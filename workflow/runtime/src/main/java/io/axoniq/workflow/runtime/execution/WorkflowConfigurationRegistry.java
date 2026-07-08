@@ -21,7 +21,7 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinitionId;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.util.Version;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.DescribableComponent;

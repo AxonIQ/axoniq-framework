@@ -19,7 +19,7 @@
 package io.axoniq.workflow.history;
 
 import io.axoniq.workflow.history.api.WorkflowHistory;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinitionId;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import org.axonframework.messaging.core.QualifiedName;

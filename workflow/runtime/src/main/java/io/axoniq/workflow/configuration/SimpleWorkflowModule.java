@@ -28,10 +28,10 @@ import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
 import io.axoniq.workflow.runtime.execution.RepositoryBackedWorkflowStateRehydrationSupport;
 import io.axoniq.workflow.runtime.execution.RunningWorkflows;
+import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
-import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowStateRehydrationSupport;
 import org.axonframework.common.annotation.Internal;
@@ -44,6 +44,7 @@ import org.axonframework.modelling.repository.Repository;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.function.Function;
 
@@ -77,7 +78,9 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     private ComponentBuilder<WorkflowExecutionRepository> workflowExecutionRepositoryBuilder;
     private boolean useHistory = true;
     private ComponentBuilder<WorkflowHistoryProjector> workflowHistoryProjectorBuilder;
-    /** Workflow-definition builders appended during configuration; concatenated at build time. */
+    /**
+     * Workflow-definition builders appended during configuration; concatenated at build time.
+     */
     private final List<ComponentBuilder<List<ConditionedWorkflowConfiguration<C>>>> workflowConfigurationBuilders = new ArrayList<>();
     private ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory;
 
@@ -143,15 +146,15 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                     SafePointStore.class,
                     COMPONENT_SAFE_POINT_STORE,
                     cfg -> cfg.getOptionalComponent(
-                                     TokenStore.class,
-                                     COMPONENT_SAFE_POINT_TOKEN_STORE
-                             )
-                             .<SafePointStore>map(tokenStore ->
-                                     new TokenStoreSafePointStore(
-                                             tokenStore,
-                                             TokenStoreSafePointStore.tokenStoreIdentifier(name)
-                                     ))
-                             .orElseGet(InMemorySafePointStore::new)
+                                      TokenStore.class,
+                                      COMPONENT_SAFE_POINT_TOKEN_STORE
+                              )
+                              .<SafePointStore>map(tokenStore ->
+                                                           new TokenStoreSafePointStore(
+                                                                   tokenStore,
+                                                                   TokenStoreSafePointStore.tokenStoreIdentifier(name)
+                                                           ))
+                              .orElseGet(InMemorySafePointStore::new)
             );
 
             cr.registerComponent(
@@ -185,7 +188,9 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     protected void registerWorkflowDefinitions(Configuration configuration) {
         WorkflowConfigurationRegistry<?> registry = configuration.getComponent(WorkflowConfigurationRegistry.class);
         List<ConditionedWorkflowConfiguration<C>> workflowConfigs = workflowConfigurationBuilders.stream()
-                                                                                                 .flatMap(b -> b.build(configuration).stream())
+                                                                                                 .flatMap(b -> b.build(
+                                                                                                                        configuration)
+                                                                                                                .stream())
                                                                                                  .toList();
         workflowConfigs.forEach(workflowConfig -> registry.register(
                 workflowConfig.eventCondition(),
@@ -290,18 +295,28 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     @SuppressWarnings("unchecked")
     private Repository<String, RunningWorkflows> runningWorkflowsRepository(Configuration configuration) {
-        return (Repository<String, RunningWorkflows>) configuration.getComponent(
-                Repository.class,
-                RunningWorkflows.componentName()
-        );
+        return configuration.getComponents(Repository.class)
+                            .values()
+                            .stream()
+                            .filter(repository -> repository.entityType().equals(RunningWorkflows.class))
+                            .map(repository -> (Repository<String, RunningWorkflows>) repository)
+                            .findFirst()
+                            .orElseThrow(() -> new NoSuchElementException(
+                                    "No repository found for %s".formatted(RunningWorkflows.class.getName())
+                            ));
     }
 
     @SuppressWarnings("unchecked")
     private Repository<String, EventSourcedWorkflowState> workflowStateRepository(Configuration configuration) {
-        return (Repository<String, EventSourcedWorkflowState>) configuration.getComponent(
-                Repository.class,
-                EventSourcedWorkflowState.componentName()
-        );
+        return configuration.getComponents(Repository.class)
+                            .values()
+                            .stream()
+                            .filter(repository -> repository.entityType().equals(EventSourcedWorkflowState.class))
+                            .map(repository -> (Repository<String, EventSourcedWorkflowState>) repository)
+                            .findFirst()
+                            .orElseThrow(() -> new NoSuchElementException(
+                                    "No repository found for %s".formatted(EventSourcedWorkflowState.class.getName())
+                            ));
     }
 
     record ConditionedWorkflowConfiguration<C extends WorkflowContext>(

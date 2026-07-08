@@ -27,8 +27,8 @@ state at startup.
 
 ### Durable state model
 
-Each workflow instance has an `EventSourcedWorkflowState` entity loaded through an
-`EventSourcingRepository<String, EventSourcedWorkflowState>`.
+Each workflow instance has an `EventSourcedWorkflowState` entity loaded through AF5's declarative
+`EventSourcedEntityModule` infrastructure.
 
 The repository criteria select workflow-owned events by `workflowId`, using the workflow event tags introduced earlier.
 This means the durable state of a workflow instance is reconstructed only from that workflow's own event stream slice.

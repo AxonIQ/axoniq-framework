@@ -18,11 +18,11 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
@@ -36,7 +36,6 @@ import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -115,11 +114,11 @@ public class EventSourcedWorkflowState implements WorkflowState {
     /**
      * Creates a new workflow state seeded with the workflow definition identity.
      *
-     * @param workflowId               workflow id.
-     * @param payload                  initial workflow payload.
-     * @param workflowDefinitionId     stable workflow definition identifier.
-     * @param context                  workflow context to use.
-     * @param listeners                workflow status change listeners.
+     * @param workflowId           workflow id.
+     * @param payload              initial workflow payload.
+     * @param workflowDefinitionId stable workflow definition identifier.
+     * @param context              workflow context to use.
+     * @param listeners            workflow status change listeners.
      */
     private EventSourcedWorkflowState(
             @Nonnull String workflowId,
@@ -153,17 +152,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
      */
     @Nonnull
     public static EventCriteria workflowEvents(@Nonnull String workflowId) {
-        return EventCriteria.havingTags(Tag.of(WorkflowEventTagResolver.WORKFLOW_ID_TAG, workflowId));
-    }
-
-    /**
-     * Name of the repository component registered for event-sourced workflow state.
-     *
-     * @return component name
-     */
-    @Nonnull
-    public static String componentName() {
-        return "%s#%s".formatted(EventSourcedWorkflowState.class.getName(), String.class.getName());
+        return EventCriteria.havingTags(Tag.of(WorkflowEventTagResolver.TAG_WORKFLOW_ID, workflowId));
     }
 
     @Override
@@ -228,7 +217,8 @@ public class EventSourcedWorkflowState implements WorkflowState {
         logger.trace("Applying event {}", eventMessage.type());
         Object eventPayload = eventMessage.payloadAs(Object.class);
         var metadata = eventMessage.metadata();
-        MetadataUtils.getWorkflowDefinitionId(metadata).ifPresent(definitionId -> this.workflowDefinitionId = definitionId);
+        MetadataUtils.getWorkflowDefinitionId(metadata)
+                     .ifPresent(definitionId -> this.workflowDefinitionId = definitionId);
         // Migration events arrive as regular COMPLETED step events that additionally carry the
         // versionChangeId + version metadata keys. They flow through the step-registration switch like
         // any other step and ALSO update the version map as a side-effect.
@@ -358,7 +348,9 @@ public class EventSourcedWorkflowState implements WorkflowState {
         workflowDefinitionId = restoredState.workflowDefinitionId;
     }
 
-    /** Migration steps: first writer wins (replay-idempotent); bump workflow version if strictly greater. */
+    /**
+     * Migration steps: first writer wins (replay-idempotent); bump workflow version if strictly greater.
+     */
     private void applyVersionMigrationStep(@Nonnull Metadata metadata) {
         var changeId = MetadataUtils.getVersionChangeId(metadata).orElse(null);
         var newVersion = MetadataUtils.getVersion(metadata).orElse(null);

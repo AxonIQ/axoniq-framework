@@ -16,7 +16,7 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.workflow.runtime.api.execution.context;
+package io.axoniq.workflow.runtime.api.execution.state;
 
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
@@ -37,20 +37,11 @@ public record WorkflowDefinitionId(@Nonnull QualifiedName qualifiedName,
                                    @Nonnull String version) {
 
     /**
-     * Derives a workflow definition id from a workflow configuration.
+     * Constructs the workflow id.
      *
-     * @param workflowConfiguration workflow configuration to identify
-     * @return workflow definition id
+     * @param qualifiedName qualified workflow name.
+     * @param version       workflow version.
      */
-    @Nonnull
-    public static WorkflowDefinitionId from(@Nonnull WorkflowConfiguration<?> workflowConfiguration) {
-        Objects.requireNonNull(workflowConfiguration, "Workflow configuration must not be null");
-        return new WorkflowDefinitionId(
-                new QualifiedName(workflowConfiguration.workflowName()),
-                workflowConfiguration.workflowVersion()
-        );
-    }
-
     public WorkflowDefinitionId {
         Objects.requireNonNull(qualifiedName, "Qualified name must not be null");
         Objects.requireNonNull(version, "Version must not be null");
@@ -62,6 +53,6 @@ public record WorkflowDefinitionId(@Nonnull QualifiedName qualifiedName,
     @Override
     @Nonnull
     public String toString() {
-        return qualifiedName + ":" + version;
+        return qualifiedName + "#" + version;
     }
 }
