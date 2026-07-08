@@ -19,7 +19,6 @@
 
 package io.axoniq.workflow.dsl.base;
 
-import io.axoniq.workflow.dsl.api.AssociationsUtils;
 import io.axoniq.workflow.runtime.api.execution.context.CancelStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.CancelWorkflowDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
@@ -37,7 +36,11 @@ import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.payload.PayloadModification;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.workflow.runtime.association.Associations;
 import io.axoniq.workflow.runtime.association.EqualsComparison;
+import io.axoniq.workflow.runtime.association.MetadataPropertyValueRetriever;
+import io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever;
+import io.axoniq.workflow.runtime.association.ValueRetriever;
 import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
@@ -104,8 +107,28 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param value expected association value
      * @return matcher that can be used when building event conditions
      */
-    public static AssociationsUtils.VariableMatcher equalsTo(Object value) {
-        return new AssociationsUtils.VariableMatcher(EqualsComparison.OPERATOR, value);
+    public static Associations.VariableMatcher equalsTo(Object value) {
+        return new Associations.VariableMatcher(EqualsComparison.OPERATOR, value);
+    }
+
+    /**
+     * Creates a payload-property association source for the simple association DSL.
+     *
+     * @param propertyName payload property name
+     * @return payload-property retriever
+     */
+    public static ValueRetriever payloadProperty(@Nonnull String propertyName) {
+        return PayloadPropertyValueRetriever.payloadProperty(propertyName);
+    }
+
+    /**
+     * Creates a metadata-property association source for the simple association DSL.
+     *
+     * @param propertyName metadata key
+     * @return metadata-property retriever
+     */
+    public static ValueRetriever metadataProperty(@Nonnull String propertyName) {
+        return MetadataPropertyValueRetriever.metadataProperty(propertyName);
     }
 
     /**

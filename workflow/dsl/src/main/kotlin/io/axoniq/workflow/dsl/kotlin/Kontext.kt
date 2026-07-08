@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.dsl.kotlin
 
-import io.axoniq.workflow.dsl.api.AssociationsUtils
 import io.axoniq.workflow.dsl.api.Payload
 import io.axoniq.workflow.runtime.api.execution.context.*
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy
@@ -29,6 +28,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult
 import io.axoniq.workflow.runtime.api.payload.PayloadModification
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer
+import io.axoniq.workflow.runtime.association.Associations
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults
 import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer
 import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer
@@ -259,7 +259,7 @@ class Kontext(
     fun <T : Any> awaitEvent(
         stepName: String,
         eventType: KClass<T>,
-        conditions: AssociationsUtils? = null,
+        conditions: Associations? = null,
         timeout: Duration = defaultTimeout,
         eventNameCustomizer: EventNameCustomizer = defaults(),
         resultPayloadReducer: PayloadReducer = GlobalOnlyPayloadReducer.INSTANCE
@@ -294,7 +294,7 @@ class Kontext(
 
     inline fun <reified T : Any> awaitEvent(
         stepName: String,
-        conditions: AssociationsUtils? = null,
+        conditions: Associations? = null,
         timeout: Duration = defaultTimeout,
         eventNameCustomizer: EventNameCustomizer = defaults(),
         resultPayloadReducer: PayloadReducer = GlobalOnlyPayloadReducer.INSTANCE
@@ -598,13 +598,13 @@ class Kontext(
 
     private fun eventCondition(
         eventType: KClass<*>,
-        conditions: AssociationsUtils?
+        conditions: Associations?
     ): EventCondition {
         val qualifiedName = resolve(eventType)
         return if (conditions == null) {
             EventConditions.fromQualifiedName(qualifiedName)
         } else {
-            EventConditions.fromQualifiedName(qualifiedName, conditions.build())
+            EventConditions.fromQualifiedName(qualifiedName, conditions)
         }
     }
 

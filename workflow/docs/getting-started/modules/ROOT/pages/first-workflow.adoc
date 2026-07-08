@@ -95,7 +95,8 @@ Each unique `orderId` gets its own workflow instance.
 [TIP]
 ====
 You can also use `startOnConditions` to filter which events trigger the workflow.
-For example, `startOnConditions = {"amount>100"}` would only process high-value orders.
+Use the canonical qualified form.
+For example, `startOnConditions = {"payload:amount>100"}` would only process high-value orders.
 ====
 
 == What happens under the hood

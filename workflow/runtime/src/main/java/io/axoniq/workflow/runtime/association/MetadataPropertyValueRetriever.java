@@ -33,6 +33,11 @@ import java.util.Objects;
  */
 public class MetadataPropertyValueRetriever implements ValueRetriever {
 
+    /**
+     * Qualifier for the association schema.
+     */
+    public static final String QUALIFIER = "metadata";
+
     private final String metadataPropertyName;
 
     /**
@@ -59,5 +64,15 @@ public class MetadataPropertyValueRetriever implements ValueRetriever {
     @Override
     public Object apply(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
         return eventMessage.metadata().get(metadataPropertyName);
+    }
+
+    @Override
+    public @Nonnull String qualifier() {
+        return QUALIFIER;
+    }
+
+    @Override
+    public @Nonnull String path() {
+        return metadataPropertyName;
     }
 }

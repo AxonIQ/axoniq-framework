@@ -57,6 +57,8 @@ class MetadataPropertyValueRetrieverTest {
         Object result = retriever.apply(eventMessage, pc);
 
         assertThat(result).isEqualTo(expectedValue);
+        assertThat(retriever.qualifier()).isEqualTo(MetadataPropertyValueRetriever.QUALIFIER);
+        assertThat(retriever.path()).isEqualTo(propertyName);
     }
 
     @Test

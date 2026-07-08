@@ -165,6 +165,44 @@ class AutoDetectionUtilsTest {
         assertThat(condition.qualifiedName()).isEqualTo(new QualifiedName("custom.AnnotatedEvent"));
     }
 
+    @Test
+    void shouldKeepCanonicalQualifiedStartConditions() {
+        Configuration configuration = mock(Configuration.class);
+        MessageTypeResolver messageTypeResolver = mock(MessageTypeResolver.class);
+        ValueComparisonOperatorRegistry operatorRegistry = new ValueComparisonOperatorRegistry();
+        when(configuration.getComponent(eq(MessageTypeResolver.class))).thenReturn(messageTypeResolver);
+        when(configuration.getComponent(eq(ValueComparisonOperatorRegistry.class), any(Supplier.class))).thenReturn(
+                operatorRegistry);
+
+        Map<String, Object> attributes = new HashMap<>();
+        attributes.put(ATTR_START_ON_EVENT_NAME, "io.axoniq.MyEvent");
+        attributes.put(ATTR_START_ON_EVENT_CLASS, String.class);
+        attributes.put(ATTR_START_ON_CONDITIONS, new String[]{"payload:status=vip"});
+
+        EventCondition condition = AutoDetectionUtils.eventConditionComponentBuilder(attributes).build(configuration);
+
+        assertThat(condition.serializedAssociations()).containsExactly("payload:status=vip");
+    }
+
+    @Test
+    void shouldRejectLegacyPayloadOnlyStartConditions() {
+        Configuration configuration = mock(Configuration.class);
+        MessageTypeResolver messageTypeResolver = mock(MessageTypeResolver.class);
+        ValueComparisonOperatorRegistry operatorRegistry = new ValueComparisonOperatorRegistry();
+        when(configuration.getComponent(eq(MessageTypeResolver.class))).thenReturn(messageTypeResolver);
+        when(configuration.getComponent(eq(ValueComparisonOperatorRegistry.class), any(Supplier.class))).thenReturn(
+                operatorRegistry);
+
+        Map<String, Object> attributes = new HashMap<>();
+        attributes.put(ATTR_START_ON_EVENT_NAME, "io.axoniq.MyEvent");
+        attributes.put(ATTR_START_ON_EVENT_CLASS, String.class);
+        attributes.put(ATTR_START_ON_CONDITIONS, new String[]{"status=vip"});
+
+        assertThatThrownBy(() -> AutoDetectionUtils.eventConditionComponentBuilder(attributes).build(configuration))
+                .isInstanceOf(io.axoniq.workflow.runtime.association.BadAssociationFormatException.class)
+                .hasMessageContaining("<qualifier>:<path><operator><value>");
+    }
+
     @Event(namespace = "custom", name = "AnnotatedEvent")
     private record AnnotatedEvent(String id) {
 

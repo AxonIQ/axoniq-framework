@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.dsl.simple;
 
-import io.axoniq.workflow.dsl.api.AssociationsUtils;
 import io.axoniq.workflow.dsl.api.Payload;
 import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
@@ -30,6 +29,7 @@ import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
+import io.axoniq.workflow.runtime.association.Associations;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -165,7 +165,7 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
     public <T> T awaitEvent(
             @Nonnull String stepName,
             @Nonnull Class<T> eventType,
-            @Nonnull AssociationsUtils conditions,
+            @Nonnull Associations conditions,
             @Nonnull UnaryOperator<WaitForStepDefinition> customizer
     ) {
         var result = waitForEvent(stepName, eventType, conditions, customizer);
@@ -201,11 +201,11 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
     public WorkflowStepResult waitForEvent(
             @Nonnull String stepName,
             @Nonnull Class<?> eventType,
-            @Nonnull AssociationsUtils conditions,
+            @Nonnull Associations conditions,
             @Nonnull UnaryOperator<WaitForStepDefinition> customizer) {
         return waitForEvent(
                 stepName,
-                EventConditions.fromQualifiedName(resolve(eventType), conditions.build()),
+                EventConditions.fromQualifiedName(resolve(eventType), conditions),
                 customizer
         );
     }
@@ -221,10 +221,10 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
     public WorkflowStepResult waitForEvent(
             @Nonnull String stepName,
             @Nonnull Class<?> eventType,
-            @Nonnull AssociationsUtils conditions) {
+            @Nonnull Associations conditions) {
         return super.waitForEvent(
                 stepName,
-                EventConditions.fromQualifiedName(resolve(eventType), conditions.build())
+                EventConditions.fromQualifiedName(resolve(eventType), conditions)
         );
     }
 

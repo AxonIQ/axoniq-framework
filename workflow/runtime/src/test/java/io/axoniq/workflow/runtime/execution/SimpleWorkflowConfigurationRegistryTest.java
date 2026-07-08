@@ -69,7 +69,7 @@ class SimpleWorkflowConfigurationRegistryTest {
     void testRegisterAndGetConfigurations() {
         QualifiedName eventName = new QualifiedName("com.example.MyEvent");
         BiPredicate<EventMessage, ProcessingContext> predicate = (eventMessage, pc) -> true;
-        EventCondition eventCondition = EventConditions.fromQualifiedName(eventName, predicate);
+        EventCondition eventCondition = eventCondition(eventName, predicate);
 
         WorkflowConfiguration<?> workflowConfiguration = new StubWorkflowConfiguration();
 
@@ -90,11 +90,11 @@ class SimpleWorkflowConfigurationRegistryTest {
         QualifiedName eventName = new QualifiedName("com.example.MyEvent");
 
         BiPredicate<EventMessage, ProcessingContext> pred1 = (msg, pc) -> true;
-        EventCondition cond1 = EventConditions.fromQualifiedName(eventName, pred1);
+        EventCondition cond1 = eventCondition(eventName, pred1);
         WorkflowConfiguration<?> conf1 = new StubWorkflowConfiguration();
 
         BiPredicate<EventMessage, ProcessingContext> pred2 = (msg, pc) -> false;
-        EventCondition cond2 = EventConditions.fromQualifiedName(eventName, pred2);
+        EventCondition cond2 = eventCondition(eventName, pred2);
         WorkflowConfiguration<?> conf2 = new StubWorkflowConfiguration();
 
         registry.register(cond1, conf1);
@@ -274,6 +274,23 @@ class SimpleWorkflowConfigurationRegistryTest {
         public @NonNull String workflowVersion() {
             return version;
         }
+    }
+
+    private static EventCondition eventCondition(
+            QualifiedName eventName,
+            BiPredicate<EventMessage, ProcessingContext> predicate
+    ) {
+        return new EventCondition() {
+            @Override
+            public @NonNull BiPredicate<EventMessage, ProcessingContext> predicate() {
+                return predicate;
+            }
+
+            @Override
+            public @NonNull QualifiedName qualifiedName() {
+                return eventName;
+            }
+        };
     }
 
     private static class StubWorkflowConfiguration implements WorkflowConfiguration<WorkflowContext> {

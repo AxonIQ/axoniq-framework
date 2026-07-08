@@ -18,7 +18,7 @@
  */
 package io.axoniq.workflow.configuration;
 
-import io.axoniq.workflow.dsl.api.AssociationsUtils;
+import io.axoniq.workflow.runtime.association.Associations;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.annotation.WorkflowStatusChangedHandler;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
@@ -221,7 +221,7 @@ public class AutoDetectionUtils {
                     );
             return EventConditions.fromQualifiedName(
                     eventQualifiedName,
-                    AssociationsUtils.parse(opRegistry, associationValues).build(c)
+                    Associations.parse(opRegistry, associationValues)
             );
         };
     }

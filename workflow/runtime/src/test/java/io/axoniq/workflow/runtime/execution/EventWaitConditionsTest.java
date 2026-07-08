@@ -19,6 +19,7 @@
 
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.association.Associations;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
@@ -37,6 +38,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer.NAME;
+import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -144,6 +146,24 @@ class EventWaitConditionsTest {
                 assertThat(stepName).isIn("step1", "step2");
             }
         }
+    }
+
+    @Test
+    void testDescribeToIncludesSerializedAssociations() {
+        QualifiedName qName = new QualifiedName("ns", "Event");
+        EventCondition condition = EventConditions.fromQualifiedName(
+                qName,
+                Associations.associate(payloadProperty("orderId"), "=", "123")
+        );
+        eventWaitConditions.add("step1", condition, globalOnly, defaults());
+
+        DescribableComponent desc = (DescribableComponent) getDescribedConditions().iterator().next();
+        ComponentDescriptor subDescriptor = mock(ComponentDescriptor.class);
+        desc.describeTo(subDescriptor);
+
+        ArgumentCaptor<String> valueCaptor = ArgumentCaptor.forClass(String.class);
+        verify(subDescriptor).describeProperty(eq("step1"), valueCaptor.capture());
+        assertThat(valueCaptor.getValue()).isEqualTo("ns.Event where payload:orderId=123");
     }
 
     private Collection<?> getDescribedConditions() {

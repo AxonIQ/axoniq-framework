@@ -19,6 +19,7 @@
 package io.axoniq.workflow.runtime.association;
 
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.annotation.Internal;
 
 import java.util.Set;
 
@@ -34,6 +35,7 @@ public class BadAssociationFormatException extends RuntimeException {
      *
      * @param message message describing the error.
      */
+    @Internal
     BadAssociationFormatException(String message) {
         super(message);
     }
@@ -49,7 +51,7 @@ public class BadAssociationFormatException extends RuntimeException {
             @Nonnull Set<String> operators,
             @Nonnull String conditionString) {
         return new BadAssociationFormatException(
-                "Illegal operator used in annotated start condition string "
+                "Illegal operator used in association string "
                         + conditionString + ". Supported operators are "
                         + String.join(", ", operators)
         );
@@ -59,17 +61,30 @@ public class BadAssociationFormatException extends RuntimeException {
     /**
      * Constructs the exception.
      *
-     * @param operator        found operator.
      * @param conditionString condition string that caused the exception.
      * @return bad association format exception.
      */
-    public static BadAssociationFormatException wrongFormat(
-            @Nonnull String operator,
+    public static BadAssociationFormatException wrongFormat(@Nonnull String conditionString) {
+        throw new BadAssociationFormatException(
+                "Illegal format in association string "
+                        + conditionString + ". It should be <qualifier>:<path><operator><value>");
+    }
+
+    /**
+     * Constructs the exception for unsupported qualifiers.
+     *
+     * @param qualifiers      supported qualifiers
+     * @param conditionString condition string that caused the exception
+     * @return bad association format exception
+     */
+    public static BadAssociationFormatException unsupportedQualifier(
+            @Nonnull Set<String> qualifiers,
             @Nonnull String conditionString
     ) {
-        throw new BadAssociationFormatException(
-                "Illegal format in start condition string "
-                        + conditionString + ". It should be <key>"
-                        + operator + "<value>");
+        return new BadAssociationFormatException(
+                "Illegal qualifier used in association string "
+                        + conditionString + ". Supported qualifiers are "
+                        + String.join(", ", qualifiers)
+        );
     }
 }

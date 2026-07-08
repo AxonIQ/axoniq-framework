@@ -18,10 +18,9 @@
  */
 package io.axoniq.workflow.runtime.association;
 
+import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-
-import java.util.function.BiFunction;
 
 /**
  * Retrieves association value from the event message.
@@ -29,7 +28,31 @@ import java.util.function.BiFunction;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-@FunctionalInterface
-public interface ValueRetriever extends BiFunction<EventMessage, ProcessingContext, Object> {
+public interface ValueRetriever {
+
+    /**
+     * Returns the qualifier used in the serialized association form.
+     *
+     * @return qualifier, for example {@code payload} or {@code metadata}
+     */
+    @Nonnull
+    String qualifier();
+
+    /**
+     * Returns the source-specific path used in the serialized association form.
+     *
+     * @return source-specific path, such as a payload property or metadata key
+     */
+    @Nonnull
+    String path();
+
+    /**
+     * Retrieves association value from the event message.
+     *
+     * @param eventMessage event message
+     * @param processingContext processing context
+     * @return retrieved value
+     */
+    Object apply(EventMessage eventMessage, ProcessingContext processingContext);
 
 }
