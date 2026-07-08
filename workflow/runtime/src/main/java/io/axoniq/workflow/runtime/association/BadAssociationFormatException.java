@@ -19,6 +19,7 @@
 package io.axoniq.workflow.runtime.association;
 
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.annotation.Internal;
 
 import java.util.Set;
 
@@ -34,6 +35,7 @@ public class BadAssociationFormatException extends RuntimeException {
      *
      * @param message message describing the error.
      */
+    @Internal
     BadAssociationFormatException(String message) {
         super(message);
     }

@@ -33,6 +33,9 @@ import java.util.Objects;
  */
 public class MetadataPropertyValueRetriever implements ValueRetriever {
 
+    /**
+     * Qualifier for the association schema.
+     */
     public static final String QUALIFIER = "metadata";
 
     private final String metadataPropertyName;

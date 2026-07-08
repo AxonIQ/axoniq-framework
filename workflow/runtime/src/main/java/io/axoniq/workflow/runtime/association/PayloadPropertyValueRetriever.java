@@ -40,6 +40,9 @@ public class PayloadPropertyValueRetriever implements ValueRetriever {
      */
     public static final TypeReference<Map<String, Object>> PAYLOAD_TYPE = new TypeReference<>() {
     };
+    /**
+     * Qualifier for the association schema.
+     */
     public static final String QUALIFIER = "payload";
 
     private final String payloadPropertyName;

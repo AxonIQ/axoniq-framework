@@ -121,6 +121,12 @@ public record SerializedAssociation(
         return new SerializedAssociation(qualifier, path, operator, right);
     }
 
+    /**
+     * Delivers a predicate that can be used to filter event messages.
+     *
+     * @param registry value comparison operator registry
+     * @return bi predicate that can be used to filter event messages
+     */
     @Nonnull
     public BiPredicate<EventMessage, ProcessingContext> asEventMessagePredicate(
             @Nonnull ValueComparisonOperatorRegistry registry
@@ -134,6 +140,11 @@ public record SerializedAssociation(
         );
     }
 
+    /**
+     * Serializes the association.
+     *
+     * @return serialized association
+     */
     @Nonnull
     public String serialize() {
         return qualifier + ":" + path + operator + value;
