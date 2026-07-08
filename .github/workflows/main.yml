@@ -39,9 +39,14 @@ jobs:
           server-password: MAVEN_PASSWORD
 
       - name: Fetch Axon Server License
-        if: ${{ secrets.LIBRARY_DEVBOT_TOKEN != '' }}
+        env:
+          LIBRARY_DEVBOT_TOKEN: ${{ secrets.LIBRARY_DEVBOT_TOKEN }}
         run: |
-          curl -s -H "Authorization: token ${{ secrets.LIBRARY_DEVBOT_TOKEN }}" \
+          if [ -z "${LIBRARY_DEVBOT_TOKEN}" ]; then
+            echo "LIBRARY_DEVBOT_TOKEN is not available; skipping Axon Server license download."
+            exit 0
+          fi
+          curl --fail --silent --show-error -H "Authorization: token ${LIBRARY_DEVBOT_TOKEN}" \
                -H "Accept: application/vnd.github.v3.raw" \
                -L "https://api.github.com/repos/AxonIQ/axon-server/contents/dev/developer.license?ref=master" \
                -o integrationtests/src/test/resources/axon-server-test.license
