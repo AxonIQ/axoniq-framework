@@ -38,7 +38,17 @@ class AssociationsTest {
                                            .and(payloadProperty("customerId"), "=", "abc");
 
         assertThat(associations.serializedAssociations())
-                .containsExactly("payload:orderId=123", "payload:customerId=abc");
+                .containsExactlyInAnyOrder("payload:orderId=123", "payload:customerId=abc");
+    }
+
+    @Test
+    void shouldReturnSortedAssociations() {
+        var associations = Associations.associate(payloadProperty("z"), "=", "1")
+                                       .and(payloadProperty("a"), "=", "2")
+                                       .and(payloadProperty("m"), "=", "3");
+
+        assertThat(associations.serializedAssociations())
+                .containsExactly("payload:a=2", "payload:m=3", "payload:z=1");
     }
 
     @Test

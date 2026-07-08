@@ -23,6 +23,7 @@ import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractDeclarativeTestBase;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
@@ -32,19 +33,24 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
+import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
+import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.metadataProperty;
+import static io.axoniq.workflow.runtime.association.Associations.associate;
+import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace;
 import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
+import static io.axoniq.workflow.runtime.util.WorkflowEventTagResolver.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+
 class WorkflowEventTagsDeclarativeTest extends AbstractDeclarativeTestBase<SimpleWorkflowContext> {
 
     WorkflowEventTagsDeclarativeTest() {
@@ -71,17 +77,17 @@ class WorkflowEventTagsDeclarativeTest extends AbstractDeclarativeTestBase<Simpl
         ));
         delayedPublisher.start();
 
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+        await().untilAsserted(() -> {
             assertThat(workflowHistoryRepository.findAll()).hasSize(1);
             assertThat(workflowHistoryRepository.findAll())
                     .allMatch(h -> h.state().workflowStatus() == WorkflowStatus.COMPLETED);
             assertThat(workflowEngine.workflowExecutions()).isEmpty();
         });
 
-        var startedWorkflowEvents = eventsWithTag(Tag.of("workflowLifecycle", "started"));
-        var completedWorkflowEvents = eventsWithTag(Tag.of("workflowLifecycle", "completed"));
-        var startedWaitEvents = eventsWithTag(Tag.of("workflowWait", "started"));
-        var timeoutWaitEvents = eventsWithTag(Tag.of("workflowWait", "timeout"));
+        var startedWorkflowEvents = eventsWithTag(Tag.of("workflowLifecycle", TAG_LIFECYCLE_VALUE_STARTED));
+        var completedWorkflowEvents = eventsWithTag(Tag.of("workflowLifecycle", TAG_LIFECYCLE_VALUE_TERMINAL));
+        var startedWaitEvents = eventsWithTag(Tag.of("workflowWait", TAG_WAIT_FOR_VALUE_STARTED));
+        var timeoutWaitEvents = eventsWithTag(Tag.of("workflowWait", TAG_WAIT_FOR_VALUE_TERMINAL));
         var workflowEvents = eventsWithTag(Tag.of("workflowId", "tags-tagged-user"));
 
         assertThat(startedWorkflowEvents).hasSize(1);
@@ -120,7 +126,21 @@ class WorkflowEventTagsDeclarativeTest extends AbstractDeclarativeTestBase<Simpl
     private static class TagWorkflow {
 
         public void execute(SimpleWorkflowContext ctx) {
-            ctx.awaitSleep("cooldown", step -> step.timeout(Duration.ofMillis(50)));
+            try {
+                ctx.awaitEvent("cooldown",
+                               SomethingHappened.class,
+                               associate(payloadProperty("fact"), equalsTo("eclipse"))
+                                       .and(metadataProperty("tenantId"), equalsTo("solar system")),
+                               step -> step.timeout(Duration.ofMillis(50)));
+            } catch (StepTimedOutException e) {
+
+            }
         }
+    }
+
+    private record SomethingHappened(
+            String fact
+    ) {
+
     }
 }

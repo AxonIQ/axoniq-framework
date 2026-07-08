@@ -43,6 +43,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -50,6 +51,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -121,7 +123,7 @@ class WaitForDelegateTest {
     void startedWaitEventCarriesReplayableWaitDetails() {
         var condition = mock(EventCondition.class);
         when(condition.qualifiedName()).thenReturn(new QualifiedName("io.acme.PaymentConfirmed"));
-        when(condition.serializedAssociations()).thenReturn(Set.of("payload:orderId=123"));
+        when(condition.serializedAssociations()).thenReturn(Set.of("payload:orderId=123", "metadata:tenantId=eu"));
 
         delegate.waitForEvent(new PrimitiveCommands.WorkflowStepResultWaitForCommand(
                 "awaitPayment",
@@ -137,7 +139,7 @@ class WaitForDelegateTest {
         assertThat(eventCaptor.getValue().payload()).isEqualTo(Map.of(
                 "startTime", Instant.parse("2026-07-08T10:00:00Z"),
                 "eventQualifiedName", "io.acme.PaymentConfirmed",
-                "serializedAssociations", Set.of("payload:orderId=123"),
+                "serializedAssociations", "payload:orderId=123;metadata:tenantId=eu",
                 "timeoutTime", Instant.parse("2026-07-08T10:15:00Z")
         ));
         assertThat(eventCaptor.getValue().metadata().get("stepPrimitive")).isEqualTo("WAIT_FOR_EVENT");

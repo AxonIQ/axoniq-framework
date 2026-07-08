@@ -39,6 +39,23 @@ import java.util.Set;
 @Internal
 public class WorkflowEventTagResolver implements TagResolver {
 
+    /**
+     * Value for started workflow.
+     */
+    public static final String TAG_LIFECYCLE_VALUE_STARTED = "started";
+    /**
+     * Value for completed, failed, cancelled and timed-out workflow.
+     */
+    public static final String TAG_LIFECYCLE_VALUE_TERMINAL = "terminal";
+    /**
+     * Value for started waitForEvent step.
+     */
+    public static final String TAG_WAIT_FOR_VALUE_STARTED = "started";
+    /**
+     * Value for completed, cancelled and timed-out waitForeEvent step.
+     */
+    public static final String TAG_WAIT_FOR_VALUE_TERMINAL = "terminal";
+
     static final String WORKFLOW_ID_TAG = "workflowId";
     static final String WORKFLOW_LIFECYCLE_TAG = "workflowLifecycle";
     static final String WORKFLOW_WAIT_TAG = "workflowWait";
@@ -79,23 +96,20 @@ public class WorkflowEventTagResolver implements TagResolver {
     private static String lifecycleValue(@Nonnull WorkflowStatus status) {
         return switch (status) {
             case NONE -> throw new IllegalArgumentException("Workflow lifecycle tag is undefined for status NONE");
-            case STARTED -> "started";
-            case COMPLETED -> "completed";
-            case FAILED -> "failed";
-            case TIMED_OUT -> "timeout";
-            case CANCELLED -> "cancelled";
+            case STARTED -> TAG_LIFECYCLE_VALUE_STARTED;
+            case COMPLETED, FAILED, TIMED_OUT, CANCELLED -> TAG_LIFECYCLE_VALUE_TERMINAL;
         };
     }
 
     @Nonnull
     private static String lifecycleValue(@Nonnull StepStatus status) {
         return switch (status) {
-            case STARTED -> "started";
-            case COMPLETED -> "completed";
-            case FAILED -> "failed";
-            case TIMED_OUT -> "timeout";
-            case CANCELLED -> "cancelled";
-            case RETRYING -> "retrying";
+            case STARTED -> TAG_WAIT_FOR_VALUE_STARTED;
+            case COMPLETED, TIMED_OUT, CANCELLED -> TAG_WAIT_FOR_VALUE_TERMINAL;
+            case FAILED -> throw new IllegalArgumentException(
+                    "Wait for step lifecycle tag is undefined for status FAILED");
+            case RETRYING -> throw new IllegalArgumentException(
+                    "Wait for step lifecycle tag is undefined for status RETRYING");
         };
     }
 }

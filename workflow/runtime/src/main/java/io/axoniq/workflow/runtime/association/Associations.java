@@ -22,9 +22,9 @@ import jakarta.annotation.Nonnull;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -47,7 +47,7 @@ public record Associations(
     public Associations {
         registry = Objects.requireNonNull(registry, "Registry must not be null");
         serializedAssociations = Collections.unmodifiableSet(
-                new LinkedHashSet<>(
+                new TreeSet<>(
                         Objects.requireNonNull(serializedAssociations,
                                                "The set of serialized associations must not be null.")
                 )
@@ -76,8 +76,7 @@ public record Associations(
     /**
      * Create a builder with association.
      *
-     * @param retriever value retriever, see {@link PayloadPropertyValueRetriever#payloadProperty(String)} for
-     *                  example.
+     * @param retriever value retriever, see {@link PayloadPropertyValueRetriever#payloadProperty(String)} for example.
      * @param matcher   variable matcher, see {@link VariableMatcher} for example.
      * @return fluent builder association utils.
      */
@@ -127,9 +126,21 @@ public record Associations(
     public Associations and(@Nonnull ValueRetriever valueRetriever,
                             @Nonnull String operator,
                             @Nonnull Object value) {
-        var newValues = new LinkedHashSet<>(this.serializedAssociations);
+        var newValues = new TreeSet<>(this.serializedAssociations);
         newValues.add(SerializedAssociation.from(valueRetriever, operator, value).serialize());
         return new Associations(this.registry, newValues);
+    }
+
+    /**
+     * Creates a new builder containing all old and a new association.
+     *
+     * @param valueRetriever  value retriever
+     * @param variableMatcher value matcher
+     * @return association builder
+     */
+    public Associations and(@Nonnull ValueRetriever valueRetriever,
+                            @Nonnull VariableMatcher variableMatcher) {
+        return and(valueRetriever, variableMatcher.operator, variableMatcher.value);
     }
 
     /**
@@ -147,6 +158,6 @@ public record Associations(
                                                      String... associations) {
         return Arrays.stream(associations)
                      .map(conditionString -> SerializedAssociation.parse(registry, conditionString).serialize())
-                     .collect(Collectors.toCollection(LinkedHashSet::new));
+                     .collect(Collectors.toCollection(TreeSet::new));
     }
 }

@@ -32,10 +32,7 @@ If an engine-published event carries `workflowId` metadata, it must also get thi
 Workflow lifecycle events get this marker tag:
 
 - `workflowLifecycle=started`
-- `workflowLifecycle=completed`
-- `workflowLifecycle=failed`
-- `workflowLifecycle=timeout`
-- `workflowLifecycle=cancelled`
+- `workflowLifecycle=terminal`
 
 This applies to:
 
@@ -50,10 +47,7 @@ This applies to:
 `waitForEvent` step lifecycle events get this marker tag:
 
 - `workflowWait=started`
-- `workflowWait=completed`
-- `workflowWait=failed`
-- `workflowWait=timeout`
-- `workflowWait=cancelled`
+- `workflowWait=terminal`
 
 This applies to the started event of a `waitForEvent` step and to its terminal events.
 

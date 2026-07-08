@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
@@ -191,13 +192,13 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     }
 
     @Nonnull
-    private Map<String, Object> startedPayload(@Nonnull io.axoniq.workflow.runtime.api.execution.context.EventCondition eventCondition,
+    private Map<String, Object> startedPayload(@Nonnull EventCondition eventCondition,
                                                @Nonnull Instant startedAt,
                                                @Nonnull Duration timeout) {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("startTime", startedAt);
         payload.put("eventQualifiedName", eventCondition.qualifiedName().toString());
-        payload.put("serializedAssociations", eventCondition.serializedAssociations());
+        payload.put("serializedAssociations", String.join(";", eventCondition.serializedAssociations()));
         payload.put("timeoutTime", startedAt.plus(timeout));
         return payload;
     }

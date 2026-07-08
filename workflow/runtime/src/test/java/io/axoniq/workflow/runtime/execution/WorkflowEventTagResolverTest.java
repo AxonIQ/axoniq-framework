@@ -29,6 +29,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 
+import static io.axoniq.workflow.runtime.util.WorkflowEventTagResolver.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -55,11 +56,11 @@ class WorkflowEventTagResolverTest {
 
         assertThat(resolver.resolve(started)).isEqualTo(Set.of(
                 Tag.of("workflowId", "wf-123"),
-                Tag.of("workflowLifecycle", "started")
+                Tag.of("workflowLifecycle", TAG_LIFECYCLE_VALUE_STARTED)
         ));
         assertThat(resolver.resolve(timedOut)).isEqualTo(Set.of(
                 Tag.of("workflowId", "wf-123"),
-                Tag.of("workflowLifecycle", "timeout")
+                Tag.of("workflowLifecycle", TAG_LIFECYCLE_VALUE_TERMINAL)
         ));
     }
 
@@ -87,11 +88,11 @@ class WorkflowEventTagResolverTest {
 
         assertThat(resolver.resolve(started)).isEqualTo(Set.of(
                 Tag.of("workflowId", "wf-123"),
-                Tag.of("workflowWait", "started")
+                Tag.of("workflowWait", TAG_WAIT_FOR_VALUE_STARTED)
         ));
         assertThat(resolver.resolve(completed)).isEqualTo(Set.of(
                 Tag.of("workflowId", "wf-123"),
-                Tag.of("workflowWait", "completed")
+                Tag.of("workflowWait", TAG_WAIT_FOR_VALUE_TERMINAL)
         ));
     }
 
