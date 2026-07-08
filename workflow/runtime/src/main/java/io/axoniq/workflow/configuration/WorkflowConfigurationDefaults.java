@@ -35,34 +35,20 @@ import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
-import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
-import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
-import org.axonframework.conversion.GeneralConverter;
-import org.axonframework.eventsourcing.CriteriaResolver;
-import org.axonframework.eventsourcing.EventSourcedEntityFactory;
-import org.axonframework.eventsourcing.EventSourcingRepository;
+import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
-import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
-import org.axonframework.eventsourcing.handler.EntityLifecycleHandler;
-import org.axonframework.eventsourcing.handler.InitializingEntityEvolver;
-import org.axonframework.eventsourcing.handler.SimpleEntityLifecycleHandler;
-import org.axonframework.eventsourcing.handler.SnapshottingEntityLifecycleHandler;
-import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
-import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
-import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jdbc.TokenSchema;
-import org.axonframework.modelling.repository.Repository;
 
 import java.time.Clock;
 import java.util.concurrent.ExecutorService;
@@ -169,62 +155,21 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     void registerRunningWorkflows(ComponentRegistry componentRegistry) {
-        var type = new TypeReference<Repository<String, RunningWorkflows>>() {
-        };
-        componentRegistry.registerIfNotPresent(
-                ComponentDefinition.ofTypeAndName(type, RunningWorkflows.componentName())
-                                   .withBuilder(c -> new EventSourcingRepository<>(
-                                           String.class,
-                                           RunningWorkflows.class,
-                                           runningWorkflowsLifecycleHandler(c)
-                                   ))
+
+        componentRegistry.registerModule(
+                EventSourcedEntityModule
+                        .declarative(String.class, RunningWorkflows.class)
+                        .messagingModel((c, model) -> model
+                                .entityEvolver((entity, event, context) -> entity.evolve(event.metadata()))
+                                .build())
+                        .entityFactory(c -> (identifier, firstEvent, context) -> new RunningWorkflows())
+                        .criteriaResolver(c -> (identifier, context) ->
+                                RunningWorkflows.workflowLifecycleEvents(identifier))
+                        // FIXME Register snapshot configuration eventually
+                        .build()
         );
     }
 
-    private EntityLifecycleHandler<String, RunningWorkflows> runningWorkflowsLifecycleHandler(
-            Configuration configuration
-    ) {
-        EventStore eventStore = configuration.getComponent(EventStore.class);
-        CriteriaResolver<String> criteriaResolver = (identifier, context) ->
-                RunningWorkflows.workflowLifecycleEvents(identifier);
-        EventSourcedEntityFactory<String, RunningWorkflows> entityFactory =
-                (identifier, firstEvent, context) -> new RunningWorkflows();
-        var evolver = new InitializingEntityEvolver<>(
-                entityFactory,
-                (entity, eventMessage, context) -> entity.evolve(eventMessage.metadata())
-        );
-
-        // @formatter:off
-        return configuration.getOptionalComponent(SnapshotPolicy.class, RunningWorkflows.componentName())
-                  .<EntityLifecycleHandler<String, RunningWorkflows>>map(snapshotPolicy ->
-                          new SnapshottingEntityLifecycleHandler<>(
-                                  eventStore,
-                                  criteriaResolver,
-                                  evolver,
-                                  snapshotPolicy,
-                                  configuration
-                                          .getOptionalComponent(MessageTypeResolver.class)
-                                          .flatMap(resolver -> resolver.resolve(RunningWorkflows.class))
-                                          .orElseThrow(() -> new IllegalStateException(
-                                                "A MessageTypeResolver entry for RunningWorkflows is required to use snapshotting."
-                                          )),
-                                  configuration.getOptionalComponent(GeneralConverter.class)
-                                     .orElseThrow(() -> new IllegalStateException(
-                                             "A Converter must be configured to use snapshotting for RunningWorkflows."
-                                     )),
-                                  RunningWorkflows.class,
-                                  configuration.getOptionalComponent(SnapshotStore.class)
-                                     .orElseThrow(() -> new IllegalStateException(
-                                             "A SnapshotStore must be configured to use snapshotting for RunningWorkflows."
-                                     ))
-                          ))
-                  .orElseGet(() -> new SimpleEntityLifecycleHandler<>(
-                          eventStore,
-                          criteriaResolver,
-                          evolver
-                  ));
-        // @formatter:on
-    }
 
     void registerWorkflowEngineExecutor(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(ExecutorService.class,
