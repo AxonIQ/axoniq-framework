@@ -19,6 +19,7 @@
 package io.axoniq.workflow.configuration;
 
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
+import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointTrigger;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -144,6 +145,23 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
                                                                  @Nonnull TrackingToken requested) {
         if (checkpointingHandler != null) {
             return checkpointingHandler.onCheckpointAdvanced(segment, requested);
+        }
+        return CompletableFuture.completedFuture(requested);
+    }
+
+    @Override
+    public void onSegmentClaimed(@Nonnull Segment segment,
+                                 @Nonnull CheckpointTrigger trigger) {
+        if (checkpointingHandler != null) {
+            checkpointingHandler.onSegmentClaimed(segment, trigger);
+        }
+    }
+
+    @Override
+    public CompletableFuture<TrackingToken> onSegmentReleased(@Nonnull Segment segment,
+                                                              @Nonnull TrackingToken requested) {
+        if (checkpointingHandler != null) {
+            return checkpointingHandler.onSegmentReleased(segment, requested);
         }
         return CompletableFuture.completedFuture(requested);
     }

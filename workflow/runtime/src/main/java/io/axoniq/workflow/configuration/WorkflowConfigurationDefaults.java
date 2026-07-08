@@ -24,13 +24,10 @@ import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
-import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
 import io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.RepositoryBackedWorkflowStateRehydrationSupport;
 import io.axoniq.workflow.runtime.execution.RunningWorkflows;
-import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
-import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
@@ -50,7 +47,6 @@ import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationD
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jdbc.TokenSchema;
 import org.axonframework.modelling.repository.Repository;
 
@@ -80,29 +76,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
      */
     public static final String COMPONENT_WORKFLOW_ENGINE = "WorkflowEngine";
     /**
-     * Name of the component used for the workflow engine safe point tracking token store.
-     */
-    public static final String COMPONENT_SAFE_POINT_STORE = "WorkflowEngineSafePointStore";
-    /**
-     * Name of the component used for the workflow engine token store used for safe point persistence.
-     */
-    public static final String COMPONENT_SAFE_POINT_TOKEN_STORE = "WorkflowEngineSafePointTokenStore";
-
-    /**
-     * Token JDBC schema used for the {@link TokenStore}.
-     */
-    public static final TokenSchema SAFE_POINT_TOKEN_STORE_JDBC_SCHEMA = TokenSchema.builder()
-                                                                                    .setTokenTable("WF_TOKEN_ENTRY")
-                                                                                    .setProcessorNameColumn(
-                                                                                            "PROCESSOR_NAME")
-                                                                                    .setTokenTypeColumn("TOKEN_TYPE")
-                                                                                    .setTokenColumn("TOKEN")
-                                                                                    .setMaskColumn("MASK")
-                                                                                    .setOwnerColumn("OWNER")
-                                                                                    .setTimestampColumn("TIMESTAMP")
-                                                                                    .setSegmentColumn("SEGMENT")
-                                                                                    .build();
-    /**
      * Name of the executor service component.
      */
     public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngineExecutor";
@@ -131,7 +104,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowExecutionRepository(componentRegistry);
         registerMutableWorkflowHistoryRepository(componentRegistry);
         registerWorkflowConfigurationRegistry(componentRegistry);
-        registerSafePointStore(componentRegistry);
         registerWorkflowEngine(componentRegistry);
         registerWorkflowHistoryProjector(componentRegistry);
         registerWorkflowStateParameterResolverFactory(componentRegistry);
@@ -215,7 +187,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                         .withBuilder(cfg -> new WorkflowEngine(
                                 cfg.getComponent(WorkflowConfigurationRegistry.class),
                                 cfg.getComponent(WorkflowExecutionRepository.class),
-                                cfg.getComponent(SafePointStore.class, COMPONENT_SAFE_POINT_STORE),
                                 workflowStateRehydrationSupport(cfg)
                         ))
                         .onShutdown(Phase.INBOUND_EVENT_CONNECTORS, WorkflowEngine::shutdown)
@@ -253,26 +224,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                             .orElseThrow(() -> new NoSuchElementException(
                                     "No repository found for %s".formatted(EventSourcedWorkflowState.class.getName())
                             ));
-    }
-
-    void registerSafePointStore(ComponentRegistry componentRegistry) {
-        componentRegistry
-                .registerIfNotPresent(
-                        SafePointStore.class,
-                        COMPONENT_SAFE_POINT_STORE,
-                        cfg -> cfg.getOptionalComponent(
-                                          TokenStore.class,
-                                          COMPONENT_SAFE_POINT_TOKEN_STORE
-                                  )
-                                  .<SafePointStore>map(tokenStore ->
-                                                               new TokenStoreSafePointStore(
-                                                                       tokenStore,
-                                                                       TokenStoreSafePointStore.tokenStoreIdentifier(
-                                                                               WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME
-                                                                       )
-                                                               ))
-                                  .orElseGet(InMemorySafePointStore::new)
-                );
     }
 
     void registerWorkflowHistoryProjector(ComponentRegistry componentRegistry) {

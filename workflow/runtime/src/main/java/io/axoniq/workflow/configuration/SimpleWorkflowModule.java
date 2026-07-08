@@ -25,11 +25,8 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
-import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
 import io.axoniq.workflow.runtime.execution.RepositoryBackedWorkflowStateRehydrationSupport;
 import io.axoniq.workflow.runtime.execution.RunningWorkflows;
-import io.axoniq.workflow.runtime.execution.SafePointStore;
-import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
@@ -39,7 +36,6 @@ import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.modelling.repository.Repository;
 
 import java.util.ArrayList;
@@ -142,20 +138,6 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                         workflowExecutionRepositoryBuilder
                 );
             }
-            cr.registerComponent(
-                    SafePointStore.class,
-                    COMPONENT_SAFE_POINT_STORE,
-                    cfg -> cfg.getOptionalComponent(
-                                      TokenStore.class,
-                                      COMPONENT_SAFE_POINT_TOKEN_STORE
-                              )
-                              .<SafePointStore>map(tokenStore ->
-                                                           new TokenStoreSafePointStore(
-                                                                   tokenStore,
-                                                                   TokenStoreSafePointStore.tokenStoreIdentifier(name)
-                                                           ))
-                              .orElseGet(InMemorySafePointStore::new)
-            );
 
             cr.registerComponent(
                     WorkflowEngine.class,
@@ -163,7 +145,6 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                     cfg -> new WorkflowEngine(
                             cfg.getComponent(WorkflowConfigurationRegistry.class),
                             cfg.getComponent(WorkflowExecutionRepository.class),
-                            cfg.getComponent(SafePointStore.class, COMPONENT_SAFE_POINT_STORE),
                             workflowStateRehydrationSupport(cfg)
                     )
             );

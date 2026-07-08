@@ -5,16 +5,17 @@
 
 ## Context
 
-[ADR-004](./004-workflow-replay-safe-point-tokens.md) already established that workflow restart needs a durable replay
-position.
+[ADR-012](./012-checkpoint-driven-replay-lower-bound.md) establishes that workflow restart needs a durable replay
+position and that this replay lower bound comes from the workflow processor checkpoint, not from a separate safe-point
+store.
 
 [ADR-007](./007-workflow-event-tags-and-waiting-step-projections.md) introduced workflow event tags, and
 [ADR-008](./008-running-workflows-event-sourced-entity.md) introduced `RunningWorkflows` as the event-sourced set of
 workflow identifiers that are still active.
 
-The design of `SimpleWorkflowExecution` contains of a transient and a non-transient part. 
+The design of `SimpleWorkflowExecution` contains both transient and non-transient parts.
 
-The transient runtime machinery such as task queues, futures, wait registrations, and timer scheduling state. 
+The transient runtime machinery includes task queues, futures, wait registrations, and timer scheduling state.
 Those structures should be reconstructed, not serialized as the primary source of truth.
 
 The durable state we actually need is the workflow execution state itself: payload, workflow status, definition
@@ -57,7 +58,7 @@ Workflow startup follows this sequence:
 4. Create a fresh workflow context and workflow execution.
 5. Inject the sourced workflow state into that fresh execution and register it in `WorkflowExecutionRepository`.
 6. Execute the restored workflow once before replay catch-up continues.
-7. Let the streaming processor catch up from the stored safe point to the latest token.
+7. Let the streaming processor catch up from the stored processor checkpoint to the latest token.
 8. Switch the engine to live mode after replay has completed.
 
 ### Rehydration rule
@@ -91,7 +92,7 @@ context that is already advancing to commit.
 This design does not store workflow state images, execution checkpoints, or projection snapshots as the primary restore
 source.
 
-Durability comes from event sourcing of `EventSourcedWorkflowState` plus the replay safe point used to resume the
+Durability comes from event sourcing of `EventSourcedWorkflowState` plus the processor checkpoint used to resume the
 streaming processor.
 
 ## Consequences

@@ -45,7 +45,9 @@ import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -57,6 +59,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -92,6 +95,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
     private final RunningSteps runningSteps = new RunningSteps();
     private final Set<String> referencedStepNames = ConcurrentHashMap.newKeySet();
+    private final AtomicBoolean taskActive = new AtomicBoolean(false);
+    private final Object checkpointIntentMonitor = new Object();
+    private boolean checkpointIntentQueued;
+    private final List<Runnable> checkpointIntentCallbacks = new ArrayList<>();
 
     private boolean executable = false;
 
@@ -180,9 +187,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         if (this.state().workflowStatus() == WorkflowStatus.NONE) {
             // FIXME join without timeout?
             sendWorkflowEvent(startedWorkflow(this.workflowContext(),
-                                             workflowName(),
-                                             workflowState.workflowDefinitionId(),
-                                             eventNameCustomizer), ctx).join();
+                                              workflowName(),
+                                              workflowState.workflowDefinitionId(),
+                                              eventNameCustomizer), ctx).join();
             try {
                 awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
             } catch (Exception e) {
@@ -362,7 +369,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     ) throws InterruptedException {
         do {
             var taken = taskQueue.take();
-            taken.accept(this);
+            runTask(taken);
         } while (!predicate.test(this.state()));
     }
 
@@ -479,7 +486,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     @Override
     @Nullable
     public Consumer<WorkflowExecution> getNextTask() {
-        return this.taskQueue.poll(); // FIXME: forever?
+        var task = this.taskQueue.poll(); // FIXME: forever?
+        return task == null ? null : ignored -> runTask(task);
     }
 
     @Override
@@ -511,6 +519,47 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     @Override
     public boolean isExecutable() {
         return executable;
+    }
+
+    /**
+     * Appends intent to advance the checkpoint token.
+     *
+     * @param onDrained runnable to execute on completion
+     */
+    public void appendCheckpointIntent(@Nonnull Runnable onDrained) {
+        var callback = Objects.requireNonNull(onDrained, "On drained callback must not be null");
+        if (!executable) {
+            callback.run();
+            return;
+        }
+
+        var shouldAppendIntent = false;
+        synchronized (checkpointIntentMonitor) {
+            checkpointIntentCallbacks.add(callback);
+            if (checkpointIntentQueued) {
+                return;
+            }
+            checkpointIntentQueued = true;
+            shouldAppendIntent = true;
+        }
+
+        if (shouldAppendIntent) {
+            appendTask(new CheckpointIntent());
+        }
+    }
+
+    /**
+     * Checks if the pending checkpoint work is present.
+     *
+     * @return
+     */
+    public boolean hasPendingCheckpointWork() {
+        if (!executable) {
+            return false;
+        }
+        synchronized (checkpointIntentMonitor) {
+            return taskActive.get() || !taskQueue.isEmpty() || checkpointIntentQueued;
+        }
     }
 
     private CompletableFuture<Void> sendWorkflowEvent(
@@ -599,5 +648,47 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         descriptor.describeProperty("state", state());
         eventWaitConditions.describeTo(descriptor);
         runningSteps.describeTo(descriptor);
+    }
+
+    /**
+     * Executes the task.
+     *
+     * @param task task to execute
+     */
+    private void runTask(@Nonnull Consumer<WorkflowExecution> task) {
+        Runnable afterTask = null;
+        taskActive.set(true);
+        try {
+            task.accept(this);
+            if (task instanceof CheckpointIntent checkpointIntent) {
+                afterTask = checkpointIntent.onDrained();
+            }
+        } finally {
+            taskActive.set(false);
+        }
+        if (afterTask != null) {
+            afterTask.run();
+        }
+    }
+
+    private final class CheckpointIntent implements Consumer<WorkflowExecution> {
+
+        private Runnable onDrained = () -> {
+        };
+
+        @Override
+        public void accept(WorkflowExecution ignored) {
+            var callbacks = new ArrayList<Runnable>();
+            synchronized (checkpointIntentMonitor) {
+                checkpointIntentQueued = false;
+                callbacks.addAll(checkpointIntentCallbacks);
+                checkpointIntentCallbacks.clear();
+            }
+            onDrained = () -> callbacks.forEach(Runnable::run);
+        }
+
+        private Runnable onDrained() {
+            return onDrained;
+        }
     }
 }
