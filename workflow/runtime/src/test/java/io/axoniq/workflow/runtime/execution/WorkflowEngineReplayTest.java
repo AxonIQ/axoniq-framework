@@ -488,6 +488,8 @@ class WorkflowEngineReplayTest {
             return execution;
         });
 
+        workflowEngine.initializeCheckpointing(safePoint, tokenAtReset);
+
         workflowEngine.handle(startEvent(eventName, "wf-1"), processingContext(firstReplayToken));
         workflowEngine.handle(startEvent(eventName, "wf-2"), processingContext(secondReplayToken));
 
