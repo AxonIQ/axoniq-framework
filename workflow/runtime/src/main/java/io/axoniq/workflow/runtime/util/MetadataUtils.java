@@ -161,7 +161,7 @@ public class MetadataUtils {
     /**
      * Returns whether the given metadata carries a version marker.
      *
-     * @return {@code true} iff the metadata carries a {@code versionChangeId} key — i.e. it's a version marker.
+     * @return {@code true} if the metadata carries a {@code versionChangeId} key — i.e. it's a version marker.
      */
     public static boolean isVersionMigrationStep(Metadata metadata) {
         return metadata.containsKey(METADATA_KEY_VERSION_CHANGE_ID);

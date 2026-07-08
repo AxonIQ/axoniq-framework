@@ -27,7 +27,7 @@ import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventstreaming.Tag;
 
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.Set;
 
 /**
@@ -71,8 +71,8 @@ public class WorkflowEventTagResolver implements TagResolver {
     @Override
     @Nonnull
     public Set<Tag> resolve(@Nonnull EventMessage eventMessage) {
-        var tags = new LinkedHashSet<Tag>();
-        var metadata = eventMessage.metadata();
+        var tags = new ArrayList<Tag>();
+        Metadata metadata = eventMessage.metadata();
 
         if (isEnginePublishedWorkflowEvent(metadata)) {
             tags.add(Tag.of(WORKFLOW_ID_TAG, MetadataUtils.getWorkflowId(metadata)));
@@ -114,10 +114,8 @@ public class WorkflowEventTagResolver implements TagResolver {
         return switch (status) {
             case STARTED -> TAG_WAIT_FOR_VALUE_STARTED;
             case COMPLETED, TIMED_OUT, CANCELLED -> TAG_WAIT_FOR_VALUE_TERMINAL;
-            case FAILED -> throw new IllegalArgumentException(
-                    "Wait for step lifecycle tag is undefined for status FAILED");
-            case RETRYING -> throw new IllegalArgumentException(
-                    "Wait for step lifecycle tag is undefined for status RETRYING");
+            default -> throw new IllegalArgumentException(
+                    "Wait for step lifecycle tag is undefined for status " + status);
         };
     }
 }
