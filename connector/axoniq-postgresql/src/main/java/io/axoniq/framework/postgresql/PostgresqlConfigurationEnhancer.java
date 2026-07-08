@@ -20,6 +20,7 @@
 package io.axoniq.framework.postgresql;
 
 import org.axonframework.common.configuration.ApplicationConfigurer;
+import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.SearchScope;
@@ -27,7 +28,6 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.sql.DataSource;
 
@@ -52,42 +52,19 @@ public class PostgresqlConfigurationEnhancer implements ConfigurationEnhancer {
 
     @Override
     public void enhance(ComponentRegistry registry) {
-        boolean engineAlreadyPresent = registry.hasComponent(EventStorageEngine.class, SearchScope.ALL);
-
-        // Capture the engine instance so the SnapshotStore builder can return it directly,
-        // avoiding a circular dependency: resolving SnapshotStore must not trigger EventStorageEngine
-        // resolution, because the framework resolves SnapshotStore during EventStorageEngine decoration.
-        AtomicReference<PostgresqlEventStorageEngine> engineRef = new AtomicReference<>();
-        // TODO #4699 this is a bit too hackish, better solution is being able to register an alias for a component
-
-        registry.registerIfNotPresent(
-                EventStorageEngine.class,
-                configuration -> {
-                    PostgresqlEventStorageEngine engine = new PostgresqlEventStorageEngine(
-                            configuration.getComponent(DataSource.class),
-                            configuration.getComponent(EventConverter.class)
-                    );
-                    engineRef.set(engine);
-                    return engine;
-                },
-                SearchScope.ALL
-        );
-
-        if (!engineAlreadyPresent) {
-            registry.registerIfNotPresent(
-                    SnapshotStore.class,
-                    configuration -> {
-                        PostgresqlEventStorageEngine engine = engineRef.get();
-                        if (engine == null) {
-                            // SnapshotStore resolved before EventStorageEngine; trigger engine creation first
-                            configuration.getComponent(EventStorageEngine.class);
-                            engine = engineRef.get();
-                        }
-                        return Objects.requireNonNull(engine);
-                    },
-                    SearchScope.ALL
-            );
+        if (!registry.hasComponent(DataSource.class, SearchScope.ALL)) {
+            return;
         }
+
+        AtomicReference<PostgresqlEventStorageEngine> instance = new AtomicReference<>();
+        ComponentBuilder<PostgresqlEventStorageEngine> shared = configuration ->
+                instance.updateAndGet(e -> e != null ? e : new PostgresqlEventStorageEngine(
+                        configuration.getComponent(DataSource.class),
+                        configuration.getComponent(EventConverter.class)
+                ));
+
+        registry.registerIfNotPresent(EventStorageEngine.class, shared, SearchScope.ALL);
+        registry.registerIfNotPresent(SnapshotStore.class, shared, SearchScope.ALL);
     }
 
     @Override
