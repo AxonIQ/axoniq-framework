@@ -42,13 +42,13 @@ class AssociationsTest {
     }
 
     @Test
-    void shouldReturnSortedAssociations() {
+    void shouldReturnAssociations() {
         var associations = Associations.associate(payloadProperty("z"), "=", "1")
                                        .and(payloadProperty("a"), "=", "2")
                                        .and(payloadProperty("m"), "=", "3");
 
         assertThat(associations.criteria())
-                .containsExactly("payload:a=2", "payload:m=3", "payload:z=1");
+                .containsExactlyInAnyOrder("payload:a=2", "payload:m=3", "payload:z=1");
     }
 
     @Test

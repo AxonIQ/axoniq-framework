@@ -21,9 +21,9 @@ package io.axoniq.workflow.runtime.association;
 import jakarta.annotation.Nonnull;
 
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -107,7 +107,7 @@ public record Associations(
     public Associations and(@Nonnull ValueRetriever retriever,
                             @Nonnull String operator,
                             @Nonnull Object value) {
-        var newValues = new TreeSet<>(this.criteria);
+        var newValues = new HashSet<>(this.criteria);
         newValues.add(SerializedAssociation.from(retriever, operator, value).serialize());
         return new Associations(this.registry, newValues);
     }
@@ -144,6 +144,6 @@ public record Associations(
                                                      String... associations) {
         return Arrays.stream(associations)
                      .map(conditionString -> SerializedAssociation.parse(registry, conditionString).serialize())
-                     .collect(Collectors.toCollection(TreeSet::new));
+                     .collect(Collectors.toCollection(HashSet::new));
     }
 }
