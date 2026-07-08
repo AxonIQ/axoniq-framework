@@ -75,4 +75,16 @@ class SerializedAssociationTest {
 
         assertThat(predicate.test(eventMessage, processingContext)).isTrue();
     }
+
+    @Test
+    void shouldEvaluateCanonicalPayloadAssociationForNonStringPayloadValue() {
+        EventMessage eventMessage = mock(EventMessage.class);
+        ProcessingContext processingContext = mock(ProcessingContext.class);
+        when(eventMessage.payloadAs(Map.class)).thenReturn(Map.of("amount", 10));
+
+        var predicate = SerializedAssociation.parse(registry, "payload:amount=10")
+                                             .asEventMessagePredicate(registry);
+
+        assertThat(predicate.test(eventMessage, processingContext)).isTrue();
+    }
 }

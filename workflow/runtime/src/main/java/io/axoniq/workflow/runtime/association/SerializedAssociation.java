@@ -134,10 +134,10 @@ public record SerializedAssociation(
         Objects.requireNonNull(registry, "Registry must not be null");
         var retriever = valueRetriever();
         var comparisonOperator = registry.get(operator);
-        return (eventMessage, processingContext) -> comparisonOperator.apply(
-                value,
-                retriever.apply(eventMessage, processingContext)
-        );
+        return (eventMessage, processingContext) -> {
+            Object retrievedValue = retriever.apply(eventMessage, processingContext);
+            return comparisonOperator.apply(value, serializeRetrievedValue(retrievedValue));
+        };
     }
 
     /**
@@ -162,6 +162,10 @@ public record SerializedAssociation(
             case MetadataPropertyValueRetriever.QUALIFIER -> MetadataPropertyValueRetriever.metadataProperty(path);
             default -> throw BadAssociationFormatException.unsupportedQualifier(supportedQualifiers(), serialize());
         };
+    }
+
+    private static Object serializeRetrievedValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     @Nonnull

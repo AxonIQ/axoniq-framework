@@ -90,11 +90,37 @@ Only `PaymentConfirmed` events whose `orderId` equals this workflow's `orderId` 
 
 The helper produces the canonical association form internally, for example `payload:orderId=123`.
 
+[[_association_dsl]]
+=== Association DSL
+
+Association conditions use this canonical form:
+
+[source,text]
+----
+<source>:<path><operator><value>
+----
+
+Examples:
+
+[source,text]
+----
+payload:paymentReference=123
+metadata:tenantId=acme
+message:timestamp>2026-01-01T12:00:00Z
+----
+
+Rules:
+
+- `source` identifies where the left-hand value comes from. `payload` is the first required qualifier.
+- `path` is source-specific lookup text, such as a payload property or metadata key. This maps to a value retriever.
+- `operator` is resolved through `ValueComparisonOperatorRegistry`.
+- `value` is stored in serialized text form.
+
 [NOTE]
 ====
 Without associations, event matching is based solely on the event type.
 For production workflows, you will almost always want to use associations to ensure events reach the correct workflow instance.
-====
+==== 
 
 == Timeouts
 

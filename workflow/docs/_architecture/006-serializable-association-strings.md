@@ -84,7 +84,6 @@ canonical representation exposed by APIs and documentation.
 - Association parsing must distinguish qualifier, path, operator, and literal value instead of
   assuming payload-only lookup.
 - The operator SPI remains valid and becomes part of the canonical association model.
-- Configuration-based start conditions can reuse the same canonical format, but that reuse is
-  optional.
+- Configuration-based start conditions reuse the same canonical format.
 - Arbitrary `BiPredicate<EventMessage, ProcessingContext>` matching is no longer the primary API
   for association-based waits.
