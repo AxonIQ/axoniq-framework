@@ -16,7 +16,9 @@
 
 package org.axonframework.messaging.eventhandling.processing.streaming.token.store;
 
+import org.axonframework.common.ClassUtils;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GapAwareTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.MergedTrackingToken;
@@ -52,9 +54,29 @@ public final class LegacyTokenTypes {
      *
      * @param tokenType the token class name read from the store
      * @return the matching Axon Framework 5 token class, or {@code null} if unknown
+     * @since 5.2.0
      */
     @Nullable
     public static Class<? extends TrackingToken> mappedType(String tokenType) {
         return AXON_4_TO_AXON_5.get(tokenType);
+    }
+
+    /**
+     * Deserializes the given {@code token} bytes into a {@link TrackingToken}, resolving the target class from the
+     * given {@code tokenType}. A known Axon Framework 4 token name is remapped to its Axon Framework 5 counterpart
+     * before deserializing; any other name is loaded as-is.
+     *
+     * @param converter the converter to deserialize the token with
+     * @param token     the serialized token bytes
+     * @param tokenType the token class name read from the store
+     * @return the deserialized tracking token
+     * @since 5.2.0
+     */
+    public static TrackingToken deserialize(Converter converter, byte[] token, String tokenType) {
+        Class<? extends TrackingToken> axon5Type = mappedType(tokenType);
+        if (axon5Type != null) {
+            return converter.convert(token, axon5Type);
+        }
+        return converter.convert(token, ClassUtils.loadClass(tokenType));
     }
 }

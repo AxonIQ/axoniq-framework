@@ -24,7 +24,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Lob;
-import org.axonframework.common.ClassUtils;
 import org.axonframework.common.DateTimeUtils;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
@@ -32,7 +31,6 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.LegacyTokenTypes;
 import org.axonframework.conversion.Converter;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.TemporalAmount;
 import java.util.Objects;
@@ -122,11 +120,7 @@ public class TokenEntry {
         if (token == null || tokenType == null) {
             return null;
         }
-        Class<? extends TrackingToken> axon5Type = LegacyTokenTypes.mappedType(tokenType);
-        if (axon5Type != null) {
-            return converter.convert(this.token, axon5Type);
-        }
-        return converter.convert(this.token, ClassUtils.loadClass(tokenType));
+        return LegacyTokenTypes.deserialize(converter, token, tokenType);
     }
 
     /**
