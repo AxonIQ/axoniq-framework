@@ -73,6 +73,8 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
         return AxonServerTestInfrastructure.class.getResource("/" + AXON_SERVER_TEST_LICENSE) != null;
     }
 
+
+
     @Override
     public void start() {
         boolean wasRunning = CONTAINER.isRunning();

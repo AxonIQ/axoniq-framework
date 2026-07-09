@@ -30,6 +30,8 @@ import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.DefaultAxonApplication;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.condition.*;
+import org.junit.jupiter.api.extension.*;
 
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -39,7 +41,9 @@ import static io.axoniq.framework.axonserver.connector.api.AxonServerConfigurati
 import static io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor.tenantWithId;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assumptions.*;
 
+@ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
 @Timeout(60)
 class AxonServerTenantProviderIT {
 

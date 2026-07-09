@@ -36,6 +36,7 @@ import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.extension.*;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -47,6 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @Timeout(60)
+@ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
 class TenantIdCorrelationIT {
 
     private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
