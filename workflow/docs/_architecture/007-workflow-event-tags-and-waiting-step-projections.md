@@ -19,7 +19,7 @@ waiting-steps projection.
 
 ## Decision
 
-All workflow-relevant events published by the engine get AF5 event-store tags through a central `TagResolver`.
+All workflow-relevant events published by the engine get event-store tags through a central `TagResolver`.
 
 ### Base workflow tag
 

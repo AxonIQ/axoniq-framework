@@ -30,8 +30,8 @@ import java.util.function.BiPredicate;
 /**
  * Canonical serialized representation of an event association.
  *
- * @param qualifier association source qualifier
- * @param path      source-specific path
+ * @param qualifier association source qualifier, maps to {@link ValueRetriever#qualifier()}
+ * @param path      source-specific path, , maps to {@link ValueRetriever#path()}
  * @param operator  comparison operator name
  * @param value     serialized comparison value
  * @author Simon Zambrovski

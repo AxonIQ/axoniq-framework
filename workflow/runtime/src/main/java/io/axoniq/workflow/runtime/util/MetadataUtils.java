@@ -33,20 +33,62 @@ import java.util.function.Predicate;
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
+ * @since 1.0.0
  */
 @Internal
 public class MetadataUtils {
 
+    /**
+     * Metadata key storing the workflow instance identifier.
+     */
     public static final String METADATA_KEY_WORKFLOW_ID = "workflowId";
+
+    /**
+     * Metadata key storing the step status value.
+     */
     public static final String METADATA_KEY_TYPE = "stepType";
+
+    /**
+     * Metadata key storing the step primitive classification.
+     */
     public static final String METADATA_KEY_STEP_PRIMITIVE = "stepPrimitive";
+
+    /**
+     * Metadata key storing the payload reducer name to apply after a step result.
+     */
     public static final String METADATA_KEY_MODIFY_PAYLOAD = "modifyPayload";
+
+    /**
+     * Metadata key storing the workflow step name.
+     */
     public static final String METADATA_KEY_STEP_NAME = "stepName";
+
+    /**
+     * Metadata key storing the workflow lifecycle status value.
+     */
     public static final String METADATA_KEY_WORKFLOW_STATUS = "workflowStatus";
+    /**
+     * Metadata key storing the workflow definition name.
+     */
     public static final String METADATA_KEY_WORKFLOW_DEFINITION_NAME = "workflowDefinitionName";
+    /**
+     * Metadata key storing the workflow definition version.
+     */
     public static final String METADATA_KEY_WORKFLOW_DEFINITION_VERSION = "workflowDefinitionVersion";
+
+    /**
+     * Metadata key storing the identifier of a recorded workflow version change.
+     */
     public static final String METADATA_KEY_VERSION_CHANGE_ID = "versionChangeId";
+
+    /**
+     * Metadata key storing the workflow version associated with a version marker event.
+     */
     public static final String METADATA_KEY_VERSION = "version";
+
+    /**
+     * Marker value identifying a step as a wait-for-event primitive.
+     */
     public static final String STEP_PRIMITIVE_WAIT_FOR_EVENT = "WAIT_FOR_EVENT";
 
     private MetadataUtils() {

@@ -19,13 +19,15 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
+import io.axoniq.workflow.runtime.util.MetadataUtils;
 import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventstreaming.Tag;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Instant;
 import java.util.Map;
@@ -33,8 +35,7 @@ import java.util.Set;
 
 import static io.axoniq.workflow.runtime.util.WorkflowEventTagResolver.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class WorkflowEventTagResolverTest {
 
@@ -55,9 +56,11 @@ class WorkflowEventTagResolverTest {
     void workflowLifecycleEventsGetWorkflowIdAndLifecycleTags() {
         var customizer = DefaultEventNameCustomizer.Builder.defaults();
         var started = EventMessageUtils.startedWorkflow(context, "OrderWorkflow", workflowDefinitionId, customizer);
-        var timedOut = EventMessageUtils.timeoutWorkflow(context, "OrderWorkflow", Instant.parse("2026-07-08T10:15:00Z"),
-                                                        workflowDefinitionId,
-                                                        customizer);
+        var timedOut = EventMessageUtils.timeoutWorkflow(context,
+                                                         "OrderWorkflow",
+                                                         Instant.parse("2026-07-08T10:15:00Z"),
+                                                         workflowDefinitionId,
+                                                         customizer);
 
         assertThat(resolver.resolve(started)).isEqualTo(Set.of(
                 Tag.of(TAG_WORKFLOW_ID, "wf-123"),
@@ -107,5 +110,25 @@ class WorkflowEventTagResolverTest {
         var started = EventMessageUtils.startedStep(context, "shipOrder", Map.of("x", "y"), customizer);
 
         assertThat(resolver.resolve(started)).isEqualTo(Set.of(Tag.of("workflowId", "wf-123")));
+    }
+
+    @Test
+    void retryingWaitForEventStepDoesNotGetWorkflowWaitTag() {
+        var customizer = DefaultEventNameCustomizer.Builder.defaults();
+        var retrying = retryingWaitForEventStep(customizer);
+
+        assertThat(resolver.resolve(retrying)).isEqualTo(Set.of(Tag.of("workflowId", "wf-123")));
+    }
+
+    private EventMessage retryingWaitForEventStep(DefaultEventNameCustomizer customizer) {
+        var retryInfo = mock(StepRetryInfo.class);
+        var retrying = EventMessageUtils.retryingStep(context, "awaitPayment", retryInfo, customizer);
+        return mockEventMessage(MetadataUtils.markWaitForEventStep(retrying.metadata()));
+    }
+
+    private EventMessage mockEventMessage(org.axonframework.messaging.core.Metadata metadata) {
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(metadata);
+        return eventMessage;
     }
 }

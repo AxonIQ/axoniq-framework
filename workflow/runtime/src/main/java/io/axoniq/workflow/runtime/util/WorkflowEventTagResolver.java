@@ -73,7 +73,10 @@ public class WorkflowEventTagResolver implements TagResolver {
 
         if (MetadataUtils.isWaitForEventStep(metadata)) {
             MetadataUtils.getStepStatus(metadata)
-                         .filter(status -> status == StepStatus.STARTED || status.isTerminal())
+                         .filter(status -> status == StepStatus.STARTED
+                                 || status == StepStatus.COMPLETED
+                                 || status == StepStatus.CANCELLED
+                                 || status == StepStatus.TIMED_OUT)
                          .map(WorkflowEventTagResolver::lifecycleValue)
                          .map(value -> Tag.of(TAG_WORKFLOW_EVENT_TYPE, value))
                          .ifPresent(tags::add);

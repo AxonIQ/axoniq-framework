@@ -19,6 +19,7 @@
 
 package io.axoniq.workflow.dsl.base;
 
+import io.axoniq.workflow.dsl.api.EventAssociationsUtils;
 import io.axoniq.workflow.runtime.api.execution.context.CancelStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.CancelWorkflowDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
@@ -37,9 +38,6 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.payload.PayloadModification;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.association.Associations;
-import io.axoniq.workflow.runtime.association.EqualsComparison;
-import io.axoniq.workflow.runtime.association.MetadataPropertyValueRetriever;
-import io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever;
 import io.axoniq.workflow.runtime.association.ValueRetriever;
 import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
@@ -106,9 +104,11 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @param value expected association value
      * @return matcher that can be used when building event conditions
+     * @deprecated use {@link EventAssociationsUtils.equalsTo(String)} instead.
      */
-    public static Associations.VariableMatcher equalsTo(Object value) {
-        return new Associations.VariableMatcher(EqualsComparison.OPERATOR, value);
+    @Deprecated(since = "0.2.0", forRemoval = true)
+    public static Associations.Matcher equalsTo(Object value) {
+        return EventAssociationsUtils.equalsTo(value);
     }
 
     /**
@@ -116,9 +116,11 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @param propertyName payload property name
      * @return payload-property retriever
+     * @deprecated use {@link EventAssociationsUtils.payloadProperty(String)} instead.
      */
+    @Deprecated(since = "0.2.0", forRemoval = true)
     public static ValueRetriever payloadProperty(@Nonnull String propertyName) {
-        return PayloadPropertyValueRetriever.payloadProperty(propertyName);
+        return EventAssociationsUtils.payloadProperty(propertyName);
     }
 
     /**
@@ -126,9 +128,11 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @param propertyName metadata key
      * @return metadata-property retriever
+     * @deprecated use {@link EventAssociationsUtils.metadataProperty(String)} instead.
      */
+    @Deprecated(since = "0.2.0", forRemoval = true)
     public static ValueRetriever metadataProperty(@Nonnull String propertyName) {
-        return MetadataPropertyValueRetriever.metadataProperty(propertyName);
+        return EventAssociationsUtils.metadataProperty(propertyName);
     }
 
     /**
@@ -365,8 +369,8 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
     }
 
     /**
-     * Migrates this workflow to {@code newVersion} for {@code changeId} and returns whether the new
-     * branch is in effect:
+     * Migrates this workflow to {@code newVersion} for {@code changeId} and returns whether the new branch is in
+     * effect:
      * <ul>
      *   <li>Already recorded for this {@code changeId} → returns {@code true} iff the recorded
      *       version is {@code >=} {@code newVersion}.</li>
@@ -391,8 +395,8 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param changeId   developer-chosen identifier describing the change.
      * @param newVersion new workflow version to record (semver string, e.g. {@code "0.0.2"}).
      * @param customizer customizer for the version step definition (e.g. event name customizer).
-     * @return {@code true} if the workflow is at (or past) {@code newVersion} for this
-     * {@code changeId}; {@code false} if it stays on the legacy branch.
+     * @return {@code true} if the workflow is at (or past) {@code newVersion} for this {@code changeId}; {@code false}
+     * if it stays on the legacy branch.
      */
     public boolean migrateVersion(@Nonnull String changeId,
                                   @Nonnull String newVersion,
@@ -405,13 +409,12 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
     }
 
     /**
-     * Migrates this workflow to {@code newVersion} for {@code changeId} with default settings
-     * (default event-name customizer).
+     * Migrates this workflow to {@code newVersion} for {@code changeId} with default settings (default event-name
+     * customizer).
      *
      * @param changeId   developer-chosen identifier describing the change.
      * @param newVersion new workflow version to record (semver string, e.g. {@code "0.0.2"}).
-     * @return {@code true} if the workflow is at (or past) {@code newVersion} for this
-     * {@code changeId}.
+     * @return {@code true} if the workflow is at (or past) {@code newVersion} for this {@code changeId}.
      * @see #migrateVersion(String, String, UnaryOperator)
      */
     public boolean migrateVersion(@Nonnull String changeId, @Nonnull String newVersion) {
@@ -583,8 +586,8 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
     }
 
     /**
-     * Creates the default version step definition used by the
-     * {@link #migrateVersion(String, String, UnaryOperator)} convenience overloads.
+     * Creates the default version step definition used by the {@link #migrateVersion(String, String, UnaryOperator)}
+     * convenience overloads.
      *
      * @param changeId   developer-chosen identifier describing the change.
      * @param newVersion new workflow version to record (semver string).

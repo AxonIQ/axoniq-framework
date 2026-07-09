@@ -262,7 +262,7 @@ These keys are managed by the engine and cannot be overridden.
 
 === Engine-managed event-store tags
 
-Engine-published workflow events are also written with AF5 event-store tags.
+Engine-published workflow events are also written with event-store tags.
 
 [cols="1,2"]
 |===
