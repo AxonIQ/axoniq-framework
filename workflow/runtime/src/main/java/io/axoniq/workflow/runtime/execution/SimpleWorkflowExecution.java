@@ -57,7 +57,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -93,9 +92,22 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
     private final RunningSteps runningSteps = new RunningSteps();
     private final Set<String> referencedStepNames = ConcurrentHashMap.newKeySet();
-    private final AtomicBoolean taskActive = new AtomicBoolean(false);
-    private final CheckpointSupport checkpointSupport;
+    private final CheckpointSupport checkpointSupport = new CheckpointSupport(new CheckpointSupport.Host() {
+        @Override
+        public boolean isExecutable() {
+            return executable;
+        }
 
+        @Override
+        public boolean hasQueuedTasks() {
+            return !taskQueue.isEmpty();
+        }
+
+        @Override
+        public void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
+            SimpleWorkflowExecution.this.appendTask(task);
+        }
+    });
     private boolean executable = false;
 
     /**
@@ -134,27 +146,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 this.contextDelegate.typedWorkflowContext(),
                 workflowConfiguration.workflowStatusChangeListeners()
         );
-        this.checkpointSupport = new CheckpointSupport(new CheckpointSupport.Host() {
-            @Override
-            public boolean isExecutable() {
-                return executable;
-            }
-
-            @Override
-            public boolean hasQueuedTasks() {
-                return !taskQueue.isEmpty();
-            }
-
-            @Override
-            public boolean isTaskActive() {
-                return taskActive.get();
-            }
-
-            @Override
-            public void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
-                SimpleWorkflowExecution.this.appendTask(task);
-            }
-        });
     }
 
 
@@ -381,12 +372,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
 
     @Override
-    public void awaitStateChange(
-            @Nonnull Predicate<WorkflowState> predicate
-    ) throws InterruptedException {
+    public void awaitStateChange(@Nonnull Predicate<WorkflowState> predicate) throws InterruptedException {
         do {
             var taken = taskQueue.take();
-            runTask(taken);
+            checkpointSupport.runTask(taken, this);
         } while (!predicate.test(this.state()));
     }
 
@@ -394,7 +383,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
         if (executable) {
             // live mode
-
             eventWaitConditions.evaluateAndApply(eventMessage, processingContext, contextDelegate::eventReceived);
             appendTask(i -> state().evolve(eventMessage, processingContext));
         } else {
@@ -461,6 +449,24 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                                                            DefaultEventNameCustomizer.Builder.defaults()));
     }
 
+    /**
+     * Appends intent to advance the checkpoint token.
+     *
+     * @param onDrained runnable to execute on completion
+     */
+    public void appendCheckpointIntent(@Nonnull Runnable onDrained) {
+        checkpointSupport.appendCheckpointIntent(onDrained);
+    }
+
+    /**
+     * Checks if the pending checkpoint work is present.
+     *
+     * @return {@code true} if the pending checkpoint work is present, {@code false} otherwise.
+     */
+    public boolean hasPendingCheckpointWork() {
+        return checkpointSupport.hasPendingCheckpointWork();
+    }
+
     @Override
     public void cancelAllRunningSteps(@Nullable Throwable cause) {
         runningSteps.cancelAll(cause, cancelledSteps -> {
@@ -504,7 +510,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     @Nullable
     public Consumer<WorkflowExecution> getNextTask() {
         var task = this.taskQueue.poll(); // FIXME: forever?
-        return task == null ? null : ignored -> runTask(task);
+        return task == null ? null : ignored -> checkpointSupport.runTask(task, this);
     }
 
     @Override
@@ -536,24 +542,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     @Override
     public boolean isExecutable() {
         return executable;
-    }
-
-    /**
-     * Appends intent to advance the checkpoint token.
-     *
-     * @param onDrained runnable to execute on completion
-     */
-    public void appendCheckpointIntent(@Nonnull Runnable onDrained) {
-        checkpointSupport.appendCheckpointIntent(onDrained);
-    }
-
-    /**
-     * Checks if the pending checkpoint work is present.
-     *
-     * @return
-     */
-    public boolean hasPendingCheckpointWork() {
-        return checkpointSupport.hasPendingCheckpointWork();
     }
 
     private CompletableFuture<Void> sendWorkflowEvent(
@@ -642,24 +630,5 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         descriptor.describeProperty("state", state());
         eventWaitConditions.describeTo(descriptor);
         runningSteps.describeTo(descriptor);
-    }
-
-    /**
-     * Executes the task.
-     *
-     * @param task task to execute
-     */
-    private void runTask(@Nonnull Consumer<WorkflowExecution> task) {
-        Runnable afterTask;
-        taskActive.set(true);
-        try {
-            task.accept(this);
-            afterTask = checkpointSupport.afterTask(task);
-        } finally {
-            taskActive.set(false);
-        }
-        if (afterTask != null) {
-            afterTask.run();
-        }
     }
 }

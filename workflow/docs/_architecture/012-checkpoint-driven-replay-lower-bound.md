@@ -57,21 +57,31 @@ events are delivered.
 
 ### Checkpoint advancement rule
 
-The workflow engine advances the processor checkpoint only when workflow work is safe with respect to durable state.
+The workflow engine requests processor checkpoints eagerly, but completes checkpoint advancement only when workflow work
+is safe with respect to durable state.
+
+The event-streaming framework guarantees at most one in-flight checkpoint advancement per segment: it does not invoke
+`onCheckpointAdvanced(...)` again until the previously returned future has completed. The engine uses that contract to
+simplify checkpointing:
+
+- before a trigger is available, newer tracking tokens are coalesced in a local pending token
+- once a trigger is available, checkpoint requests are forwarded immediately to the processor
+- the processor, not the engine, serializes repeated checkpoint requests for the segment
+- queue-drain waiting happens only inside `onCheckpointAdvanced(...)`
 
 For one execution, checkpoint advancement is safe when:
 
 - no workflow task is currently active
 - no workflow task is still queued
-- no queued checkpoint intent remains
+- no queued checkpoint barrier remains
 
 An execution waiting in `waitForEvent` with an empty queue is checkpoint-safe. Wait registrations, timeout futures, and
 other transient runtime structures are rebuilt on restore and do not by themselves require replay from the workflow
 start token.
 
-If an external event has been observed but its workflow consequence is still in-flight through the task queue,
-checkpoint advancement must wait. The engine should request another checkpoint attempt after the queue drains instead of
-falling back to the earliest workflow start token.
+The completion-side wait must still re-check queue safety after each barrier task runs. Consuming one barrier task does
+not by itself prove quiescence, because an earlier workflow task may append more work behind that barrier. The engine
+therefore repeats the barrier-and-recheck cycle until the workflow queues are actually drained.
 
 ## Consequences
 
@@ -80,5 +90,7 @@ falling back to the earliest workflow start token.
 - Event-sourced workflow rehydration remains the source of durable workflow state.
 - The old safe-point-store architecture is no longer the target design for replay positioning.
 - Checkpoint safety depends on queue drain and active task completion, not on workflow age.
+- Engine-side in-flight checkpoint tracking is not needed; checkpoint waiting is concentrated in
+  `onCheckpointAdvanced(...)`, and request serialization is delegated to the processor.
 - Catch-up mode remains necessary so restored waits can observe events that arrived during downtime before the engine
   becomes fully live.

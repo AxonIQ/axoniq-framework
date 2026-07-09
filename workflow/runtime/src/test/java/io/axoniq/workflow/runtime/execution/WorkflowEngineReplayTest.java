@@ -51,6 +51,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.time.Clock;
 import java.util.HashMap;
 import java.util.List;
@@ -542,6 +543,81 @@ class WorkflowEngineReplayTest {
     }
 
     @Test
+    void checkpointIsRequestedImmediatelyEvenWhenWorkflowQueueHasPendingWork() throws Exception {
+        var execution = simpleExecution("wf-1", token(18));
+        markExecutable(execution, true);
+        execution.appendTask(ignored -> {
+        });
+        workflowExecutionRepository.save("wf-1", () -> execution);
+
+        var trigger = mock(CheckpointTrigger.class);
+        var requested = token(25);
+        workflowEngine.initializeCheckpointing(token(18), token(30));
+        workflowEngine.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+
+        requestCheckpoint(workflowEngine, requested);
+
+        verify(trigger).requestCheckpoint(requested);
+    }
+
+    @Test
+    void checkpointRequestsAreCoalescedUntilSegmentTriggerIsAvailable() throws Exception {
+        var trigger = mock(CheckpointTrigger.class);
+        var firstRequested = token(25);
+        var secondRequested = token(27);
+        workflowEngine.initializeCheckpointing(token(18), token(30));
+
+        requestCheckpoint(workflowEngine, firstRequested);
+        requestCheckpoint(workflowEngine, secondRequested);
+
+        verifyNoInteractions(trigger);
+
+        workflowEngine.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+
+        verify(trigger).requestCheckpoint(secondRequested);
+        verifyNoMoreInteractions(trigger);
+    }
+
+    @Test
+    void checkpointRequestsAreForwardedWhileEarlierAdvanceIsStillInFlight() throws Exception {
+        var trigger = mock(CheckpointTrigger.class);
+        var firstRequested = token(25);
+        var secondRequested = token(27);
+        workflowEngine.initializeCheckpointing(token(18), token(30));
+        workflowEngine.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+
+        requestCheckpoint(workflowEngine, firstRequested);
+        requestCheckpoint(workflowEngine, secondRequested);
+
+        verify(trigger).requestCheckpoint(firstRequested);
+        verify(trigger).requestCheckpoint(secondRequested);
+    }
+
+    @Test
+    void checkpointAdvanceRechecksWhenEarlierTaskAppendsMoreWorkBehindBarrier() throws Exception {
+        var execution = simpleExecution("wf-1", token(18));
+        markExecutable(execution, true);
+        execution.appendTask(ignored -> execution.appendTask(next -> {
+        }));
+        workflowExecutionRepository.save("wf-1", () -> execution);
+
+        var requested = token(25);
+        var advanced = workflowEngine.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
+
+        execution.getNextTask().accept(execution);
+        assertThat(advanced).isNotDone();
+
+        execution.getNextTask().accept(execution);
+        assertThat(advanced).isNotDone();
+
+        execution.getNextTask().accept(execution);
+        assertThat(advanced).isNotDone();
+
+        execution.getNextTask().accept(execution);
+        assertSameToken(advanced.join(), requested);
+    }
+
+    @Test
     void checkpointIntentCallbacksAreCoalescedIntoSingleQueuedTask() throws Exception {
         var execution = simpleExecution("wf-1", token(18));
         markExecutable(execution, true);
@@ -618,6 +694,13 @@ class WorkflowEngineReplayTest {
         Field field = SimpleWorkflowExecution.class.getDeclaredField("executable");
         field.setAccessible(true);
         field.set(execution, executable);
+    }
+
+    private static void requestCheckpoint(WorkflowEngine workflowEngine,
+                                          TrackingToken token) throws Exception {
+        Method method = WorkflowEngine.class.getDeclaredMethod("requestCheckpoint", TrackingToken.class);
+        method.setAccessible(true);
+        method.invoke(workflowEngine, token);
     }
 
     private static void drainAllTasks(SimpleWorkflowExecution execution) {
