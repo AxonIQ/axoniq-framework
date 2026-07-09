@@ -151,7 +151,7 @@ When migrating from Axon Framework 4, make sure your application no longer assum
 Snapshot storage is now an explicit dependency of the entity module.
 ====
 
-[#existing_snapshot_data]
+[#reusing_existing_snapshots]
 == Reusing existing Axon Framework 4 snapshots
 
 The stores above only begin writing snapshots once your application runs on Axon Framework 5.
@@ -164,7 +164,7 @@ An Axon Framework 4 snapshot is positioned only by its aggregate sequence number
 
 [IMPORTANT]
 ====
-Existing Axon Framework 4 snapshots are therefore not reusable in Axon Framework 5, nor migratable to a DCB context.
+Existing Axon Framework 4 snapshots are therefore neither reusable in Axon Framework 5 nor migratable to a DCB context.
 Once a context is switched to DCB they are ignored entirely: affected entities rebuild from a full event replay, and fresh snapshots are written from then on.
 ====
 

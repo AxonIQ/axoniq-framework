@@ -72,7 +72,7 @@ This engine uses Axon Server's previous aggregate-oriented APIs, which organize 
 [NOTE]
 ====
 Switching a context to DCB also affects existing snapshots: Axon Framework 4 snapshots cannot be reused afterwards, and affected entities rebuild from their event streams.
-See xref:migration:paths/snapshotting.adoc#existing_snapshot_data[Reusing existing Axon Framework 4 snapshots] for the reasoning and what to expect.
+See xref:migration:paths/snapshotting.adoc#reusing_existing_snapshots[Reusing existing Axon Framework 4 snapshots] for the reasoning and what to expect.
 ====
 
 To configure the `AggregateBasedAxonServerEventStorageEngine`, please regard the following samples:
