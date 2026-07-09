@@ -343,7 +343,7 @@ A replay token only exists while a processor is replaying, so complete any repla
 === Multi-source tokens
 
 Reading from more than one event source, and its `MultiSourceTrackingToken`, is part of the Axoniq Framework rather than Axon Framework 5 itself.
-When you use the Axoniq Framework, these tokens are recognized and read after upgrading, in the same way as the tokens above.
+When you use Axoniq Framework, these tokens are recognized and read after upgrading, in the same way as the tokens above.
 The exception is a token captured while one of its sources was replaying, because it contains a replay token, which cannot be migrated for the reason described under <<replay-tokens,Replay tokens>>. Reset those processors instead.
 
 On Axon Framework 5 without the Axoniq Framework there is no multi-source support, so reset the affected processors to rebuild their position, as described in <<option-2-reset-processors-to-latest,reset the processors to latest>>.
