@@ -144,7 +144,7 @@ class WorkflowEngineReplayTest {
 
         ProcessingContext context = processingContext(token(191));
 
-        workflowEngine.handle(replayStatusChanged, context);
+        workflowEngine.replayStatusChangedHandler().handle(replayStatusChanged, context);
 
         // Verify terminal execution removed
         verify(workflowExecutionRepository).remove("terminalId");
@@ -416,8 +416,8 @@ class WorkflowEngineReplayTest {
             return execution;
         });
 
-        workflowEngine.initializeCheckpointing(safePoint, tokenAtReset);
-        workflowEngine.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        workflowEngine.replayStatusChangedHandler().initializeReplayTracking(safePoint, tokenAtReset);
+        workflowEngine.checkpointing().onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
 
         workflowEngine.handle(startEvent(eventName, "wf-1"), processingContext(firstReplayToken));
         workflowEngine.handle(startEvent(eventName, "wf-2"), processingContext(secondReplayToken));
@@ -430,9 +430,9 @@ class WorkflowEngineReplayTest {
     void checkpointAdvancesToRequestedTokenWhenNoWorkflowWorkIsPending() {
         var requested = token(25);
 
-        workflowEngine.initializeCheckpointing(token(18), token(30));
+        workflowEngine.replayStatusChangedHandler().initializeReplayTracking(token(18), token(30));
 
-        var advanced = workflowEngine.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested).join();
+        var advanced = workflowEngine.checkpointing().onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested).join();
 
         assertSameToken(advanced, requested);
     }
@@ -446,11 +446,11 @@ class WorkflowEngineReplayTest {
         workflowExecutionRepository.save("wf-1", () -> execution);
 
         var trigger = mock(CheckpointTrigger.class);
-        workflowEngine.initializeCheckpointing(token(18), token(30));
-        workflowEngine.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        workflowEngine.replayStatusChangedHandler().initializeReplayTracking(token(18), token(30));
+        workflowEngine.checkpointing().onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
 
         var requested = token(25);
-        var advanced = workflowEngine.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
+        var advanced = workflowEngine.checkpointing().onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
 
         assertThat(advanced).isNotDone();
 
@@ -469,8 +469,8 @@ class WorkflowEngineReplayTest {
 
         var trigger = mock(CheckpointTrigger.class);
         var requested = token(25);
-        workflowEngine.initializeCheckpointing(token(18), token(30));
-        workflowEngine.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        workflowEngine.replayStatusChangedHandler().initializeReplayTracking(token(18), token(30));
+        workflowEngine.checkpointing().onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
 
         requestCheckpoint(workflowEngine, requested);
 
@@ -482,14 +482,14 @@ class WorkflowEngineReplayTest {
         var trigger = mock(CheckpointTrigger.class);
         var firstRequested = token(25);
         var secondRequested = token(27);
-        workflowEngine.initializeCheckpointing(token(18), token(30));
+        workflowEngine.replayStatusChangedHandler().initializeReplayTracking(token(18), token(30));
 
         requestCheckpoint(workflowEngine, firstRequested);
         requestCheckpoint(workflowEngine, secondRequested);
 
         verifyNoInteractions(trigger);
 
-        workflowEngine.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        workflowEngine.checkpointing().onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
 
         verify(trigger).requestCheckpoint(secondRequested);
         verifyNoMoreInteractions(trigger);
@@ -500,8 +500,8 @@ class WorkflowEngineReplayTest {
         var trigger = mock(CheckpointTrigger.class);
         var firstRequested = token(25);
         var secondRequested = token(27);
-        workflowEngine.initializeCheckpointing(token(18), token(30));
-        workflowEngine.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        workflowEngine.replayStatusChangedHandler().initializeReplayTracking(token(18), token(30));
+        workflowEngine.checkpointing().onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
 
         requestCheckpoint(workflowEngine, firstRequested);
         requestCheckpoint(workflowEngine, secondRequested);
@@ -519,7 +519,7 @@ class WorkflowEngineReplayTest {
         workflowExecutionRepository.save("wf-1", () -> execution);
 
         var requested = token(25);
-        var advanced = workflowEngine.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
+        var advanced = workflowEngine.checkpointing().onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
 
         execution.getNextTask().accept(execution);
         assertThat(advanced).isNotDone();

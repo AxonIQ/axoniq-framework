@@ -20,6 +20,8 @@ package io.axoniq.workflow.configuration;
 
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointTrigger;
+import io.axoniq.workflow.runtime.execution.CheckpointingSupplier;
+import io.axoniq.workflow.runtime.execution.ReplayStatusChangedHandlerSupplier;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -95,13 +97,17 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
                 SequentialPerAggregatePolicy.INSTANCE,
                 SequentialPolicy.INSTANCE
         );
-        if (eventHandler instanceof Checkpointing checkpointing) {
+        if (eventHandler instanceof CheckpointingSupplier checkpointingSupplier) {
+            checkpointingHandler = checkpointingSupplier.checkpointing();
+        } else if (eventHandler instanceof Checkpointing checkpointing) {
             checkpointingHandler = checkpointing;
         } else {
             checkpointingHandler = null;
         }
-        if (eventHandler instanceof ReplayStatusChangedHandler) {
-            replayStatusChangedHandler = (ReplayStatusChangedHandler) eventHandler;
+        if (eventHandler instanceof ReplayStatusChangedHandlerSupplier replayStatusChangedHandlerSupplier) {
+            replayStatusChangedHandler = replayStatusChangedHandlerSupplier.replayStatusChangedHandler();
+        } else if (eventHandler instanceof ReplayStatusChangedHandler replayStatusChanged) {
+            replayStatusChangedHandler = replayStatusChanged;
         } else {
             replayStatusChangedHandler = null;
         }

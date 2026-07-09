@@ -88,7 +88,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
     private final RunningSteps runningSteps = new RunningSteps();
     private final Set<String> referencedStepNames = ConcurrentHashMap.newKeySet();
-    private final CheckpointSupport checkpointSupport = new CheckpointSupport(new CheckpointSupport.Host() {
+    private final WorkflowExecutionCheckpointSupport checkpointSupport = new WorkflowExecutionCheckpointSupport(new WorkflowExecutionCheckpointSupport.Host() {
         @Override
         public boolean isExecutable() {
             return executable;

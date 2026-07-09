@@ -234,7 +234,8 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
             @Nullable TrackingToken processorToken,
             @Nullable TrackingToken latestToken
     ) {
-        workflowEngine.initializeCheckpointing(processorToken, latestToken);
+        var replaySupport = workflowEngine.replayStatusChangedHandler();
+        replaySupport.initializeReplayTracking(processorToken, latestToken);
         var executionContext = new ConfigurationBackedProcessingContext(configuration);
         return unitOfWorkFactory.create(moduleName + "WorkflowRehydration")
                                 .executeWithResult(context -> {
@@ -243,7 +244,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                 })
                                 .thenRun(() -> {
                                     if (!requiresReplay(processorToken, latestToken)) {
-                                        workflowEngine.switchToLiveMode();
+                                        replaySupport.switchToLiveMode();
                                     } else {
                                         workflowEngine.startCheckpointCatchUp();
                                     }

@@ -86,7 +86,7 @@ import java.util.function.Consumer;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-final class CheckpointSupport {
+final class WorkflowExecutionCheckpointSupport {
 
     private static final Runnable NO_OP = () -> {
     };
@@ -122,7 +122,7 @@ final class CheckpointSupport {
         /**
          * Appends a task to the execution queue.
          * <p>
-         * {@link CheckpointSupport} uses this to inject {@link CheckpointIntent} barrier tasks into the exact same
+         * {@link WorkflowExecutionCheckpointSupport} uses this to inject {@link CheckpointIntent} barrier tasks into the exact same
          * queue that carries normal workflow work, which is what makes the barrier meaningful.
          *
          * @param task the task to append
@@ -141,7 +141,7 @@ final class CheckpointSupport {
      * @param host the execution facade used to inspect queue state and append barrier tasks
      */
     @Internal
-    CheckpointSupport(@Nonnull Host host) {
+    WorkflowExecutionCheckpointSupport(@Nonnull Host host) {
         this.host = Objects.requireNonNull(host, "Checkpoint support host must not be null");
     }
 
@@ -253,7 +253,7 @@ final class CheckpointSupport {
          */
         @Override
         public void accept(WorkflowExecution ignored) {
-            synchronized (CheckpointSupport.this) {
+            synchronized (WorkflowExecutionCheckpointSupport.this) {
                 checkpointIntentQueued = false;
                 onDrained = checkpointIntentCallback;
                 checkpointIntentCallback = NO_OP;

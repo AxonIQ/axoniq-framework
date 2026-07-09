@@ -19,6 +19,7 @@
 package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
+import io.axoniq.workflow.runtime.execution.WorkflowEngineReplaySupport;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -43,11 +44,13 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
     void earlierProcessorTokenStartsCheckpointCatchUpAfterRehydration() {
         var enhancer = new WorkflowEventProcessingRegistrationEnhancer("Workflow", null, null, true);
         var workflowEngine = mock(WorkflowEngine.class);
+        var replaySupport = mock(WorkflowEngineReplaySupport.class);
         var configuration = mock(Configuration.class);
         var unitOfWorkFactory = unitOfWorkFactory();
         var processor = mock(StreamingEventProcessor.class);
         var processorToken = token(18);
         var latestToken = token(192);
+        when(workflowEngine.replayStatusChangedHandler()).thenReturn(replaySupport);
 
         enhancer.initializeWorkflowEngine(
                 configuration,
@@ -58,11 +61,12 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
                 latestToken
         ).join();
 
-        var inOrder = inOrder(workflowEngine);
-        inOrder.verify(workflowEngine).initializeCheckpointing(processorToken, latestToken);
+        var inOrder = inOrder(workflowEngine, replaySupport);
+        inOrder.verify(workflowEngine).replayStatusChangedHandler();
+        inOrder.verify(replaySupport).initializeReplayTracking(processorToken, latestToken);
         inOrder.verify(workflowEngine).rehydrateRunningWorkflows(any(ProcessingContext.class), any(ProcessingContext.class));
         inOrder.verify(workflowEngine).startCheckpointCatchUp();
-        verify(workflowEngine, never()).switchToLiveMode();
+        verify(replaySupport, never()).switchToLiveMode();
         verifyNoInteractions(processor);
     }
 
@@ -70,10 +74,12 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
     void matchingProcessorAndLatestTokenSwitchesToLiveMode() {
         var enhancer = new WorkflowEventProcessingRegistrationEnhancer("Workflow", null, null, true);
         var workflowEngine = mock(WorkflowEngine.class);
+        var replaySupport = mock(WorkflowEngineReplaySupport.class);
         var configuration = mock(Configuration.class);
         var unitOfWorkFactory = unitOfWorkFactory();
         var processor = mock(StreamingEventProcessor.class);
         var token = token(192);
+        when(workflowEngine.replayStatusChangedHandler()).thenReturn(replaySupport);
 
         enhancer.initializeWorkflowEngine(
                 configuration,
@@ -84,9 +90,9 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
                 token
         ).join();
 
-        verify(workflowEngine).initializeCheckpointing(token, token);
+        verify(replaySupport).initializeReplayTracking(token, token);
         verify(workflowEngine).rehydrateRunningWorkflows(any(ProcessingContext.class), any(ProcessingContext.class));
-        verify(workflowEngine).switchToLiveMode();
+        verify(replaySupport).switchToLiveMode();
         verify(workflowEngine, never()).startCheckpointCatchUp();
         verifyNoInteractions(processor);
     }
