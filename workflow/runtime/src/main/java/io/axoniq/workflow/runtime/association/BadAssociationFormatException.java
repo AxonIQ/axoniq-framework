@@ -65,7 +65,7 @@ public class BadAssociationFormatException extends RuntimeException {
      * @return bad association format exception.
      */
     public static BadAssociationFormatException wrongFormat(@Nonnull String conditionString) {
-        throw new BadAssociationFormatException(
+        return new BadAssociationFormatException(
                 "Illegal format in association string "
                         + conditionString + ". It should be <qualifier>:<path><operator><value>");
     }

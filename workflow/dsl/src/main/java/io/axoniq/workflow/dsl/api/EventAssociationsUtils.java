@@ -63,8 +63,8 @@ public final class EventAssociationsUtils {
      * @param value expected association value
      * @return equals matcher
      */
-    public static Associations.VariableMatcher equalsTo(@Nonnull Object value) {
-        return new Associations.VariableMatcher(EqualsComparison.OPERATOR, value);
+    public static Associations.Matcher equalsTo(@Nonnull Object value) {
+        return new Associations.Matcher(EqualsComparison.OPERATOR, value);
     }
 
     /**
@@ -73,7 +73,7 @@ public final class EventAssociationsUtils {
      * @param value expected association value
      * @return equals matcher
      */
-    public static Associations.VariableMatcher eq(@Nonnull Object value) {
+    public static Associations.Matcher eq(@Nonnull Object value) {
         return equalsTo(value);
     }
 }
