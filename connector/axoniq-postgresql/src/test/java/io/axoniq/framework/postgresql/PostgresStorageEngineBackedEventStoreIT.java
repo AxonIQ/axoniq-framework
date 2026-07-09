@@ -195,7 +195,7 @@ public class PostgresStorageEngineBackedEventStoreIT extends StorageEngineBacked
         private Snapshot storeSnapshot(long position) {
             Snapshot snapshot = new Snapshot(new GlobalIndexPosition(position), "0.0.1", "snapshot-payload", Instant.now(), Map.of());
 
-            engine.store(qualifiedName, identifier, snapshot).join();
+            engine.store(qualifiedName, identifier, snapshot, null).join();
 
             return snapshot;
         }

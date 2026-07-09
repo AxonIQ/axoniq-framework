@@ -440,13 +440,15 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      */
 
     @Override
-    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot) {
-        return snapshotStore.store(qualifiedName, identifier, snapshot);
+    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
+                                         @Nullable ProcessingContext context) {
+        return snapshotStore.store(qualifiedName, identifier, snapshot, context);
     }
 
     @Override
-    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier) {
-        return snapshotStore.load(qualifiedName, identifier);
+    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
+                                                      @Nullable ProcessingContext context) {
+        return snapshotStore.load(qualifiedName, identifier, context);
     }
 
     @Override
@@ -537,7 +539,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     }
 
     @Override
-    public MessageStream<EventMessage> source(SourcingCondition condition) {
+    public MessageStream<EventMessage> source(SourcingCondition condition, @Nullable ProcessingContext context) {
         Set<EventCriterion> criterions = condition.criteria().flatten();
 
         return DelayedMessageStream.create(
