@@ -37,6 +37,15 @@ jobs:
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
 
+      - name: Write Axon Server test license
+        run: |
+          mkdir -p integrationtests/src/test/resources
+          printf '%s' "$AXON_SERVER_LICENSE" > integrationtests/src/test/resources/axon-server-test.license
+          echo "Axon Server test license written to integrationtests/src/test/resources/axon-server-test.license"
+          echo "License file size: $(wc -c < integrationtests/src/test/resources/axon-server-test.license) bytes"
+        env:
+          AXON_SERVER_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
+
       - name: Regular Build
         if: ${{ !matrix.sonar-enabled }}
         run: |
