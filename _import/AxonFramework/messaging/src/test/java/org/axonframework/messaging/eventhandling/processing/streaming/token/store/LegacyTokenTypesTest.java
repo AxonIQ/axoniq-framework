@@ -16,6 +16,7 @@
 
 package org.axonframework.messaging.eventhandling.processing.streaming.token.store;
 
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GapAwareTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.junit.jupiter.api.Test;
 
@@ -24,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Validates the Axon Framework 4 to Axon Framework 5 token class name mapping used when reading a legacy token store.
  */
+@SuppressWarnings("removal") // exercises the deprecated migration bridge on purpose
 class LegacyTokenTypesTest {
 
     @Test
@@ -39,12 +41,26 @@ class LegacyTokenTypesTest {
 
     @Test
     void returnsNullForUnknownName() {
-        assertThat(LegacyTokenTypes.currentTypeFor("com.example.CustomTrackingToken")).isNull();
+        assertThat(LegacyTokenTypes.currentTypeFor("com.example.UnknownTrackingToken")).isNull();
     }
 
     @Test
     void doesNotMapReplayToken() {
         // A ReplayToken changed shape between versions, so it is not mapped. Such a token must be reset instead.
         assertThat(LegacyTokenTypes.currentTypeFor("org.axonframework.eventhandling.ReplayToken")).isNull();
+    }
+
+    @Test
+    void resolvesMappingContributedThroughServiceLoader() {
+        // StubLegacyTokenTypeMapper is registered through META-INF/services and contributes this mapping.
+        assertThat(LegacyTokenTypes.currentTypeFor("com.example.LegacyCustomToken"))
+                .isEqualTo(GlobalSequenceTrackingToken.class);
+    }
+
+    @Test
+    void builtInMappingsTakePrecedenceOverServiceLoaderContributions() {
+        // StubLegacyTokenTypeMapper also tries to remap a built-in name; the built-in mapping must win.
+        assertThat(LegacyTokenTypes.currentTypeFor("org.axonframework.eventhandling.GapAwareTrackingToken"))
+                .isEqualTo(GapAwareTrackingToken.class);
     }
 }
