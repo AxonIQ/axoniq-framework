@@ -115,6 +115,9 @@ class QueryConverterTest {
         assertThat(queryRequest.getMessageIdentifier()).isEqualTo(messageIdentifier);
         assertThat(queryRequest.getQuery()).isEqualTo("QueryType");
         assertThat(queryRequest.getPayload().getType()).isEqualTo("QueryType");
+        assertThat(queryRequest.getPayload().getRevision()).isEqualTo("1");
+        assertThat(queryRequest.getPayload().getData().toByteArray()).isEqualTo(payload);
+        assertThat(queryRequest.getMetaDataMap().get("k").getTextValue()).isEqualTo("v");
         assertThat(queryRequest.getProcessingInstructionsList())
                 .anySatisfy(pi -> assertThat(pi.getKey()).isEqualTo(PRIORITY))
                 .anySatisfy(pi -> assertThat(pi.getKey()).isEqualTo(NR_OF_RESULTS))
@@ -248,6 +251,103 @@ class QueryConverterTest {
         assertThat(qu.getErrorMessage().getMessage()).contains("boom");
         assertThat(qu.getErrorMessage().getErrorCode()).isEqualTo("AXONIQ-5001");
         assertThat(qu.getErrorCode()).isEqualTo("AXONIQ-5001");
+    }
+
+    @Test
+    void convertsQueryMessageWithoutPriorityToQueryRequestWithoutPriorityInstruction() {
+        // given a query message without an explicit priority
+        var qm = new GenericQueryMessage(
+                new GenericMessage(messageIdentifier, new MessageType("QueryType", "1"), payload, Map.of())
+        );
+
+        // when
+        var queryRequest = QueryConverter.convertQueryMessage(qm, clientId, componentName);
+
+        // then
+        assertThat(queryRequest.getProcessingInstructionsList())
+                .noneSatisfy(pi -> assertThat(pi.getKey()).isEqualTo(PRIORITY));
+    }
+
+    @Test
+    void convertsQueryRequestWithEmptyRevisionToDefaultVersion() {
+        // given a query request whose payload carries no revision
+        var queryRequest = QueryRequest.newBuilder()
+                                       .setMessageIdentifier(messageIdentifier)
+                                       .setPayload(SerializedObject.newBuilder()
+                                                                   .setType("QueryType")
+                                                                   .setData(ByteString.copyFrom(payload))
+                                                                   .build())
+                                       .build();
+
+        // when
+        var queryMessage = QueryConverter.convertQueryRequest(queryRequest, converter);
+
+        // then absent revision defaults to the default version and absent priority to the lowest priority
+        assertThat(queryMessage.type().version()).isEqualTo(MessageType.DEFAULT_VERSION);
+        assertThat(queryMessage.priority()).hasValue(0);
+    }
+
+    @Test
+    void convertsQueryResponseWithEmptyRevisionToDefaultVersion() {
+        // given a query response whose payload carries no revision
+        var response = newBuilder()
+                .setMessageIdentifier(messageIdentifier)
+                .setPayload(SerializedObject.newBuilder()
+                                            .setType("java.lang.String")
+                                            .setData(ByteString.copyFrom("ok".getBytes()))
+                                            .build())
+                .build();
+
+        // when
+        var responseMessage = QueryConverter.convertQueryResponse(response, converter);
+
+        // then
+        assertThat(responseMessage.type().version()).isEqualTo(MessageType.DEFAULT_VERSION);
+    }
+
+    @Test
+    void convertsQueryResponseMessageWithNullPayloadToEmptyPayloadData() {
+        // given a query response message without a payload
+        var message = new GenericMessage(messageIdentifier, new MessageType("java.lang.String", "1"), null, Map.of());
+        var qrm = new GenericQueryResponseMessage(message);
+
+        // when
+        var response = QueryConverter.convertQueryResponseMessage("req-1", qrm);
+
+        // then
+        assertThat(response.getPayload().getType()).isEqualTo("java.lang.String");
+        assertThat(response.getPayload().getData().isEmpty()).isTrue();
+    }
+
+    @Test
+    void convertsSubscriptionQueryUpdateMessageWithNullPayloadToEmptyPayloadData() {
+        // given an update message without a payload
+        var updateMessage = new GenericSubscriptionQueryUpdateMessage(
+                new GenericMessage(messageIdentifier, new MessageType("java.lang.String", "1"), null, Map.of())
+        );
+
+        // when
+        var queryUpdate = QueryConverter.convertQueryUpdate(updateMessage);
+
+        // then
+        assertThat(queryUpdate.getPayload().getType()).isEqualTo("java.lang.String");
+        assertThat(queryUpdate.getPayload().getData().isEmpty()).isTrue();
+    }
+
+    @Test
+    void convertsClientAndThrowableWithoutErrorCodeToErrorQueryUpdateWithoutErrorCode() {
+        // given
+        var throwable = new RuntimeException("boom");
+
+        // when
+        var qu = QueryConverter.convertQueryUpdate(clientId, null, throwable);
+
+        // then
+        assertThat(qu.getClientId()).isEqualTo(clientId);
+        assertThat(qu.hasErrorMessage()).isTrue();
+        assertThat(qu.getErrorMessage().getMessage()).contains("boom");
+        assertThat(qu.getErrorCode()).isEmpty();
+        assertThat(qu.getErrorMessage().getErrorCode()).isEmpty();
     }
 
     @Test
