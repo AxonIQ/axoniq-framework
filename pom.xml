@@ -36,7 +36,7 @@
         <revision>5.2.0-SNAPSHOT</revision>
 
         <!-- Global Axoniq version properties -->
-        <axon-framework.version>5.2.0-SNAPSHOT</axon-framework.version>
+        <axon-framework.version>5.2.0</axon-framework.version>
         <axoniq-entitlement-manager.version>1.0.1</axoniq-entitlement-manager.version>
         <axonserver-connector-java.version>2026.0.0</axonserver-connector-java.version>
 
