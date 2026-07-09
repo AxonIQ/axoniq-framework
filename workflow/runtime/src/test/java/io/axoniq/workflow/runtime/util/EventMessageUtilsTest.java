@@ -181,6 +181,18 @@ class EventMessageUtilsTest {
     }
 
     @Test
+    void testStartedWaitForEventStep() {
+        Map<String, Object> local = Map.of("localKey", "localVal");
+        EventMessage message = EventMessageUtils.startedWaitForEventStep(context, "step1", local, customizer);
+        assertThat(message.type().toString()).startsWith("step1.STARTED");
+        assertThat(message.payload()).isEqualTo(local);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.STARTED);
+        assertThat(MetadataUtils.isWaitForEventStep(message.metadata())).isTrue();
+    }
+
+    @Test
     void testCompletedStep() {
         Map<String, Object> result = Map.of("res", "val");
         EventMessage message = EventMessageUtils.completedStep(context, "step1", result, "myReducer", customizer);
@@ -193,10 +205,33 @@ class EventMessageUtilsTest {
     }
 
     @Test
+    void testCompletedWaitForEventStep() {
+        Map<String, Object> result = Map.of("res", "val");
+        EventMessage message = EventMessageUtils.completedWaitForEventStep(context, "step1", result, "myReducer",
+                                                                           customizer);
+        assertThat(message.type().toString()).startsWith("step1.COMPLETED");
+        assertThat(message.payload()).isEqualTo(result);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.COMPLETED);
+        assertThat(MetadataUtils.payloadReducer(message.metadata())).contains("myReducer");
+        assertThat(MetadataUtils.isWaitForEventStep(message.metadata())).isTrue();
+    }
+
+    @Test
     void testCompletedStepNoReducer() {
         Map<String, Object> result = Map.of("res", "val");
         EventMessage message = EventMessageUtils.completedStep(context, "step1", result, null, customizer);
         assertThat(MetadataUtils.payloadReducer(message.metadata())).isEmpty();
+    }
+
+    @Test
+    void testCompletedWaitForEventStepNoReducer() {
+        Map<String, Object> result = Map.of("res", "val");
+        EventMessage message = EventMessageUtils.completedWaitForEventStep(context, "step1", result, null,
+                                                                           customizer);
+        assertThat(MetadataUtils.payloadReducer(message.metadata())).isEmpty();
+        assertThat(MetadataUtils.isWaitForEventStep(message.metadata())).isTrue();
     }
 
     @Test
@@ -236,6 +271,32 @@ class EventMessageUtilsTest {
     }
 
     @Test
+    void testCancelledWaitForEventStep() {
+        EventMessage message = EventMessageUtils.cancelledWaitForEventStep(context, "step1", null, customizer);
+        assertThat(message.type().toString()).startsWith("step1.CANCELLED");
+        assertThat(message.payload()).isEqualTo(Map.of());
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.CANCELLED);
+        assertThat(MetadataUtils.isWaitForEventStep(message.metadata())).isTrue();
+    }
+
+    @Test
+    void testCancelledWaitForEventStepWithCause() {
+        Throwable cause = new RuntimeException("step cancelled");
+        EventMessage message = EventMessageUtils.cancelledWaitForEventStep(context, "step1", cause, customizer);
+        assertThat(message.type().toString()).startsWith("step1.CANCELLED");
+        assertThat(message.payload()).isInstanceOfSatisfying(WorkflowError.class, err -> {
+            assertThat(err.type()).isEqualTo(RuntimeException.class.getName());
+            assertThat(err.message()).isEqualTo("step cancelled");
+        });
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.CANCELLED);
+        assertThat(MetadataUtils.isWaitForEventStep(message.metadata())).isTrue();
+    }
+
+    @Test
     void testRetryingStep() {
         StepRetryInfo retryInfo = mock(StepRetryInfo.class);
         EventMessage message = EventMessageUtils.retryingStep(context, "step1", retryInfo, customizer);
@@ -255,6 +316,27 @@ class EventMessageUtilsTest {
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
         assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.TIMED_OUT);
+    }
+
+    @Test
+    void testTimeoutWaitForEventStep() {
+        Instant now = Instant.now();
+        EventMessage message = EventMessageUtils.timeoutWaitForEventStep(context, "step1", now, customizer);
+        assertThat(message.type().toString()).startsWith("step1.TIMED_OUT");
+        assertThat(message.payload()).isEqualTo(now);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.TIMED_OUT);
+        assertThat(MetadataUtils.isWaitForEventStep(message.metadata())).isTrue();
+    }
+
+    @Test
+    void testStartedWorkflowDefaultsMessageTypeVersionWhenContextVersionIsBlank() {
+        when(context.workflowVersion()).thenReturn(" ");
+
+        EventMessage message = EventMessageUtils.startedWorkflow(context, "myWorkflow", customizer);
+
+        assertThat(message.type().version()).isEqualTo(org.axonframework.messaging.core.MessageType.DEFAULT_VERSION);
     }
 
     @Test

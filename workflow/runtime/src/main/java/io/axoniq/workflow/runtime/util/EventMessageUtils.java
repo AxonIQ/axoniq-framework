@@ -287,24 +287,6 @@ public class EventMessageUtils {
     }
 
     /**
-     * Creates a failed event for a wait-for-event step.
-     */
-    @Nonnull
-    public static EventMessage failWaitForEventStep(@Nonnull WorkflowContext context,
-                                                    @Nonnull String stepName,
-                                                    @Nonnull Throwable exception,
-                                                    @Nonnull EventNameCustomizer customizer) {
-        var name = customizer.getEventName(stepName, Map.of(), StepStatus.FAILED);
-        return new GenericEventMessage(
-                new MessageType(name, versionOf(context)),
-                WorkflowError.from(exception),
-                MetadataUtils.markWaitForEventStep(
-                        MetadataUtils.create(context.workflowId(), stepName, StepStatus.FAILED)
-                )
-        );
-    }
-
-    /**
      * Creates a new event message stating that a workflow step has been cancelled.
      *
      * @param context    workflow context.
