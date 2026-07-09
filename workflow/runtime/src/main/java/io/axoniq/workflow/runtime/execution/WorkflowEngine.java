@@ -162,6 +162,26 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
         return MessageStream.empty();
     }
 
+    @Override
+    @Nonnull
+    public CompletableFuture<TrackingToken> onCheckpointAdvanced(@Nonnull Segment segment,
+                                                                 @Nonnull TrackingToken requested) {
+        return completeCheckpointWhenSafe(requested);
+    }
+
+    @Override
+    public void onSegmentClaimed(@Nonnull Segment segment,
+                                 @Nonnull CheckpointTrigger trigger) {
+        registerCheckpointTrigger(trigger);
+    }
+
+    @Override
+    public CompletableFuture<TrackingToken> onSegmentReleased(@Nonnull Segment segment,
+                                                              @Nonnull TrackingToken requested) {
+        return onCheckpointAdvanced(segment, requested)
+                .whenComplete((ignored, cause) -> clearCheckpointTrigger());
+    }
+
 
     /**
      * Switches the engine to live mode. By doing so, the engine stops replaying events and starts executing workflow
@@ -230,8 +250,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
             var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
             if (!(execution instanceof WorkflowStateRehydratable restorable)) {
                 throw new IllegalStateException(
-                        "Workflow execution for workflowId '%s' does not support state rehydration."
-                                .formatted(workflowId)
+                        "Workflow execution for workflowId '%s' does not support state rehydration.".formatted(workflowId)
                 );
             }
             restorable.rehydrate(state);
@@ -252,8 +271,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
         if (executionsToStart.isEmpty()) {
             return;
         }
-        logger.info("Starting {} rehydrated workflow execution(s) before replay catch-up.",
-                    executionsToStart.size());
+        logger.info("Starting {} rehydrated workflow execution(s) before replay catch-up.", executionsToStart.size());
         for (var execution : executionsToStart) {
             execute(execution);
         }
@@ -331,26 +349,6 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
                              }
                          }
                 );
-    }
-
-    @Override
-    @Nonnull
-    public CompletableFuture<TrackingToken> onCheckpointAdvanced(@Nonnull Segment segment,
-                                                                 @Nonnull TrackingToken requested) {
-        return completeCheckpointWhenSafe(requested);
-    }
-
-    @Override
-    public void onSegmentClaimed(@Nonnull Segment segment,
-                                 @Nonnull CheckpointTrigger trigger) {
-        registerCheckpointTrigger(trigger);
-    }
-
-    @Override
-    public CompletableFuture<TrackingToken> onSegmentReleased(@Nonnull Segment segment,
-                                                              @Nonnull TrackingToken requested) {
-        return onCheckpointAdvanced(segment, requested)
-                .whenComplete((ignored, cause) -> clearCheckpointTrigger());
     }
 
 
