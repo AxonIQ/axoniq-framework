@@ -158,7 +158,7 @@ The stores above only begin writing snapshots once your application runs on Axon
 The snapshots you already hold from Axon Framework 4 cannot be carried over, because the two versions locate a snapshot in the event stream with incompatible numbering:
 
 * *Aggregate-based storage* (the Axon Framework 4 model, and the aggregate-based storage engines in Axon Framework 5) numbers events per entity, each entity starting at 0.
-* *Dynamic Consistency Boundary (DCB) storage* numbers events store-wide, as a single global index shared by every event.
+* *Dynamic Consistency Boundary (DCB) storage* numbers events context-wide, as a single global index shared by every event.
 
 An Axon Framework 4 snapshot is positioned only by its aggregate sequence number and carries no global index, so a DCB store has no way to know where in the global stream to resume.
 
