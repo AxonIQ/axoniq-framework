@@ -38,43 +38,6 @@ jobs:
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
 
-      - name: Fetch Axon Server License
-        uses: actions/github-script@v9
-        env:
-          LIBRARY_DEVBOT_TOKEN: ${{ secrets.LIBRARY_DEVBOT_TOKEN }}
-        with:
-          script: |
-            const fs = require('fs');
-            const targetDir = 'integrationtests/src/test/resources';
-            const target = `${targetDir}/axon-server-test.license`;
-
-            const listTargetDir = () => {
-              const entries = fs.readdirSync(targetDir, { withFileTypes: true })
-                .map(entry => `${entry.isDirectory() ? 'd' : '-'} ${entry.name}`);
-              core.info(`${targetDir} contains:\n${entries.join('\n')}`);
-            };
-
-            if (!process.env.LIBRARY_DEVBOT_TOKEN) {
-              core.info('LIBRARY_DEVBOT_TOKEN is not available; skipping Axon Server license download.');
-              listTargetDir();
-              return;
-            }
-
-            const response = await github.request('GET /repos/{owner}/{repo}/contents/{path}', {
-              owner: 'AxonIQ',
-              repo: 'axon-server',
-              path: 'dev/developer.license',
-              ref: 'master',
-              headers: {
-                authorization: `token ${process.env.LIBRARY_DEVBOT_TOKEN}`,
-                accept: 'application/vnd.github.v3.raw'
-              }
-            });
-
-            fs.writeFileSync(target, response.data);
-            core.info(`Axon Server license downloaded to ${target}.`);
-            listTargetDir();
-
       - name: Regular Build
         if: ${{ !matrix.sonar-enabled }}
         run: |
