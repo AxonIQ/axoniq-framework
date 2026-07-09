@@ -150,3 +150,23 @@ Use `AxonServerSnapshotStore` when you want persistent snapshot storage backed b
 When migrating from Axon Framework 4, make sure your application no longer assumes snapshot persistence is part of the event store implementation itself.
 Snapshot storage is now an explicit dependency of the entity module.
 ====
+
+[#existing_snapshot_data]
+== Reusing existing Axon Framework 4 snapshots
+
+The stores above only begin writing snapshots once your application runs on Axon Framework 5.
+The snapshots you already hold from Axon Framework 4 cannot be carried over, because the two versions locate a snapshot in the event stream with incompatible numbering:
+
+* *Aggregate-based storage* (the Axon Framework 4 model, and the aggregate-based storage engines in Axon Framework 5) numbers events per entity, each entity starting at 0.
+* *Dynamic Consistency Boundary (DCB) storage* numbers events store-wide, as a single global index shared by every event.
+
+An Axon Framework 4 snapshot is positioned only by its aggregate sequence number and carries no global index, so a DCB store has no way to know where in the global stream to resume.
+
+[IMPORTANT]
+====
+Existing Axon Framework 4 snapshots are therefore not reusable in Axon Framework 5, nor migratable to a DCB context.
+Once a context is switched to DCB they are ignored entirely: affected entities rebuild from a full event replay, and fresh snapshots are written from then on.
+====
+
+Accepting this is safe: a snapshot is only an optional performance cache, always rebuildable from the event stream, so losing it costs replay time, not correctness.
+For the storage engine choices that decide whether a context runs in aggregate-based or DCB mode, see the xref:migration:paths/event-store.adoc[Event Store migration].
