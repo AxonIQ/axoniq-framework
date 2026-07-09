@@ -19,8 +19,11 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
+import io.axoniq.workflow.runtime.util.MetadataUtils;
 import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
+import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventstreaming.Tag;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -102,5 +105,25 @@ class WorkflowEventTagResolverTest {
         var started = EventMessageUtils.startedStep(context, "shipOrder", Map.of("x", "y"), customizer);
 
         assertThat(resolver.resolve(started)).isEqualTo(Set.of(Tag.of("workflowId", "wf-123")));
+    }
+
+    @Test
+    void retryingWaitForEventStepDoesNotGetWorkflowWaitTag() {
+        var customizer = DefaultEventNameCustomizer.Builder.defaults();
+        var retrying = retryingWaitForEventStep(customizer);
+
+        assertThat(resolver.resolve(retrying)).isEqualTo(Set.of(Tag.of("workflowId", "wf-123")));
+    }
+
+    private EventMessage retryingWaitForEventStep(DefaultEventNameCustomizer customizer) {
+        var retryInfo = mock(StepRetryInfo.class);
+        var retrying = EventMessageUtils.retryingStep(context, "awaitPayment", retryInfo, customizer);
+        return mockEventMessage(MetadataUtils.markWaitForEventStep(retrying.metadata()));
+    }
+
+    private EventMessage mockEventMessage(org.axonframework.messaging.core.Metadata metadata) {
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(metadata);
+        return eventMessage;
     }
 }

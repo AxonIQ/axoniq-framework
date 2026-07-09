@@ -58,7 +58,7 @@ class EventWaitConditionsTest {
     }
 
     @Test
-    void testAddAndRemove() {
+    void addAndRemove() {
         QualifiedName qName = new QualifiedName("ns", "Event");
         EventCondition condition = EventConditions.fromQualifiedName(qName);
         eventWaitConditions.add("step1", condition, globalOnly, defaults());
@@ -73,7 +73,7 @@ class EventWaitConditionsTest {
     }
 
     @Test
-    void testEvaluateAndApplyMatches() {
+    void evaluateAndApplyMatches() {
         QualifiedName qName = new QualifiedName("ns", "Event");
         EventCondition condition = EventConditions.fromQualifiedName(qName);
         eventWaitConditions.add("step1", condition, globalOnly, defaults());
@@ -92,7 +92,7 @@ class EventWaitConditionsTest {
     }
 
     @Test
-    void testEvaluateAndApplyNoMatch() {
+    void evaluateAndApplyNoMatch() {
         QualifiedName qName = new QualifiedName("ns", "Event");
         EventCondition condition = EventConditions.never(qName);
         eventWaitConditions.add("step1", condition, globalOnly, defaults());
@@ -112,7 +112,7 @@ class EventWaitConditionsTest {
     }
 
     @Test
-    void testDescribeTo() {
+    void describeTo() {
         QualifiedName qName1 = new QualifiedName("ns", "Event1");
         EventCondition condition = EventConditions.fromQualifiedName(qName1);
         eventWaitConditions.add("step1", condition, globalOnly, defaults());
@@ -149,7 +149,7 @@ class EventWaitConditionsTest {
     }
 
     @Test
-    void testDescribeToIncludesSerializedAssociations() {
+    void describeToIncludesSerializedAssociations() {
         QualifiedName qName = new QualifiedName("ns", "Event");
         EventCondition condition = EventConditions.fromQualifiedName(
                 qName,

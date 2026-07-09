@@ -28,14 +28,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Tests for {@link Associations}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class AssociationsTest {
 
     @Test
     void shouldSerializePayloadAssociationsIntoCanonicalQualifiedForm() {
         var associations = Associations.associate(payloadProperty("orderId"), "=", "123")
-                                           .and(payloadProperty("customerId"), "=", "abc");
+                                       .and(payloadProperty("customerId"), "=", "abc");
 
         assertThat(associations.criteria())
                 .containsExactlyInAnyOrder("payload:orderId=123", "payload:customerId=abc");
