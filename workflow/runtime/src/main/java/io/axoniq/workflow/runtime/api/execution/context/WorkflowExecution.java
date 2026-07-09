@@ -27,7 +27,6 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 
 import java.util.List;
 import java.util.Set;
@@ -151,6 +150,20 @@ public interface WorkflowExecution extends DescribableComponent {
     void cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause);
 
     /**
+     * Appends intent to advance the checkpoint token.
+     *
+     * @param onDrained runnable to execute on completion
+     */
+    void appendCheckpointIntent(@Nonnull Runnable onDrained);
+
+    /**
+     * Checks if the pending checkpoint work is present.
+     *
+     * @return {@code true} if the pending checkpoint work is present, {@code false} otherwise.
+     */
+    boolean hasPendingCheckpointWork();
+
+    /**
      * Cancel all running steps.
      *
      * @param cause optional cause of the cancellation.
@@ -160,10 +173,10 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Interrupt all running steps without producing any step/workflow cancellation events. Unlike
      * {@link #cancelAllRunningSteps(Throwable)}, this method is for abrupt process-level teardown (e.g. an engine
-     * shutdown lifecycle hook): it completes in-flight step futures with a non-cancellation failure so the running
-     * step is removed from bookkeeping and no {@code <Step>Cancelled} event is published. The workflow's state in the
-     * event store is left at its most recent {@code <Step>Started} entry so the step can resume on the next app
-     * start. Safe to call from any thread.
+     * shutdown lifecycle hook): it completes in-flight step futures with a non-cancellation failure so the running step
+     * is removed from bookkeeping and no {@code <Step>Cancelled} event is published. The workflow's state in the event
+     * store is left at its most recent {@code <Step>Started} entry so the step can resume on the next app start. Safe
+     * to call from any thread.
      */
     void interrupt();
 
@@ -209,16 +222,6 @@ public interface WorkflowExecution extends DescribableComponent {
     String workflowId();
 
     /**
-     * Returns this execution's restart token.
-     * <p>
-     * This is the earliest tracking token the execution needs to restart correctly.
-     *
-     * @return restart token, or {@code null} if unavailable
-     */
-    @Nullable
-    TrackingToken restartToken();
-
-    /**
      * Returns the configuration of the workflow.
      *
      * @return workflow configuration.
@@ -227,9 +230,9 @@ public interface WorkflowExecution extends DescribableComponent {
     WorkflowConfiguration<?> workflowConfiguration();
 
     /**
-     * Records that the live execution has reached the step with the given name during the current
-     * invocation. Forms the runtime "book"; comparing it against the event-sourced book (state) detects
-     * when the code has drifted past what history accounts for.
+     * Records that the live execution has reached the step with the given name during the current invocation. Forms the
+     * runtime "book"; comparing it against the event-sourced book (state) detects when the code has drifted past what
+     * history accounts for.
      *
      * @param stepName step name encountered.
      */
@@ -244,9 +247,9 @@ public interface WorkflowExecution extends DescribableComponent {
     Set<String> referencedStepNames();
 
     /**
-     * Terminal steps in {@link #state()} (event-sourced book) that the current live run has not
-     * referenced (runtime book). A non-empty result means old code already ran past this position —
-     * the signal used by the version primitive's downstream-steps guard and by the drift safety net.
+     * Terminal steps in {@link #state()} (event-sourced book) that the current live run has not referenced (runtime
+     * book). A non-empty result means old code already ran past this position — the signal used by the version
+     * primitive's downstream-steps guard and by the drift safety net.
      *
      * @return ordered list of unreferenced terminal step names; empty when state is fully accounted for.
      */
@@ -273,13 +276,12 @@ public interface WorkflowExecution extends DescribableComponent {
     }
 
     /**
-     * Throws {@link WorkflowReplayDriftException} when the event-sourced book contains terminal steps the
-     * current run has not referenced yet — i.e. the new code is about to publish past where the old code
-     * already ran.
+     * Throws {@link WorkflowReplayDriftException} when the event-sourced book contains terminal steps the current run
+     * has not referenced yet — i.e. the new code is about to publish past where the old code already ran.
      * <p>
      * <b>Invariant:</b> anything that publishes events or changes workflow state must call this guard
-     * before doing so. Per-step primitives gate on first live publish; workflow-level termination
-     * gates on the {@code "<terminate>"} marker.
+     * before doing so. Per-step primitives gate on first live publish; workflow-level termination gates on the
+     * {@code "<terminate>"} marker.
      *
      * @param aboutToExecute step name about to publish.
      */

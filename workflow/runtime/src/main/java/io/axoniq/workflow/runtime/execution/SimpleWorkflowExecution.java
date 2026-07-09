@@ -40,7 +40,6 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,7 +61,6 @@ import java.util.function.Predicate;
 
 import static io.axoniq.workflow.configuration.WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.*;
-import static io.axoniq.workflow.runtime.util.ProcessingContextUtils.resolveRestartToken;
 import static java.lang.Thread.currentThread;
 
 /**
@@ -80,8 +78,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     // State variables
     private final EventSourcedWorkflowState workflowState;
-    @Nullable
-    private final TrackingToken restartToken;
     private final WorkflowConfiguration<?> workflowConfiguration;
 
     // Execution
@@ -131,8 +127,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 new QualifiedName(workflowConfiguration.workflowName()),
                 workflowConfiguration.workflowVersion()
         );
-        this.restartToken = resolveRestartToken(processingContext);
-
         this.contextDelegate = new WorkflowContextDelegation(
                 workflowConfiguration,
                 workflowContext,
@@ -449,20 +443,13 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                                                            DefaultEventNameCustomizer.Builder.defaults()));
     }
 
-    /**
-     * Appends intent to advance the checkpoint token.
-     *
-     * @param onDrained runnable to execute on completion
-     */
+
+    @Override
     public void appendCheckpointIntent(@Nonnull Runnable onDrained) {
         checkpointSupport.appendCheckpointIntent(onDrained);
     }
 
-    /**
-     * Checks if the pending checkpoint work is present.
-     *
-     * @return {@code true} if the pending checkpoint work is present, {@code false} otherwise.
-     */
+    @Override
     public boolean hasPendingCheckpointWork() {
         return checkpointSupport.hasPendingCheckpointWork();
     }
@@ -592,12 +579,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     @Override
     public String workflowId() {
         return workflowState.workflowId();
-    }
-
-    @Override
-    @Nullable
-    public TrackingToken restartToken() {
-        return restartToken;
     }
 
     @Nonnull

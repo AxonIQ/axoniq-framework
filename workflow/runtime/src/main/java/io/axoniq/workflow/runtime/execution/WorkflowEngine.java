@@ -18,15 +18,12 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointTrigger;
-import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
@@ -34,9 +31,7 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.WrappedToken;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.slf4j.Logger;
@@ -45,11 +40,7 @@ import org.slf4j.LoggerFactory;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-
-import static io.axoniq.workflow.runtime.util.ProcessingContextUtils.RESTART_TOKEN_RESOURCE_KEY;
 
 /**
  * Main workflow component responsible for managing and executing workflows.
@@ -61,24 +52,13 @@ import static io.axoniq.workflow.runtime.util.ProcessingContextUtils.RESTART_TOK
  * @since 1.0.0
  */
 @Internal
-public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler, Checkpointing {
+public class WorkflowEngine extends CheckpointingAdvancingSupport implements EventHandler, ReplayStatusChangedHandler {
 
     private final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
     private final WorkflowStateRehydrationSupport workflowStateRehydrationSupport;
-    private volatile boolean isRunning;
-    @Nullable
-    private volatile TrackingToken currentTrackingToken;
-    @Nullable
-    private volatile TrackingToken lastProcessedTrackingToken;
-    @Nullable
-    private volatile TrackingToken startupLatestToken;
-    @Nullable
-    private CheckpointTrigger checkpointTrigger;
-    @Nullable
-    private TrackingToken pendingCheckpointToken;
 
     /**
      * Creates a new workflow engine.
@@ -102,11 +82,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
     @Override
     public MessageStream.Empty<Message> handle(@Nonnull EventMessage eventMessage,
                                                @Nonnull ProcessingContext processingContext) {
-        var currentTrackingToken = captureCurrentTrackingToken(processingContext);
-        CheckpointTrigger.fromContext(processingContext).ifPresent(this::registerCheckpointTrigger);
-        // ensure there is always a restart token resource available, even an empty one
-        processingContext.putResource(RESTART_TOKEN_RESOURCE_KEY,
-                                      Optional.ofNullable(lastProcessedTrackingToken));
+        var currentTrackingToken = observeCheckpointContext(processingContext);
         logger.trace("Received eventMessage {} {} {}",
                      processingContext.resources().get(TrackingToken.RESOURCE_KEY),
                      eventMessage.identifier(),
@@ -119,8 +95,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
             if (executionOpt.isEmpty()) {
                 logger.debug("Ignoring event {} for workflowId '{}' — no matching execution in this engine.",
                              eventMessage.type(), workflowId);
-                requestCheckpoint(currentTrackingToken);
-                updateLiveMode(currentTrackingToken);
+                advanceCheckpointing(currentTrackingToken);
                 return MessageStream.empty();
             }
             executionOpt.get().onEvent(eventMessage, processingContext);
@@ -135,11 +110,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
             }
         }
 
-        if (currentTrackingToken != null) {
-            lastProcessedTrackingToken = currentTrackingToken;
-        }
-        requestCheckpoint(currentTrackingToken);
-        updateLiveMode(currentTrackingToken);
+        advanceCheckpointing(currentTrackingToken);
         logger.trace("EventMessage {} successfully handled", eventMessage.identifier());
         return MessageStream.empty();
     }
@@ -151,50 +122,29 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
     @Nonnull
     public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
                                                @Nonnull ProcessingContext context) {
-        captureCurrentTrackingToken(context);
+        observeCheckpointContext(context);
         logger.debug("Replay status changed to {} at {}",
                      statusChange.status(),
                      context.resources().get(TrackingToken.RESOURCE_KEY));
 
-        if (!statusChange.status().isReplay()) {
-            switchToLiveMode();
+        if (!statusChange.status().isReplay() && !activateLiveMode()) {
+            logger.warn("Workflow Execution is already started.");
         }
         return MessageStream.empty();
     }
-
-    @Override
-    @Nonnull
-    public CompletableFuture<TrackingToken> onCheckpointAdvanced(@Nonnull Segment segment,
-                                                                 @Nonnull TrackingToken requested) {
-        return completeCheckpointWhenSafe(requested);
-    }
-
-    @Override
-    public void onSegmentClaimed(@Nonnull Segment segment,
-                                 @Nonnull CheckpointTrigger trigger) {
-        registerCheckpointTrigger(trigger);
-    }
-
-    @Override
-    public CompletableFuture<TrackingToken> onSegmentReleased(@Nonnull Segment segment,
-                                                              @Nonnull TrackingToken requested) {
-        return onCheckpointAdvanced(segment, requested)
-                .whenComplete((ignored, cause) -> clearCheckpointTrigger());
-    }
-
 
     /**
      * Switches the engine to live mode. By doing so, the engine stops replaying events and starts executing workflow
      * executions. Prior to that, all finished workflow executions are removed from the execution repository.
      */
     public void switchToLiveMode() {
-        synchronized (this) {
-            if (isRunning) {
-                logger.warn("Workflow Execution is already started.");
-                return;
-            }
-            isRunning = true;
+        if (!activateLiveMode()) {
+            logger.warn("Workflow Execution is already started.");
         }
+    }
+
+    @Override
+    protected void onLiveModeActivated() {
         workflowConfigurationRegistry.warnAboutSameVersionDuplicates();
         logger.info("Workflow instance replay finished. Switching to live mode.");
         // get rid of finished executions
@@ -250,7 +200,8 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
             var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
             if (!(execution instanceof WorkflowStateRehydratable restorable)) {
                 throw new IllegalStateException(
-                        "Workflow execution for workflowId '%s' does not support state rehydration.".formatted(workflowId)
+                        "Workflow execution for workflowId '%s' does not support state rehydration.".formatted(
+                                workflowId)
                 );
             }
             restorable.rehydrate(state);
@@ -277,6 +228,28 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
         }
     }
 
+    @Override
+    protected boolean scheduleCheckpointIntent(@Nonnull Runnable onDrained) {
+        var scheduledWorkflowIds = new HashSet<String>();
+        var scheduled = false;
+        for (var execution : workflowExecutionRepository.findAll()) {
+            if (!execution.hasPendingCheckpointWork() || !scheduledWorkflowIds.add(execution.workflowId())) {
+                continue;
+            }
+            execution.appendCheckpointIntent(onDrained);
+            scheduled = true;
+        }
+        return scheduled;
+    }
+
+    @Override
+    protected boolean hasUnsafeCheckpointWork() {
+        return workflowExecutionRepository
+                .findAll().stream()
+                .anyMatch(WorkflowExecution::hasPendingCheckpointWork);
+    }
+
+
     private void execute(@Nonnull WorkflowExecution execution) {
         execution
                 .workflowContext()
@@ -290,7 +263,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
                                                  execution.workflowId(),
                                                  finished.state().workflowStatus());
                                     this.workflowExecutionRepository.remove(execution.workflowId());
-                                    requestCheckpoint(currentTrackingToken);
+                                    requestCheckpoint(currentTrackingToken());
                                 }
                         );
                     } catch (Throwable t) {
@@ -343,7 +316,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
                                                   workflowId, eventMessage.payload());
                                      return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
                                  });
-                                 if (isRunning) { // if the engine is already running, start the workflow immediately
+                                 if (isLiveMode()) { // if the engine is already running, start the workflow immediately
                                      execute(execution);
                                  }
                              }
@@ -381,13 +354,6 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
         workflowExecutionRepository.clear();
     }
 
-    public void initializeCheckpointing(@Nullable TrackingToken processorToken,
-                                        @Nullable TrackingToken latestToken) {
-        lastProcessedTrackingToken = processorToken;
-        currentTrackingToken = processorToken;
-        startupLatestToken = latestToken;
-    }
-
     private WorkflowConfiguration<?> resolveWorkflowConfiguration(@Nonnull String workflowId,
                                                                   @Nonnull EventSourcedWorkflowState state) {
         WorkflowDefinitionId workflowDefinitionId = state.workflowDefinitionId();
@@ -396,128 +362,5 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
                                                     "No workflow configuration found for workflow '%s' with definition %s."
                                                             .formatted(workflowId, workflowDefinitionId)
                                             ));
-    }
-
-    private void initializeRestoreProcessingContext(@Nonnull ProcessingContext processingContext) {
-        var restartToken = lastProcessedTrackingToken;
-        if (!processingContext.resources().containsKey(RESTART_TOKEN_RESOURCE_KEY)) {
-            processingContext.putResource(RESTART_TOKEN_RESOURCE_KEY, Optional.ofNullable(restartToken));
-        }
-        if (restartToken != null && !processingContext.resources().containsKey(TrackingToken.RESOURCE_KEY)) {
-            processingContext.putResource(TrackingToken.RESOURCE_KEY, restartToken);
-        }
-    }
-
-    @Nullable
-    private TrackingToken captureCurrentTrackingToken(@Nonnull ProcessingContext processingContext) {
-        var token = (TrackingToken) processingContext.resources().get(TrackingToken.RESOURCE_KEY);
-        if (token != null) {
-            // Unwrap ReplayToken (and any other WrappedToken) to the raw underlying position before storing.
-            // Without this, restart tokens captured across replay events mix raw and wrapped types, which
-            // makes determineEngineSafePoint crash with "Incompatible token type provided: ReplayToken".
-            currentTrackingToken = WrappedToken.unwrapLowerBound(token);
-        }
-        return currentTrackingToken;
-    }
-
-    private synchronized void requestCheckpoint(@Nullable TrackingToken token) {
-        if (token == null) {
-            return;
-        }
-        pendingCheckpointToken = upperBound(pendingCheckpointToken, token);
-        requestPendingCheckpoint();
-    }
-
-    private synchronized void requestPendingCheckpoint() {
-        var trigger = checkpointTrigger;
-        if (trigger == null) {
-            return;
-        }
-        var requested = pendingCheckpointToken;
-        if (requested == null) {
-            return;
-        }
-        trigger.requestCheckpoint(requested);
-        pendingCheckpointToken = null;
-    }
-
-    private CompletableFuture<TrackingToken> completeCheckpointWhenSafe(@Nonnull TrackingToken requested) {
-        if (hasUnsafeCheckpointWork()) {
-            var result = new CompletableFuture<TrackingToken>();
-            var scheduled = scheduleCheckpointIntent(() -> {
-                if (result.isDone()) {
-                    return;
-                }
-                completeCheckpointWhenSafe(requested)
-                        .whenComplete((token, cause) -> {
-                            if (cause != null) {
-                                result.completeExceptionally(cause);
-                            } else {
-                                result.complete(token);
-                            }
-                        });
-            });
-            if (!scheduled) {
-                if (!hasUnsafeCheckpointWork()) {
-                    return CompletableFuture.completedFuture(requested);
-                }
-                result.completeExceptionally(new IllegalStateException(
-                        "Checkpoint requested while workflow work is unsafe, but no checkpoint intent could be scheduled."
-                ));
-            }
-            return result;
-        }
-        return CompletableFuture.completedFuture(requested);
-    }
-
-    private boolean hasUnsafeCheckpointWork() {
-        return workflowExecutionRepository
-                .findAll().stream()
-                .anyMatch(execution -> (execution instanceof SimpleWorkflowExecution simple)
-                        && simple.hasPendingCheckpointWork());
-    }
-
-    private boolean scheduleCheckpointIntent(@Nonnull Runnable onDrained) {
-        var scheduledWorkflowIds = new HashSet<String>();
-        var scheduled = false;
-        for (var execution : workflowExecutionRepository.findAll()) {
-            if (!(execution instanceof SimpleWorkflowExecution simple)
-                    || !simple.hasPendingCheckpointWork()
-                    || !scheduledWorkflowIds.add(execution.workflowId())) {
-                continue;
-            }
-            simple.appendCheckpointIntent(onDrained);
-            scheduled = true;
-        }
-        return scheduled;
-    }
-
-    private void updateLiveMode(@Nullable TrackingToken currentToken) {
-        var latest = startupLatestToken;
-        if (latest != null && !isRunning && covers(currentToken, latest)) {
-            switchToLiveMode();
-        }
-    }
-
-    private synchronized void registerCheckpointTrigger(@Nonnull CheckpointTrigger trigger) {
-        checkpointTrigger = trigger;
-        requestPendingCheckpoint();
-    }
-
-    private synchronized void clearCheckpointTrigger() {
-        checkpointTrigger = null;
-    }
-
-    private static boolean covers(@Nullable TrackingToken current,
-                                  @Nullable TrackingToken target) {
-        if (target == null) {
-            return true;
-        }
-        return current != null && (current.covers(target) || current.samePositionAs(target));
-    }
-
-    private static TrackingToken upperBound(@Nullable TrackingToken current,
-                                            @Nonnull TrackingToken candidate) {
-        return current == null ? candidate : current.upperBound(candidate);
     }
 }

@@ -51,7 +51,6 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.time.Clock;
 import java.util.HashMap;
 import java.util.List;
@@ -63,7 +62,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
-import static io.axoniq.workflow.runtime.util.ProcessingContextUtils.RESTART_TOKEN_RESOURCE_KEY;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
@@ -127,7 +125,6 @@ class WorkflowEngineReplayTest {
         when(runningExecution.workflowId()).thenReturn("runningId");
         when(runningExecution.state()).thenReturn(runningState);
         when(runningExecution.workflowContext()).thenReturn(runningContext);
-        when(runningExecution.restartToken()).thenReturn(token(18));
         when(runningState.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         ProcessingContext runningPC = mock(ProcessingContext.class);
         when(runningContext.processingContext()).thenReturn(runningPC);
@@ -164,10 +161,7 @@ class WorkflowEngineReplayTest {
         when(config.workflowVersion()).thenReturn(org.axonframework.messaging.core.MessageType.DEFAULT_VERSION);
         when(config.eventNameCustomizer()).thenReturn(defaults());
 
-        when(pc.resources()).thenReturn(Map.of(
-                TrackingToken.RESOURCE_KEY, token(18),
-                RESTART_TOKEN_RESOURCE_KEY, Optional.empty()
-        ));
+        when(pc.resources()).thenReturn(Map.of(TrackingToken.RESOURCE_KEY, token(18)));
         when(pc.component(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
         when(pc.component(Clock.class)).thenReturn(Clock.systemUTC());
         when(pc.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
@@ -184,7 +178,6 @@ class WorkflowEngineReplayTest {
                 workflowContext
         );
 
-        assertSameToken(execution.restartToken(), token(18));
         // Initially NOT executable (replay mode)
         assertThat(execution.isExecutable()).isFalse();
 
@@ -202,7 +195,7 @@ class WorkflowEngineReplayTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void rehydrateRunningWorkflowsRestoresExecutionStateAndRestartToken() {
+    void rehydrateRunningWorkflowsRestoresExecutionState() {
         String workflowId = "wf-1";
         TrackingToken checkpointToken = token(30);
         ProcessingContext restoreContext = processingContext(checkpointToken);
@@ -242,7 +235,6 @@ class WorkflowEngineReplayTest {
         when(workflowConfigurationRegistry.getWorkflowConfiguration(definitionId)).thenReturn(Optional.of(configuration));
         when(contextFactory.createContext(anyMap(), eq(workflowId), same(executionContext), eq(configuration)))
                 .thenReturn(workflowContext);
-        executionContext.putResource(RESTART_TOKEN_RESOURCE_KEY, Optional.of(checkpointToken));
         var restoredExecution = new SimpleWorkflowExecution(
                 workflowId,
                 restoredState.payload(),
@@ -262,7 +254,6 @@ class WorkflowEngineReplayTest {
         assertThat(restored.state().getStep("waitForResume").status()).isEqualTo(
                 io.axoniq.workflow.runtime.api.execution.status.StepStatus.STARTED
         );
-        assertSameToken(restored.restartToken(), checkpointToken);
     }
 
     @Test
@@ -385,64 +376,7 @@ class WorkflowEngineReplayTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    void secondWorkflowStartReceivesPreviousEventTokenAsRestartToken() {
-        QualifiedName eventName = new QualifiedName("OrderPlaced");
-        TrackingToken firstEventToken = token(18);
-        TrackingToken secondEventToken = token(19);
-
-        WorkflowConfiguration<WorkflowContext> configuration = mock(WorkflowConfiguration.class);
-        WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
-        var executionFactory = mock(WorkflowExecutionFactory.class);
-
-        Map<String, Optional<TrackingToken>> restartTokensByWorkflowId = new HashMap<>();
-        Map<WorkflowContext, String> workflowIdsByContext = new HashMap<>();
-        when(configuration.workflowIdProvider())
-                .thenReturn(event -> String.valueOf(event.payloadAs(new TypeReference<Map<String, Object>>() {
-                }).get("orderId")));
-        when(configuration.workflowContextFactory()).thenReturn(contextFactory);
-        when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
-        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
-                .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
-
-        when(contextFactory.createContext(anyMap(), anyString(), any(), eq(configuration))).thenAnswer(invocation -> {
-            String workflowId = invocation.getArgument(1);
-            ProcessingContext processingContext = invocation.getArgument(2);
-            @SuppressWarnings("unchecked")
-            Optional<TrackingToken> restartToken = (Optional<TrackingToken>) processingContext.resources()
-                                                                                              .get(RESTART_TOKEN_RESOURCE_KEY);
-            restartTokensByWorkflowId.put(workflowId, restartToken);
-            var workflowContext = mock(WorkflowContext.class);
-            when(workflowContext.processingContext()).thenReturn(processingContext);
-            workflowIdsByContext.put(workflowContext, workflowId);
-            return workflowContext;
-        });
-        when(executionFactory.create(any())).thenAnswer(invocation -> {
-            WorkflowContext workflowContext = invocation.getArgument(0);
-            String workflowId = workflowIdsByContext.get(workflowContext);
-            var execution = mock(WorkflowExecution.class);
-            when(execution.workflowId()).thenReturn(workflowId);
-            when(execution.restartToken()).thenReturn(restartTokensByWorkflowId.get(workflowId).orElse(null));
-            when(execution.workflowContext()).thenReturn(workflowContext);
-            when(execution.state()).thenReturn(mock(WorkflowState.class));
-            return execution;
-        });
-
-        workflowEngine.handle(startEvent(eventName, "wf-1"), processingContext(firstEventToken));
-        workflowEngine.handle(startEvent(eventName, "wf-2"), processingContext(secondEventToken));
-
-        assertThat(restartTokensByWorkflowId.get("wf-1")).isEqualTo(Optional.empty());
-        assertThat(restartTokensByWorkflowId.get("wf-2")).contains(firstEventToken);
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    void replaySpawnsAcrossEventsProduceConsistentRestartTokenTypes() {
-        // Reproduces the "Incompatible token type provided: ReplayToken" crash:
-        // when replay starts from a previously persisted safePoint and multiple workflows
-        // are spawned across replay events, earlier spawns used to receive a raw restart
-        // token while later spawns received a ReplayToken — making determineEngineSafePoint
-        // crash on GlobalSequenceTrackingToken.lowerBound(ReplayToken).
+    void replayEventsUseUnwrappedTokensForCheckpointRequests() {
         QualifiedName eventName = new QualifiedName("OrderPlaced");
         TrackingToken safePoint = token(10);
         TrackingToken tokenAtReset = token(20);
@@ -451,10 +385,10 @@ class WorkflowEngineReplayTest {
 
         WorkflowConfiguration<WorkflowContext> configuration = mock(WorkflowConfiguration.class);
         WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
-        var executionFactory = mock(WorkflowExecutionFactory.class);
-
-        Map<String, TrackingToken> restartTokensByWorkflowId = new HashMap<>();
+        WorkflowExecutionFactory executionFactory = mock(WorkflowExecutionFactory.class);
+        CheckpointTrigger trigger = mock(CheckpointTrigger.class);
         Map<WorkflowContext, String> workflowIdsByContext = new HashMap<>();
+
         when(configuration.workflowIdProvider())
                 .thenReturn(event -> String.valueOf(event.payloadAs(new TypeReference<Map<String, Object>>() {
                 }).get("orderId")));
@@ -462,51 +396,34 @@ class WorkflowEngineReplayTest {
         when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
         when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
-
         when(contextFactory.createContext(anyMap(), anyString(), any(), eq(configuration))).thenAnswer(invocation -> {
             String workflowId = invocation.getArgument(1);
-            ProcessingContext processingContext = invocation.getArgument(2);
-            Optional<TrackingToken> restartTokenResource = (Optional<TrackingToken>) processingContext.resources()
-                                                                                                     .get(RESTART_TOKEN_RESOURCE_KEY);
-            restartTokensByWorkflowId.put(workflowId, restartTokenResource.orElse(null));
             var workflowContext = mock(WorkflowContext.class);
-            when(workflowContext.processingContext()).thenReturn(processingContext);
+            ProcessingContext workflowProcessingContext = mock(ProcessingContext.class);
+            when(workflowContext.processingContext()).thenReturn(workflowProcessingContext);
+            when(workflowProcessingContext.whenComplete(any())).thenReturn(workflowProcessingContext);
             workflowIdsByContext.put(workflowContext, workflowId);
             return workflowContext;
         });
         when(executionFactory.create(any())).thenAnswer(invocation -> {
             WorkflowContext workflowContext = invocation.getArgument(0);
-            String workflowId = workflowIdsByContext.get(workflowContext);
             var execution = mock(WorkflowExecution.class);
             var state = mock(WorkflowState.class);
             when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
-            when(execution.workflowId()).thenReturn(workflowId);
-            when(execution.restartToken()).thenReturn(restartTokensByWorkflowId.get(workflowId));
+            when(execution.workflowId()).thenReturn(workflowIdsByContext.get(workflowContext));
             when(execution.workflowContext()).thenReturn(workflowContext);
             when(execution.state()).thenReturn(state);
-            ProcessingContext workflowProcessingContext = mock(ProcessingContext.class);
-            when(workflowContext.processingContext()).thenReturn(workflowProcessingContext);
-            when(workflowProcessingContext.whenComplete(any())).thenReturn(workflowProcessingContext);
             return execution;
         });
 
         workflowEngine.initializeCheckpointing(safePoint, tokenAtReset);
+        workflowEngine.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
 
         workflowEngine.handle(startEvent(eventName, "wf-1"), processingContext(firstReplayToken));
         workflowEngine.handle(startEvent(eventName, "wf-2"), processingContext(secondReplayToken));
 
-        // Both restart tokens must be raw (i.e. not ReplayToken-wrapped) so that
-        // determineEngineSafePoint can combine them via lowerBound without crashing.
-        assertThat(restartTokensByWorkflowId.get("wf-1")).isNotInstanceOf(ReplayToken.class);
-        assertThat(restartTokensByWorkflowId.get("wf-2")).isNotInstanceOf(ReplayToken.class);
-
-        ReplayStatusChanged replayFinished = mock(ReplayStatusChanged.class);
-        ReplayStatus status = mock(ReplayStatus.class);
-        when(replayFinished.status()).thenReturn(status);
-        when(status.isReplay()).thenReturn(false);
-
-        // Without the fix, this throws IllegalArgumentException: Incompatible token type provided: ReplayToken.
-        workflowEngine.handle(replayFinished, processingContext(secondReplayToken));
+        verify(trigger).requestCheckpoint(token(10));
+        verify(trigger).requestCheckpoint(token(15));
     }
 
     @Test
@@ -645,7 +562,6 @@ class WorkflowEngineReplayTest {
         ProcessingContext processingContext = mock(ProcessingContext.class);
         Map<Context.ResourceKey<?>, Object> resources = new HashMap<>();
         resources.put(TrackingToken.RESOURCE_KEY, token);
-        resources.put(RESTART_TOKEN_RESOURCE_KEY, Optional.ofNullable(token));
         when(processingContext.resources()).thenReturn(resources);
         doAnswer(invocation -> {
             Context.ResourceKey<?> key = invocation.getArgument(0);
@@ -698,9 +614,7 @@ class WorkflowEngineReplayTest {
 
     private static void requestCheckpoint(WorkflowEngine workflowEngine,
                                           TrackingToken token) throws Exception {
-        Method method = WorkflowEngine.class.getDeclaredMethod("requestCheckpoint", TrackingToken.class);
-        method.setAccessible(true);
-        method.invoke(workflowEngine, token);
+        workflowEngine.requestCheckpoint(token);
     }
 
     private static void drainAllTasks(SimpleWorkflowExecution execution) {

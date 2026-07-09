@@ -26,7 +26,7 @@ import org.axonframework.modelling.repository.Repository;
 import java.util.Objects;
 
 /**
- * AF5-repository backed implementation of workflow-state rehydration support.
+ * Event-sourcing repository backed implementation of workflow-state rehydration support.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
