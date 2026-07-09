@@ -203,7 +203,6 @@ public class EventMessageUtils {
      * @param stepName   name of the step
      * @param local      local data
      * @param customizer customizer for event name
-     *
      */
     @Nonnull
     public static EventMessage startedWaitForEventStep(@Nonnull WorkflowContext context,
