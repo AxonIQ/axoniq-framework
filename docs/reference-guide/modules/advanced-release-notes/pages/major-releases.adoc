@@ -23,7 +23,7 @@ All the enhancements and features which have been introduced to our major releas
 
 === Enhancements
 
-- Include the data protection module in the axoniq framework bom for convenience link:https://github.com/AxonIQ/axoniq-framework/pull/130[#130]
+- Include the data protection module in the Axoniq Framework BOM for convenience link:https://github.com/AxonIQ/axoniq-framework/pull/130[#130]
 - fix the slack-release-notification.yml link:https://github.com/AxonIQ/axoniq-framework/pull/141[#141]
 - build: unified apidocs profile and publish workflow link:https://github.com/AxonIQ/axoniq-framework/pull/156[#156]
 - Remove _archive folder link:https://github.com/AxonIQ/axoniq-framework/pull/166[#166]
@@ -54,7 +54,7 @@ All the enhancements and features which have been introduced to our major releas
 - Include Axoniq feature indicator in navigation link:https://github.com/AxonIQ/axoniq-framework/pull/107[#107]
 - [#77] Clarify migration of the AxonServerContainer from 5.0 -> 5.1 link:https://github.com/AxonIQ/axoniq-framework/pull/112[#112]
 - Add anchors for the event storage engines to allow referencing link:https://github.com/AxonIQ/axoniq-framework/pull/117[#117]
-- Fix the maven coordinates for axoniq-postgresql in the reference link:https://github.com/AxonIQ/axoniq-framework/pull/119[#119]
+- Fix the maven coordinates for Axoniq PostgreSQL in the reference link:https://github.com/AxonIQ/axoniq-framework/pull/119[#119]
 - Fix Modules Documentation (remove opentracing) link:https://github.com/AxonIQ/axoniq-framework/pull/128[#128]
 - Introduce Framework Comparison page link:https://github.com/AxonIQ/axoniq-framework/pull/134[#134]
 - [#137] add Event Transformation reference docs (moved from Axon Framework) link:https://github.com/AxonIQ/axoniq-framework/pull/179[#179]
@@ -66,19 +66,19 @@ All the enhancements and features which have been introduced to our major releas
 === Dependency upgrades
 
 - Bump io.opentelemetry:opentelemetry-api from 1.60.1 to 1.62.0 in /_archive/extensions/tracing/tracing-opentelemetry link:https://github.com/AxonIQ/axoniq-framework/pull/121[#121]
-- Bump @antora/site-generator from 3.2.0-alpha.11 to 3.2.0-alpha.12 in /docs/_playbook link:https://github.com/AxonIQ/axoniq-framework/pull/125[#125]
-- Bump @antora/cli from 3.2.0-alpha.11 to 3.2.0-alpha.12 in /docs/_playbook link:https://github.com/AxonIQ/axoniq-framework/pull/126[#126]
+- Bump Antora site-generator from 3.2.0-alpha.11 to 3.2.0-alpha.12 in /docs/_playbook link:https://github.com/AxonIQ/axoniq-framework/pull/125[#125]
+- Bump Antora cli from 3.2.0-alpha.11 to 3.2.0-alpha.12 in /docs/_playbook link:https://github.com/AxonIQ/axoniq-framework/pull/126[#126]
 - Bump the maven-dependencies group with 4 updates link:https://github.com/AxonIQ/axoniq-framework/pull/127[#127]
 - Bump qs from 6.14.2 to 6.15.2 in /docs/_playbook link:https://github.com/AxonIQ/axoniq-framework/pull/145[#145]
 - Bump the maven-dependencies group with 3 updates link:https://github.com/AxonIQ/axoniq-framework/pull/146[#146]
 - Bump the maven-dependencies group with 6 updates link:https://github.com/AxonIQ/axoniq-framework/pull/154[#154]
 - Bump the maven-dependencies group with 5 updates link:https://github.com/AxonIQ/axoniq-framework/pull/161[#161]
 - Bump the maven-dependencies group with 7 updates link:https://github.com/AxonIQ/axoniq-framework/pull/170[#170]
-- Bump the github-dependencies group with 4 updates link:https://github.com/AxonIQ/axoniq-framework/pull/182[#182]
-- Bump @antora/site-generator from 3.2.0-alpha.12 to 3.2.0-rc.2 in /docs/_playbook link:https://github.com/AxonIQ/axoniq-framework/pull/183[#183]
+- Bump the GitHub dependencies group with 4 updates link:https://github.com/AxonIQ/axoniq-framework/pull/182[#182]
+- Bump Antora site-generator from 3.2.0-alpha.12 to 3.2.0-rc.2 in /docs/_playbook link:https://github.com/AxonIQ/axoniq-framework/pull/183[#183]
 - Bump the maven-dependencies group with 4 updates link:https://github.com/AxonIQ/axoniq-framework/pull/184[#184]
-- Bump js-yaml and @antora/cli in /docs/_playbook link:https://github.com/AxonIQ/axoniq-framework/pull/185[#185]
-- Bump the github-dependencies group with 2 updates link:https://github.com/AxonIQ/axoniq-framework/pull/194[#194]
+- Bump js YAML and Antora cli in /docs/_playbook link:https://github.com/AxonIQ/axoniq-framework/pull/185[#185]
+- Bump the GitHub dependencies group with 2 updates link:https://github.com/AxonIQ/axoniq-framework/pull/194[#194]
 - Bump the maven-dependencies group with 4 updates link:https://github.com/AxonIQ/axoniq-framework/pull/195[#195]
 - Bump the maven-dependencies group with 8 updates link:https://github.com/AxonIQ/axoniq-framework/pull/215[#215]
 - [chore]: Add missing axoniq-message-transformation to combined coverage report link:https://github.com/AxonIQ/axoniq-framework/pull/217[#217]
