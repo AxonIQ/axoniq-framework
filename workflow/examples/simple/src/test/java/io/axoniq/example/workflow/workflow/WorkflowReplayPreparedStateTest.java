@@ -355,10 +355,8 @@ class WorkflowReplayPreparedStateTest {
         }
 
         private void publish(Object event) {
-            var eventMessage = new GenericEventMessage(
-                    messageTypeResolver.resolveOrThrow(event),
-                    event
-            ).withConverter(eventConverter);
+            var eventMessage = new GenericEventMessage(messageTypeResolver.resolveOrThrow(event), event)
+                    .withConverter(eventConverter);
             eventSink.publish(null, eventMessage);
         }
 

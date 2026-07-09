@@ -45,9 +45,7 @@ import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -96,9 +94,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final RunningSteps runningSteps = new RunningSteps();
     private final Set<String> referencedStepNames = ConcurrentHashMap.newKeySet();
     private final AtomicBoolean taskActive = new AtomicBoolean(false);
-    private final Object checkpointIntentMonitor = new Object();
-    private boolean checkpointIntentQueued;
-    private final List<Runnable> checkpointIntentCallbacks = new ArrayList<>();
+    private final CheckpointSupport checkpointSupport;
 
     private boolean executable = false;
 
@@ -138,6 +134,27 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 this.contextDelegate.typedWorkflowContext(),
                 workflowConfiguration.workflowStatusChangeListeners()
         );
+        this.checkpointSupport = new CheckpointSupport(new CheckpointSupport.Host() {
+            @Override
+            public boolean isExecutable() {
+                return executable;
+            }
+
+            @Override
+            public boolean hasQueuedTasks() {
+                return !taskQueue.isEmpty();
+            }
+
+            @Override
+            public boolean isTaskActive() {
+                return taskActive.get();
+            }
+
+            @Override
+            public void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
+                SimpleWorkflowExecution.this.appendTask(task);
+            }
+        });
     }
 
 
@@ -527,25 +544,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param onDrained runnable to execute on completion
      */
     public void appendCheckpointIntent(@Nonnull Runnable onDrained) {
-        var callback = Objects.requireNonNull(onDrained, "On drained callback must not be null");
-        if (!executable) {
-            callback.run();
-            return;
-        }
-
-        var shouldAppendIntent = false;
-        synchronized (checkpointIntentMonitor) {
-            checkpointIntentCallbacks.add(callback);
-            if (checkpointIntentQueued) {
-                return;
-            }
-            checkpointIntentQueued = true;
-            shouldAppendIntent = true;
-        }
-
-        if (shouldAppendIntent) {
-            appendTask(new CheckpointIntent());
-        }
+        checkpointSupport.appendCheckpointIntent(onDrained);
     }
 
     /**
@@ -554,12 +553,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @return
      */
     public boolean hasPendingCheckpointWork() {
-        if (!executable) {
-            return false;
-        }
-        synchronized (checkpointIntentMonitor) {
-            return taskActive.get() || !taskQueue.isEmpty() || checkpointIntentQueued;
-        }
+        return checkpointSupport.hasPendingCheckpointWork();
     }
 
     private CompletableFuture<Void> sendWorkflowEvent(
@@ -656,39 +650,16 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param task task to execute
      */
     private void runTask(@Nonnull Consumer<WorkflowExecution> task) {
-        Runnable afterTask = null;
+        Runnable afterTask;
         taskActive.set(true);
         try {
             task.accept(this);
-            if (task instanceof CheckpointIntent checkpointIntent) {
-                afterTask = checkpointIntent.onDrained();
-            }
+            afterTask = checkpointSupport.afterTask(task);
         } finally {
             taskActive.set(false);
         }
         if (afterTask != null) {
             afterTask.run();
-        }
-    }
-
-    private final class CheckpointIntent implements Consumer<WorkflowExecution> {
-
-        private Runnable onDrained = () -> {
-        };
-
-        @Override
-        public void accept(WorkflowExecution ignored) {
-            var callbacks = new ArrayList<Runnable>();
-            synchronized (checkpointIntentMonitor) {
-                checkpointIntentQueued = false;
-                callbacks.addAll(checkpointIntentCallbacks);
-                checkpointIntentCallbacks.clear();
-            }
-            onDrained = () -> callbacks.forEach(Runnable::run);
-        }
-
-        private Runnable onDrained() {
-            return onDrained;
         }
     }
 }

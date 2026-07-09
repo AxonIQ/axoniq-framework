@@ -58,6 +58,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
@@ -538,6 +539,26 @@ class WorkflowEngineReplayTest {
         drainAllTasks(execution);
 
         assertSameToken(advanced.join(), requested);
+    }
+
+    @Test
+    void checkpointIntentCallbacksAreCoalescedIntoSingleQueuedTask() throws Exception {
+        var execution = simpleExecution("wf-1", token(18));
+        markExecutable(execution, true);
+        AtomicInteger drainedCallbacks = new AtomicInteger();
+
+        execution.appendCheckpointIntent(drainedCallbacks::incrementAndGet);
+        execution.appendCheckpointIntent(drainedCallbacks::incrementAndGet);
+
+        Consumer<WorkflowExecution> queuedTask = execution.getNextTask();
+
+        assertThat(queuedTask).isNotNull();
+        assertThat(execution.getNextTask()).isNull();
+        assertThat(drainedCallbacks).hasValue(0);
+
+        queuedTask.accept(execution);
+
+        assertThat(drainedCallbacks).hasValue(2);
     }
 
     private static TrackingToken token(long globalIndex) {

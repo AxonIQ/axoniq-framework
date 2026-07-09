@@ -18,13 +18,13 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointTrigger;
+import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.util.MetadataUtils;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
+import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.TypeReference;
@@ -42,6 +42,7 @@ import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandl
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -82,8 +83,8 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
     /**
      * Creates a new workflow engine.
      *
-     * @param workflowConfigurationRegistry configuration registry.
-     * @param workflowExecutionRepository   execution registry.
+     * @param workflowConfigurationRegistry   configuration registry.
+     * @param workflowExecutionRepository     execution registry.
      * @param workflowStateRehydrationSupport repository-backed rehydration support.
      */
     public WorkflowEngine(
@@ -336,7 +337,8 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
 
     @Override
     @Nonnull
-    public CompletableFuture<TrackingToken> onCheckpointAdvanced(@Nonnull Segment segment, @Nonnull TrackingToken requested) {
+    public CompletableFuture<TrackingToken> onCheckpointAdvanced(@Nonnull Segment segment,
+                                                                 @Nonnull TrackingToken requested) {
         return completeCheckpointWhenSafe(requested);
     }
 
@@ -487,16 +489,14 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
     }
 
     private boolean hasUnsafeCheckpointWork() {
-        for (var execution : workflowExecutionRepository.findAll()) {
-            if (execution instanceof SimpleWorkflowExecution simple && simple.hasPendingCheckpointWork()) {
-                return true;
-            }
-        }
-        return false;
+        return workflowExecutionRepository
+                .findAll().stream()
+                .anyMatch(execution -> (execution instanceof SimpleWorkflowExecution simple)
+                        && simple.hasPendingCheckpointWork());
     }
 
     private boolean scheduleCheckpointIntent(@Nonnull Runnable onDrained) {
-        var scheduledWorkflowIds = new java.util.HashSet<String>();
+        var scheduledWorkflowIds = new HashSet<String>();
         var scheduled = false;
         for (var execution : workflowExecutionRepository.findAll()) {
             if (!(execution instanceof SimpleWorkflowExecution simple)
@@ -529,5 +529,4 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler,
                                             @Nonnull TrackingToken candidate) {
         return current == null ? candidate : current.upperBound(candidate);
     }
-
 }
