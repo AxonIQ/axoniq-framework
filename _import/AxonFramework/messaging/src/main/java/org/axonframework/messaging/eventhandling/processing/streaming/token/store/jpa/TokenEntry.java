@@ -116,7 +116,6 @@ public class TokenEntry {
      * @param converter The converter to deserialize the token with.
      * @return The deserialized token stored in this entry.
      */
-    @SuppressWarnings("removal") // reads Axon 4 tokens through the deprecated migration bridge on purpose
     public TrackingToken getToken(Converter converter) {
         if (token == null || tokenType == null) {
             return null;
