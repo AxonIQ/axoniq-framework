@@ -3,6 +3,97 @@
 
 All the enhancements and features which have been introduced to our major releases of the Axoniq Framework are noted here.
 
+[#release_5_2]
+== Release 5.2
+
+=== Features
+
+- Migrate core persistent streams API from AF4 link:https://github.com/AxonIQ/axoniq-framework/pull/135[#135]
+- Enhancement/137/spec message transformator link:https://github.com/AxonIQ/axoniq-framework/pull/138[#138]
+- [#137] Message Transformation / Upcasting - Specification link:https://github.com/AxonIQ/axoniq-framework/pull/143[#143]
+- [#137] Message Transformation / Upcasting - Module setup (phase 1) link:https://github.com/AxonIQ/axoniq-framework/pull/151[#151]
+- [#137] Message Transformation / Upcasting - SPI foundation (phase 2) link:https://github.com/AxonIQ/axoniq-framework/pull/152[#152]
+- [#137] Message Transformation - Transform Chain and Event Store Decoration (phase 3) link:https://github.com/AxonIQ/axoniq-framework/pull/153[#153]
+- [#137] Message Transformation - Sourcing Criteria widening for sourcing link:https://github.com/AxonIQ/axoniq-framework/pull/160[#160]
+- Implement SnapshotStore for PostgresqlEventStorageEngine link:https://github.com/AxonIQ/axoniq-framework/pull/163[#163]
+- [#137] Message Transformation - Rename support (phase 4) link:https://github.com/AxonIQ/axoniq-framework/pull/164[#164]
+- [#137] Message Transformation - Drop / Filter support (phase 5) link:https://github.com/AxonIQ/axoniq-framework/pull/167[#167]
+- [#137] Merge Message Transformation support link:https://github.com/AxonIQ/axoniq-framework/pull/193[#193]
+- [#123] Persistent Streams Autoconfiguration link:https://github.com/AxonIQ/axoniq-framework/pull/196[#196]
+
+=== Enhancements
+
+- Include the data protection module in the axoniq framework bom for convenience link:https://github.com/AxonIQ/axoniq-framework/pull/130[#130]
+- fix the slack-release-notification.yml link:https://github.com/AxonIQ/axoniq-framework/pull/141[#141]
+- build: unified apidocs profile and publish workflow link:https://github.com/AxonIQ/axoniq-framework/pull/156[#156]
+- Remove _archive folder link:https://github.com/AxonIQ/axoniq-framework/pull/166[#166]
+- [#137] Message Transformation - Semantic matching: exact precedence + from(List) (phase 6) link:https://github.com/AxonIQ/axoniq-framework/pull/178[#178]
+- Disable sonar for builds link:https://github.com/AxonIQ/axoniq-framework/pull/187[#187]
+- Improve flaky integration tests link:https://github.com/AxonIQ/axoniq-framework/pull/189[#189]
+- cleanup remainders of the _archive folder link:https://github.com/AxonIQ/axoniq-framework/pull/202[#202]
+- [#4633] AF4 MultiSourceLegacyToken classname compatibility fix link:https://github.com/AxonIQ/axoniq-framework/pull/228[#228]
+
+=== Bug fixes
+
+- Port axon 5.1.x to main link:https://github.com/AxonIQ/axoniq-framework/pull/114[#114]
+- Align listing approach with Event Storage Engine parent page link:https://github.com/AxonIQ/axoniq-framework/pull/115[#115]
+- Adjust import for TerminalEventMessage link:https://github.com/AxonIQ/axoniq-framework/pull/132[#132]
+- Fix failing tests link:https://github.com/AxonIQ/axoniq-framework/pull/136[#136]
+- Port (5.1.x): [#108] docs(dead-letter-queue): document DLQ transactional behavior link:https://github.com/AxonIQ/axoniq-framework/pull/150[#150]
+- [#4625 | Port] Use `EventTypeResolver` in Axon Server `EventStorageEngines` to default `null` `revision` to default version link:https://github.com/AxonIQ/axoniq-framework/pull/188[#188]
+- Support source with snapshot in single server call link:https://github.com/AxonIQ/axoniq-framework/pull/220[#220]
+- [AxonFramework#4698] Ensure message type version for Commands/Queries sent from AF4 to AF5 applications link:https://github.com/AxonIQ/axoniq-framework/pull/225[#225]
+- [AxonFramework#4625] Allow to gracefully handle events without revision for persistent streams link:https://github.com/AxonIQ/axoniq-framework/pull/227[#227]
+
+=== Documentation
+
+- Include Axoniq Data Protection release notes and module description in the framework reference link:https://github.com/AxonIQ/axoniq-framework/pull/97[#97]
+- Include Axoniq Workflow Engine release notes and module description in the framework reference link:https://github.com/AxonIQ/axoniq-framework/pull/99[#99]
+- Move workflow module table listing to workflow-repo for easier maintenance link:https://github.com/AxonIQ/axoniq-framework/pull/101[#101]
+- [#77] Add migration guide for 5.0 -> 5.1 link:https://github.com/AxonIQ/axoniq-framework/pull/106[#106]
+- Include Axoniq feature indicator in navigation link:https://github.com/AxonIQ/axoniq-framework/pull/107[#107]
+- [#77] Clarify migration of the AxonServerContainer from 5.0 -> 5.1 link:https://github.com/AxonIQ/axoniq-framework/pull/112[#112]
+- Add anchors for the event storage engines to allow referencing link:https://github.com/AxonIQ/axoniq-framework/pull/117[#117]
+- Fix the maven coordinates for axoniq-postgresql in the reference link:https://github.com/AxonIQ/axoniq-framework/pull/119[#119]
+- Fix Modules Documentation (remove opentracing) link:https://github.com/AxonIQ/axoniq-framework/pull/128[#128]
+- Introduce Framework Comparison page link:https://github.com/AxonIQ/axoniq-framework/pull/134[#134]
+- [#137] add Event Transformation reference docs (moved from Axon Framework) link:https://github.com/AxonIQ/axoniq-framework/pull/179[#179]
+- [#137] adapt moved Event Transformation docs + address review nits link:https://github.com/AxonIQ/axoniq-framework/pull/180[#180]
+- Add 5.1.1 and 5.1.2 Release Notes link:https://github.com/AxonIQ/axoniq-framework/pull/191[#191]
+- docs: use DeadLetterQueueConfiguration extension API in DLQ reference link:https://github.com/AxonIQ/axoniq-framework/pull/197[#197]
+- Fix configuration example for `EventProcessorDefinition` based persistent streams configuration link:https://github.com/AxonIQ/axoniq-framework/pull/224[#224]
+
+=== Dependency upgrades
+
+- Bump io.opentelemetry:opentelemetry-api from 1.60.1 to 1.62.0 in /_archive/extensions/tracing/tracing-opentelemetry link:https://github.com/AxonIQ/axoniq-framework/pull/121[#121]
+- Bump @antora/site-generator from 3.2.0-alpha.11 to 3.2.0-alpha.12 in /docs/_playbook link:https://github.com/AxonIQ/axoniq-framework/pull/125[#125]
+- Bump @antora/cli from 3.2.0-alpha.11 to 3.2.0-alpha.12 in /docs/_playbook link:https://github.com/AxonIQ/axoniq-framework/pull/126[#126]
+- Bump the maven-dependencies group with 4 updates link:https://github.com/AxonIQ/axoniq-framework/pull/127[#127]
+- Bump qs from 6.14.2 to 6.15.2 in /docs/_playbook link:https://github.com/AxonIQ/axoniq-framework/pull/145[#145]
+- Bump the maven-dependencies group with 3 updates link:https://github.com/AxonIQ/axoniq-framework/pull/146[#146]
+- Bump the maven-dependencies group with 6 updates link:https://github.com/AxonIQ/axoniq-framework/pull/154[#154]
+- Bump the maven-dependencies group with 5 updates link:https://github.com/AxonIQ/axoniq-framework/pull/161[#161]
+- Bump the maven-dependencies group with 7 updates link:https://github.com/AxonIQ/axoniq-framework/pull/170[#170]
+- Bump the github-dependencies group with 4 updates link:https://github.com/AxonIQ/axoniq-framework/pull/182[#182]
+- Bump @antora/site-generator from 3.2.0-alpha.12 to 3.2.0-rc.2 in /docs/_playbook link:https://github.com/AxonIQ/axoniq-framework/pull/183[#183]
+- Bump the maven-dependencies group with 4 updates link:https://github.com/AxonIQ/axoniq-framework/pull/184[#184]
+- Bump js-yaml and @antora/cli in /docs/_playbook link:https://github.com/AxonIQ/axoniq-framework/pull/185[#185]
+- Bump the github-dependencies group with 2 updates link:https://github.com/AxonIQ/axoniq-framework/pull/194[#194]
+- Bump the maven-dependencies group with 4 updates link:https://github.com/AxonIQ/axoniq-framework/pull/195[#195]
+- Bump the maven-dependencies group with 8 updates link:https://github.com/AxonIQ/axoniq-framework/pull/215[#215]
+- [chore]: Add missing axoniq-message-transformation to combined coverage report link:https://github.com/AxonIQ/axoniq-framework/pull/217[#217]
+
+=== Contributors
+
+We'd like to thank all the contributors who worked on this section!
+
+- link:https://github.com/abuijze[@abuijze]
+- link:https://github.com/hatzlj[@hatzlj]
+- link:https://github.com/hjohn[@hjohn]
+- link:https://github.com/laura-devriendt-lemon[@laura-devriendt-lemon]
+- link:https://github.com/MateuszNaKodach[@MateuszNaKodach]
+- link:https://github.com/smcvb[@smcvb]
+
 [#release_5_1]
 == Release 5.1
 
