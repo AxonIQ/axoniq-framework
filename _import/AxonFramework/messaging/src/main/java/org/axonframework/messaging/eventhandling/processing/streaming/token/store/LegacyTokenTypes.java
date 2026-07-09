@@ -24,13 +24,21 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Glob
 import org.axonframework.messaging.eventhandling.processing.streaming.token.MergedTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.ServiceLoader;
 
 /**
  * Maps Axon Framework 4 {@link TrackingToken} class names to their Axon Framework 5 counterparts, so a token store
  * written by Axon Framework 4 can be read after upgrading. Reading yields an Axon Framework 5 token, so the next save
  * stores the new name and the store migrates itself.
+ * <p>
+ * Modules that ship their own tracking token add its mapping through {@link LegacyTokenTypeMapper}, which is discovered
+ * with {@link java.util.ServiceLoader}.
  * <p>
  * Marked {@link Internal} because it exists purely as a migration bridge for upgrading applications: it is invoked by
  * the token stores while reading, never by application code, and its mapping table is the only thing keeping an Axon
@@ -39,18 +47,42 @@ import java.util.Map;
  *
  * @author Laura Devriendt
  * @since 5.2.0
+ * @deprecated Temporary bridge for reading Axon Framework 4 token stores after upgrading. Scheduled for removal in
+ * 5.5.0, once existing stores have migrated to the Axon Framework 5 token class names.
  */
 @Internal
+@Deprecated(since = "5.2.0", forRemoval = true)
 public final class LegacyTokenTypes {
 
-    private static final Map<String, Class<? extends TrackingToken>> AXON_4_TO_AXON_5 = Map.of(
-            "org.axonframework.eventhandling.GlobalSequenceTrackingToken", GlobalSequenceTrackingToken.class,
-            "org.axonframework.eventhandling.GapAwareTrackingToken", GapAwareTrackingToken.class,
-            "org.axonframework.eventhandling.MergedTrackingToken", MergedTrackingToken.class,
-            "org.axonframework.eventhandling.tokenstore.ConfigToken", ConfigToken.class
-    );
+    private static final Logger logger = LoggerFactory.getLogger(LegacyTokenTypes.class);
+
+    private static final Map<String, Class<? extends TrackingToken>> AXON_4_TO_AXON_5 = loadMappings();
 
     private LegacyTokenTypes() {
+    }
+
+    private static Map<String, Class<? extends TrackingToken>> loadMappings() {
+        Map<String, Class<? extends TrackingToken>> mappings = new HashMap<>();
+        mappings.put("org.axonframework.eventhandling.GlobalSequenceTrackingToken", GlobalSequenceTrackingToken.class);
+        mappings.put("org.axonframework.eventhandling.GapAwareTrackingToken", GapAwareTrackingToken.class);
+        mappings.put("org.axonframework.eventhandling.MergedTrackingToken", MergedTrackingToken.class);
+        mappings.put("org.axonframework.eventhandling.tokenstore.ConfigToken", ConfigToken.class);
+        // Contributed mappings are added on top, but cannot override the built-in mappings above.
+        ServiceLoader.load(LegacyTokenTypeMapper.class, LegacyTokenTypes.class.getClassLoader())
+                     .forEach(mapper -> addContributedMappings(mappings, mapper));
+        return Map.copyOf(mappings);
+    }
+
+    private static void addContributedMappings(Map<String, Class<? extends TrackingToken>> mappings,
+                                               LegacyTokenTypeMapper mapper) {
+        Objects.requireNonNull(mapper.mappings(), "A LegacyTokenTypeMapper must not return null mappings.")
+               .forEach((tokenType, tokenClass) -> {
+                   Class<? extends TrackingToken> builtIn = mappings.putIfAbsent(tokenType, tokenClass);
+                   if (builtIn != null && !builtIn.equals(tokenClass)) {
+                       logger.debug("Ignoring contributed token mapping for [{}]; the built-in mapping to [{}] "
+                                            + "takes precedence.", tokenType, builtIn.getName());
+                   }
+               });
     }
 
     /**
