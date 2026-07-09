@@ -129,7 +129,7 @@ class WorkflowEventTagsDeclarativeTest extends AbstractDeclarativeTestBase<Simpl
                                        .and(metadataProperty("tenantId"), equalsTo("solar system")),
                                step -> step.timeout(Duration.ofMillis(50)));
             } catch (StepTimedOutException e) {
-
+                // intentionally empty to just finish the workflow successfully
             }
         }
     }

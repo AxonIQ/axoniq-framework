@@ -97,8 +97,8 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerPayloadReducerRegistry(componentRegistry);
         registerEventNameCustomizer(componentRegistry);
         registerClock(componentRegistry);
-        registerTagResolver(componentRegistry);
         registerRunningWorkflows(componentRegistry);
+        decorateTagResolver(componentRegistry);
         registerWorkflowStateRepository(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
         registerWorkflowExecutionRepository(componentRegistry);
@@ -123,7 +123,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         componentRegistry.registerIfNotPresent(Clock.class, cfg -> Clock.systemUTC());
     }
 
-    void registerTagResolver(ComponentRegistry componentRegistry) {
+    void decorateTagResolver(ComponentRegistry componentRegistry) {
         componentRegistry.registerDecorator(
                 TagResolver.class,
                 0,

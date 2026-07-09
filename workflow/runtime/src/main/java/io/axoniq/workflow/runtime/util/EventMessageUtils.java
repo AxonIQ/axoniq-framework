@@ -220,7 +220,6 @@ public class EventMessageUtils {
      * @param stepName   name of the step
      * @param local      local data
      * @param customizer customizer for event name
-     *
      */
     @Nonnull
     public static EventMessage startedWaitForEventStep(@Nonnull WorkflowContext context,
@@ -301,24 +300,6 @@ public class EventMessageUtils {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.FAILED);
         return new GenericEventMessage(new MessageType(name, versionOf(context)), WorkflowError.from(exception),
                                        MetadataUtils.create(context.workflowId(), stepName, StepStatus.FAILED)
-        );
-    }
-
-    /**
-     * Creates a failed event for a wait-for-event step.
-     */
-    @Nonnull
-    public static EventMessage failWaitForEventStep(@Nonnull WorkflowContext context,
-                                                    @Nonnull String stepName,
-                                                    @Nonnull Throwable exception,
-                                                    @Nonnull EventNameCustomizer customizer) {
-        var name = customizer.getEventName(stepName, Map.of(), StepStatus.FAILED);
-        return new GenericEventMessage(
-                new MessageType(name, versionOf(context)),
-                WorkflowError.from(exception),
-                MetadataUtils.markWaitForEventStep(
-                        MetadataUtils.create(context.workflowId(), stepName, StepStatus.FAILED)
-                )
         );
     }
 

@@ -201,16 +201,6 @@ public abstract class AbstractStepExecutor {
     }
 
     @Nonnull
-    protected CompletableFuture<Void> failedWaitForEvent(@Nonnull String stepName,
-                                                         @Nonnull Throwable ex,
-                                                         @Nonnull EventNameCustomizer eventNameCustomizer) {
-        logger.error("Wait-for-event step '{}' failed in workflow '{}'", stepName, workflowExecution.workflowId(), ex);
-        return sendStepEvent(stepName, failWaitForEventStep(workflowContext, stepName, ex,
-                                                            merge(parentEventNameCustomizer, eventNameCustomizer)
-        ), getContext(stepName));
-    }
-
-    @Nonnull
     protected CompletableFuture<Void> retrying(@Nonnull String stepName,
                                                @Nonnull StepRetryInfo retryInfo,
                                                @Nonnull EventNameCustomizer eventNameCustomizer) {
