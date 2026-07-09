@@ -24,6 +24,7 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import org.axonframework.common.Registration;
 import org.axonframework.common.StringUtils;
+import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.messaging.core.SubscribableEventSource;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -61,11 +62,12 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
     /**
      * Instantiates a {@code PersistentStreamEventSource}.
      *
-     * @param name                       the name of the persistent stream; acts as the unique stream identifier in
-     *                                   Axon Server
+     * @param name                       the name of the persistent stream; acts as the unique stream identifier in Axon
+     *                                   Server
      * @param connectionManager          the Axon Server connection manager
      * @param serverConfig               the Axon Server configuration
      * @param converter                  the event converter used to deserialize event payloads
+     * @param eventTypeResolver          the event type resolver used to resolve the type on inbound events
      * @param persistentStreamProperties the properties for the persistent stream
      * @param scheduler                  the scheduler thread pool to schedule tasks
      * @param unitOfWorkFactory          the {@link UnitOfWorkFactory} used to create a unit of work to span message
@@ -76,6 +78,7 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
                                        AxonServerConnectionManager connectionManager,
                                        AxonServerConfiguration serverConfig,
                                        EventConverter converter,
+                                       EventTypeResolver eventTypeResolver,
                                        PersistentStreamProperties persistentStreamProperties,
                                        ScheduledExecutorService scheduler,
                                        UnitOfWorkFactory unitOfWorkFactory,
@@ -84,6 +87,7 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
              connectionManager,
              serverConfig,
              converter,
+             eventTypeResolver,
              persistentStreamProperties,
              scheduler,
              unitOfWorkFactory,
@@ -94,11 +98,12 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
     /**
      * Instantiates a {@code PersistentStreamEventSource}.
      *
-     * @param name                       the name of the persistent stream; acts as the unique stream identifier in
-     *                                   Axon Server
+     * @param name                       the name of the persistent stream; acts as the unique stream identifier in Axon
+     *                                   Server
      * @param connectionManager          the Axon Server connection manager
      * @param serverConfig               the Axon Server configuration
      * @param converter                  the event converter used to deserialize event payloads
+     * @param eventTypeResolver          the event type resolver used to resolve the type on inbound events
      * @param persistentStreamProperties the properties for the persistent stream
      * @param scheduler                  the scheduler thread pool to schedule tasks
      * @param unitOfWorkFactory          the {@link UnitOfWorkFactory} used to create a unit of work to span message
@@ -111,6 +116,7 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
                                        AxonServerConnectionManager connectionManager,
                                        AxonServerConfiguration serverConfig,
                                        EventConverter converter,
+                                       EventTypeResolver eventTypeResolver,
                                        PersistentStreamProperties persistentStreamProperties,
                                        ScheduledExecutorService scheduler,
                                        UnitOfWorkFactory unitOfWorkFactory,
@@ -124,6 +130,7 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
                                                                          connectionManager,
                                                                          serverConfig,
                                                                          converter,
+                                                                         eventTypeResolver,
                                                                          persistentStreamProperties,
                                                                          scheduler,
                                                                          unitOfWorkFactory,

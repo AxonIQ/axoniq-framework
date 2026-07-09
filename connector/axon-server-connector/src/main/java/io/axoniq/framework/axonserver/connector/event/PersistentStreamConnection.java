@@ -32,8 +32,8 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.shared.MetadataConverter;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.messaging.core.LegacyResources;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -92,6 +92,7 @@ public class PersistentStreamConnection {
     private final AxonServerConnectionManager connectionManager;
     private final AxonServerConfiguration serverConfig;
     private final EventConverter converter;
+    private final EventTypeResolver eventTypeResolver;
     private final PersistentStreamProperties persistentStreamProperties;
 
     private final AtomicReference<@Nullable PersistentStream> persistentStreamHolder = new AtomicReference<>();
@@ -109,38 +110,8 @@ public class PersistentStreamConnection {
     private final @Nullable String context;
 
     /**
-     * Instantiates a {@code PersistentStreamConnection}.
-     *
-     * @param streamId                   the unique identifier of the persistent stream
-     * @param connectionManager          the Axon Server connection manager
-     * @param serverConfig               the Axon Server configuration
-     * @param converter                  the event converter used to deserialize event payloads
-     * @param persistentStreamProperties the properties for the persistent stream
-     * @param scheduler                  the scheduler thread pool to schedule tasks
-     * @param unitOfWorkFactory          the unit of work factory
-     * @param batchSize                  the maximum number of events to collect per batch
-     */
-    public PersistentStreamConnection(String streamId,
-                                      AxonServerConnectionManager connectionManager,
-                                      AxonServerConfiguration serverConfig,
-                                      EventConverter converter,
-                                      PersistentStreamProperties persistentStreamProperties,
-                                      ScheduledExecutorService scheduler,
-                                      UnitOfWorkFactory unitOfWorkFactory,
-                                      int batchSize) {
-        this(streamId,
-             connectionManager,
-             serverConfig,
-             converter,
-             persistentStreamProperties,
-             scheduler,
-             unitOfWorkFactory,
-             batchSize,
-             null);
-    }
-
-    /**
-     * Instantiates a {@code PersistentStreamConnection}.
+     * Instantiates a {@code PersistentStreamConnection} falling back to the
+     * {@link EventTypeResolver#DEFAULT default event type resolver} for message type resolution.
      *
      * @param streamId                   the unique identifier of the persistent stream
      * @param connectionManager          the Axon Server connection manager
@@ -162,10 +133,48 @@ public class PersistentStreamConnection {
                                       UnitOfWorkFactory unitOfWorkFactory,
                                       int batchSize,
                                       @Nullable String context) {
+        this(streamId,
+             connectionManager,
+             serverConfig,
+             converter,
+             EventTypeResolver.DEFAULT,
+             persistentStreamProperties,
+             scheduler,
+             unitOfWorkFactory,
+             batchSize,
+             context);
+    }
+
+    /**
+     * Instantiates a {@code PersistentStreamConnection}.
+     *
+     * @param streamId                   the unique identifier of the persistent stream
+     * @param connectionManager          the Axon Server connection manager
+     * @param serverConfig               the Axon Server configuration
+     * @param converter                  the event converter used to deserialize event payloads
+     * @param eventTypeResolver          the event type resolver used to resolve the type on inbound events
+     * @param persistentStreamProperties the properties for the persistent stream
+     * @param scheduler                  the scheduler thread pool to schedule tasks
+     * @param unitOfWorkFactory          the unit of work factory
+     * @param batchSize                  the maximum number of events to collect per batch
+     * @param context                    the Axon Server context to connect to, or {@code null} to use
+     *                                   {@link AxonServerConfiguration#getContext()}
+     */
+    public PersistentStreamConnection(String streamId,
+                                      AxonServerConnectionManager connectionManager,
+                                      AxonServerConfiguration serverConfig,
+                                      EventConverter converter,
+                                      EventTypeResolver eventTypeResolver,
+                                      PersistentStreamProperties persistentStreamProperties,
+                                      ScheduledExecutorService scheduler,
+                                      UnitOfWorkFactory unitOfWorkFactory,
+                                      int batchSize,
+                                      @Nullable String context) {
         this.streamId = Objects.requireNonNull(streamId, "streamId must not be null");
         this.connectionManager = Objects.requireNonNull(connectionManager, "connectionManager must not be null");
         this.serverConfig = Objects.requireNonNull(serverConfig, "serverConfig must not be null");
         this.converter = Objects.requireNonNull(converter, "converter must not be null");
+        this.eventTypeResolver = Objects.requireNonNull(eventTypeResolver, "eventTypeResolver must not be null");
         this.persistentStreamProperties = Objects.requireNonNull(persistentStreamProperties,
                                                                  "persistentStreamProperties must not be null");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler must not be null");
@@ -442,7 +451,7 @@ public class PersistentStreamConnection {
             SerializedObject payload = event.getPayload();
             return new GenericEventMessage(
                     event.getMessageIdentifier(),
-                    new MessageType(payload.getType(), payload.getRevision()),
+                    eventTypeResolver.resolve(payload.getType(), payload.getRevision()),
                     payload.getData().toByteArray(),
                     new Metadata(MetadataConverter.convertMetadataValuesToGrpc(event.getMetaDataMap())),
                     Instant.ofEpochMilli(event.getTimestamp())

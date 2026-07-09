@@ -30,9 +30,10 @@ import io.axoniq.axonserver.grpc.query.QueryResponse;
 import io.axoniq.axonserver.grpc.query.QueryUpdate;
 import io.axoniq.axonserver.grpc.query.SubscriptionQuery;
 import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
-import io.axoniq.framework.axonserver.connector.shared.MetadataConverter;
 import io.axoniq.framework.axonserver.connector.shared.ExceptionConverter;
+import io.axoniq.framework.axonserver.connector.shared.MetadataConverter;
 import io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils;
+import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.GenericMessage;
@@ -82,7 +83,8 @@ public final class QueryConverter {
         var payload = queryRequest.getPayload();
         Integer priority = ProcessingInstructionUtils.priority(queryRequest.getProcessingInstructionsList());
 
-        var type = new MessageType(payload.getType(), payload.getRevision());
+        String revision = revisionOrDefault(payload);
+        var type = new MessageType(payload.getType(), revision);
         return new GenericQueryMessage(
                 new GenericMessage(
                         queryRequest.getMessageIdentifier(),
@@ -164,9 +166,10 @@ public final class QueryConverter {
             throw new IllegalArgumentException("Query Response contained an error.");
         }
         SerializedObject responsePayload = queryResponse.getPayload();
+        String revision = revisionOrDefault(responsePayload);
         var message = new GenericMessage(
                 queryResponse.getMessageIdentifier(),
-                new MessageType(responsePayload.getType(), responsePayload.getRevision()),
+                new MessageType(responsePayload.getType(), revision),
                 responsePayload.getData().toByteArray(),
                 MetadataConverter.convertMetadataValuesToGrpc(queryResponse.getMetaDataMap())
         );
@@ -219,9 +222,10 @@ public final class QueryConverter {
      */
     public static QueryMessage convertSubscriptionQueryMessage(SubscriptionQuery query, @Nullable Converter converter) {
         SerializedObject responsePayload = query.getQueryRequest().getPayload();
+        String revision = revisionOrDefault(responsePayload);
         var message = new GenericMessage(
                 query.getSubscriptionIdentifier(),
-                new MessageType(responsePayload.getType(), responsePayload.getRevision()),
+                new MessageType(responsePayload.getType(), revision),
                 responsePayload.getData().toByteArray(),
                 MetadataConverter.convertMetadataValuesToGrpc(query.getQueryRequest().getMetaDataMap())
         );
@@ -265,9 +269,10 @@ public final class QueryConverter {
     public static SubscriptionQueryUpdateMessage convertQueryUpdate(QueryUpdate queryUpdate,
                                                                     @Nullable Converter converter) {
         SerializedObject payload = queryUpdate.getPayload();
+        String revision = revisionOrDefault(payload);
         var message = new GenericMessage(
                 queryUpdate.getMessageIdentifier(),
-                new MessageType(payload.getType(), payload.getRevision()),
+                new MessageType(payload.getType(), revision),
                 payload.getData().toByteArray(),
                 MetadataConverter.convertMetadataValuesToGrpc(queryUpdate.getMetaDataMap())
         );
@@ -306,6 +311,19 @@ public final class QueryConverter {
                                                                        .setNumberValue(priority));
             builder.addProcessingInstructions(instruction);
         });
+    }
+
+    /**
+     * Return the {@link SerializedObject#getRevision()} or {@link MessageType#DEFAULT_VERSION} if the revision is
+     * {@code empty} or {@code null}.
+     *
+     * @param payload the {@link SerializedObject} to resolve the revision from
+     * @return the revision or the {@link MessageType#DEFAULT_VERSION} if the revision is {@code empty} or {@code null}
+     */
+    private static String revisionOrDefault(SerializedObject payload) {
+        return StringUtils.nonEmptyOrNull(payload.getRevision())
+                ? payload.getRevision()
+                : MessageType.DEFAULT_VERSION;
     }
 
     private static ProcessingInstruction.Builder nrOfResults(int nrOfResults) {
