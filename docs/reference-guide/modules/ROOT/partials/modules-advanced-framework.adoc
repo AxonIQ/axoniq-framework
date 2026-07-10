@@ -24,9 +24,6 @@ include::partial$advanced-modules.excalidraw[]
 ifdef::data-protection[]
 |<<Axoniq Data Protection>> |`axoniq-data-protection`    |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-data-protection[available]
 endif::[]
-ifdef::workflows[]
-include::modules-table-workflows.adoc[]
-endif::[]
 |===
 
 === Axoniq PostgreSQL
@@ -57,8 +54,4 @@ See the xref:message-transformation:index.adoc[event transformation reference] t
 
 ifdef::data-protection[]
 include::modules-dataprotection.adoc[]
-endif::[]
-
-ifdef::workflows[]
-include::modules-workflows.adoc[]
 endif::[]
