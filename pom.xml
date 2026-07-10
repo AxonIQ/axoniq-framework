@@ -414,11 +414,6 @@
                     <artifactId>axon-reactor</artifactId>
                     <version>${axon-framework.version}</version>
                 </dependency>
-                <dependency>
-                    <groupId>org.axonframework.extensions.tracing</groupId>
-                    <artifactId>axon-tracing-opentelemetry</artifactId>
-                    <version>${axon-framework.version}</version>
-                </dependency>
                 <!--
                   Optional dependencies of the Axon modules above. They are declared optional in
                   Axon, so they are not resolved transitively, but Javadoc must resolve their types
@@ -537,7 +532,6 @@
                                 <dependencySourceInclude>org.axonframework.extensions.kotlin:*</dependencySourceInclude>
                                 <dependencySourceInclude>org.axonframework.extensions.metrics:*</dependencySourceInclude>
                                 <dependencySourceInclude>org.axonframework.extensions.reactor:*</dependencySourceInclude>
-                                <dependencySourceInclude>org.axonframework.extensions.tracing:*</dependencySourceInclude>
                             </dependencySourceIncludes>
                             <tags>
                                 <tag>
