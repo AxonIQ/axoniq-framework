@@ -1,1 +1,2 @@
 * xref:multi-tenancy:index.adoc[[.advanced-framework]#Multi-Tenancy#]
+** xref:multi-tenancy:tenant-aware-components.adoc[]

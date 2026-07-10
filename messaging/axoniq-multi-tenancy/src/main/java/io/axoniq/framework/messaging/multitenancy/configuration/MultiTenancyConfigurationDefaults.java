@@ -21,6 +21,7 @@ package io.axoniq.framework.messaging.multitenancy.configuration;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolverRegistry;
@@ -33,6 +34,7 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.SearchScope;
 import org.axonframework.common.lifecycle.Phase;
+import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
 import org.axonframework.messaging.core.correlation.CorrelationDataProvider;
 import org.axonframework.messaging.core.correlation.CorrelationDataProviderRegistry;
 import org.axonframework.messaging.core.correlation.SimpleCorrelationDataProvider;
@@ -75,6 +77,7 @@ import org.axonframework.messaging.core.correlation.SimpleCorrelationDataProvide
  * @author Steven van Beelen
  * @author Theo Emanuelsson
  * @author Jan Galinski
+ * @author Laura Devriendt
  * @since 5.3.0
  */
 @Internal
@@ -104,6 +107,48 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
 
         // Propagate the tenantId via Metadata to all messages, so that the tenantId is available in the processing context.
         registerCorrelationDataProviderDecorator(componentRegistry);
+
+        // Inject the correct tenant's instance of any registered TenantComponentProvider into message handlers.
+        registerTenantComponentParameterResolverFactory(componentRegistry);
+
+        // Keep every TenantComponentProvider in sync with the tenants known to the TenantProvider.
+        registerTenantComponentProviderSubscription(componentRegistry);
+    }
+
+    /**
+     * Registers the {@link TenantComponentParameterResolverFactory}, so message handlers can declare tenant-scoped
+     * component parameters resolved through the registered {@link TenantComponentProvider TenantComponentProviders}.
+     *
+     * @param componentRegistry the registry to register the parameter resolver factory with
+     */
+    static void registerTenantComponentParameterResolverFactory(ComponentRegistry componentRegistry) {
+        ParameterResolverFactoryUtils.registerToComponentRegistry(
+                componentRegistry,
+                TenantComponentParameterResolverFactory::new
+        );
+    }
+
+    /**
+     * Registers a decorator subscribing every {@link TenantComponentProvider} to the {@link TenantProvider}, so
+     * providers follow the tenant lifecycle: known tenants are replayed on subscription and tenants added or removed
+     * at runtime reach every provider.
+     *
+     * @param componentRegistry the registry to register the subscription decorator with
+     */
+    static void registerTenantComponentProviderSubscription(ComponentRegistry componentRegistry) {
+        // A TenantProvider is always present, since this enhancer registers one itself when none is configured.
+        // Subscribing at decoration time is deliberate: a provider only needs tenants once it is actually built,
+        // and subscribe(...) replays all tenants known by then. The returned Registration is deliberately not
+        // retained either, since the TenantProvider's own shutdown deregisters all subscribers in reverse order,
+        // which is exactly what destroys each tenant's component instances.
+        componentRegistry.registerDecorator(
+                TenantComponentProvider.class,
+                0,
+                (config, name, delegate) -> {
+                    config.getComponent(TenantProvider.class).subscribe(delegate);
+                    return delegate;
+                }
+        );
     }
 
     static void registerDefaultTenantResolverRegistry(ComponentRegistry componentRegistry) {
