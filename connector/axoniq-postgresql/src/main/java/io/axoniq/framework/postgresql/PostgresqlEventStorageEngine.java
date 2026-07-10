@@ -555,6 +555,10 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                 -- BTREE index on global_index in consistency_tags (for faster finalizations)
                 CREATE INDEX IF NOT EXISTS consistency_tags_global_index_idx
                   ON consistency_tags (global_index);
+
+                -- BTREE index on global_index in tags (for faster finalizations)
+                CREATE INDEX IF NOT EXISTS tags_global_index_idx
+                  ON tags (global_index);
                 """
             );
 
