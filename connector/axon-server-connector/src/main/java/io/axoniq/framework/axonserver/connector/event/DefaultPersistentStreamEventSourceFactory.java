@@ -23,6 +23,7 @@ import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.slf4j.Logger;
@@ -71,6 +72,8 @@ public class DefaultPersistentStreamEventSourceFactory implements PersistentStre
                 configuration.getComponent(AxonServerConnectionManager.class),
                 configuration.getComponent(AxonServerConfiguration.class),
                 configuration.getComponent(EventConverter.class),
+                configuration.getOptionalComponent(EventTypeResolver.class)
+                             .orElse(EventTypeResolver.DEFAULT),
                 properties,
                 scheduler,
                 configuration.getComponent(UnitOfWorkFactory.class),
