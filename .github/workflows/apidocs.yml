@@ -86,8 +86,23 @@ jobs:
           fi
           echo "Built ${{ steps.target.outputs.version }}; highest release is $HIGHEST"
 
+      - name: Remove unpublished extensions from apidocs profile
+        # Some extension artifacts listed in the apidocs profile may not yet be published to
+        # Maven Central for the tag being built. Strip any missing ones here so the build
+        # does not fail on a dependency-resolution error.
+        # Remove once axon-tracing-opentelemetry is published at the axon-framework.version
+        # used by this tag.
+        run: |
+          python3 -c "
+          import re
+          src = open('pom.xml').read()
+          src = re.sub(r'\s*<dependency>\s*<groupId>org[.]axonframework[.]extensions[.]tracing</groupId>.*?</dependency>', '', src, flags=re.DOTALL)
+          src = re.sub(r'\s*<dependencySourceInclude>org[.]axonframework[.]extensions[.]tracing:[*]</dependencySourceInclude>', '', src)
+          open('pom.xml', 'w').write(src)
+          "
+
       - name: Set up JDK 21
-        uses: actions/setup-java@v5.4.0
+        uses: actions/setup-java@v5.5.0
         with:
           distribution: 'zulu'
           java-version: 21
