@@ -19,44 +19,48 @@ Implement a `TenantComponentFactory` describing how the component is built for a
 
 [tabs]
 ====
-Spring Boot::
+Declarative - Configuration API::
 +
+--
+Register the provider as a component on your `MessagingConfigurer`, passed in from the place it is created:
+
 [source,java]
 ----
-@Configuration
-public class CourseStatsConfiguration {
-
-    @Bean
-    public TenantComponentProvider<CourseStatsRepository> courseStatsRepository() {
-        return TenantComponentProvider.withFactory(
-                CourseStatsRepository.class,                                   // <1>
-                tenant -> new InMemoryCourseStatsRepository(tenant.tenantId()) // <2>
-        );
-    }
-}
-----
-<1> The component type, used to match the provider against handler parameters.
-<2> The `TenantComponentFactory`: a function from a `TenantDescriptor` to the tenant's component instance.
-
-Plain Java::
-+
-[source,java]
-----
-public void registerTenantComponents(MessagingConfigurer configurer) { // <1>
+public void registerTenantComponents(MessagingConfigurer configurer) {
     configurer.componentRegistry(registry ->
         registry.registerComponent(
-                TenantComponentProvider.class,                         // <2>
+                TenantComponentProvider.class,                                     // <1>
                 config -> TenantComponentProvider.withFactory(
-                        CourseStatsRepository.class,
+                        CourseStatsRepository.class,                               // <2>
                         tenant -> new InMemoryCourseStatsRepository(tenant.tenantId())
                 )
         )
     );
 }
 ----
-<1> Registration happens on the application's single `MessagingConfigurer`, passed in from the place it is created.
-<2> Register the provider under the `TenantComponentProvider` type so it is discovered during parameter resolution.
+<1> Register the provider under the `TenantComponentProvider` type so it is discovered during parameter resolution.
+<2> The component type, used to match the provider against handler parameters. The lambda is the `TenantComponentFactory` building the tenant's instance.
+--
+Autodetected - Spring Boot::
++
+--
+Expose the provider as a bean of type `TenantComponentProvider`.
+Axon's Spring Boot integration registers it as a component, where the same parameter resolution detects it:
+
+[source,java]
+----
+@Bean
+public TenantComponentProvider<CourseStatsRepository> courseStatsRepository() {
+    return TenantComponentProvider.withFactory(
+            CourseStatsRepository.class,
+            tenant -> new InMemoryCourseStatsRepository(tenant.tenantId())
+    );
+}
+----
+--
 ====
+
+Both approaches do the same thing: they provide one `TenantComponentProvider` component, and message handlers can then declare the component type as a parameter.
 
 == Injecting the tenant's instance into a handler
 
@@ -81,10 +85,16 @@ This guarantees that no tenant-scoped resource is ever created for an unknown te
 == Registering multiple component types
 
 An application can register several tenant-aware components, one provider per type.
-Register each provider under its own name.
 Every provider is matched to a handler parameter by its own component type, and a single exact type match settles the choice even when assignable supertype candidates exist.
 When the choice cannot be settled by an exact match, because two providers serve the same exact type or, absent an exact match, several assignable candidates remain, handler registration fails with an `AxonConfigurationException`.
 Register a single provider per component type, or narrow the parameter type, to resolve such an ambiguity.
+
+[tabs]
+====
+Declarative - Configuration API::
++
+--
+Register each provider under its own name:
 
 [source,java]
 ----
@@ -101,6 +111,31 @@ configurer.componentRegistry(registry -> registry
 ----
 <1> A provider for the `CourseStatsRepository` read model.
 <2> A second provider, for a per-tenant reporting `DataSource`, registered under a different name.
+--
+Autodetected - Spring Boot::
++
+--
+Declare one bean per component type.
+The bean name serves as the component name:
+
+[source,java]
+----
+@Bean
+public TenantComponentProvider<CourseStatsRepository> courseStatsRepository() {
+    return TenantComponentProvider.withFactory(
+            CourseStatsRepository.class,
+            tenant -> new InMemoryCourseStatsRepository(tenant.tenantId()));
+}
+
+@Bean
+public TenantComponentProvider<DataSource> reportingDataSource() {
+    return TenantComponentProvider.withFactory(
+            DataSource.class,
+            tenant -> buildDataSource(tenant));
+}
+----
+--
+====
 
 == Lifecycle and cleanup
 
