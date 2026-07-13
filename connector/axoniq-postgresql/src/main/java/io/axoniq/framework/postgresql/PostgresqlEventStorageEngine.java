@@ -21,7 +21,6 @@ package io.axoniq.framework.postgresql;
 
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.license.entitlement.EntitlementMessageType;
-import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.tx.TransactionalExecutor;
@@ -59,8 +58,6 @@ import org.axonframework.messaging.eventstreaming.EventCriterion;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.axonframework.messaging.eventstreaming.Tag;
 import org.jspecify.annotations.Nullable;
-import org.postgresql.PGConnection;
-import org.postgresql.PGNotification;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,7 +76,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
@@ -452,15 +448,10 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     };
 
     /**
-     * Tracks runnables for callbacks attached to streams for when new events may have become available.
+     * Watches for new events arriving via Postgres {@code LISTEN}/{@code NOTIFY} and notifies
+     * registered stream callbacks.
      */
-    private final Map<Object, Runnable> streamCallbacks = new ConcurrentHashMap<>();
-
-    /**
-     * The thread used to monitor for the arrival of new events inserted
-     * by another instance of this class running in a different process.
-     */
-    private final Thread eventMonitoringThread;
+    private final PostgresqlEventMonitor eventMonitor;
 
     /**
      * Synchronized field. Future for the queued finalization which append transactions
@@ -472,13 +463,6 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * Synchronized field. Tracks whether any finalizer is running currently.
      */
     private boolean finalizerRunning;
-
-    /**
-     * Synchronized field. Tracks the highest known global index known by
-     * this engine instance. This is updated by the instance itself or via
-     * the Postgres LISTEN/NOTIFY mechanism.
-     */
-    private long highestKnownGlobalIndex;
 
     /**
      * Constructs a new instance.
@@ -568,124 +552,11 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
             throw new IllegalStateException("Could not initialize " + getClass().getSimpleName(), e);
         }
 
-        // Setup thread and connection to detect new appends:
-        this.eventMonitoringThread = Thread.ofVirtual().start(() -> {
-            while (!Thread.currentThread().isInterrupted()) {
-                try (Connection connection = dataSource.getConnection()) {
-                    monitorForNewEvents(connection);
-                }
-                catch (SQLException e) {
-
-                    /*
-                     * The Postgres driver will wrap InterruptedExceptions in an SQLException.
-                     * To check whether the exception here was meant to terminate the monitoring
-                     * thread, the interrupted flag is checked:
-                     */
-
-                    if (Thread.currentThread().isInterrupted()) {
-                        break;
-                    }
-
-                    LOGGER.warn("Exception while accessing DataSource (retry in 5 seconds): " + dataSource, e);
-
-                    try {
-                        Thread.sleep(5000);
-                    }
-                    catch (InterruptedException ie) {
-                        break;  // exit thread when asked to terminate during retry delay
-                    }
-                }
-            }
-
-            LOGGER.info("Event Monitoring Thread terminated");
-        });
+        this.eventMonitor = new PostgresqlEventMonitor(dataSource);
     }
 
     void close() {  // for testing purposes, to avoid junk exceptions
-        eventMonitoringThread.interrupt();
-        try {
-            eventMonitoringThread.join(10_000);
-        }
-        catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    private void monitorForNewEvents(Connection c) throws SQLException {
-        PGConnection pgConnection = c.unwrap(PGConnection.class);
-
-        c.setAutoCommit(true);  // required to have no transaction for receiving notifications
-
-        /*
-         * First set up a listener for global index updates:
-         */
-
-        try (PreparedStatement ps = c.prepareStatement("LISTEN events_channel")) {
-            ps.execute();
-        }
-
-        /*
-         * It's possible some notifications were missed, so perform a direct query once
-         * to find the current highest global index:
-         */
-
-        try (
-            PreparedStatement ps = c.prepareStatement(EVENTS_FIND_NEXT_AVAILABLE_GLOBAL_INDEX);
-            ResultSet resultSet = ps.executeQuery();
-        ) {
-            resultSet.next();
-
-            updateHighestKnownGlobalIndex(resultSet.getLong(1) - 1);
-        }
-
-        /*
-         * Loop and process incoming notifications, until interrupted. Note that
-         * there is no InterruptedException that can occur here, as the Postgres
-         * driver hides this fact and wraps it in a normal SQLException.
-         */
-
-        while (!Thread.currentThread().isInterrupted()) {
-            PGNotification[] notifications = pgConnection.getNotifications(60000);
-            long globalIndex = 0;
-
-            for (PGNotification notification : notifications) {
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Received notification from PID " + notification.getPID() + " on " + notification.getName() + " with " + notification.getParameter());
-                }
-
-                if (notification.getName().equals("events_channel")) {
-                    globalIndex = Math.max(Long.parseLong(notification.getParameter()), globalIndex);
-                }
-            }
-
-            if (globalIndex > 0) {
-                updateHighestKnownGlobalIndex(globalIndex);
-            }
-        }
-    }
-
-    private void updateHighestKnownGlobalIndex(long globalIndex) {
-        synchronized (streamCallbacks) {
-            if (globalIndex <= highestKnownGlobalIndex) {  // checks if notification can be skipped
-                return;
-            }
-
-            highestKnownGlobalIndex = globalIndex;
-        }
-
-        /*
-         * ContinuousMessageStream already guarantees that the callbacks do not
-         * throw exceptions, and per MessageStream documentation they must not
-         * block or do any significant amount of work in the callback. This may
-         * block or stop the monitor thread otherwise.
-         *
-         * The callbacks should still preferably be run outside the
-         * synchronization block.
-         */
-
-        for (Runnable callback : streamCallbacks.values()) {
-            callback.run();
-        }
+        eventMonitor.close();
     }
 
     /*
@@ -889,18 +760,12 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         return new ContinuousMessageStream<>(
             fetcher,
             this::toMessageStreamEntry,
-            this::registerCallback
+            eventMonitor::registerCallback
         );
     }
 
     private SimpleEntry<EventMessage> toMessageStreamEntry(FinalizedEvent finalizedEvent) {
         return new SimpleEntry<>(finalizedEvent.event, trackingTokenContext(finalizedEvent));
-    }
-
-    private Registration registerCallback(MessageStream<?> ms, Runnable callback) {
-        streamCallbacks.put(ms, callback);
-
-        return () -> streamCallbacks.remove(ms) != null;
     }
 
     @Override
@@ -1236,7 +1101,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         try {
             long latestGlobalIndex = finalizeAndReturnLatestIndex();
 
-            updateHighestKnownGlobalIndex(latestGlobalIndex);  // will notify callbacks if needed
+            eventMonitor.updateHighestKnownGlobalIndex(latestGlobalIndex);  // will notify callbacks if needed
 
             return new GlobalIndexConsistencyMarker(latestGlobalIndex + 1);
         }
