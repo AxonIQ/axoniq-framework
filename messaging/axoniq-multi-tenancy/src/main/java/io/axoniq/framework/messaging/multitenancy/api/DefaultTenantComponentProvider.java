@@ -25,10 +25,8 @@ import org.axonframework.common.infra.ComponentDescriptor;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Default implementation of {@link TenantComponentProvider}, caching one lazily created component instance per tenant.
@@ -41,9 +39,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>
  * Component creation runs inside the cache update. The factory's
  * {@link TenantComponentFactory#create(TenantDescriptor) create} method must therefore not register or unregister
- * tenants on, nor request components from, this provider on the creating thread. Registering the same tenant more
- * than once is not supported: the resulting registrations are not distinguished, so cancelling any of them
- * unregisters the tenant.
+ * tenants on, nor request components from, this provider on the creating thread.
+ * <p>
+ * Re-registering a tenant supersedes its previous registration, and cancelling a registration affects only the
+ * instance created under it, so a stale cancellation never disturbs a newer registration of the same tenant.
  * <p>
  * Internal, because users obtain this provider through
  * {@link TenantComponentProvider#withFactory(Class, TenantComponentFactory)} rather than constructing it directly.
@@ -59,8 +58,10 @@ class DefaultTenantComponentProvider<T> implements TenantComponentProvider<T> {
 
     private final Class<T> componentType;
     private final TenantComponentFactory<T> factory;
-    private final ConcurrentMap<TenantDescriptor, T> components = new ConcurrentHashMap<>();
-    private final Set<TenantDescriptor> registeredTenants = ConcurrentHashMap.newKeySet();
+    // Each registerTenant call is identified by its own token. Instances are cached per token rather than per
+    // tenant, so membership and instance ownership always trace back to the registration that created them.
+    private final ConcurrentMap<TenantDescriptor, RegistrationToken> activeRegistrations = new ConcurrentHashMap<>();
+    private final ConcurrentMap<RegistrationToken, T> components = new ConcurrentHashMap<>();
     // Refreshed on (un)registration, so the per-message tenants() call does not allocate on the hot path.
     private volatile List<TenantDescriptor> tenantsView = List.of();
 
@@ -70,6 +71,7 @@ class DefaultTenantComponentProvider<T> implements TenantComponentProvider<T> {
      *
      * @param componentType the type of component provided per tenant, used to match against handler parameters
      * @param factory       the factory building and destroying the per-tenant instances
+     * @throws NullPointerException if the given {@code componentType} or {@code factory} is {@code null}
      */
     DefaultTenantComponentProvider(Class<T> componentType,
                                    TenantComponentFactory<T> factory) {
@@ -80,25 +82,27 @@ class DefaultTenantComponentProvider<T> implements TenantComponentProvider<T> {
     @Override
     public T componentFor(TenantDescriptor tenant) {
         Objects.requireNonNull(tenant, "The tenant must not be null");
-        if (!registeredTenants.contains(tenant)) {
-            throw unknownTenantException(tenant);
-        }
-        T component = components.computeIfAbsent(
-                tenant,
-                t -> Objects.requireNonNull(factory.create(t),
-                                            "The factory returned null for tenant [" + t.tenantId() + "]")
-        );
-        // The tenant may have been unregistered concurrently, in which case the fresh instance would escape the
-        // cleanup that ran during unregistration. Re-validate and destroy the instance instead of leaking it. The
-        // value-checked remove confines the cleanup to the instance this thread created. A re-registration racing
-        // this window may still observe the rejection, which is acceptable: the next access simply recreates.
-        if (!registeredTenants.contains(tenant)) {
-            if (components.remove(tenant, component)) {
+        while (true) {
+            RegistrationToken token = activeRegistrations.get(tenant);
+            if (token == null) {
+                throw unknownTenantException(tenant);
+            }
+            T component = components.computeIfAbsent(
+                    token,
+                    ignored -> Objects.requireNonNull(factory.create(tenant),
+                                                      "The factory returned null for tenant [" + tenant.tenantId()
+                                                              + "]")
+            );
+            if (activeRegistrations.get(tenant) == token) {
+                return component;
+            }
+            // The registration was cancelled or superseded while creating, so the fresh instance would escape the
+            // cleanup of its registration. Destroy it instead of leaking it and re-evaluate: a cancelled tenant is
+            // rejected on the next iteration, a superseded one gets an instance under the newer registration.
+            if (components.remove(token, component)) {
                 factory.destroy(tenant, component);
             }
-            throw unknownTenantException(tenant);
         }
-        return component;
     }
 
     private TenantNotResolvedException unknownTenantException(TenantDescriptor tenant) {
@@ -121,20 +125,20 @@ class DefaultTenantComponentProvider<T> implements TenantComponentProvider<T> {
     @Override
     public Registration registerTenant(TenantDescriptor tenantDescriptor) {
         Objects.requireNonNull(tenantDescriptor, "The tenant descriptor must not be null");
-        registeredTenants.add(tenantDescriptor);
+        RegistrationToken token = new RegistrationToken();
+        activeRegistrations.put(tenantDescriptor, token);
         refreshTenantsView();
-        AtomicBoolean cancelled = new AtomicBoolean(false);
         return () -> {
-            // Cancelling is idempotent: a second cancel of a stale registration must not unregister a tenant
-            // that was re-registered in the meantime, nor destroy its live component instance.
-            if (!cancelled.compareAndSet(false, true)) {
-                return false;
+            // The tenant-scoped remove only succeeds while this registration is still the active one, and the
+            // token-scoped remove only yields the instance created under it. Cancelling is therefore idempotent
+            // and never affects a newer registration of the same tenant.
+            boolean wasRegistered = activeRegistrations.remove(tenantDescriptor, token);
+            if (wasRegistered) {
+                refreshTenantsView();
             }
-            boolean wasRegistered = registeredTenants.remove(tenantDescriptor);
-            refreshTenantsView();
-            T removed = components.remove(tenantDescriptor);
-            if (removed != null) {
-                factory.destroy(tenantDescriptor, removed);
+            T owned = components.remove(token);
+            if (owned != null) {
+                factory.destroy(tenantDescriptor, owned);
             }
             return wasRegistered;
         };
@@ -148,13 +152,18 @@ class DefaultTenantComponentProvider<T> implements TenantComponentProvider<T> {
 
     // Synchronized so concurrent (un)registrations cannot publish an older snapshot last, leaving the view stale.
     private synchronized void refreshTenantsView() {
-        this.tenantsView = List.copyOf(registeredTenants);
+        this.tenantsView = List.copyOf(activeRegistrations.keySet());
     }
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("componentType", componentType.getName());
-        // The immutable snapshot, so lazily serializing descriptors never observe mid-mutation state.
+        // Describes the immutable snapshot, so descriptors serialized lazily never observe mid-mutation state.
         descriptor.describeProperty("tenants", tenantsView);
+    }
+
+    // Identifies a single registerTenant call, tying tenant membership and instance ownership to that registration.
+    private static final class RegistrationToken {
+
     }
 }

@@ -36,6 +36,11 @@ public interface TenantProvider extends WithTenantDescriptors {
 
     /**
      * Subscribes the given {@code component} with this provider.
+     * <p>
+     * Tenants known to this provider are replayed to the component on subscription, and tenants added or removed
+     * afterwards reach the component through its registration hooks. Cancelling the returned {@link Registration}
+     * unsubscribes the component and cancels the tenant registrations made on its behalf, giving the component the
+     * opportunity to release its per-tenant resources.
      *
      * @param component to be subscribed {@link MultiTenantAwareComponent} for tenant changes.
      * @return the registration for the given component.

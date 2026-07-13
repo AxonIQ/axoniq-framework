@@ -35,8 +35,8 @@ package io.axoniq.framework.messaging.multitenancy.api;
  * lazily through a {@link TenantComponentFactory} on first {@link #componentFor(TenantDescriptor) access} for a
  * tenant, and releases them again when that tenant is unregistered.
  * <p>
- * As a {@link MultiTenantAwareComponent} the provider participates in tenant lifecycle management: registering a tenant
- * makes it eligible for component instances, unregistering it releases them.
+ * As a {@link MultiTenantAwareComponent} the provider participates in tenant lifecycle management. Registering a
+ * tenant makes it eligible for component instances and unregistering it releases them.
  *
  * @param <T> the type of component provided per tenant
  * @author Theo Emanuelsson

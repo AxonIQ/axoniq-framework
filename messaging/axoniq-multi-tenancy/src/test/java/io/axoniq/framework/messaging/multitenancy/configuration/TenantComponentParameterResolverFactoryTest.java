@@ -43,8 +43,6 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class TenantComponentParameterResolverFactoryTest {
@@ -201,7 +199,7 @@ class TenantComponentParameterResolverFactoryTest {
             provider.registerTenant(TENANT_A);
             givenProviders(provider);
             when(configuration.getComponent(TenantResolverRegistry.class))
-                    .thenReturn(new DefaultTenantResolverRegistry().registerResolver(
+                    .thenReturn(TenantResolverRegistry.create().registerResolver(
                             config -> new MetadataBasedTenantResolver("customTenantKey")
                     ));
             ParameterResolver<?> resolver = resolverFor("handlesCourseRepository", CourseRepository.class);
@@ -224,7 +222,7 @@ class TenantComponentParameterResolverFactoryTest {
             provider.registerTenant(TENANT_A);
             givenProviders(provider);
             when(configuration.getComponent(TenantResolverRegistry.class))
-                    .thenReturn(new DefaultTenantResolverRegistry().registerCommandResolver(
+                    .thenReturn(TenantResolverRegistry.create().registerCommandResolver(
                             config -> new MetadataBasedTenantResolver("commandTenantKey")
                     ));
             ParameterResolver<?> resolver = resolverFor("handlesCourseRepository", CourseRepository.class);
@@ -249,16 +247,26 @@ class TenantComponentParameterResolverFactoryTest {
         }
 
         @Test
-        void capturesTheTenantResolversOnlyOnceAcrossHandlerInspections() throws Exception {
-            // given
-            givenProviders(courseRepositoryProvider());
-
-            // when two handler parameters are inspected on the same factory
+        void honorsAResolverRegisteredAfterAnEarlierHandlerInspection() throws Exception {
+            // given a registry that only receives a custom resolver after a first handler was inspected
+            TenantComponentProvider<CourseRepository> provider = courseRepositoryProvider();
+            provider.registerTenant(TENANT_A);
+            givenProviders(provider);
+            TenantResolverRegistry registry = TenantResolverRegistry.create();
+            when(configuration.getComponent(TenantResolverRegistry.class)).thenReturn(registry);
             resolverFor("handlesCourseRepository", CourseRepository.class);
-            resolverFor("handlesCourseRepository", CourseRepository.class);
+            registry.registerResolver(config -> new MetadataBasedTenantResolver("lateTenantKey"));
+            ParameterResolver<?> resolver = resolverFor("handlesCourseRepository", CourseRepository.class);
+            Message message = new GenericMessage("message-id",
+                                                 new MessageType("TestCommand"),
+                                                 "payload".getBytes(),
+                                                 Map.of("lateTenantKey", TENANT_A.tenantId()));
 
-            // then the resolver registry is consulted a single time
-            verify(configuration, times(1)).getComponent(TenantResolverRegistry.class);
+            // when
+            Object resolved = resolver.resolveParameterValue(StubProcessingContext.forMessage(message)).join();
+
+            // then the late resolver is picked up by the later inspection
+            assertThat(resolved).isSameAs(provider.componentFor(TENANT_A));
         }
 
         @Test
@@ -334,7 +342,7 @@ class TenantComponentParameterResolverFactoryTest {
             byName.put("provider-" + i, providers[i]);
         }
         when(configuration.getComponents(TenantComponentProvider.class)).thenReturn(byName);
-        when(configuration.getComponent(TenantResolverRegistry.class)).thenReturn(new DefaultTenantResolverRegistry());
+        when(configuration.getComponent(TenantResolverRegistry.class)).thenReturn(TenantResolverRegistry.create());
     }
 
     private ParameterResolver<?> resolverFor(String methodName, Class<?> parameterType) throws Exception {

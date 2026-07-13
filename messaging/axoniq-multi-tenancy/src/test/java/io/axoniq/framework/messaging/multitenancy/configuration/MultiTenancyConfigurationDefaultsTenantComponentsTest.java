@@ -24,7 +24,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
-import org.axonframework.common.configuration.Configuration;
+import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageType;
@@ -32,6 +32,7 @@ import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -55,10 +56,10 @@ class MultiTenancyConfigurationDefaultsTenantComponentsTest {
     private final TenantComponentProvider<CourseRepository> componentProvider =
             TenantComponentProvider.withFactory(CourseRepository.class, CourseRepository::new);
 
-    private Configuration configuration;
+    private AxonConfiguration configuration;
 
     @BeforeEach
-    void buildConfiguration() {
+    void buildAndStartConfiguration() {
         tenantProvider.addTenant(TENANT_A);
         configuration = MessagingConfigurer.create()
                                            .componentRegistry(registry -> registry
@@ -70,26 +71,26 @@ class MultiTenancyConfigurationDefaultsTenantComponentsTest {
                                                    .registerComponent(TenantComponentProvider.class,
                                                                       config -> componentProvider))
                                            .build();
+        configuration.start();
+    }
+
+    @AfterEach
+    void shutdownConfiguration() {
+        configuration.shutdown();
     }
 
     @Nested
     class TenantLifecycleWiring {
 
         @Test
-        void subscribesTheProviderToTheTenantProviderAndReplaysKnownTenants() {
-            // when the provider component is built by the configuration
-            configuration.getComponent(TenantComponentProvider.class);
-
-            // then
+        void subscribesTheProviderAtStartupAndReplaysKnownTenants() {
+            // then the started configuration subscribed the provider, without any component lookup being needed
             assertThat(tenantProvider.subscribedComponents()).contains(componentProvider);
             assertThat(componentProvider.tenants()).containsExactly(TENANT_A);
         }
 
         @Test
         void propagatesTenantsAddedAtRuntimeToTheProvider() {
-            // given
-            configuration.getComponent(TenantComponentProvider.class);
-
             // when
             tenantProvider.addTenant(TENANT_B);
 
@@ -100,7 +101,6 @@ class MultiTenancyConfigurationDefaultsTenantComponentsTest {
         @Test
         void removingATenantDestroysItsComponentInstance() {
             // given
-            configuration.getComponent(TenantComponentProvider.class);
             tenantProvider.addTenant(TENANT_B);
             CourseRepository repository = componentProvider.componentFor(TENANT_B);
 
@@ -115,7 +115,6 @@ class MultiTenancyConfigurationDefaultsTenantComponentsTest {
         @Test
         void shuttingDownTheTenantProviderDestroysAllComponentInstances() {
             // given
-            configuration.getComponent(TenantComponentProvider.class);
             CourseRepository repository = componentProvider.componentFor(TENANT_A);
 
             // when the tenant provider shuts down, deregistering all subscribed components
@@ -123,6 +122,22 @@ class MultiTenancyConfigurationDefaultsTenantComponentsTest {
 
             // then
             assertThat(repository.closed).isTrue();
+            assertThat(componentProvider.tenants()).isEmpty();
+        }
+
+        @Test
+        void shuttingDownTheConfigurationDestroysAllComponentInstances() {
+            // given instances for a replayed tenant and for a tenant added at runtime
+            tenantProvider.addTenant(TENANT_B);
+            CourseRepository repositoryA = componentProvider.componentFor(TENANT_A);
+            CourseRepository repositoryB = componentProvider.componentFor(TENANT_B);
+
+            // when the configuration shuts down, cancelling the retained provider subscriptions
+            configuration.shutdown();
+
+            // then both instances are destroyed, without relying on the tenant provider's own shutdown
+            assertThat(repositoryA.closed).isTrue();
+            assertThat(repositoryB.closed).isTrue();
             assertThat(componentProvider.tenants()).isEmpty();
         }
     }

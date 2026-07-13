@@ -27,7 +27,6 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
@@ -76,7 +75,7 @@ class TenantComponentProviderTest {
 
         // then
         assertThat(descriptor.<String>getProperty("componentType")).isEqualTo(TestComponent.class.getName());
-        assertThat(descriptor.<Set<TenantDescriptor>>getProperty("tenants")).containsExactly(TENANT_A);
+        assertThat(descriptor.<List<TenantDescriptor>>getProperty("tenants")).containsExactly(TENANT_A);
     }
 
     @Nested
@@ -151,6 +150,27 @@ class TenantComponentProviderTest {
             // the tenant is unknown again, so a subsequent access is rejected
             assertThatThrownBy(() -> testSubject.componentFor(TENANT_A))
                     .isInstanceOf(TenantNotResolvedException.class);
+        }
+
+        @Test
+        void reRegisteringATenantSupersedesThePreviousRegistration() {
+            // given an instance created under the first registration
+            Registration staleRegistration = testSubject.registerTenant(TENANT_A);
+            TestComponent first = testSubject.componentFor(TENANT_A);
+
+            // when the tenant is registered again
+            testSubject.registerTenant(TENANT_A);
+            TestComponent second = testSubject.componentFor(TENANT_A);
+
+            // then the newer registration serves its own instance
+            assertThat(second).isNotSameAs(first);
+
+            // and the stale cancel destroys only the instance it created, leaving the newer registration untouched
+            boolean cancelled = staleRegistration.cancel();
+            assertThat(cancelled).isFalse();
+            assertThat(testSubject.tenants()).contains(TENANT_A);
+            assertThat(testSubject.componentFor(TENANT_A)).isSameAs(second);
+            assertThat(factory.destroyed()).containsExactly(first);
         }
 
         @Test

@@ -21,17 +21,17 @@ package io.axoniq.framework.messaging.multitenancy.api;
 import org.axonframework.common.AxonNonTransientException;
 
 /**
- * Exception thrown when a tenant can not be resolved.
+ * Exception thrown when no tenant can be established for a message or an operation.
  *
  * @author Stefan Dragisic
  * @author Jan Galinski
  * @since 5.3.0
  */
-@SuppressWarnings("java:S110") // S110: "TenantNotFoundException" has 5 parent classes.
+@SuppressWarnings("java:S110") // S110: "TenantNotResolvedException" has 5 parent classes.
 public class TenantNotResolvedException extends AxonNonTransientException {
 
     /**
-     * Construct a {@code TenantNotFoundException}.
+     * Construct a {@code TenantNotResolvedException}.
      *
      * @param message the message (template) for the exception
      * @param args    the arguments for the message template
@@ -41,10 +41,10 @@ public class TenantNotResolvedException extends AxonNonTransientException {
     }
 
     /**
-     * Construct a {@code TenantNotFoundException} referring to the given {@code tenantId}.
+     * Construct a {@code TenantNotResolvedException} referring to the given {@code tenantId}.
      *
-     * @param tenantId the tenant identifier that could not be found
-     * @return a {@code TenantNotFoundException} with a message indicating the tenant is unknown
+     * @param tenantId the tenant identifier that could not be resolved
+     * @return a {@code TenantNotResolvedException} with a message indicating the tenant is unknown
      */
     public static TenantNotResolvedException forTenantId(String tenantId) {
         return new TenantNotResolvedException("Tenant with identifier [%s] is unknown", tenantId);

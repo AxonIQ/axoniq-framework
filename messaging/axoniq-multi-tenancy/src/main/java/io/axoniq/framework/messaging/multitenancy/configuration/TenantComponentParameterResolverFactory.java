@@ -52,8 +52,7 @@ import java.util.stream.Collectors;
  * {@link TenantComponentProvider#componentType() component type} fits the parameter type. When one is found, the
  * resolved parameter value is that provider's instance for the tenant of the message being handled. The tenant is
  * derived through the {@link TenantResolverRegistry}, honoring message-type-specific resolvers, and defaults to a
- * {@link MetadataBasedTenantResolver} when the registry has none configured. The registry's resolvers are captured
- * once, at the first handler inspection: resolvers registered after that point are not picked up.
+ * {@link MetadataBasedTenantResolver} when the registry has none configured.
  * <p>
  * Registering several providers (one per component type) is supported: each parameter is matched to the provider for
  * its own type. A single exact type match settles the choice, even when assignable supertype candidates exist. When
@@ -71,9 +70,6 @@ import java.util.stream.Collectors;
 public class TenantComponentParameterResolverFactory implements ParameterResolverFactory {
 
     private final Configuration configuration;
-    // Built once on first handler inspection, since the registry builds a resolver anew on every accessor call and
-    // handler parameters may be plentiful. Guarded by the synchronized accessor below.
-    private @Nullable TenantResolvers tenantResolvers;
 
     /**
      * Constructs a {@code TenantComponentParameterResolverFactory} for the given {@code configuration}.
@@ -141,17 +137,13 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
         return configuration.getComponents(TenantComponentProvider.class).values();
     }
 
-    private synchronized TenantResolvers tenantResolvers() {
-        TenantResolvers resolvers = this.tenantResolvers;
-        if (resolvers == null) {
-            TenantResolverRegistry registry = configuration.getComponent(TenantResolverRegistry.class);
-            resolvers = new TenantResolvers(orDefault(registry.commandResolver(configuration)),
-                                            orDefault(registry.eventResolver(configuration)),
-                                            orDefault(registry.queryResolver(configuration)),
-                                            orDefault(registry.resolver(configuration)));
-            this.tenantResolvers = resolvers;
-        }
-        return resolvers;
+    // The registry builds each resolver once and reuses it, so fetching per handler inspection stays cheap.
+    private TenantResolvers tenantResolvers() {
+        TenantResolverRegistry registry = configuration.getComponent(TenantResolverRegistry.class);
+        return new TenantResolvers(orDefault(registry.commandResolver(configuration)),
+                                   orDefault(registry.eventResolver(configuration)),
+                                   orDefault(registry.queryResolver(configuration)),
+                                   orDefault(registry.resolver(configuration)));
     }
 
     // The registry deliberately starts empty so users can decorate it, hence the metadata default lives here.

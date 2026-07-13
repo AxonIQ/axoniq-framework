@@ -86,7 +86,7 @@ This guarantees that no tenant-scoped resource is ever created for an unknown te
 
 An application can register several tenant-aware components, one provider per type.
 Every provider is matched to a handler parameter by its own component type, and a single exact type match settles the choice even when assignable supertype candidates exist.
-When the choice cannot be settled by an exact match, because two providers serve the same exact type or, absent an exact match, several assignable candidates remain, handler registration fails with an `AxonConfigurationException`.
+When two providers serve the same exact type, or no exact match exists and several assignable candidates remain, handler inspection fails with an `AxonConfigurationException`.
 Register a single provider per component type, or narrow the parameter type, to resolve such an ambiguity.
 
 [tabs]

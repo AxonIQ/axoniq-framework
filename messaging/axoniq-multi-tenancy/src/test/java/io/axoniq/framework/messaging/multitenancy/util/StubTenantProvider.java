@@ -25,34 +25,32 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import org.axonframework.common.Registration;
 
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Predicate;
 
 /**
  * Test stub for {@link TenantProvider}, mirroring the subscribe-and-replay semantics of the Axon Server backed
  * provider without requiring a running Axon Server. Known tenants are replayed to newly subscribed components, and
- * tenants added or removed later trigger the registration hooks on all subscribed components.
+ * tenants added or removed later trigger the registration hooks on all subscribed components. Cancelling a
+ * subscription cancels every tenant registration made on the component's behalf, including registrations for tenants
+ * added after subscribing, as the {@link TenantProvider#subscribe(MultiTenantAwareComponent)} contract requires.
  */
 public class StubTenantProvider implements TenantProvider {
 
     private final List<TenantDescriptor> tenantDescriptors = new CopyOnWriteArrayList<>();
     private final List<MultiTenantAwareComponent> subscribedComponents = new CopyOnWriteArrayList<>();
-    private final Map<TenantDescriptor, List<Registration>> registrationMap = new ConcurrentHashMap<>();
+    // One entry per tenant-component pair, so cancellation can select by either dimension.
+    private final List<TenantRegistration> registrations = new CopyOnWriteArrayList<>();
 
     @Override
     public Registration subscribe(MultiTenantAwareComponent component) {
         subscribedComponents.add(component);
-        List<Registration> componentRegistrations = new CopyOnWriteArrayList<>();
-        tenantDescriptors.forEach(tenant -> {
-            Registration registration = component.registerTenant(tenant);
-            registrationsFor(tenant).add(registration);
-            componentRegistrations.add(registration);
-        });
+        tenantDescriptors.forEach(tenant -> registrations.add(new TenantRegistration(
+                tenant, component, component.registerTenant(tenant)
+        )));
         return () -> {
             subscribedComponents.remove(component);
-            componentRegistrations.forEach(Registration::cancel);
-            registrationMap.values().forEach(registrations -> registrations.removeAll(componentRegistrations));
+            cancelRegistrationsMatching(registration -> registration.component() == component);
             return true;
         };
     }
@@ -64,17 +62,14 @@ public class StubTenantProvider implements TenantProvider {
 
     public void addTenant(TenantDescriptor tenant) {
         tenantDescriptors.add(tenant);
-        subscribedComponents.forEach(
-                component -> registrationsFor(tenant).add(component.registerAndStartTenant(tenant))
-        );
+        subscribedComponents.forEach(component -> registrations.add(new TenantRegistration(
+                tenant, component, component.registerAndStartTenant(tenant)
+        )));
     }
 
     public void removeTenant(TenantDescriptor tenant) {
         if (tenantDescriptors.remove(tenant)) {
-            List<Registration> registrations = registrationMap.remove(tenant);
-            if (registrations != null) {
-                registrations.forEach(Registration::cancel);
-            }
+            cancelRegistrationsMatching(registration -> registration.tenant().equals(tenant));
         }
     }
 
@@ -83,15 +78,24 @@ public class StubTenantProvider implements TenantProvider {
      * what destroys the tenants' component instances at application shutdown.
      */
     public void shutdown() {
-        registrationMap.values().forEach(registrations -> registrations.forEach(Registration::cancel));
-        registrationMap.clear();
+        cancelRegistrationsMatching(registration -> true);
     }
 
     public List<MultiTenantAwareComponent> subscribedComponents() {
         return List.copyOf(subscribedComponents);
     }
 
-    private List<Registration> registrationsFor(TenantDescriptor tenant) {
-        return registrationMap.computeIfAbsent(tenant, t -> new CopyOnWriteArrayList<>());
+    // Synchronized like the Axon Server provider, so overlapping cancel paths never cancel the same entry twice.
+    // Cancellation failures propagate on purpose: in a test they should fail the test, not be swallowed.
+    private synchronized void cancelRegistrationsMatching(Predicate<TenantRegistration> criterion) {
+        List<TenantRegistration> matching = registrations.stream().filter(criterion).toList();
+        registrations.removeAll(matching);
+        matching.reversed().forEach(tenantRegistration -> tenantRegistration.registration().cancel());
+    }
+
+    private record TenantRegistration(TenantDescriptor tenant,
+                                      MultiTenantAwareComponent component,
+                                      Registration registration) {
+
     }
 }

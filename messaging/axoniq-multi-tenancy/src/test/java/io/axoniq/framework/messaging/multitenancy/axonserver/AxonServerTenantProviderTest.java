@@ -29,6 +29,7 @@ import io.axoniq.axonserver.grpc.admin.ReplicationGroupOverview;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingTenantAwareComponent;
+import org.axonframework.common.Registration;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -124,6 +125,64 @@ class AxonServerTenantProviderTest {
             ArgumentCaptor<Runnable> callback = ArgumentCaptor.forClass(Runnable.class);
             verify(contextUpdates).onAvailable(callback.capture());
             return callback.getValue();
+        }
+    }
+
+    @Nested
+    class Subscriptions {
+
+        @Test
+        void cancellingASubscriptionDeregistersTenantsAddedAfterSubscribing() {
+            // given a component subscribed before the tenant becomes known
+            AxonServerTenantProvider testSubject = new AxonServerTenantProvider(connectionManager, tenant -> true);
+            RecordingTenantAwareComponent recorder = new RecordingTenantAwareComponent();
+            Registration subscription = testSubject.subscribe(recorder);
+            testSubject.addTenant(TenantDescriptor.tenantWithId("added-later"));
+            assertThat(recorder.tenants())
+                    .extracting(TenantDescriptor::tenantId)
+                    .containsExactly("added-later");
+
+            // when
+            boolean cancelled = subscription.cancel();
+
+            // then the registration made after subscribing is cancelled as well
+            assertThat(cancelled).isTrue();
+            assertThat(recorder.tenants()).isEmpty();
+        }
+
+        @Test
+        void addingAKnownTenantAgainDoesNotRegisterItsComponentsTwice() {
+            // given a subscribed component and a tenant that is already known
+            AxonServerTenantProvider testSubject = new AxonServerTenantProvider(connectionManager, tenant -> true);
+            RecordingTenantAwareComponent recorder = new RecordingTenantAwareComponent();
+            testSubject.subscribe(recorder);
+            TenantDescriptor tenant = TenantDescriptor.tenantWithId("tenant-a");
+            testSubject.addTenant(tenant);
+
+            // when the same tenant is added again
+            testSubject.addTenant(tenant);
+
+            // then the component is registered for it only once
+            assertThat(recorder.tenants()).containsExactly(tenant);
+        }
+    }
+
+    @Nested
+    class Shutdown {
+
+        @Test
+        void addingATenantAfterShutdownDoesNotRegisterIt() throws Exception {
+            // given a subscribed component on a provider that has shut down
+            AxonServerTenantProvider testSubject = new AxonServerTenantProvider(connectionManager, tenant -> true);
+            RecordingTenantAwareComponent recorder = new RecordingTenantAwareComponent();
+            testSubject.subscribe(recorder);
+            testSubject.shutdown().get(5, TimeUnit.SECONDS);
+
+            // when a context update still in flight adds a tenant after shutdown
+            testSubject.addTenant(TenantDescriptor.tenantWithId("added-after-shutdown"));
+
+            // then the tenant is not registered, so its instance cannot escape the shutdown cleanup
+            assertThat(recorder.tenants()).isEmpty();
         }
     }
 
