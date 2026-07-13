@@ -9,7 +9,6 @@ Any patch release made for an Axon project is tailored towards resolving bugs. T
 
 ==== Bug fixes
 
-- [#4625] Use `EventTypeResolver` in Axon Server `EventStorageEngines` to default `null` `revision` to default version link:https://github.com/AxonIQ/axoniq-framework/pull/186[#186]
 - fix(axonserver): preserve event metadata when appending aggregate-based events link:https://github.com/AxonIQ/axoniq-framework/pull/158[#158]
 
 ==== Dependency upgrades
