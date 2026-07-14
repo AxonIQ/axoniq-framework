@@ -292,36 +292,7 @@ public class AxonServerConnectionManager implements ConnectionManager {
                 builder.routingServers(addresses);
             }
 
-            String clientCertFile = axonServerConfiguration.getClientCertFile();
-            String clientKeyFile = axonServerConfiguration.getClientKeyFile();
-            if ((clientCertFile == null) != (clientKeyFile == null)) {
-                throw new AxonConfigurationException(
-                        "Both a client certificate file and a client key file are required for mutual TLS, "
-                                + "but only one of them was configured"
-                );
-            }
-            if (axonServerConfiguration.isSslEnabled()) {
-                if (axonServerConfiguration.getCertFile() != null || clientCertFile != null) {
-                    try {
-                        SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
-                        if (axonServerConfiguration.getCertFile() != null) {
-                            sslContextBuilder.trustManager(new File(axonServerConfiguration.getCertFile()));
-                        }
-                        if (clientCertFile != null) {
-                            sslContextBuilder.keyManager(new File(clientCertFile), new File(clientKeyFile));
-                        }
-                        builder.useTransportSecurity(sslContextBuilder.build());
-                    } catch (SSLException e) {
-                        throw new AxonConfigurationException("Exception configuring Transport Security", e);
-                    }
-                } else {
-                    builder.useTransportSecurity();
-                }
-            } else if (clientCertFile != null) {
-                throw new AxonConfigurationException(
-                        "A client certificate for mutual TLS was configured, but SSL is not enabled"
-                );
-            }
+            configureTransportSecurity(builder);
 
             builder.connectTimeout(axonServerConfiguration.getConnectTimeout(), TimeUnit.MILLISECONDS)
                    .reconnectInterval(axonServerConfiguration.getReconnectInterval(), TimeUnit.MILLISECONDS)
@@ -362,6 +333,59 @@ public class AxonServerConnectionManager implements ConnectionManager {
 
             AxonServerConnectionFactory connectionFactory = builder.build();
             return new AxonServerConnectionManager(this, connectionFactory);
+        }
+
+        /**
+         * Configures transport security on the given {@code builder} based on the SSL settings in the
+         * {@link AxonServerConfiguration}: plaintext when SSL is disabled, TLS with JVM-default trust when no
+         * certificate files are configured, and a custom {@code SslContext} otherwise, containing the configured
+         * trusted certificates and/or the client certificate for mutual TLS.
+         */
+        private void configureTransportSecurity(AxonServerConnectionFactory.Builder builder) {
+            String certFile = axonServerConfiguration.getCertFile();
+            String clientCertFile = axonServerConfiguration.getClientCertFile();
+            String clientKeyFile = axonServerConfiguration.getClientKeyFile();
+            validateMutualTlsConfiguration(clientCertFile, clientKeyFile);
+
+            if (!axonServerConfiguration.isSslEnabled()) {
+                return;
+            }
+            if (certFile == null && clientCertFile == null) {
+                builder.useTransportSecurity();
+                return;
+            }
+            try {
+                SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
+                if (certFile != null) {
+                    sslContextBuilder.trustManager(new File(certFile));
+                }
+                if (clientCertFile != null) {
+                    sslContextBuilder.keyManager(new File(clientCertFile), new File(clientKeyFile));
+                }
+                builder.useTransportSecurity(sslContextBuilder.build());
+            } catch (SSLException e) {
+                throw new AxonConfigurationException("Exception configuring Transport Security", e);
+            }
+        }
+
+        private void validateMutualTlsConfiguration(String clientCertFile, String clientKeyFile) {
+            if (clientCertFile != null && clientKeyFile == null) {
+                throw new AxonConfigurationException(
+                        "A client certificate file was configured for mutual TLS, "
+                                + "but the client key file is missing"
+                );
+            }
+            if (clientKeyFile != null && clientCertFile == null) {
+                throw new AxonConfigurationException(
+                        "A client key file was configured for mutual TLS, "
+                                + "but the client certificate file is missing"
+                );
+            }
+            if (clientCertFile != null && !axonServerConfiguration.isSslEnabled()) {
+                throw new AxonConfigurationException(
+                        "A client certificate for mutual TLS was configured, but SSL is not enabled"
+                );
+            }
         }
 
         private static List<NodeInfo> mapToNodeInfos(String servers) {

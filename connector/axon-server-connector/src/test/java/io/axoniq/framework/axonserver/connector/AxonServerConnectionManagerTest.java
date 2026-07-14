@@ -426,7 +426,7 @@ class AxonServerConnectionManagerTest {
                                                                                             .axonServerConfiguration(config);
         assertThatThrownBy(builderTestSubject::build)
                 .isInstanceOf(AxonConfigurationException.class)
-                .hasMessageContaining("client");
+                .hasMessageContaining("client key file is missing");
     }
 
     @Test
@@ -441,7 +441,7 @@ class AxonServerConnectionManagerTest {
                                                                                             .axonServerConfiguration(config);
         assertThatThrownBy(builderTestSubject::build)
                 .isInstanceOf(AxonConfigurationException.class)
-                .hasMessageContaining("client");
+                .hasMessageContaining("client certificate file is missing");
     }
 
     @Test
