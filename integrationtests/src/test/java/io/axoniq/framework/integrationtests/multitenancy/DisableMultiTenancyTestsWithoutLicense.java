@@ -20,14 +20,22 @@
 package io.axoniq.framework.integrationtests.multitenancy;
 
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.extension.*;
 
-// FIXME: this is a temparary solution to disable multi-tenancy tests when no Axon Server license is present.
-//  Once the license file can be resolved in github ci runs, this can be removed.
+/**
+ * JUnit 5 {@link ExecutionCondition} that disables multi-tenancy tests when no Axon Server license is present.
+ * <p>
+ * This condition is applied to the entire test class, so all tests in the class will be skipped if the condition is
+ * not met.
+ * <p>
+ * Kept for nicer {@code fail()} when a dev has no license configured locally.
+ */
 public class DisableMultiTenancyTestsWithoutLicense implements ExecutionCondition {
 
     @Override
-    public ConditionEvaluationResult evaluateExecutionCondition(ExtensionContext context) {
+    @NonNull
+    public ConditionEvaluationResult evaluateExecutionCondition(@NonNull ExtensionContext context) {
         return AxonServerTestInfrastructure.licenseExists()
                 ? ConditionEvaluationResult.enabled("Axon Server license exists, multi-tenancy tests can run")
                 : ConditionEvaluationResult.disabled("Axon Server license does not exist, multi-tenancy tests are disabled");
