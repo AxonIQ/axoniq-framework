@@ -133,8 +133,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     void registerClock(ComponentRegistry componentRegistry) {
-        //  Axon Framework does not register a Clock component itself. Registering the global
-        //  ClockUtils clock keeps the workflow clock aligned with event message timestamps.
         componentRegistry.registerIfNotPresent(Clock.class, cfg -> ClockUtils.get());
     }
 
