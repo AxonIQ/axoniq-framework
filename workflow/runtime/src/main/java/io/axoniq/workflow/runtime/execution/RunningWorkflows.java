@@ -42,18 +42,17 @@ public class RunningWorkflows {
     /**
      * Singleton identifier of the running-workflows entity.
      */
-    public static final String ENTITY_ID = "running-workflows";
+    public static final String ENTITY_ID = "__running-workflows";
 
     private final Set<String> workflowIds = new HashSet<>();
 
     /**
      * Criteria selecting the workflow lifecycle events introduced by ADR-007.
      *
-     * @param ignoredEntityId singleton entity identifier
      * @return event criteria for workflow lifecycle reconstruction
      */
     @Nonnull
-    public static EventCriteria workflowLifecycleEvents(@Nonnull String ignoredEntityId) {
+    public static EventCriteria workflowLifecycleEvents() {
         return EventCriteria.havingTags(Tag.of(
                                                 WorkflowEventTagResolver.TAG_WORKFLOW_EVENT_TYPE,
                                                 WorkflowEventTagResolver.TAG_VALUE_EVENT_TYPE_LIFECYCLE
@@ -65,13 +64,10 @@ public class RunningWorkflows {
      * Evolves the state from workflow lifecycle metadata.
      *
      * @param metadata lifecycle event metadata
-     * @return this state instance
      */
-    @Nonnull
-    public RunningWorkflows evolve(@Nonnull Metadata metadata) {
+    public void evolve(@Nonnull Metadata metadata) {
         MetadataUtils.getWorkflowStatus(metadata)
                      .ifPresent(status -> applyLifecycle(MetadataUtils.getWorkflowId(metadata), status));
-        return this;
     }
 
     /**

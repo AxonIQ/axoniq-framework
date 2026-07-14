@@ -16,7 +16,7 @@ projector and custom replay loop.
 
 ## Decision
 
-We introduce a singleton AF5 event-sourced entity named `RunningWorkflows`.
+We introduce a singleton event-sourced entity named `RunningWorkflows`.
 
 ### State
 

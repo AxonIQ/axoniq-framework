@@ -44,7 +44,7 @@ public class WorkflowEventTagResolver implements TagResolver {
      */
     public static final String TAG_VALUE_EVENT_TYPE_LIFECYCLE = "lifecycle";
     /**
-     * Value for started waitForEvent step.
+     * A tag value for a waitForEvent step.
      */
     public static final String TAG_VALUE_EVENT_TYPE_WAIT_STEP = "waitForStep";
     /**
