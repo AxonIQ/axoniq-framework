@@ -32,7 +32,7 @@ import java.util.List;
  * @author Stefan Dragisic
  * @since 5.3.0
  */
-public interface TenantProvider extends WithTenantDescriptors {
+public interface TenantProvider extends TenantDescriptors {
 
     /**
      * Subscribes the given {@code component} with this provider.

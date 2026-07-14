@@ -28,7 +28,7 @@ import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.api.WithTenantDescriptors;
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
 import org.axonframework.common.Registration;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
@@ -74,7 +74,7 @@ import static java.util.Objects.requireNonNull;
  * @since 5.3.0
  */
 @Internal
-public class AxonServerTenantProvider implements TenantProvider, WithTenantDescriptors {
+public class AxonServerTenantProvider implements TenantProvider, TenantDescriptors {
 
     /**
      * The configuration property that can be used to provide a comma-separated list of predefined context names.

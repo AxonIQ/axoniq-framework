@@ -23,20 +23,33 @@ import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolve
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.conversion.PassThroughConverter;
+import org.axonframework.messaging.commandhandling.CommandBus;
+import org.axonframework.messaging.commandhandling.CommandResultMessage;
+import org.axonframework.messaging.commandhandling.GenericCommandMessage;
+import org.axonframework.messaging.commandhandling.annotation.AnnotatedCommandHandlingComponent;
+import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.annotation.AnnotationMessageTypeResolver;
+import org.axonframework.messaging.core.annotation.ClasspathHandlerDefinition;
+import org.axonframework.messaging.core.annotation.ClasspathParameterResolverFactory;
+import org.axonframework.messaging.core.annotation.MultiParameterResolverFactory;
 import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.axonframework.messaging.core.conversion.DelegatingMessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Method;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.setTenantDescriptor;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,6 +74,7 @@ class MultiTenancyConfigurationDefaultsTenantComponentsTest {
     void buildAndStartConfiguration() {
         tenantProvider.addTenant(TENANT_A);
         configuration = MessagingConfigurer.create()
+                                           .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                            .componentRegistry(registry -> registry
                                                    // Scanning would pull in the Axon Server enhancer, which needs
                                                    // eventsourcing classes absent from this module's test classpath.
@@ -172,11 +186,59 @@ class MultiTenancyConfigurationDefaultsTenantComponentsTest {
         }
     }
 
+    @Nested
+    class HandlerInterceptorWiring {
+
+        @Test
+        void commandBusHandlingResolvesTenantScopedComponentsWithoutManuallySeedingTheProcessingContext() {
+            // given
+            TenantAwareCommandHandler handler = new TenantAwareCommandHandler();
+            CommandBus commandBus = configuration.getComponent(CommandBus.class);
+            ParameterResolverFactory parameterResolverFactory = MultiParameterResolverFactory.ordered(
+                    ClasspathParameterResolverFactory.forClass(TenantAwareCommandHandler.class),
+                    configuration.getComponent(ParameterResolverFactory.class)
+            );
+            commandBus.subscribe(new AnnotatedCommandHandlingComponent<>(
+                    handler,
+                    parameterResolverFactory,
+                    ClasspathHandlerDefinition.forClass(TenantAwareCommandHandler.class),
+                    new AnnotationMessageTypeResolver(),
+                    new DelegatingMessageConverter(PassThroughConverter.INSTANCE)
+            ));
+            GenericCommandMessage command = new GenericCommandMessage(
+                    new MessageType("tenant-aware-command"),
+                    "payload",
+                    Map.of(MetadataBasedTenantResolver.DEFAULT_TENANT_KEY, TENANT_A.tenantId())
+            );
+
+            // when
+            CommandResultMessage result = commandBus.dispatch(command, null)
+                                                    .orTimeout(5, TimeUnit.SECONDS)
+                                                    .join();
+
+            // then
+            assertThat(result.payloadAs(String.class)).isEqualTo(TENANT_A.tenantId());
+            assertThat(handler.resolvedRepository).isSameAs(componentProvider.componentFor(TENANT_A));
+            assertThat(handler.resolvedRepository.tenant).isEqualTo(TENANT_A);
+        }
+    }
+
     @SuppressWarnings("unused")
     private static final class SampleHandlers {
 
         void handle(CourseRepository repository) {
             // Reflection target only. The parameter type drives the matching under test.
+        }
+    }
+
+    private static final class TenantAwareCommandHandler {
+
+        private CourseRepository resolvedRepository;
+
+        @CommandHandler(commandName = "tenant-aware-command")
+        String handle(String command, CourseRepository repository) {
+            this.resolvedRepository = repository;
+            return repository.tenant.tenantId();
         }
     }
 

@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class MetadataBasedTenantResolverTest {
 
-    public static final TenantDescriptor TENANT_A = new TenantDescriptor(
+    private static final TenantDescriptor TENANT_A = new TenantDescriptor(
             "foo-a",
             Map.of("replicationGroup", "rg-a")
     );

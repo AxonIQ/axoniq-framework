@@ -45,7 +45,7 @@ package io.axoniq.framework.messaging.multitenancy.api;
  * @see TenantComponentFactory
  * @since 5.3.0
  */
-public interface TenantComponentProvider<T> extends MultiTenantAwareComponent, WithTenantDescriptors {
+public interface TenantComponentProvider<T> extends MultiTenantAwareComponent, TenantDescriptors {
 
     /**
      * Creates a {@code TenantComponentProvider} for the given {@code componentType}, building and destroying the

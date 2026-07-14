@@ -27,7 +27,8 @@ import java.util.List;
  * @author Jan Galinski
  * @since 5.3.0
  */
-public interface WithTenantDescriptors {
+@FunctionalInterface
+public interface TenantDescriptors {
 
     /**
      * Returns a list of tenant descriptors.

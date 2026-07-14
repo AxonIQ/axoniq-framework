@@ -27,7 +27,6 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.util.Collections;
-import java.util.List;
 
 /**
  * A {@link MessageHandlerInterceptor} that registers a {@link TenantDescriptor} in the {@link ProcessingContext}
@@ -41,7 +40,7 @@ import java.util.List;
 @Internal
 public record RegisterTenantDescriptorHandlerInterceptor(
         TenantResolver<Message> tenantResolver,
-        List<TenantDescriptor> tenantDescriptors
+        TenantDescriptors tenantDescriptors
 ) implements MessageHandlerInterceptor<Message> {
 
     /**
@@ -52,7 +51,7 @@ public record RegisterTenantDescriptorHandlerInterceptor(
      * @param tenantResolver the {@link TenantResolver} to resolve the {@link TenantDescriptor} from the {@link Message}
      */
     public RegisterTenantDescriptorHandlerInterceptor(TenantResolver<Message> tenantResolver) {
-        this(tenantResolver, Collections.emptyList());
+        this(tenantResolver, Collections::emptyList);
     }
 
     @Override
@@ -61,7 +60,7 @@ public record RegisterTenantDescriptorHandlerInterceptor(
                                               MessageHandlerInterceptorChain<Message> interceptorChain) {
         return interceptorChain.proceed(message, context.withResource(
                 MultiTenancyApiUtils.TENANT_RESOURCE_KEY,
-                tenantResolver.resolveTenant(message, tenantDescriptors)
+                tenantResolver.resolveTenant(message, tenantDescriptors.tenants())
         ));
     }
 }

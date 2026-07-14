@@ -21,9 +21,11 @@ package io.axoniq.framework.messaging.multitenancy.configuration;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerTenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerTenantProvider;
 import org.axonframework.common.annotation.Internal;
@@ -34,10 +36,13 @@ import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.SearchScope;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
-import org.axonframework.messaging.core.correlation.CorrelationDataProvider;
 import org.axonframework.messaging.core.correlation.CorrelationDataProviderRegistry;
-import org.axonframework.messaging.core.correlation.SimpleCorrelationDataProvider;
+import org.axonframework.messaging.core.interception.HandlerInterceptorRegistry;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled.isEnabled;
 
 /**
  * {@link ConfigurationEnhancer} registering the default multi-tenancy components.
@@ -78,6 +83,8 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      */
     private static final int TENANT_COMPONENT_SUBSCRIBER_PHASE = TENANT_PROVIDER_PHASE + 10;
 
+    private static final Logger logger = LoggerFactory.getLogger(MultiTenancyConfigurationDefaults.class);
+
     @Override
     public int order() {
         return ENHANCER_ORDER;
@@ -85,18 +92,26 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
 
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
+        if (!isEnabled(componentRegistry)) {
+            return;
+        }
+
+        // Register the default TenantResolver, which resolves the tenant from message metadata.
+        componentRegistry.registerIfNotPresent(TenantResolver.class,
+                                               c -> new MetadataBasedTenantResolver(),
+                                               SearchScope.ALL);
 
         // Register the Axon Server TenantProvider, which is the default implementation for multi-tenancy in Axon Server.
         componentRegistry.registerIfNotPresent(axonServerTenantProvider(null), SearchScope.ALL);
-
-        // Propagate the tenantId via Metadata to all messages, so that the tenantId is available in the processing context.
-        registerCorrelationDataProviderDecorator(componentRegistry);
 
         // Inject the correct tenant's instance of any registered TenantComponentProvider into message handlers.
         registerTenantComponentParameterResolverFactory(componentRegistry);
 
         // Keep every TenantComponentProvider in sync with the tenants known to the TenantProvider.
         registerTenantComponentProviderSubscription(componentRegistry);
+
+        // Register HandlerInterceptor that puts a ResourceKey with the resolved TenantDescriptor into {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}.
+        registerTenantDescriptorInterceptor(componentRegistry);
     }
 
     /**
@@ -133,28 +148,13 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
         );
     }
 
-    static void registerCorrelationDataProviderDecorator(ComponentRegistry componentRegistry) {
-        CorrelationDataProvider correlationDataProvider = new SimpleCorrelationDataProvider(
-                MetadataBasedTenantResolver.DEFAULT_TENANT_KEY
-        );
-
-        componentRegistry.registerDecorator(
-                CorrelationDataProviderRegistry.class,
-                0,
-                (config, name, delegate) ->
-                        delegate.registerProvider(
-                                cfg -> correlationDataProvider
-                        )
-        );
-    }
-
     /**
      * Provides a {@link ComponentDefinition} for the {@link TenantProvider} that is backed by Axon Server. Uses the
      * {@link AxonServerConnectionManager} to manage connections and the {@link TenantConnectPredicate} to determine
      * which tenants to connect to, defaults to {@link AxonServerTenantConnectPredicate}.
      *
-     * @param predefinedContexts an optional, comma-separated list of contexts that should be pre-defined in the tenant provider
-     *
+     * @param predefinedContexts an optional, comma-separated list of contexts that should be pre-defined in the tenant
+     *                           provider
      * @return a {@link ComponentDefinition} for the {@link TenantProvider} that is backed by Axon Server.
      */
     // TODO: we need to find a better way to configure the predefined contexts.
@@ -171,5 +171,19 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
                          provider -> ((AxonServerTenantProvider) provider).start())
                 .onShutdown(TENANT_PROVIDER_PHASE,
                             provider -> ((AxonServerTenantProvider) provider).shutdown());
+    }
+
+    static void registerTenantDescriptorInterceptor(ComponentRegistry componentRegistry) {
+        componentRegistry.registerDecorator(
+                HandlerInterceptorRegistry.class,
+                0,
+                (config, name, delegate) ->
+                        delegate.registerInterceptor(
+                                c -> new RegisterTenantDescriptorHandlerInterceptor(
+                                        config.getComponent(TenantResolver.class),
+                                        config.getComponent(TenantProvider.class)
+                                )
+                        )
+        );
     }
 }

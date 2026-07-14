@@ -21,7 +21,7 @@ package io.axoniq.framework.messaging.multitenancy.util;
 
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
-import io.axoniq.framework.messaging.multitenancy.api.WithTenantDescriptors;
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.ComponentDescriptor;
 
@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.StringJoiner;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-public class RecordingTenantAwareComponent implements MultiTenantAwareComponent, WithTenantDescriptors {
+public class RecordingTenantAwareComponent implements MultiTenantAwareComponent, TenantDescriptors {
 
     private final List<TenantDescriptor> registeredTenants = new CopyOnWriteArrayList<>();
 

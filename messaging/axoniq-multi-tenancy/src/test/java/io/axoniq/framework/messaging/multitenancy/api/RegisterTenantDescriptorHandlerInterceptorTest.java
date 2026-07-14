@@ -27,8 +27,7 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.jspecify.annotations.NonNull;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.Map;
 
@@ -85,7 +84,7 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
             testSubject.interceptOnHandle(message, context, interceptorChain);
 
             // then
-            assertThat(testSubject.tenantDescriptors()).isEmpty();
+            assertThat(testSubject.tenantDescriptors().tenants()).isEmpty();
             assertThat(getTenantDescriptor(interceptorChain.context)).isEqualTo(TenantDescriptor.tenantWithId(
                     TENANT_A.tenantId()
             ));
