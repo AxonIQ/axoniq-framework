@@ -23,3 +23,5 @@ io.axoniq.framework.springboot.autoconfig.JdbcDeadLetterQueueAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.JpaDeadLetterQueueAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.PostgresqlAutoConfiguration
 io.axoniq.framework.springboot.autoconfig.PersistentStreamAutoConfiguration
+io.axoniq.framework.springboot.autoconfig.DistributedTracingAutoConfiguration
+io.axoniq.framework.springboot.autoconfig.MicrometerTracingAutoConfiguration
