@@ -84,7 +84,7 @@ public record MetadataBasedTenantResolver(String metadataKey) implements TenantR
      * Resolves the target tenant by extracting the tenant identifier from the message's metadata.
      *
      * @param message the message to resolve the tenant from
-     * @param tenants the available tenants (not used by this implementation)
+     * @param tenants the available tenants
      * @return the {@link TenantDescriptor} for the resolved tenant
      * @throws TenantNotResolvedException if the message metadata does not contain the expected tenant key
      */
