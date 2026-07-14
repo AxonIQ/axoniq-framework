@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.integrationtests.multitenancy;
 
+import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
@@ -66,23 +67,13 @@ class AxonServerTenantProviderIT {
         INFRASTRUCTURE.stop();
     }
 
-    @SafeVarargs
-    private AxonConfiguration startAxonApplication(
-            Consumer<ApplicationConfigurer>... configurers
-    ) {
-        ApplicationConfigurer configurer = new DefaultAxonApplication()
-                .componentRegistry(INFRASTRUCTURE::configureInfrastructure);
-
-        Stream.of(configurers).forEach(it -> it.accept(configurer));
-
-        return configurer.start();
-    }
-
     @Test
     void axonServerTenantProviderIsConfiguredViaEnhancer() {
         RecordingTenantAwareComponent tenantDescriptorRecorder = new RecordingTenantAwareComponent();
 
-        AxonConfiguration application = startAxonApplication();
+        AxonConfiguration application = new DefaultAxonApplication()
+                .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
+                .start();
 
         AxonServerTenantProvider tenantProvider = (AxonServerTenantProvider) application.getComponent(TenantProvider.class);
 
@@ -110,11 +101,10 @@ class AxonServerTenantProviderIT {
                 .and(it -> !DEFAULT_CONTEXT.equals(it.tenantId()))
                 .test(tenantDescriptor);
 
-        AxonConfiguration application = startAxonApplication(
-                configurer -> configurer.componentRegistry(
-                        cr -> cr.registerComponent(TenantConnectPredicate.class, c -> predicate)
-                )
-        );
+        AxonConfiguration application = new DefaultAxonApplication()
+                .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
+                .componentRegistry(cr -> cr.registerComponent(TenantConnectPredicate.class, c -> predicate))
+                .start();
 
         AxonServerTenantProvider tenantProvider = (AxonServerTenantProvider) application.getComponent(TenantProvider.class);
 
@@ -138,5 +128,22 @@ class AxonServerTenantProviderIT {
         contextManager.deleteContext("foo");
         await().untilAsserted(() -> assertThat(tenantProvider.tenants()).isEmpty());
         await().untilAsserted(() -> assertThat(tenantDescriptorRecorder.tenants().isEmpty()));
+    }
+
+    @Test
+    void tenantProviderUsesPredifinedContext() {
+        RecordingTenantAwareComponent tenantDescriptorRecorder = new RecordingTenantAwareComponent();
+
+        TenantConnectPredicate predicate = tenantDescriptor -> new AxonServerTenantConnectPredicate()
+                .and(it -> !DEFAULT_CONTEXT.equals(it.tenantId()))
+                .test(tenantDescriptor);
+
+        AxonConfiguration application = new DefaultAxonApplication()
+                .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
+                .componentRegistry(cr -> cr.registerComponent(TenantConnectPredicate.class, c -> predicate))
+                .start();
+
+        AxonServerTenantProvider tenantProvider = (AxonServerTenantProvider) application.getComponent(TenantProvider.class);
+
     }
 }

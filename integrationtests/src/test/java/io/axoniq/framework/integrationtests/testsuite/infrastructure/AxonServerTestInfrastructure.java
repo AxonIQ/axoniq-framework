@@ -86,9 +86,12 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
 
     @Override
     public void configureInfrastructure(ComponentRegistry registry) {
-        AxonServerConfiguration config = new AxonServerConfiguration();
-        config.setServers(CONTAINER.getHost() + ":" + CONTAINER.getGrpcPort());
-        registry.registerComponent(AxonServerConfiguration.class, c -> config);
+        configureInfrastructure(registry, AxonServerConfiguration.builder());
+    }
+
+    public void configureInfrastructure(ComponentRegistry registry, AxonServerConfiguration.Builder builder) {
+        builder.servers(CONTAINER.getHost() + ":" + CONTAINER.getGrpcPort());
+        registry.registerComponent(AxonServerConfiguration.class, c -> builder.build());
     }
 
     @Override
