@@ -44,8 +44,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
 import static io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerMultiTenancyUtils.tenantDescriptor;
@@ -78,19 +78,24 @@ public class AxonServerTenantProvider implements TenantProvider, WithTenantDescr
 
     private static final Logger logger = LoggerFactory.getLogger(AxonServerTenantProvider.class);
 
-    private final List<MultiTenantAwareComponent> tenantAwareComponents = new CopyOnWriteArrayList<>();
     private final Set<TenantDescriptor> tenantDescriptors = ConcurrentHashMap.newKeySet();
 
     @Nullable
     private final String preDefinedContexts;
     private final TenantConnectPredicate tenantConnectPredicate;
     private final AxonServerConnectionManager axonServerConnectionManager;
-    private final ConcurrentHashMap<TenantDescriptor, List<Registration>> registrationMap = new ConcurrentHashMap<>();
+
+    // Guarded by 'this': every lifecycle transition mutates these under the monitor, so a registration is never added
+    // in parallel with the cancellation that should cover it. One entry per tenant-component pair lets cancellation
+    // select by tenant or by component. 'closed' blocks late registrations once shutdown cancelled everything.
+    private final List<MultiTenantAwareComponent> tenantAwareComponents = new ArrayList<>();
+    private final List<TenantRegistration> registrations = new ArrayList<>();
+    private boolean closed = false;
 
     /**
      * Initialized in subscribeToUpdates() and closed in shutdown(). Used to receive context updates from Axon Server.
      */
-    private ResultStream<ContextUpdate> contextUpdatesStream;
+    private volatile ResultStream<ContextUpdate> contextUpdatesStream;
 
     /**
      * Constructs an AxonServerTenantProvider with the given connection manager and tenant connect predicate.
@@ -130,8 +135,7 @@ public class AxonServerTenantProvider implements TenantProvider, WithTenantDescr
      */
     public CompletableFuture<Void> start() {
         return CompletableFuture.runAsync(() -> {
-            tenantDescriptors.addAll(getInitialTenants());
-            tenantDescriptors.forEach(this::addTenant);
+            getInitialTenants().forEach(this::addTenant);
             if (preDefinedContexts == null || preDefinedContexts.isEmpty()) {
                 subscribeToUpdates();
             }
@@ -161,8 +165,8 @@ public class AxonServerTenantProvider implements TenantProvider, WithTenantDescr
             contextUpdatesStream = adminChannel().subscribeToContextUpdates();
             contextUpdatesStream.onAvailable(() -> {
                 try {
+                    // nextIfAvailable() can return null despite its non-null annotation, so guard against it.
                     ContextUpdate contextUpdate = contextUpdatesStream.nextIfAvailable();
-                    // FIXME: failed also markd NonNull: java.lang.NullPointerException: Cannot invoke "io.axoniq.axonserver.grpc.admin.ContextUpdate.getType()" because "contextUpdate" is null
                     if (contextUpdate == null) {
                         return;
                     }
@@ -193,7 +197,7 @@ public class AxonServerTenantProvider implements TenantProvider, WithTenantDescr
                                              .getContextOverview(contextUpdate.getContext())
                                              .orTimeout(30, TimeUnit.SECONDS)
                                              .join());
-            if (tenantConnectPredicate.test(newTenant) && !tenantDescriptors.contains(newTenant)) {
+            if (tenantConnectPredicate.test(newTenant)) {
                 addTenant(newTenant);
             }
         } catch (Exception e) {
@@ -219,19 +223,20 @@ public class AxonServerTenantProvider implements TenantProvider, WithTenantDescr
     }
 
     /**
-     * Adds a new tenant to the system.
-     * <p>
-     * This method adds the provided {@link TenantDescriptor} to the set of known tenants. Once added all
-     * {@link MultiTenantAwareComponent MultiTenantAwareComponents} are registered and started for the new tenant.
+     * Adds the given {@code tenantDescriptor} as a known tenant, registering and starting every subscribed
+     * {@link MultiTenantAwareComponent} for it. A tenant that is already known is ignored, so its components are never
+     * registered twice.
      *
      * @param tenantDescriptor the {@link TenantDescriptor} representing the tenant to be added
      */
-    public void addTenant(TenantDescriptor tenantDescriptor) {
-        tenantDescriptors.add(tenantDescriptor);
-        tenantAwareComponents
-                .forEach(component -> registrationMap
-                        .computeIfAbsent(tenantDescriptor, t -> new CopyOnWriteArrayList<>())
-                        .add(component.registerAndStartTenant(tenantDescriptor)));
+    public synchronized void addTenant(TenantDescriptor tenantDescriptor) {
+        // Skip when shutting down, or when the tenant is already known, so a component is never registered twice.
+        if (closed || !tenantDescriptors.add(tenantDescriptor)) {
+            return;
+        }
+        tenantAwareComponents.forEach(component -> registrations.add(new TenantRegistration(
+                tenantDescriptor, component, component.registerAndStartTenant(tenantDescriptor)
+        )));
     }
 
     /**
@@ -245,67 +250,83 @@ public class AxonServerTenantProvider implements TenantProvider, WithTenantDescr
      * @param tenantDescriptor the {@link TenantDescriptor} representing the tenant to be removed
      */
     public void removeTenant(TenantDescriptor tenantDescriptor) {
-        if (tenantDescriptors.remove(tenantDescriptor)) {
-            List<Registration> registrations = registrationMap.remove(tenantDescriptor);
-            if (registrations != null && !registrations.isEmpty()) {
-                registrations.forEach(Registration::cancel);
-            }
+        // The disconnect is kept out of the monitor, so no lifecycle transition blocks on the network call.
+        if (deregisterTenant(tenantDescriptor)) {
             axonServerConnectionManager.disconnect(tenantDescriptor.tenantId());
         }
     }
 
+    private synchronized boolean deregisterTenant(TenantDescriptor tenantDescriptor) {
+        if (!tenantDescriptors.remove(tenantDescriptor)) {
+            return false;
+        }
+        cancelRegistrationsMatching(registration -> registration.tenant().equals(tenantDescriptor));
+        return true;
+    }
+
     @Override
-    public Registration subscribe(MultiTenantAwareComponent component) {
+    public synchronized Registration subscribe(MultiTenantAwareComponent component) {
         tenantAwareComponents.add(component);
+        tenantDescriptors.forEach(tenantDescriptor -> registrations.add(new TenantRegistration(
+                tenantDescriptor, component, component.registerTenant(tenantDescriptor)
+        )));
 
-        List<Registration> componentRegistrations = new CopyOnWriteArrayList<>();
-        tenantDescriptors
-                .forEach(tenantDescriptor -> {
-                    Registration registration = component.registerTenant(tenantDescriptor);
-                    registrationMap
-                            .computeIfAbsent(tenantDescriptor, t -> new CopyOnWriteArrayList<>())
-                            .add(registration);
-                    componentRegistrations.add(registration);
-                });
+        // Cancelling covers every registration made on the component's behalf, including tenants added after
+        // subscribing, as the TenantProvider#subscribe contract requires.
+        return () -> unsubscribe(component);
+    }
 
-        return () -> {
-            tenantAwareComponents.remove(component);
-            componentRegistrations.forEach(Registration::cancel);
-            registrationMap.values().forEach(list -> list.removeAll(componentRegistrations));
-            return true;
-        };
+    private synchronized boolean unsubscribe(MultiTenantAwareComponent component) {
+        tenantAwareComponents.remove(component);
+        cancelRegistrationsMatching(registration -> registration.component() == component);
+        return true;
+    }
+
+    // Cancels in reverse registration order, so the last registered component is deregistered first. A failing
+    // cancellation is logged and skipped, so the remaining registrations are still cancelled.
+    private synchronized void cancelRegistrationsMatching(Predicate<TenantRegistration> criterion) {
+        List<TenantRegistration> matching = registrations.stream().filter(criterion).toList();
+        registrations.removeAll(matching);
+        for (TenantRegistration tenantRegistration : matching.reversed()) {
+            try {
+                tenantRegistration.registration().cancel();
+            } catch (Exception e) {
+                logger.warn("Error while cancelling the tenant [{}] registration of component [{}].",
+                            tenantRegistration.tenant().tenantId(), tenantRegistration.component(), e);
+            }
+        }
     }
 
     /**
      * Shuts down the AxonServerTenantProvider by deregistering all subscribed components.
      * <p>
-     * The shutdown process involves the following steps:
-     * <ol>
-     *     <li>Iterates through all registered components for each tenant.</li>
-     *     <li>Reverses the order of registrations for each tenant to ensure
-     *         last-registered components are deregistered first.</li>
-     *     <li>Invokes the cancel method on each registration, effectively
-     *         deregistering the component from the tenant.</li>
-     * </ol>
-     * <p>
-     * This method ensures that all resources associated with tenant management are properly
-     * released and that components are given the opportunity to perform any necessary cleanup
-     * in the reverse order of their registration.
+     * Every tenant registration of every subscribed component is cancelled in reverse registration order, so
+     * last-registered components are deregistered first and get the opportunity to perform any necessary cleanup.
      *
      * @return a {@link CompletableFuture} that completes when the provider has shut down
      */
     public CompletableFuture<Void> shutdown() {
-        if (!contextUpdatesStream.isClosed()) {
+        // The stream is only opened when tenants are discovered dynamically, so it is null with predefined contexts.
+        if (contextUpdatesStream != null && !contextUpdatesStream.isClosed()) {
             contextUpdatesStream.close();
         }
-        return CompletableFuture.runAsync(() -> registrationMap
-                .values()
-                .forEach(it -> it.reversed().forEach(Registration::cancel)
-                )
-        );
+        return CompletableFuture.runAsync(this::cancelAllRegistrations);
+    }
+
+    private synchronized void cancelAllRegistrations() {
+        // Marks the provider closed before cancelling, so a context update still in flight skips registration in
+        // addTenant rather than adding an entry that would outlive this cancellation.
+        closed = true;
+        cancelRegistrationsMatching(registration -> true);
     }
 
     private AdminChannel adminChannel() {
         return axonServerConnectionManager.getConnection(ADMIN_CONTEXT).adminChannel();
+    }
+
+    private record TenantRegistration(TenantDescriptor tenant,
+                                      MultiTenantAwareComponent component,
+                                      Registration registration) {
+
     }
 }

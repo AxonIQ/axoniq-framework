@@ -31,6 +31,9 @@ public interface MultiTenantAwareComponent extends DescribableComponent {
 
     /**
      * Registers the given {@code tenantDescriptor} as a known tenant with this multi-tenant aware component.
+     * <p>
+     * The caller must retain the returned {@link Registration} and cancel it when the tenant is removed, since
+     * releasing the component's per-tenant resources rides on that cancellation.
      *
      * @param tenantDescriptor The {@link TenantDescriptor} to register with this component.
      * @return A {@link Registration} used to deregister the given {@code tenantDescriptor}.

@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.messaging.multitenancy.api;
 
-import io.axoniq.framework.messaging.multitenancy.configuration.DefaultTenantResolverRegistry;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.commandhandling.CommandMessage;
@@ -39,13 +38,27 @@ import org.jspecify.annotations.Nullable;
  * <p>
  * The general resolver registered via {@link #registerResolver(ComponentBuilder)} serves as a
  * fallback for all message types and can be retrieved directly via {@link #resolver(Configuration)}.
+ * <p>
+ * The default registry, obtained through {@link #create()}, starts without any registered resolvers and builds each
+ * registered resolver once, reusing the instance on every following retrieval.
  *
  * @author Theo Emanuelsson
  * @since 5.3.0
  * @see TenantResolver
- * @see DefaultTenantResolverRegistry
  */
 public interface TenantResolverRegistry {
+
+    /**
+     * Creates a {@code TenantResolverRegistry} without any registered resolvers.
+     * <p>
+     * The returned registry builds each registered resolver once, on the first retrieval that needs it, and reuses
+     * that instance on every subsequent retrieval.
+     *
+     * @return a registry without any registered resolvers
+     */
+    static TenantResolverRegistry create() {
+        return new DefaultTenantResolverRegistry();
+    }
 
     /**
      * Registers the given {@code resolverBuilder} as the general {@link TenantResolver} for all message types.

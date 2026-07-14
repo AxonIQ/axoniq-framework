@@ -17,10 +17,8 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.configuration;
+package io.axoniq.framework.messaging.multitenancy.api;
 
-import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.core.Message;
@@ -28,6 +26,8 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -44,7 +44,7 @@ class DefaultTenantResolverRegistryTest {
     private static final TenantResolver<QueryMessage> QUERY_RESOLVER = resolverReturning("query");
 
     private final Configuration configuration = mock(Configuration.class);
-    private final DefaultTenantResolverRegistry testSubject = new DefaultTenantResolverRegistry();
+    private final TenantResolverRegistry testSubject = TenantResolverRegistry.create();
 
     @Nested
     class WithoutRegisteredResolvers {
@@ -237,6 +237,48 @@ class DefaultTenantResolverRegistryTest {
             assertThat(testSubject.commandResolver(configuration)).isSameAs(REPLACEMENT_COMMAND_RESOLVER);
             assertThat(testSubject.eventResolver(configuration)).isSameAs(GENERAL_RESOLVER);
             assertThat(testSubject.queryResolver(configuration)).isSameAs(GENERAL_RESOLVER);
+        }
+    }
+
+    @Nested
+    class BuildsResolversOnce {
+
+        @Test
+        void buildsTheGeneralResolverOnlyOnceAcrossAccessorCalls() {
+            // given a builder producing a fresh resolver on every invocation
+            AtomicInteger buildCount = new AtomicInteger();
+            testSubject.registerResolver(config -> {
+                buildCount.incrementAndGet();
+                return resolverReturning("general-" + buildCount.get());
+            });
+
+            // when every accessor falls back to the general resolver
+            TenantResolver<Message> firstAccess = testSubject.resolver(configuration);
+            TenantResolver<Message> secondAccess = testSubject.resolver(configuration);
+            TenantResolver<Message> commandFallback = testSubject.commandResolver(configuration);
+
+            // then
+            assertThat(buildCount).hasValue(1);
+            assertThat(secondAccess).isSameAs(firstAccess);
+            assertThat(commandFallback).isSameAs(firstAccess);
+        }
+
+        @Test
+        void buildsATypeSpecificResolverOnlyOnceAcrossAccessorCalls() {
+            // given a builder producing a fresh resolver on every invocation
+            AtomicInteger buildCount = new AtomicInteger();
+            testSubject.registerCommandResolver(config -> {
+                buildCount.incrementAndGet();
+                return resolverReturning("command-" + buildCount.get());
+            });
+
+            // when
+            TenantResolver<Message> firstAccess = testSubject.commandResolver(configuration);
+            TenantResolver<Message> secondAccess = testSubject.commandResolver(configuration);
+
+            // then
+            assertThat(buildCount).hasValue(1);
+            assertThat(secondAccess).isSameAs(firstAccess);
         }
     }
 

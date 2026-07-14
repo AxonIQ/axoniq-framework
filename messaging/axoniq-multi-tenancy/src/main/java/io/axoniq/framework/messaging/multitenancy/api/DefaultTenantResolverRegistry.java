@@ -17,11 +17,8 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.configuration;
+package io.axoniq.framework.messaging.multitenancy.api;
 
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolverRegistry;
-import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
@@ -37,6 +34,12 @@ import org.jspecify.annotations.Nullable;
  * <p>
  * Type-specific resolvers (command, event, query) take precedence over the general resolver.
  * When a type-specific resolver is not configured, the general resolver is returned as a fallback.
+ * <p>
+ * Each resolver is built once, on the first accessor call that needs it, and the same instance is returned on every
+ * subsequent call. Registering a new builder replaces the previously built resolver of that bucket.
+ * <p>
+ * Internal, because users obtain this registry through {@link TenantResolverRegistry#create()} rather than
+ * constructing it directly.
  *
  * @author Theo Emanuelsson
  * @since 5.3.0
@@ -44,101 +47,103 @@ import org.jspecify.annotations.Nullable;
  */
 @Internal
 // Todo: Do we really need message type specific resolvers? Or is a single resolver enough?
-public class DefaultTenantResolverRegistry implements TenantResolverRegistry {
-
-    // TODO use TypeReference in ComponentRegistry to dynamically register into the correct bucket.
-    private static final TypeReference<TenantResolver<Message>> TYPE_REF_MESSAGE = new TypeReference<>() {
-    };
-    private static final TypeReference<TenantResolver<? super CommandMessage>> TYPE_REF_COMMAND_MESSAGE = new TypeReference<>() {
-    };
-    private static final TypeReference<TenantResolver<? super EventMessage>> TYPE_REF_EVENT_MESSAGE = new TypeReference<>() {
-    };
-    private static final TypeReference<TenantResolver<? super QueryMessage>> TYPE_REF_QUERY_MESSAGE = new TypeReference<>() {
-    };
+class DefaultTenantResolverRegistry implements TenantResolverRegistry {
 
     private @Nullable ComponentBuilder<TenantResolver<Message>> generalBuilder;
     private @Nullable ComponentBuilder<TenantResolver<? super CommandMessage>> commandBuilder;
     private @Nullable ComponentBuilder<TenantResolver<? super EventMessage>> eventBuilder;
     private @Nullable ComponentBuilder<TenantResolver<? super QueryMessage>> queryBuilder;
 
+    private @Nullable TenantResolver<Message> builtGeneralResolver;
+    private @Nullable TenantResolver<Message> builtCommandResolver;
+    private @Nullable TenantResolver<Message> builtEventResolver;
+    private @Nullable TenantResolver<Message> builtQueryResolver;
+
     @Override
-    public TenantResolverRegistry registerResolver(
+    public synchronized TenantResolverRegistry registerResolver(
             ComponentBuilder<TenantResolver<Message>> resolverBuilder
     ) {
         this.generalBuilder = resolverBuilder;
+        this.builtGeneralResolver = null;
         return this;
     }
 
     @Override
-    public TenantResolverRegistry registerCommandResolver(
+    public synchronized TenantResolverRegistry registerCommandResolver(
             ComponentBuilder<TenantResolver<? super CommandMessage>> resolverBuilder
     ) {
         this.commandBuilder = resolverBuilder;
+        this.builtCommandResolver = null;
         return this;
     }
 
     @Override
-    public TenantResolverRegistry registerEventResolver(
+    public synchronized TenantResolverRegistry registerEventResolver(
             ComponentBuilder<TenantResolver<? super EventMessage>> resolverBuilder
     ) {
         this.eventBuilder = resolverBuilder;
+        this.builtEventResolver = null;
         return this;
     }
 
     @Override
-    public TenantResolverRegistry registerQueryResolver(
+    public synchronized TenantResolverRegistry registerQueryResolver(
             ComponentBuilder<TenantResolver<? super QueryMessage>> resolverBuilder
     ) {
         this.queryBuilder = resolverBuilder;
+        this.builtQueryResolver = null;
         return this;
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public @Nullable TenantResolver<Message> commandResolver(Configuration config) {
+    public synchronized @Nullable TenantResolver<Message> commandResolver(Configuration config) {
         if (commandBuilder != null) {
-            return (TenantResolver<Message>) (TenantResolver<?>) commandBuilder.build(config);
+            if (builtCommandResolver == null) {
+                builtCommandResolver = (TenantResolver<Message>) (TenantResolver<?>) commandBuilder.build(config);
+            }
+            return builtCommandResolver;
         }
-        if (generalBuilder != null) {
-            return generalBuilder.build(config);
-        }
-        return null;
+        return resolver(config);
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public @Nullable TenantResolver<Message> eventResolver(Configuration config) {
+    public synchronized @Nullable TenantResolver<Message> eventResolver(Configuration config) {
         if (eventBuilder != null) {
-            return (TenantResolver<Message>) (TenantResolver<?>) eventBuilder.build(config);
+            if (builtEventResolver == null) {
+                builtEventResolver = (TenantResolver<Message>) (TenantResolver<?>) eventBuilder.build(config);
+            }
+            return builtEventResolver;
         }
-        if (generalBuilder != null) {
-            return generalBuilder.build(config);
-        }
-        return null;
+        return resolver(config);
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public @Nullable TenantResolver<Message> queryResolver(Configuration config) {
+    public synchronized @Nullable TenantResolver<Message> queryResolver(Configuration config) {
         if (queryBuilder != null) {
-            return (TenantResolver<Message>) (TenantResolver<?>) queryBuilder.build(config);
+            if (builtQueryResolver == null) {
+                builtQueryResolver = (TenantResolver<Message>) (TenantResolver<?>) queryBuilder.build(config);
+            }
+            return builtQueryResolver;
         }
-        if (generalBuilder != null) {
-            return generalBuilder.build(config);
-        }
-        return null;
+        return resolver(config);
     }
 
     @Override
-    public @Nullable TenantResolver<Message> resolver(Configuration config) {
-        if (generalBuilder != null) {
-            return generalBuilder.build(config);
+    public synchronized @Nullable TenantResolver<Message> resolver(Configuration config) {
+        if (generalBuilder == null) {
+            return null;
         }
-        return null;
+        if (builtGeneralResolver == null) {
+            builtGeneralResolver = generalBuilder.build(config);
+        }
+        return builtGeneralResolver;
     }
 
     @Override
-    public boolean hasResolver() {
+    public synchronized boolean hasResolver() {
         return generalBuilder != null
                 || commandBuilder != null
                 || eventBuilder != null
