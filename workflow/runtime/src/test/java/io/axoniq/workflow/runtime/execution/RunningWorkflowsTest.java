@@ -20,20 +20,80 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
+import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.axonframework.messaging.eventstreaming.EventCriteria;
+import org.axonframework.messaging.eventstreaming.Tag;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RunningWorkflowsTest {
 
     @Test
-    void lifecycleMetadataAddsAndRemovesWorkflowIds() {
+    void workflowLifecycleEventsSelectLifecycleTaggedEvents() {
+        assertThat(RunningWorkflows.workflowLifecycleEvents()).isEqualTo(
+                EventCriteria.havingTags(Tag.of(
+                        WorkflowEventTagResolver.TAG_WORKFLOW_EVENT_TYPE,
+                        WorkflowEventTagResolver.TAG_VALUE_EVENT_TYPE_LIFECYCLE
+                ))
+        );
+    }
+
+    @Test
+    void startedStatusAddsWorkflowIdAndUpdatesContains() {
         var state = new RunningWorkflows();
 
         state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
-        assertThat(state.workflowIds()).containsExactly("wf-123");
 
-        state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.TIMED_OUT));
+        assertThat(state.workflowIds()).containsExactly("wf-123");
+        assertThat(state.contains("wf-123")).isTrue();
+        assertThat(state.contains("wf-456")).isFalse();
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = WorkflowStatus.class, names = {"COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"})
+    void terminalStatusesRemoveWorkflowIds(WorkflowStatus status) {
+        var state = new RunningWorkflows();
+
+        state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
+        state.evolve(MetadataUtils.create("wf-123", status));
+
         assertThat(state.workflowIds()).isEmpty();
+        assertThat(state.contains("wf-123")).isFalse();
+    }
+
+    @Test
+    void noneStatusDoesNotChangeRunningWorkflowIds() {
+        var state = new RunningWorkflows();
+
+        state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
+        state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.NONE));
+
+        assertThat(state.workflowIds()).containsExactly("wf-123");
+        assertThat(state.contains("wf-123")).isTrue();
+    }
+
+    @Test
+    void metadataWithoutWorkflowStatusDoesNotChangeRunningWorkflowIds() {
+        var state = new RunningWorkflows();
+
+        state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
+        state.evolve(MetadataUtils.create("wf-123"));
+
+        assertThat(state.workflowIds()).containsExactly("wf-123");
+    }
+
+    @Test
+    void workflowIdsReturnsImmutableCopy() {
+        var state = new RunningWorkflows();
+
+        state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
+
+        assertThatThrownBy(() -> state.workflowIds().add("wf-456"))
+                .isInstanceOf(UnsupportedOperationException.class);
+        assertThat(state.workflowIds()).containsExactly("wf-123");
     }
 }
