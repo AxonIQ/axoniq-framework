@@ -90,6 +90,8 @@
         <module>messaging/axoniq-message-transformation</module>
 
         <module>testing/axoniq-testcontainer</module>
+
+        <module>tracing/axoniq-tracing-micrometer</module>
     </modules>
 
     <inceptionYear>2026</inceptionYear>

@@ -1,0 +1,2 @@
+io.axoniq.framework.tracing.micrometer.MicrometerTracingConfigurationEnhancer
+io.axoniq.framework.tracing.micrometer.threadlocal.MicrometerThreadLocalContextPropagationConfigurationEnhancer

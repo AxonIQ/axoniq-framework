@@ -108,6 +108,13 @@
                 <artifactId>axoniq-testcontainer</artifactId>
                 <version>${project.version}</version>
             </dependency>
+
+            <!-- Axoniq Framework: Tracing -->
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-tracing-micrometer</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 </project>
