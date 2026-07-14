@@ -132,16 +132,18 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     void registerRunningWorkflows(ComponentRegistry componentRegistry) {
-
         componentRegistry.registerModule(
                 EventSourcedEntityModule
                         .declarative(String.class, RunningWorkflows.class)
                         .messagingModel((c, model) -> model
-                                .entityEvolver((entity, event, context) -> entity.evolve(event.metadata()))
+                                .entityEvolver((entity, event, context) -> {
+                                    entity.evolve(event.metadata());
+                                    return entity;
+                                })
                                 .build())
                         .entityFactory(c -> (identifier, firstEvent, context) -> new RunningWorkflows())
                         .criteriaResolver(c -> (identifier, context) ->
-                                RunningWorkflows.workflowLifecycleEvents(identifier))
+                                RunningWorkflows.workflowLifecycleEvents())
                         // FIXME Register snapshot configuration eventually
                         .build()
         );

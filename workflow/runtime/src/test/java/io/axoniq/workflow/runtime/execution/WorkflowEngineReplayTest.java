@@ -56,7 +56,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -211,7 +210,8 @@ class WorkflowEngineReplayTest {
         when(executionContext.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
         when(executionContext.component(EventSink.class)).thenReturn(mock(EventSink.class));
 
-        var running = new RunningWorkflows().evolve(MetadataUtils.create(workflowId, WorkflowStatus.STARTED));
+        var running = new RunningWorkflows();
+        running.evolve(MetadataUtils.create(workflowId, WorkflowStatus.STARTED));
         when(workflowStateRehydrationSupport.loadRunningWorkflows(same(restoreContext))).thenReturn(running);
 
         var definitionId = new WorkflowDefinitionId(new QualifiedName("RestoredWorkflow"), "1.0.0");
