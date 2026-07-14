@@ -131,7 +131,7 @@ public interface QueryBusConnector extends DescribableComponent {
     /**
      * Defines a callback mechanism to handle update messages for subscription queries
      * in a reactive and asynchronous manner.
-     * <p/>
+     * <p>
      * The {@code UpdateCallback} interface is used to send update, complete the processing,
      * or handle exceptional completion during subscription queries.
      */
