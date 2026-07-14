@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.integrationtests.multitenancy;
 
-import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
@@ -27,22 +26,18 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerTenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerTenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingTenantAwareComponent;
-import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.DefaultAxonApplication;
+import org.axonframework.common.configuration.SearchScope;
 import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.condition.*;
 import org.junit.jupiter.api.extension.*;
-
-import java.util.function.Consumer;
-import java.util.stream.Stream;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
 import static io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor.tenantWithId;
+import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults.axonServerTenantProvider;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assumptions.*;
 
 @ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
 @Timeout(60)
@@ -131,19 +126,33 @@ class AxonServerTenantProviderIT {
     }
 
     @Test
-    void tenantProviderUsesPredifinedContext() {
+    void tenantProviderUsesPredefinedContexts() {
         RecordingTenantAwareComponent tenantDescriptorRecorder = new RecordingTenantAwareComponent();
-
-        TenantConnectPredicate predicate = tenantDescriptor -> new AxonServerTenantConnectPredicate()
-                .and(it -> !DEFAULT_CONTEXT.equals(it.tenantId()))
-                .test(tenantDescriptor);
 
         AxonConfiguration application = new DefaultAxonApplication()
                 .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                .componentRegistry(cr -> cr.registerComponent(TenantConnectPredicate.class, c -> predicate))
+                .componentRegistry(cr -> cr.registerComponent(TenantConnectPredicate.class, c -> td -> false))
+                .componentRegistry(cr -> cr.registerIfNotPresent(
+                        axonServerTenantProvider("foo,bar"),
+                        SearchScope.ALL
+                ))
                 .start();
 
         AxonServerTenantProvider tenantProvider = (AxonServerTenantProvider) application.getComponent(TenantProvider.class);
 
+
+        tenantProvider.subscribe(tenantDescriptorRecorder);
+
+        await().untilAsserted(() -> {
+            assertThat(tenantProvider.tenants())
+                    .isNotEmpty()
+                    .extracting(TenantDescriptor::tenantId)
+                    .containsExactlyInAnyOrder("foo", "bar")
+            ;
+            assertThat(tenantDescriptorRecorder.tenants())
+                    .isNotEmpty()
+                    .extracting(TenantDescriptor::tenantId)
+                    .containsExactlyInAnyOrder("foo", "bar");
+        });
     }
 }

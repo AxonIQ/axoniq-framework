@@ -20,6 +20,8 @@ package io.axoniq.framework.messaging.multitenancy.api;
 
 import org.axonframework.common.AxonNonTransientException;
 
+import java.util.function.Supplier;
+
 /**
  * Exception thrown when no tenant can be established for a message or an operation.
  *
@@ -29,6 +31,11 @@ import org.axonframework.common.AxonNonTransientException;
  */
 @SuppressWarnings("java:S110") // S110: "TenantNotResolvedException" has 5 parent classes.
 public class TenantNotResolvedException extends AxonNonTransientException {
+
+
+    static Supplier<TenantNotResolvedException> tenantNotResolved(String message, Object... args) {
+        return () -> new TenantNotResolvedException(message, args);
+    }
 
     /**
      * Construct a {@code TenantNotResolvedException}.

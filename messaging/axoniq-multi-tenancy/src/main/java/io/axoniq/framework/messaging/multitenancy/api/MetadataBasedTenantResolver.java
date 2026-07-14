@@ -22,8 +22,6 @@ package io.axoniq.framework.messaging.multitenancy.api;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.correlation.CorrelationDataProvider;
 import org.axonframework.messaging.core.correlation.SimpleCorrelationDataProvider;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.jspecify.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.Optional;
@@ -50,8 +48,8 @@ import static org.axonframework.common.BuilderUtils.assertNonEmpty;
  *     TenantResolver&lt;Message&gt; resolver = new MetadataBasedTenantResolver("customTenantKey");
  * </code></pre>
  *
- * @param metadataKey the key to use when extracting the tenant identifier from message metadata, default is {@code "tenantId"}
- *
+ * @param metadataKey the key to use when extracting the tenant identifier from message metadata, default is
+ *                    {@code "tenantId"}
  * @author Theo Emanuelsson
  * @author Jan Galinski
  * @see TenantResolver
@@ -85,16 +83,13 @@ public record MetadataBasedTenantResolver(String metadataKey) implements TenantR
     /**
      * Resolves the target tenant by extracting the tenant identifier from the message's metadata.
      *
-     * @param message           the message to resolve the tenant from
-     * @param processingContext the (optional) processing context of the message being processed (not used by this
-     *                          implementation)
-     * @param tenants           the available tenants (not used by this implementation)
+     * @param message the message to resolve the tenant from
+     * @param tenants the available tenants (not used by this implementation)
      * @return the {@link TenantDescriptor} for the resolved tenant
      * @throws TenantNotResolvedException if the message metadata does not contain the expected tenant key
      */
     @Override
     public TenantDescriptor resolveTenant(Message message,
-                                          @Nullable ProcessingContext processingContext,
                                           Collection<TenantDescriptor> tenants
     ) {
         String tenantId = message.metadata().get(metadataKey);

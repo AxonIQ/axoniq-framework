@@ -42,7 +42,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
-import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.decorateWithTenantResolver;
+import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.registerTenantResolver;
 import static java.util.Objects.requireNonNull;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -95,7 +95,7 @@ class TenantIdCorrelationIT {
 
         AxonConfiguration axon = new DefaultAxonApplication()
                 .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                .componentRegistry(decorateWithTenantResolver(new MetadataBasedTenantResolver()))
+                .componentRegistry(registerTenantResolver(new MetadataBasedTenantResolver()))
                 .componentRegistry(cr -> cr.registerModule(testCommandModule))
                 .start();
 

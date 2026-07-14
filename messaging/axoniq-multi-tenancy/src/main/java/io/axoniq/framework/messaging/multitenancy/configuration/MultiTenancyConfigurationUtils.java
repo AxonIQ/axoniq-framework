@@ -20,7 +20,6 @@
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolverRegistry;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.messaging.core.Message;
 
@@ -47,11 +46,10 @@ public final class MultiTenancyConfigurationUtils {
      * @param tenantResolver the {@link TenantResolver} to register
      * @return a {@link Consumer} that registers the given {@code tenantResolver} to a {@link ComponentRegistry}
      */
-    public static Consumer<ComponentRegistry> decorateWithTenantResolver(TenantResolver<Message> tenantResolver) {
-        return componentRegistry -> componentRegistry.registerDecorator(
-                TenantResolverRegistry.class,
-                0,
-                (config, name, delegate) -> delegate.registerResolver(c -> tenantResolver)
+    public static Consumer<ComponentRegistry> registerTenantResolver(TenantResolver<Message> tenantResolver) {
+        return componentRegistry -> componentRegistry.registerComponent(
+                TenantResolver.class,
+                c -> tenantResolver
         );
     }
 

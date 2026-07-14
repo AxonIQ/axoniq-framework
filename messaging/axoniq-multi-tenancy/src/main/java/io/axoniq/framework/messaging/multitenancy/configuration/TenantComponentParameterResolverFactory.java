@@ -24,17 +24,13 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolverRegistry;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
-import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Executable;
@@ -45,20 +41,21 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.getTenantDescriptor;
+
 /**
  * {@link ParameterResolverFactory} injecting tenant-scoped components into message-handling methods.
  * <p>
  * For each handler parameter it looks for a registered {@link TenantComponentProvider} whose
  * {@link TenantComponentProvider#componentType() component type} fits the parameter type. When one is found, the
  * resolved parameter value is that provider's instance for the tenant of the message being handled. The tenant is
- * derived through the {@link TenantResolverRegistry}, honoring message-type-specific resolvers, and defaults to a
+ * derived through the {@link TenantResolver}, honoring message-type-specific resolvers, and defaults to a
  * {@link MetadataBasedTenantResolver} when the registry has none configured.
  * <p>
  * Registering several providers (one per component type) is supported: each parameter is matched to the provider for
- * its own type. A single exact type match settles the choice, even when assignable supertype candidates exist. When
- * the choice cannot be settled by an exact match, handler inspection fails with an
- * {@link AxonConfigurationException}, since silently picking one of the candidates could hand the handler the wrong
- * tenant-scoped resource.
+ * its own type. A single exact type match settles the choice, even when assignable supertype candidates exist. When the
+ * choice cannot be settled by an exact match, handler inspection fails with an {@link AxonConfigurationException},
+ * since silently picking one of the candidates could hand the handler the wrong tenant-scoped resource.
  *
  * @author Theo Emanuelsson
  * @author Jan Galinski
@@ -75,10 +72,10 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
      * Constructs a {@code TenantComponentParameterResolverFactory} for the given {@code configuration}.
      * <p>
      * The given {@code configuration} supplies the registered {@link TenantComponentProvider providers} and the
-     * {@link TenantResolverRegistry} used to derive the tenant of each handled message.
+     * {@link TenantResolver} used to derive the tenant of each handled message.
      *
-     * @param configuration the configuration to look up the registered tenant-component providers and tenant
-     *                      resolvers, must not be {@code null}
+     * @param configuration the configuration to look up the registered tenant-component providers and tenant resolvers,
+     *                      must not be {@code null}
      */
     public TenantComponentParameterResolverFactory(Configuration configuration) {
         this.configuration = Objects.requireNonNull(configuration, "The configuration must not be null");
@@ -93,7 +90,7 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
         if (provider == null) {
             return null;
         }
-        return new TenantComponentParameterResolver(provider, tenantResolvers());
+        return new TenantComponentParameterResolver(provider);
     }
 
     private @Nullable TenantComponentProvider<?> findProviderFor(Class<?> parameterType) {
@@ -137,55 +134,13 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
         return configuration.getComponents(TenantComponentProvider.class).values();
     }
 
-    // The registry builds each resolver once and reuses it, so fetching per handler inspection stays cheap.
-    private TenantResolvers tenantResolvers() {
-        TenantResolverRegistry registry = configuration.getComponent(TenantResolverRegistry.class);
-        return new TenantResolvers(orDefault(registry.commandResolver(configuration)),
-                                   orDefault(registry.eventResolver(configuration)),
-                                   orDefault(registry.queryResolver(configuration)),
-                                   orDefault(registry.resolver(configuration)));
-    }
-
-    // The registry deliberately starts empty so users can decorate it, hence the metadata default lives here.
-    private static TenantResolver<Message> orDefault(@Nullable TenantResolver<Message> resolver) {
-        return resolver != null ? resolver : new MetadataBasedTenantResolver();
-    }
-
-    /**
-     * The per-message-type {@link TenantResolver TenantResolvers} captured at handler inspection time, so resolution
-     * honors command, event, and query specific resolvers configured in the {@link TenantResolverRegistry}.
-     *
-     * @param commandResolver the resolver for {@link CommandMessage CommandMessages}
-     * @param eventResolver   the resolver for {@link EventMessage EventMessages}
-     * @param queryResolver   the resolver for {@link QueryMessage QueryMessages}
-     * @param generalResolver the resolver for any other {@link Message} implementation
-     */
-    private record TenantResolvers(TenantResolver<Message> commandResolver,
-                                   TenantResolver<Message> eventResolver,
-                                   TenantResolver<Message> queryResolver,
-                                   TenantResolver<Message> generalResolver) {
-
-        private TenantResolver<Message> forMessage(Message message) {
-            if (message instanceof CommandMessage) {
-                return commandResolver;
-            }
-            if (message instanceof EventMessage) {
-                return eventResolver;
-            }
-            if (message instanceof QueryMessage) {
-                return queryResolver;
-            }
-            return generalResolver;
-        }
-    }
 
     /**
      * Resolves a handler parameter to the matched provider's component instance for the tenant of the message in the
      * {@link ProcessingContext}. Matches any message-carrying context: a message without a resolvable or registered
      * tenant fails at resolution time with a {@link TenantNotResolvedException}, rather than silently not matching.
      */
-    private record TenantComponentParameterResolver(TenantComponentProvider<?> provider,
-                                                    TenantResolvers tenantResolvers)
+    private record TenantComponentParameterResolver(TenantComponentProvider<?> provider)
             implements ParameterResolver<Object> {
 
         @Override
@@ -197,8 +152,7 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
                 ));
             }
             try {
-                TenantDescriptor tenant = tenantResolvers.forMessage(message)
-                                                         .resolveTenant(message, context, provider.tenants());
+                TenantDescriptor tenant = getTenantDescriptor(context);
                 Object component = provider.componentFor(tenant);
                 return CompletableFuture.completedFuture(component);
             } catch (RuntimeException e) {

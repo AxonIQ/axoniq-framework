@@ -76,6 +76,11 @@ import static java.util.Objects.requireNonNull;
 @Internal
 public class AxonServerTenantProvider implements TenantProvider, WithTenantDescriptors {
 
+    /**
+     * The configuration property that can be used to provide a comma-separated list of predefined context names.
+     */
+    public static final String AXONSERVER_PREDEFINED_CONTEXTS = "axon.axonserver.contexts";
+
     private static final Logger logger = LoggerFactory.getLogger(AxonServerTenantProvider.class);
 
     private final Set<TenantDescriptor> tenantDescriptors = ConcurrentHashMap.newKeySet();
@@ -145,7 +150,6 @@ public class AxonServerTenantProvider implements TenantProvider, WithTenantDescr
     private List<TenantDescriptor> getInitialTenants() {
         List<TenantDescriptor> initialTenants = Collections.emptyList();
         try {
-            // TODO: never tried predefined contexts with this new module, needs verification
             if (StringUtils.nonEmptyOrNull(preDefinedContexts)) {
                 initialTenants = Arrays.stream(preDefinedContexts.split(","))
                                        .map(String::trim)

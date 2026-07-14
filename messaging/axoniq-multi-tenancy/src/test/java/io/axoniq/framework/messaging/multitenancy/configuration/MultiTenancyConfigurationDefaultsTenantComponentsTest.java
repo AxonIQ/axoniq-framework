@@ -31,15 +31,14 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Method;
 import java.util.Map;
 
+import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.setTenantDescriptor;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -159,8 +158,13 @@ class MultiTenancyConfigurationDefaultsTenantComponentsTest {
                     Map.of(MetadataBasedTenantResolver.DEFAULT_TENANT_KEY, TENANT_A.tenantId())
             );
 
+            ProcessingContext context = StubProcessingContext.forMessage(message);
+            TenantDescriptor tenantDescriptor = new MetadataBasedTenantResolver().resolveTenant(message);
+            setTenantDescriptor(context, tenantDescriptor);
+
+
             // when
-            Object resolved = resolver.resolveParameterValue(StubProcessingContext.forMessage(message)).join();
+            Object resolved = resolver.resolveParameterValue(context).join();
 
             // then
             assertThat(resolved).isSameAs(componentProvider.componentFor(TENANT_A));

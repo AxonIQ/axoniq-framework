@@ -20,7 +20,6 @@ package io.axoniq.framework.messaging.multitenancy.api;
 
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.jspecify.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -40,58 +39,28 @@ public interface TenantResolver<M extends Message> {
     /**
      * Returns {@link TenantDescriptor} for the given {@code message}.
      *
-     * @param message           the {@link Message} implementation to resolve the target tenant for
-     * @param processingContext the (optional) {@link ProcessingContext} of the message being processed.
-     * @param tenants           the (empty) collection of tenants to resolve the target tenant from
+     * @param message the {@link Message} implementation to resolve the target tenant for
+     * @param tenants the (empty) collection of tenants to resolve the target tenant from
      * @return the resolved {@link TenantDescriptor} based on the given {@code message}
      * @throws TenantNotResolvedException if no tenant could be resolved
      */
     TenantDescriptor resolveTenant(
             M message,
-            @Nullable ProcessingContext processingContext,
             Collection<TenantDescriptor> tenants
     ) throws TenantNotResolvedException;
 
-    /**
-     * Returns {@link TenantDescriptor} for the given {@code message}. This method is a convenience method that calls
-     * {@link #resolveTenant(Message, ProcessingContext, Collection)} with an empty collection of tenants.
-     *
-     * @param message           the {@link Message} implementation to resolve the target tenant for
-     * @param processingContext the (optional) {@link ProcessingContext} of the message being processed.
-     * @return the resolved {@link TenantDescriptor} based on the given {@code message}
-     * @throws TenantNotResolvedException if no tenant could be resolved
-     * @see #resolveTenant(Message, ProcessingContext, Collection)
-     */
-    default TenantDescriptor resolveTenant(M message, @Nullable ProcessingContext processingContext) {
-        return resolveTenant(message, processingContext, Collections.emptyList());
-    }
 
     /**
      * Returns {@link TenantDescriptor} for the given {@code message}. This method is a convenience method that calls
-     * {@link #resolveTenant(Message, ProcessingContext, Collection)} with a {@code null} processing context.
-     *
-     * @param message the {@link Message} implementation to resolve the target tenant for
-     * @param tenants the (empty) collection of tenants to resolve the target tenant from
-     * @return the resolved {@link TenantDescriptor} based on the given {@code message}
-     * @throws TenantNotResolvedException if no tenant could be resolved
-     * @see #resolveTenant(Message, ProcessingContext, Collection)
-     */
-    default TenantDescriptor resolveTenant(M message, Collection<TenantDescriptor> tenants) {
-        return resolveTenant(message, null, tenants);
-    }
-
-    /**
-     * Returns {@link TenantDescriptor} for the given {@code message}. This method is a convenience method that calls
-     * {@link #resolveTenant(Message, ProcessingContext, Collection)} with an empty collection of tenants and
-     * {@code null} processing context.
+     * {@link #resolveTenant(Message, Collection)} with an empty collection of tenants.
      *
      * @param message the {@link Message} implementation to resolve the target tenant for
      * @return the resolved {@link TenantDescriptor} based on the given {@code message}
      * @throws TenantNotResolvedException if no tenant could be resolved
-     * @see #resolveTenant(Message, ProcessingContext, Collection)
+     * @see #resolveTenant(Message, Collection)
      */
     default TenantDescriptor resolveTenant(M message) {
-        return resolveTenant(message, null, Collections.emptyList());
+        return resolveTenant(message, Collections.emptyList());
     }
 
     /**
@@ -113,6 +82,6 @@ public interface TenantResolver<M extends Message> {
                                   .orElseThrow(() -> new IllegalStateException(
                                           "Cannot resolve tenant: no message found in ProcessingContext"));
 
-        return resolveTenant((M) message, context, tenants);
+        return resolveTenant((M) message, tenants);
     }
 }
