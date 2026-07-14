@@ -295,16 +295,16 @@ public class AxonServerConfiguration {
     private PersistentStreamSettings autoPersistentStreamsSettings = new PersistentStreamSettings();
 
     /**
-     * Instantiate a {@link Builder} to create an {@link AxonServerConfiguration}.
+     * Instantiate a {@link Builder} to create an {@code AxonServerConfiguration}.
      *
-     * @return a {@link Builder} to be able to create an {@link AxonServerConfiguration}.
+     * @return a {@link Builder} to be able to create an {@code AxonServerConfiguration}.
      */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Instantiate a default {@link AxonServerConfiguration}.
+     * Instantiate a default {@code AxonServerConfiguration}.
      */
     public AxonServerConfiguration() {
     }
