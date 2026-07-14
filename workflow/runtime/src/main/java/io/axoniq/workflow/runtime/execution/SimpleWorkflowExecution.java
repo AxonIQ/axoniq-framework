@@ -143,8 +143,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         ProcessingContextUtils
                 .executeWithResultInSeparateThread(
                         contextDelegate.workflowId(),
-                        // Non-transactional wrapper: the body can stay parked for minutes (awaitEvent/sleep/backoff);
-                        // a transactional UoW here pins one JDBC connection per in-flight instance (issue #126).
                         contextDelegate.bodyUnitOfWorkFactory(),
                         contextDelegate.executorService(),
                         this.processingContext(),
