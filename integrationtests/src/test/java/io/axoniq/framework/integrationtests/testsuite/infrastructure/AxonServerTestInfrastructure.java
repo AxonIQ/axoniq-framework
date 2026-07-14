@@ -28,8 +28,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.*;
 
@@ -73,7 +75,33 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
         return AxonServerTestInfrastructure.class.getResource("/" + AXON_SERVER_TEST_LICENSE) != null;
     }
 
+    private final List<Consumer<ComponentRegistry>> infrastructureConfigurators;
 
+    public AxonServerTestInfrastructure() {
+        this(Collections.emptyList());
+    }
+
+    /**
+     * Creates a new {@code AxonServerTestInfrastructure} instance with the given infrastructure configurators.
+     *
+     * @param infrastructureConfigurators to be executed when {@link #configureInfrastructure(ComponentRegistry)} is
+     *                                    called.
+     * @see AxonServerTestInfrastructure#AxonServerTestInfrastructure(List)
+     */
+    @SafeVarargs
+    public AxonServerTestInfrastructure(Consumer<ComponentRegistry>... infrastructureConfigurators) {
+        this(List.of(infrastructureConfigurators));
+    }
+
+    /**
+     * Creates a new {@code AxonServerTestInfrastructure} instance with the given infrastructure configurators.
+     *
+     * @param infrastructureConfigurators to be executed when {@link #configureInfrastructure(ComponentRegistry)} is
+     *                                    called.
+     */
+    public AxonServerTestInfrastructure(List<Consumer<ComponentRegistry>> infrastructureConfigurators) {
+        this.infrastructureConfigurators = infrastructureConfigurators;
+    }
 
     @Override
     public void start() {
@@ -86,12 +114,12 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
 
     @Override
     public void configureInfrastructure(ComponentRegistry registry) {
-        configureInfrastructure(registry, AxonServerConfiguration.builder());
-    }
+        // builder so we can eventually add more configuration options if needed, without having to change impl.
+        AxonServerConfiguration.Builder builder = builder()
+                .servers(CONTAINER.getHost() + ":" + CONTAINER.getGrpcPort());
 
-    public void configureInfrastructure(ComponentRegistry registry, AxonServerConfiguration.Builder builder) {
-        builder.servers(CONTAINER.getHost() + ":" + CONTAINER.getGrpcPort());
         registry.registerComponent(AxonServerConfiguration.class, c -> builder.build());
+        infrastructureConfigurators.forEach(configurator -> configurator.accept(registry));
     }
 
     @Override
