@@ -37,69 +37,84 @@ import java.util.Set;
 import java.util.function.BiFunction;
 
 import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.toUnmodifiableSet;
 
 /**
- * A 1:N split {@link EventTransformation}: it replaces an event matched by exact identity {@code source} with the
- * events its mapper produces, all delivered at the input's stream position. A split declares no single {@code to}
- * identity, so no output-identity check applies.
+ * A 1:N split {@link EventTransformation}: it replaces an event matched by exact identity {@code source} with its
+ * declared outputs, each pairing a produced {@link MessageType} with the mapper deriving its payload. The stored
+ * payload is converted to the declared input type once, then every output mapper derives its payload from that
+ * converted input. Outputs are emitted in declaration order, all at the input's stream position.
+ * <p>
+ * Each output is emitted under the {@link MessageType} it was declared with. No output-identity check applies: an
+ * output payload may be a stored-shape type whose own resolved identity differs from the declared one, so a split
+ * can emit an older-version payload that then re-enters the chain to be lifted the rest of the way.
  *
  * @param <T> the input payload type declared at registration
  * @author Laura Devriendt
- * @since 5.2.1
+ * @since 5.3.0
  */
 @Internal
 final class SplitEventTransformation<T> implements EventTransformation {
 
     private final MessageType source;
     private final FromMatcher matcher;
-    private final Set<QualifiedName> declaredToTypes;
     private final DeclaredInputType<T> inputType;
-    private final BiFunction<T, @Nullable ProcessingContext, List<TransformedEvent>> mapper;
+    private final List<Output<T>> outputs;
+    private final Set<QualifiedName> declaredToTypes;
+
+    /**
+     * One event a split produces, pairing the produced identity with the mapper deriving its payload from the
+     * converted input payload.
+     *
+     * @param <T>    the input payload type shared by all of a split's outputs
+     * @param type   the produced event's identity
+     * @param mapper maps the input payload and processing context to the produced event's payload
+     */
+    record Output<T>(MessageType type, BiFunction<T, @Nullable ProcessingContext, ?> mapper) {
+
+    }
 
     /**
      * Constructs a 1:N split transformation.
      *
-     * @param source          the {@code from} identity matched by exact equality
-     * @param declaredToTypes the type names of the events this split produces, widening a type-filtering read
-     * @param inputType       the declared input type, preserving any generic parameters
-     * @param mapper          the user-supplied mapper producing the events in read-stream order
+     * @param source    the {@code from} identity matched by exact equality
+     * @param inputType the declared input type, preserving any generic parameters
+     * @param outputs   the declared outputs, emitted in this order for every matched event
      */
-    SplitEventTransformation(MessageType source,
-                             Set<QualifiedName> declaredToTypes,
-                             TypeReference<T> inputType,
-                             BiFunction<T, @Nullable ProcessingContext, List<TransformedEvent>> mapper) {
+    SplitEventTransformation(MessageType source, TypeReference<T> inputType, List<Output<T>> outputs) {
         this.source = requireNonNull(source, "source may not be null");
         this.matcher = new FromMatcher.Exact(source);
-        this.declaredToTypes = Set.copyOf(requireNonNull(declaredToTypes, "declaredToTypes may not be null"));
         this.inputType = DeclaredInputType.of(inputType);
-        this.mapper = requireNonNull(mapper, "mapper may not be null");
+        this.outputs = List.copyOf(requireNonNull(outputs, "outputs may not be null"));
+        this.declaredToTypes = this.outputs.stream()
+                                           .map(output -> output.type().qualifiedName())
+                                           .collect(toUnmodifiableSet());
     }
 
     /**
-     * Transforms the matched message into the events its mapper produces, in order.
+     * Transforms the matched message into the declared outputs, in declaration order.
      *
      * @param message the matched input message
      * @param context the per-message {@link TransformationContext}
-     * @return a stream of the produced events, empty when the mapper produces none
+     * @return a stream of the produced events
      */
     @Override
     public MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
         requireNonNull(context, "context may not be null");
         T typedPayload = inputType.resolvePayload(message, context);
-        List<TransformedEvent> producedEvents = mapper.apply(typedPayload, context.processingContext());
-        requireNonNull(producedEvents, "A split mapper may not return null; return an empty list to drop the event.");
-        List<EventMessage> outputs = new ArrayList<>(producedEvents.size());
-        for (TransformedEvent produced : producedEvents) {
-            requireNonNull(produced, "A split mapper may not return a null event.");
-            outputs.add(new GenericEventMessage(
+        List<EventMessage> produced = new ArrayList<>(outputs.size());
+        for (Output<T> output : outputs) {
+            Object payload = output.mapper().apply(typedPayload, context.processingContext());
+            requireNonNull(payload, "A split output mapper may not return null. A split emits every declared output.");
+            produced.add(new GenericEventMessage(
                     message.identifier(),
-                    produced.type(),
-                    produced.payload(),
+                    output.type(),
+                    payload,
                     message.metadata(),
                     message.timestamp()
             ));
         }
-        return MessageStream.fromIterable(outputs);
+        return MessageStream.fromIterable(produced);
     }
 
     @Override
@@ -108,9 +123,10 @@ final class SplitEventTransformation<T> implements EventTransformation {
     }
 
     /**
-     * The declared type names of the events this split produces, used to widen a type-filtering read.
+     * The type names of the events this split produces, derived from the declared outputs and used to widen a
+     * type-filtering read back to the {@code source}.
      *
-     * @return the declared {@code to} type names
+     * @return the produced {@code to} type names
      */
     Set<QualifiedName> declaredToTypes() {
         return declaredToTypes;

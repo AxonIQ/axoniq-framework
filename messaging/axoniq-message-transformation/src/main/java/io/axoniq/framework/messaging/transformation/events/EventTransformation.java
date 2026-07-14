@@ -29,6 +29,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -59,9 +60,10 @@ import static java.util.Objects.requireNonNull;
  * </ul>
  * A pure rename is built with {@link #rename(MessageType, MessageType)}: it leaves the payload unchanged and, unlike
  * the mapping paths, may change the {@link QualifiedName} rather than only the version. A 1:N split is built with
- * {@link #split(MessageType)}: a matched event is replaced by the several events its mapper produces, delivered in
- * order at the input's stream position. A drop is built with {@link #drop(MessageType)}: matched events are
- * removed from the read stream while their stream position is still advanced.
+ * {@link #split(MessageType, Class)}: a matched event is replaced by the declared outputs, each pairing a produced
+ * identity with the mapper deriving its payload, delivered in declaration order at the input's stream position. A
+ * drop is built with {@link #drop(MessageType)}: matched events are removed from the read stream while their stream
+ * position is still advanced.
  * <pre>{@code
  * // Concrete mapping: rewrite a single, known source type.
  * EventTransformation.from(new MessageType("com.example.CourseCreated", "1.0.0"))
@@ -78,15 +80,13 @@ import static java.util.Objects.requireNonNull;
  * EventTransformation.rename(new MessageType("com.example.CourseCreated", "1.0.0"),
  *                            new MessageType("com.example.CourseRegistered", "1.0.0"));
  *
- * // Split: replace one event with several, declaring the produced types so reads stay type-filtered.
- * EventTransformation.split(new MessageType("com.example.StudentEnrolledAndCourseUpdated", "1.0.0"))
- *                    .declaringToTypes(new QualifiedName("com.example.StudentEnrolled"),
- *                                      new QualifiedName("com.example.CourseCapacityUpdated"))
- *                    .transform(Combined.class, (payload, context) -> List.of(
- *                            TransformedEvent.of(new MessageType("com.example.StudentEnrolled", "1.0.0"),
- *                                                payload.enrollment()),
- *                            TransformedEvent.of(new MessageType("com.example.CourseCapacityUpdated", "1.0.0"),
- *                                                payload.capacity())));
+ * // Split: replace one event with several, pairing each produced identity with its payload mapper.
+ * EventTransformation.split(new MessageType("com.example.StudentEnrolledAndCourseUpdated", "1.0.0"), Combined.class)
+ *                    .producing(new MessageType("com.example.StudentEnrolled", "1.0.0"),
+ *                               payload -> payload.enrollment())
+ *                    .producing(new MessageType("com.example.CourseCapacityUpdated", "1.0.0"),
+ *                               payload -> payload.capacity())
+ *                    .build();
  *
  * // Drop: remove matched events from the read stream.
  * EventTransformation.drop(new MessageType("com.example.CourseCreated", "1.0.0"));
@@ -163,16 +163,34 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
     }
 
     /**
-     * Begin a 1:N split of events matching {@code source} by exact equality. Declare the type names of the events
-     * the split produces via {@link SplitStep#declaringToTypes(QualifiedName...)}, then supply the split mapper with
-     * {@code transform(...)}.
+     * Begin a 1:N split of events matching {@code source} by exact equality. The stored payload is converted to
+     * {@code inputType} once, then each output declared via {@link SplitStep#producing(MessageType, Function)} is
+     * derived from that converted payload. Finish with {@link SplitStep#build()}.
      *
-     * @param source the {@code from} identity to split
-     * @return a builder awaiting {@code declaringToTypes(...)}
+     * @param <T>       input payload type
+     * @param source    the {@code from} identity to split
+     * @param inputType the type the stored payload is converted to before the output mappers are invoked
+     * @return a builder awaiting one or more {@code producing(...)} declarations
      */
-    static SplitStep split(MessageType source) {
+    static <T> SplitStep<T> split(MessageType source, Class<T> inputType) {
         requireNonNull(source, SOURCE_NOT_NULL);
-        return new SplitStep(source);
+        requireNonNull(inputType, "inputType may not be null");
+        return new SplitStep<>(source, TypeReference.fromClass(inputType));
+    }
+
+    /**
+     * Generic-type overload of {@link #split(MessageType, Class)}. Use this when {@code inputType} carries type
+     * parameters (e.g. {@code Map<String, Object>}, {@code List<Foo>}).
+     *
+     * @param <T>       input payload type
+     * @param source    the {@code from} identity to split
+     * @param inputType the {@link TypeReference} the stored payload is converted to
+     * @return a builder awaiting one or more {@code producing(...)} declarations
+     */
+    static <T> SplitStep<T> split(MessageType source, TypeReference<T> inputType) {
+        requireNonNull(source, SOURCE_NOT_NULL);
+        requireNonNull(inputType, "inputType may not be null");
+        return new SplitStep<>(source, inputType);
     }
 
     /**
@@ -247,119 +265,80 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
     }
 
     /**
-     * Continuation of {@link #split(MessageType)}. Declares the type names of the events the split produces before
-     * the split mapper is supplied.
+     * Continuation of {@link #split(MessageType, Class)} / {@link #split(MessageType, TypeReference)}. Pairs each
+     * produced event's {@link MessageType} with the mapper deriving its payload, so a split is declared as several
+     * 1:1 output declarations sharing one {@code from}.
+     * <p>
+     * The split emits exactly the declared outputs, in declaration order, every time the {@code source} is read. The
+     * produced identities are known at registration time, so a read filtered to one of them is widened back to the
+     * {@code source} and an entity sourced from a produced type observes the split. To remove an event instead of
+     * splitting it, use {@link EventTransformation#drop(MessageType)}.
+     * <p>
+     * Unlike the single-output forms, which complete at their mapper ({@code from(...).to(...).transform(...)}) or
+     * are supplied whole ({@link EventTransformation#rename(MessageType, MessageType)},
+     * {@link EventTransformation#drop(MessageType)}), a split accumulates several outputs and is therefore finished
+     * with an explicit {@link #build()}.
+     *
+     * @param <T> input payload type shared by all output mappers
      */
-    final class SplitStep {
+    final class SplitStep<T> {
+
+        private static final String PRODUCED_TYPE_NOT_NULL = "producedType may not be null";
+        private static final String OUTPUT_MAPPER_NOT_NULL = "outputMapper may not be null";
 
         private final MessageType source;
+        private final TypeReference<T> inputType;
+        private final List<SplitEventTransformation.Output<T>> outputs = new ArrayList<>();
 
-        private SplitStep(MessageType source) {
+        private SplitStep(MessageType source, TypeReference<T> inputType) {
             this.source = source;
+            this.inputType = inputType;
         }
 
         /**
-         * Declare the type names of the events this split produces. The mapper produces their identities at read
-         * time, so they cannot be inferred. Declaring them lets a read filtered to one of those types still fetch the
-         * {@code source} type, so an aggregate sourced from a produced type observes the split. Declaring an
-         * incomplete set means a read for an omitted type is not widened to the source, leaving an entity without
-         * events it expects.
+         * Declare one event this split produces, pairing its identity with the mapper deriving its payload from the
+         * converted input payload. Outputs are emitted in declaration order. Declaring the same {@link MessageType}
+         * more than once is allowed and emits one event per declaration.
          *
-         * @param declaredToTypes the type names of the events the split produces, at least one is required
-         * @return a builder awaiting {@code transform(...)}
-         * @throws IllegalArgumentException if {@code declaredToTypes} is empty
+         * @param producedType the produced event's identity
+         * @param outputMapper maps the input payload to the produced event's payload
+         * @return this builder, for further {@code producing(...)} declarations or {@link #build()}
          */
-        public SplitTransformStep declaringToTypes(QualifiedName... declaredToTypes) {
-            requireNonNull(declaredToTypes, "declaredToTypes may not be null");
-            Set<QualifiedName> declared = LinkedHashSet.newLinkedHashSet(declaredToTypes.length);
-            for (QualifiedName declaredType : declaredToTypes) {
-                declared.add(requireNonNull(declaredType, "declaredToTypes element may not be null"));
+        public SplitStep<T> producing(MessageType producedType, Function<T, ?> outputMapper) {
+            requireNonNull(producedType, PRODUCED_TYPE_NOT_NULL);
+            requireNonNull(outputMapper, OUTPUT_MAPPER_NOT_NULL);
+            return producing(producedType, (payload, context) -> outputMapper.apply(payload));
+        }
+
+        /**
+         * Context-aware variant of {@link #producing(MessageType, Function)}, for outputs that also need the
+         * {@link ProcessingContext}. The context may be {@code null} on read paths that supply none.
+         *
+         * @param producedType the produced event's identity
+         * @param outputMapper maps the input payload and processing context to the produced event's payload
+         * @return this builder, for further {@code producing(...)} declarations or {@link #build()}
+         */
+        public SplitStep<T> producing(MessageType producedType,
+                                      BiFunction<T, @Nullable ProcessingContext, ?> outputMapper) {
+            requireNonNull(producedType, PRODUCED_TYPE_NOT_NULL);
+            requireNonNull(outputMapper, OUTPUT_MAPPER_NOT_NULL);
+            outputs.add(new SplitEventTransformation.Output<>(producedType, outputMapper));
+            return this;
+        }
+
+        /**
+         * Complete the split.
+         *
+         * @return the resulting {@link EventTransformation}
+         * @throws IllegalArgumentException if no output was declared via {@code producing(...)}
+         */
+        public EventTransformation build() {
+            if (outputs.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "A split requires at least one producing(...) declaration. "
+                                + "Use drop(...) to remove events from the read stream.");
             }
-            if (declared.isEmpty()) {
-                throw new IllegalArgumentException("declaringToTypes(...) requires at least one qualified name.");
-            }
-            return new SplitTransformStep(source, declared);
-        }
-    }
-
-    /** Continuation of {@code split(...).declaringToTypes(...)}. Supplies the split mapper. */
-    final class SplitTransformStep {
-
-        private static final String INPUT_TYPE_NOT_NULL = "inputType may not be null";
-        private static final String SPLIT_MAPPER_NOT_NULL = "splitMapper may not be null";
-
-        private final MessageType source;
-        private final Set<QualifiedName> declaredToTypes;
-
-        private SplitTransformStep(MessageType source, Set<QualifiedName> declaredToTypes) {
-            this.source = source;
-            this.declaredToTypes = declaredToTypes;
-        }
-
-        /**
-         * Supply the splitting behavior for a non-generic input type. Returning an empty list removes the event.
-         * Prefer {@link EventTransformation#drop(MessageType)} for that, as it converts no payload.
-         *
-         * @param <T>         input payload type
-         * @param inputType   the type the stored payload is converted to before invocation
-         * @param splitMapper maps the input payload and processing context to the events the split produces, in order
-         * @return the resulting {@link EventTransformation}
-         */
-        public <T> EventTransformation transform(
-                Class<T> inputType,
-                BiFunction<T, @Nullable ProcessingContext, List<TransformedEvent>> splitMapper) {
-            requireNonNull(inputType, INPUT_TYPE_NOT_NULL);
-            requireNonNull(splitMapper, SPLIT_MAPPER_NOT_NULL);
-            return new SplitEventTransformation<>(source, declaredToTypes, TypeReference.fromClass(inputType),
-                                                  splitMapper);
-        }
-
-        /**
-         * Context-free variant of {@link #transform(Class, BiFunction)} for a non-generic input type, for splits that
-         * derive the events they produce purely from the input payload.
-         *
-         * @param <T>         input payload type
-         * @param inputType   the type the stored payload is converted to before invocation
-         * @param splitMapper maps the input payload to the events the split produces, in order
-         * @return the resulting {@link EventTransformation}
-         */
-        public <T> EventTransformation transform(Class<T> inputType,
-                                                 Function<T, List<TransformedEvent>> splitMapper) {
-            requireNonNull(inputType, INPUT_TYPE_NOT_NULL);
-            requireNonNull(splitMapper, SPLIT_MAPPER_NOT_NULL);
-            return transform(inputType, (payload, context) -> splitMapper.apply(payload));
-        }
-
-        /**
-         * Generic-type overload of {@link #transform(Class, BiFunction)}. Use this when {@code inputType} carries
-         * type parameters (e.g. {@code Map<String, Object>}, {@code List<Foo>}).
-         *
-         * @param <T>         input payload type
-         * @param inputType   the {@link TypeReference} the stored payload is converted to
-         * @param splitMapper maps the input payload and processing context to the events the split produces, in order
-         * @return the resulting {@link EventTransformation}
-         */
-        public <T> EventTransformation transform(
-                TypeReference<T> inputType,
-                BiFunction<T, @Nullable ProcessingContext, List<TransformedEvent>> splitMapper) {
-            requireNonNull(inputType, INPUT_TYPE_NOT_NULL);
-            requireNonNull(splitMapper, SPLIT_MAPPER_NOT_NULL);
-            return new SplitEventTransformation<>(source, declaredToTypes, inputType, splitMapper);
-        }
-
-        /**
-         * Context-free variant of {@link #transform(TypeReference, BiFunction)} for a generic input type.
-         *
-         * @param <T>         input payload type
-         * @param inputType   the {@link TypeReference} the stored payload is converted to
-         * @param splitMapper maps the input payload to the events the split produces, in order
-         * @return the resulting {@link EventTransformation}
-         */
-        public <T> EventTransformation transform(TypeReference<T> inputType,
-                                                 Function<T, List<TransformedEvent>> splitMapper) {
-            requireNonNull(inputType, INPUT_TYPE_NOT_NULL);
-            requireNonNull(splitMapper, SPLIT_MAPPER_NOT_NULL);
-            return transform(inputType, (payload, context) -> splitMapper.apply(payload));
+            return new SplitEventTransformation<>(source, inputType, outputs);
         }
     }
 

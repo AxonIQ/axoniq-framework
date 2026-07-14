@@ -37,7 +37,7 @@ import static java.util.Objects.requireNonNull;
  * @param type     the declared type, preserving any generic parameters
  * @param rawClass the raw class of {@code type}
  * @author Laura Devriendt
- * @since 5.2.1
+ * @since 5.3.0
  */
 @Internal
 record DeclaredInputType<T>(Type type, Class<T> rawClass) {
@@ -61,7 +61,6 @@ record DeclaredInputType<T>(Type type, Class<T> rawClass) {
      * @param message the message whose payload to resolve
      * @param context the per-message {@link TransformationContext}, supplying the converter
      * @return the payload typed as {@code T}
-     *
      * @throws IllegalStateException if the converter resolves the stored payload to {@code null}
      */
     T resolvePayload(EventMessage message, TransformationContext context) {

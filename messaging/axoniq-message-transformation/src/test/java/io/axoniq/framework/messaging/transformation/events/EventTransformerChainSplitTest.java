@@ -26,6 +26,8 @@ import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
@@ -34,9 +36,10 @@ import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.alwaysEmptyMessageTypeResolver;
 import static io.axoniq.framework.messaging.transformation.events.EventStreamTestUtils.collectEntries;
@@ -49,10 +52,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Behavior of the {@code EventTransformation.split(source)} factory: a stored event matching {@code source} is
- * replaced in the read stream by the ordered replacement events its mapper produces. Every other event passes
- * through untouched. All replacements share the input event's stream position, and each re-enters the chain, so a
- * later transformation still applies to it.
+ * Behavior of the {@code EventTransformation.split(source, inputType)} factory: a stored event matching
+ * {@code source} is replaced in the read stream by its declared outputs, each pairing a produced identity with the
+ * mapper deriving its payload, emitted in declaration order. Every other event passes through untouched. All
+ * replacements share the input event's stream position, and each re-enters the chain, so a later transformation
+ * still applies to it.
  */
 final class EventTransformerChainSplitTest {
 
@@ -84,13 +88,11 @@ final class EventTransformerChainSplitTest {
 
     /** A split of the combined event into an enrollment followed by a capacity change, in that order. */
     private static EventTransformation studentEnrolledSplit() {
-        return EventTransformation.split(COMBINED)
-                                  .declaringToTypes(STUDENT_ENROLLED.qualifiedName(),
-                                                    COURSE_CAPACITY_UPDATED.qualifiedName())
-                                  .transform(Combined.class, combined -> List.of(
-                                          TransformedEvent.of(STUDENT_ENROLLED, new Enrollment(combined.student())),
-                                          TransformedEvent.of(COURSE_CAPACITY_UPDATED,
-                                                              new CapacityChange(combined.capacity()))));
+        return EventTransformation.split(COMBINED, Combined.class)
+                                  .producing(STUDENT_ENROLLED, combined -> new Enrollment(combined.student()))
+                                  .producing(COURSE_CAPACITY_UPDATED,
+                                             combined -> new CapacityChange(combined.capacity()))
+                                  .build();
     }
 
     @Nested
@@ -99,41 +101,65 @@ final class EventTransformerChainSplitTest {
         @Test
         void splitRejectsNullSource() {
             //noinspection DataFlowIssue
-            assertThatThrownBy(() -> EventTransformation.split(null))
+            assertThatThrownBy(() -> EventTransformation.split(null, Combined.class))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("source");
         }
 
         @Test
-        void splitRejectsNullMapper() {
-            EventTransformation.SplitTransformStep step =
-                    EventTransformation.split(COMBINED).declaringToTypes(STUDENT_ENROLLED.qualifiedName());
-
+        void splitRejectsNullInputType() {
             //noinspection DataFlowIssue
-            assertThatThrownBy(() -> step.transform(
-                    Combined.class, (java.util.function.Function<Combined, List<TransformedEvent>>) null))
+            assertThatThrownBy(() -> EventTransformation.split(COMBINED, (Class<Combined>) null))
                     .isInstanceOf(NullPointerException.class)
-                    .hasMessageContaining("splitMapper");
+                    .hasMessageContaining("inputType");
         }
 
         @Test
-        void declaringToTypesRejectsAnEmptyList() {
-            EventTransformation.SplitStep step = EventTransformation.split(COMBINED);
+        void splitRejectsNullTypeReferenceInputType() {
+            //noinspection DataFlowIssue
+            assertThatThrownBy(() -> EventTransformation.split(COMBINED, (TypeReference<Combined>) null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("inputType");
+        }
 
-            assertThatThrownBy(step::declaringToTypes)
+        @Test
+        void producingRejectsANullProducedType() {
+            EventTransformation.SplitStep<Combined> step = EventTransformation.split(COMBINED, Combined.class);
+
+            //noinspection DataFlowIssue
+            assertThatThrownBy(() -> step.producing(null, combined -> new Enrollment(combined.student())))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("producedType");
+        }
+
+        @Test
+        void producingRejectsANullOutputMapper() {
+            EventTransformation.SplitStep<Combined> step = EventTransformation.split(COMBINED, Combined.class);
+
+            //noinspection DataFlowIssue
+            assertThatThrownBy(() -> step.producing(STUDENT_ENROLLED, (Function<Combined, ?>) null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("outputMapper");
+        }
+
+        @Test
+        void producingRejectsANullContextAwareOutputMapper() {
+            EventTransformation.SplitStep<Combined> step = EventTransformation.split(COMBINED, Combined.class);
+
+            //noinspection DataFlowIssue
+            assertThatThrownBy(() -> step.producing(
+                    STUDENT_ENROLLED, (BiFunction<Combined, ProcessingContext, ?>) null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("outputMapper");
+        }
+
+        @Test
+        void buildRequiresAtLeastOneProducedEvent() {
+            EventTransformation.SplitStep<Combined> step = EventTransformation.split(COMBINED, Combined.class);
+
+            assertThatThrownBy(step::build)
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("at least one");
-        }
-
-        @Test
-        void declaringToTypesRejectsANullElement() {
-            EventTransformation.SplitStep step = EventTransformation.split(COMBINED);
-            QualifiedName enrolledName = STUDENT_ENROLLED.qualifiedName();
-
-            //noinspection DataFlowIssue
-            assertThatThrownBy(() -> step.declaringToTypes(enrolledName, null))
-                    .isInstanceOf(NullPointerException.class)
-                    .hasMessageContaining("declaredToTypes element");
         }
     }
 
@@ -161,6 +187,28 @@ final class EventTransformerChainSplitTest {
             assertThat(outputs.get(0).payload()).isEqualTo(new Enrollment("alice"));
             assertThat(outputs.get(1).type()).isEqualTo(COURSE_CAPACITY_UPDATED);
             assertThat(outputs.get(1).payload()).isEqualTo(new CapacityChange(30));
+        }
+
+        @Test
+        void aSplitWithASingleDeclaredOutputEmitsThatOneEvent() {
+            // given a split declaring exactly one output
+            EventTransformation singleOutputSplit =
+                    EventTransformation.split(COMBINED, Combined.class)
+                                       .producing(STUDENT_ENROLLED, combined -> new Enrollment(combined.student()))
+                                       .build();
+            EventTransformerChain chain = EventTransformerChain.builder().register(singleOutputSplit).build();
+            EventMessage stored = eventOf(COMBINED, new Combined("peter", 6));
+
+            // when the chain reads the stream
+            List<EventMessage> outputs = collectMessages(chain.transform(
+                    MessageStream.fromIterable(List.of(stored)),
+                    null, neverInvokedConverter(), alwaysEmptyMessageTypeResolver()));
+
+            // then exactly the single declared event appears in place of the source
+            assertThat(outputs).singleElement().satisfies(output -> {
+                assertThat(output.type()).isEqualTo(STUDENT_ENROLLED);
+                assertThat(output.payload()).isEqualTo(new Enrollment("peter"));
+            });
         }
 
         @Test
@@ -200,24 +248,6 @@ final class EventTransformerChainSplitTest {
                 assertThat(output).isSameAs(unrelated);
                 assertThat(output.type()).isEqualTo(UNRELATED);
             });
-        }
-
-        @Test
-        void anEmptyReplacementListDropsTheEvent() {
-            // given a split whose mapper returns no replacements
-            EventTransformation emptySplit = EventTransformation.split(COMBINED)
-                                                                .declaringToTypes(STUDENT_ENROLLED.qualifiedName())
-                                                                .transform(Combined.class, combined -> List.of());
-            EventTransformerChain chain = EventTransformerChain.builder().register(emptySplit).build();
-            EventMessage stored = eventOf(COMBINED, new Combined("carol", 0));
-
-            // when the chain reads the stream
-            List<EventMessage> outputs = collectMessages(chain.transform(
-                    MessageStream.fromIterable(List.of(stored)),
-                    null, neverInvokedConverter(), alwaysEmptyMessageTypeResolver()));
-
-            // then nothing reaches handlers, as with a drop
-            assertThat(outputs).isEmpty();
         }
 
         @Test
@@ -311,14 +341,12 @@ final class EventTransformerChainSplitTest {
             EventTransformation bumpCombined = EventTransformation.from(COMBINED)
                                                                   .to(COMBINED_V2)
                                                                   .transform(Combined.class, combined -> combined);
-            EventTransformation splitV2 = EventTransformation.split(COMBINED_V2)
-                                                             .declaringToTypes(STUDENT_ENROLLED.qualifiedName(),
-                                                                               COURSE_CAPACITY_UPDATED.qualifiedName())
-                                                             .transform(Combined.class, combined -> List.of(
-                                                                     TransformedEvent.of(STUDENT_ENROLLED,
-                                                                                         new Enrollment(combined.student())),
-                                                                     TransformedEvent.of(COURSE_CAPACITY_UPDATED,
-                                                                                         new CapacityChange(combined.capacity()))));
+            EventTransformation splitV2 = EventTransformation.split(COMBINED_V2, Combined.class)
+                                                             .producing(STUDENT_ENROLLED,
+                                                                        combined -> new Enrollment(combined.student()))
+                                                             .producing(COURSE_CAPACITY_UPDATED,
+                                                                        combined -> new CapacityChange(combined.capacity()))
+                                                             .build();
             EventTransformerChain chain = EventTransformerChain.builder()
                                                                .register(bumpCombined)
                                                                .register(splitV2)
@@ -400,13 +428,12 @@ final class EventTransformerChainSplitTest {
         @Test
         void aProducedEventCanItselfBeSplit() {
             // given the split, then a second split registered on one of its produced types
-            EventTransformation splitEnrolled = EventTransformation.split(STUDENT_ENROLLED)
-                                                                   .declaringToTypes(STUDENT_NAME_RECORDED.qualifiedName(),
-                                                                                     STUDENT_CONTACT_ADDED.qualifiedName())
-                                                                   .transform(Enrollment.class, enrollment -> List.of(
-                                                                           TransformedEvent.of(STUDENT_NAME_RECORDED, enrollment),
-                                                                           TransformedEvent.of(STUDENT_CONTACT_ADDED,
-                                                                                               "contact-" + enrollment.student())));
+            EventTransformation splitEnrolled = EventTransformation.split(STUDENT_ENROLLED, Enrollment.class)
+                                                                   .producing(STUDENT_NAME_RECORDED,
+                                                                              enrollment -> enrollment)
+                                                                   .producing(STUDENT_CONTACT_ADDED,
+                                                                              enrollment -> "contact-" + enrollment.student())
+                                                                   .build();
             EventTransformerChain chain = EventTransformerChain.builder()
                                                                .register(studentEnrolledSplit())
                                                                .register(splitEnrolled)
@@ -525,14 +552,12 @@ final class EventTransformerChainSplitTest {
             // given a split declaring a parameterized input type via TypeReference, and a stored raw String payload
             TypeReference<Map<String, Object>> mapType = new TypeReference<>() {
             };
-            EventTransformation split = EventTransformation.split(COMBINED)
-                                                           .declaringToTypes(STUDENT_ENROLLED.qualifiedName(),
-                                                                             COURSE_CAPACITY_UPDATED.qualifiedName())
-                                                           .transform(mapType, map -> List.of(
-                                                                   TransformedEvent.of(STUDENT_ENROLLED,
-                                                                                       new Enrollment((String) map.get("student"))),
-                                                                   TransformedEvent.of(COURSE_CAPACITY_UPDATED,
-                                                                                       new CapacityChange(((Number) map.get("capacity")).intValue()))));
+            EventTransformation split = EventTransformation.split(COMBINED, mapType)
+                                                           .producing(STUDENT_ENROLLED,
+                                                                      map -> new Enrollment((String) map.get("student")))
+                                                           .producing(COURSE_CAPACITY_UPDATED,
+                                                                      map -> new CapacityChange(((Number) map.get("capacity")).intValue()))
+                                                           .build();
             EventTransformerChain chain = EventTransformerChain.builder().register(split).build();
             EventMessage stored = eventOf(COMBINED, "raw-string-payload");
             EventStreamTestUtils.RecordingMessageConverter<Map<String, Object>> converter =
@@ -567,41 +592,82 @@ final class EventTransformerChainSplitTest {
     }
 
     @Nested
-    final class MapperResultValidation {
+    final class OutputMapperValidation {
 
         @Test
-        void aNullMapperResultIsRejected() {
-            // given a split whose mapper returns null
-            EventTransformation split = EventTransformation.split(COMBINED)
-                                                           .declaringToTypes(STUDENT_ENROLLED.qualifiedName())
-                                                           .transform(Combined.class, combined -> null);
+        void aNullOutputPayloadIsRejected() {
+            // given a split whose second output mapper returns null: a split emits every declared output, so a
+            // missing payload is a configuration error rather than a conditional omission
+            EventTransformation split = EventTransformation.split(COMBINED, Combined.class)
+                                                           .producing(STUDENT_ENROLLED,
+                                                                      combined -> new Enrollment(combined.student()))
+                                                           .producing(COURSE_CAPACITY_UPDATED, combined -> null)
+                                                           .build();
             TransformationContext context = new TransformationContext(
                     Context.empty(), null, neverInvokedConverter(), neverInvokedMessageTypeResolver());
             EventMessage stored = eventOf(COMBINED, new Combined("mia", 1));
 
-            // when the split transforms a matched event / then the null result is rejected
+            // when the split transforms a matched event / then the null output payload is rejected
             assertThatThrownBy(() -> split.transform(stored, context))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("null");
         }
 
         @Test
-        void aNullEventInTheResultIsRejected() {
-            // given a split whose mapper returns a list containing a null element
-            EventTransformation split = EventTransformation.split(COMBINED)
-                                                           .declaringToTypes(STUDENT_ENROLLED.qualifiedName())
-                                                           .transform(Combined.class, combined -> Arrays.asList(
-                                                                   TransformedEvent.of(STUDENT_ENROLLED,
-                                                                                       new Enrollment(combined.student())),
-                                                                   null));
+        void theSameProducedTypeMayBeDeclaredTwice() {
+            // given a split declaring the enrolled type twice with distinct mappers
+            EventTransformation split = EventTransformation.split(COMBINED, Combined.class)
+                                                           .producing(STUDENT_ENROLLED,
+                                                                      combined -> new Enrollment(combined.student()))
+                                                           .producing(STUDENT_ENROLLED,
+                                                                      combined -> new Enrollment(combined.student() + "-copy"))
+                                                           .build();
             TransformationContext context = new TransformationContext(
                     Context.empty(), null, neverInvokedConverter(), neverInvokedMessageTypeResolver());
-            EventMessage stored = eventOf(COMBINED, new Combined("noah", 2));
 
-            // when the split transforms a matched event / then the null element is rejected
-            assertThatThrownBy(() -> split.transform(stored, context))
-                    .isInstanceOf(NullPointerException.class)
-                    .hasMessageContaining("null");
+            // when the split transforms a matched event
+            List<EventMessage> replacements = collectMessages(
+                    split.transform(eventOf(COMBINED, new Combined("noah", 2)), context));
+
+            // then one event per declaration is emitted, in declaration order
+            assertThat(replacements).extracting(EventMessage::payload)
+                                    .containsExactly(new Enrollment("noah"), new Enrollment("noah-copy"));
+        }
+    }
+
+    @Nested
+    final class ContextAwareOutputs {
+
+        @Test
+        void aContextAwareOutputMapperReceivesTheProcessingContext() {
+            // given a split whose output mapper branches on whether a ProcessingContext was supplied
+            EventTransformation split =
+                    EventTransformation.split(COMBINED, Combined.class)
+                                       .producing(STUDENT_ENROLLED, (combined, context) ->
+                                               new Enrollment(context == null ? "no-context" : combined.student()))
+                                       .build();
+            EventMessage stored = eventOf(COMBINED, new Combined("olivia", 3));
+
+            // when the split transforms a matched event on the entity-load path, which supplies a context
+            TransformationContext withContext = new TransformationContext(
+                    Context.empty(), new StubProcessingContext(),
+                    neverInvokedConverter(), neverInvokedMessageTypeResolver());
+            List<EventMessage> withContextOutputs = collectMessages(split.transform(stored, withContext));
+
+            // then the mapper observed the non-null context and used the payload
+            assertThat(withContextOutputs).singleElement()
+                                          .extracting(EventMessage::payload)
+                                          .isEqualTo(new Enrollment("olivia"));
+
+            // when the split transforms on a read path that supplies no context
+            TransformationContext withoutContext = new TransformationContext(
+                    Context.empty(), null, neverInvokedConverter(), neverInvokedMessageTypeResolver());
+            List<EventMessage> withoutContextOutputs = collectMessages(split.transform(stored, withoutContext));
+
+            // then the mapper observed the null context
+            assertThat(withoutContextOutputs).singleElement()
+                                             .extracting(EventMessage::payload)
+                                             .isEqualTo(new Enrollment("no-context"));
         }
     }
 

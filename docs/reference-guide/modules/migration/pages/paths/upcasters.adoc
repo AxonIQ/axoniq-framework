@@ -158,15 +158,66 @@ See xref:message-transformation:defining-transformations.adoc#_renaming_an_event
 == Splitting an event
 
 An Axon Framework 4 upcaster could turn one stored event into several, emitting multiple representations from a single input.
-Axon Framework 5 makes that a first-class `split(...)`: declare the source identity, the identities it produces, and a mapper returning the replacement events.
+Axon Framework 5 makes that a first-class `split(...)`, pairing each produced identity with the mapper deriving its payload.
+The same split expressed in both styles:
+
+[tabs]
+====
+Axon Framework 4::
++
+--
+An `EventMultiUpcaster` matches the stored type and emits one representation per produced event, rewriting the serialized payload directly:
+
+[source,java]
+----
+import com.fasterxml.jackson.databind.JsonNode;
+import org.axonframework.serialization.SimpleSerializedType;
+import org.axonframework.serialization.upcasting.event.EventMultiUpcaster;
+import org.axonframework.serialization.upcasting.event.IntermediateEventRepresentation;
+
+import java.util.stream.Stream;
+
+public class CourseListedWithSeatsUpcaster extends EventMultiUpcaster {
+
+    private static final SimpleSerializedType FROM =
+            new SimpleSerializedType("coursecatalog.CourseListedWithSeats", "1.0.0");
+
+    @Override
+    protected boolean canUpcast(IntermediateEventRepresentation representation) {          // <1>
+        return representation.getType().equals(FROM);
+    }
+
+    @Override
+    protected Stream<IntermediateEventRepresentation> doUpcast(IntermediateEventRepresentation representation) { // <2>
+        return Stream.of(
+                representation.upcastPayload(                                               // <3>
+                        new SimpleSerializedType("coursecatalog.CoursePublished", "1.0.0"),
+                        JsonNode.class,
+                        this::toCoursePublished),
+                representation.upcastPayload(
+                        new SimpleSerializedType("coursecatalog.CourseCapacityChanged", "1.0.0"),
+                        JsonNode.class,
+                        this::toCourseCapacityChanged));
+    }
+
+    // Rewrite the stored JSON into each produced shape.
+    private JsonNode toCoursePublished(JsonNode listing) { return listing; }
+    private JsonNode toCourseCapacityChanged(JsonNode listing) { return listing; }
+}
+----
+<1> `canUpcast(...)` gates the upcaster on the stored `SerializedType`, matching by name and revision.
+<2> `doUpcast(...)` returns one `IntermediateEventRepresentation` per produced event.
+<3> Each `upcastPayload(...)` rewrites the payload into a produced type, operating on the serialized representation rather than a typed object.
+--
+Axon Framework 5::
++
+--
+`split(...)` pairs each produced identity with the mapper deriving its payload from the typed input:
 
 [source,java]
 ----
 import io.axoniq.framework.messaging.transformation.events.EventTransformation;
-import io.axoniq.framework.messaging.transformation.events.TransformedEvent;
 import org.axonframework.messaging.core.MessageType;
-
-import java.util.List;
 
 public final class CourseListedWithSeatsSplit {
 
@@ -175,17 +226,12 @@ public final class CourseListedWithSeatsSplit {
     private static final MessageType CAPACITY_CHANGED = new MessageType("coursecatalog.CourseCapacityChanged", "1.0.0");
 
     public static EventTransformation build() {
-        return EventTransformation.split(FROM)                                          // <1>
-                                  .declaringToTypes(COURSE_PUBLISHED.qualifiedName(),    // <2>
-                                                    CAPACITY_CHANGED.qualifiedName())
-                                  .transform(Listing.class, CourseListedWithSeatsSplit::split); // <3>
-    }
-
-    private static List<TransformedEvent> split(Listing listing) { // <4>
-        return List.of(
-                TransformedEvent.of(COURSE_PUBLISHED, new Published(listing.courseId(), listing.name(), listing.seats())),
-                TransformedEvent.of(CAPACITY_CHANGED, new CapacityChanged(listing.courseId(), listing.seats()))
-        );
+        return EventTransformation.split(FROM, Listing.class)                              // <1>
+                                  .producing(COURSE_PUBLISHED, listing ->                   // <2>
+                                          new Published(listing.courseId(), listing.name(), listing.seats()))
+                                  .producing(CAPACITY_CHANGED, listing ->
+                                          new CapacityChanged(listing.courseId(), listing.seats()))
+                                  .build();                                                 // <3>
     }
 
     // Stored shapes read in and written out, kept next to the transformation.
@@ -194,10 +240,11 @@ public final class CourseListedWithSeatsSplit {
     record CapacityChanged(String courseId, int capacity) { }
 }
 ----
-<1> `split(from)` matches the source by exact identity, like a concrete `from(...)`.
-<2> `declaringToTypes(...)` names the identities the split produces. It is required, so a type-filtering read is widened back to the source.
-<3> `transform(...)` reads the stored payload into the typed `Listing` record before calling the mapper.
-<4> The mapper returns the replacement events in order. Each inherits the source event's stream position.
+<1> `split(from, inputType)` matches the source by exact identity, like a concrete `from(...)`, and reads the stored payload into the typed `Listing` record once.
+<2> Each `producing(identity, mapper)` declares one produced event. Outputs are emitted in declaration order, each inheriting the source event's stream position, and the declared identities widen a type-filtering read back to the source.
+<3> `build()` completes the split. At least one `producing(...)` is required.
+--
+====
 
 Each produced event re-enters the chain, so version-step transformations registered for a produced type still lift it the rest of the way.
 See xref:message-transformation:defining-transformations.adoc#_splitting_an_event[Splitting an event] for the full example.

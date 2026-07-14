@@ -61,41 +61,9 @@ The three permitted implementations are package-private `final` classes, each pr
 
 ---
 
-## `TransformedEvent` (5.3+, US3 split -- not in 5.2.0)
+## Split outputs (5.3+, US3 split -- not in 5.2.0)
 
-Output type for 1:N split mappers. **Not shipped in 5.2.0**: split/drop (US3/US4) are deferred, so this type lands with that work; the 1:1 slice has no use for it. The framework wraps each into an `EventMessage`, preserving the input event's envelope per FR-010.
-
-```java
-package io.axoniq.framework.messaging.transformation.events;
-
-import org.axonframework.messaging.core.MessageType;
-import org.jspecify.annotations.NullMarked;
-
-/**
- * One output of a 1:N split mapper. The framework wraps each into an
- * {@link org.axonframework.messaging.eventhandling.EventMessage}; all N outputs inherit
- * the input event's envelope (tracking token, sequence number, entity identity).
- *
- * @param type    identity of the replacement event
- * @param payload new payload; its runtime type drives downstream conversion
- * @author Laura Devriendt
- * @since 5.2.0
- */
-@NullMarked
-public record TransformedEvent(MessageType type, Object payload) {
-
-    /**
-     * Convenience factory.
-     *
-     * @param type    identity of the replacement event
-     * @param payload new payload
-     * @return a {@link TransformedEvent}
-     */
-    public static TransformedEvent of(MessageType type, Object payload) {
-        return new TransformedEvent(type, payload);
-    }
-}
-```
+A 1:N split declares its outputs at registration time: each `producing(MessageType, mapper)` declaration on the split builder pairs a produced identity with the mapper deriving that output's payload from the once-converted input. No public output wrapper type exists; the pairing lives in the builder declaration, held internally by the split transformation. The framework wraps each produced payload into an `EventMessage`, preserving the input event's envelope per FR-010 (tracking token, sequence number, entity identity). Outputs are emitted in declaration order, and the declared identities feed read-criteria widening.
 
 **Cross-references**: FR-003, FR-009, FR-010, US3.
 
