@@ -35,6 +35,9 @@ import org.axonframework.common.lifecycle.Phase;
 import java.io.File;
 import java.util.Arrays;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -53,6 +56,8 @@ import static org.axonframework.common.BuilderUtils.assertNonNull;
  * @since 4.0.0
  */
 public class AxonServerConnectionManager implements ConnectionManager {
+
+    private static final Logger logger = LoggerFactory.getLogger(AxonServerConnectionManager.class);
 
     private static final int DEFAULT_GRPC_PORT = 8124;
     private static final int DEFAULT_MAX_MESSAGE_SIZE = 4194304;
@@ -348,6 +353,10 @@ public class AxonServerConnectionManager implements ConnectionManager {
             validateMutualTlsConfiguration(clientCertFile, clientKeyFile);
 
             if (!axonServerConfiguration.isSslEnabled()) {
+                if (certFile != null) {
+                    logger.warn("A certificate file is configured, but SSL is not enabled. "
+                                        + "The certificate file will be ignored.");
+                }
                 return;
             }
             if (certFile == null && clientCertFile == null) {

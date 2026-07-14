@@ -399,71 +399,76 @@ class AxonServerConnectionManagerTest {
                 .isInstanceOf(AxonConfigurationException.class);
     }
 
-    @Test
-    void buildWithMutualTlsConfigurationSucceeds() {
-        AxonServerConfiguration config = AxonServerConfiguration.builder()
-                                                                .servers("localhost:" + stubServer.getPort())
-                                                                .mutualTls(tlsFile("client.crt"), tlsFile("client.key"))
-                                                                .build();
-        config.setCertFile(tlsFile("ca.crt"));
+    @Nested
+    class MutualTlsConfiguration {
 
-        AxonServerConnectionManager testSubject = AxonServerConnectionManager.builder()
-                                                                             .axonServerConfiguration(config)
-                                                                             .build();
+        @Test
+        void buildWithMutualTlsConfigurationSucceeds() {
+            AxonServerConfiguration config = AxonServerConfiguration.builder()
+                                                                    .servers("localhost:" + stubServer.getPort())
+                                                                    .mutualTls(tlsFile("client.crt"),
+                                                                               tlsFile("client.key"))
+                                                                    .build();
+            config.setCertFile(tlsFile("ca.crt"));
 
-        assertThat(testSubject).isNotNull();
-    }
+            AxonServerConnectionManager testSubject = AxonServerConnectionManager.builder()
+                                                                                 .axonServerConfiguration(config)
+                                                                                 .build();
 
-    @Test
-    void buildWithClientCertificateWithoutClientKeyThrowsAxonConfigurationException() {
-        AxonServerConfiguration config = AxonServerConfiguration.builder()
-                                                                .servers("localhost:" + stubServer.getPort())
-                                                                .ssl(tlsFile("ca.crt"))
-                                                                .build();
-        config.setClientCertFile(tlsFile("client.crt"));
+            assertThat(testSubject).isNotNull();
+        }
 
-        AxonServerConnectionManager.Builder builderTestSubject = AxonServerConnectionManager.builder()
-                                                                                            .axonServerConfiguration(config);
-        assertThatThrownBy(builderTestSubject::build)
-                .isInstanceOf(AxonConfigurationException.class)
-                .hasMessageContaining("client key file is missing");
-    }
+        @Test
+        void buildWithClientCertificateWithoutClientKeyThrowsAxonConfigurationException() {
+            AxonServerConfiguration config = AxonServerConfiguration.builder()
+                                                                    .servers("localhost:" + stubServer.getPort())
+                                                                    .ssl(tlsFile("ca.crt"))
+                                                                    .build();
+            config.setClientCertFile(tlsFile("client.crt"));
 
-    @Test
-    void buildWithClientKeyWithoutClientCertificateThrowsAxonConfigurationException() {
-        AxonServerConfiguration config = AxonServerConfiguration.builder()
-                                                                .servers("localhost:" + stubServer.getPort())
-                                                                .ssl(tlsFile("ca.crt"))
-                                                                .build();
-        config.setClientKeyFile(tlsFile("client.key"));
+            AxonServerConnectionManager.Builder builderTestSubject =
+                    AxonServerConnectionManager.builder().axonServerConfiguration(config);
+            assertThatThrownBy(builderTestSubject::build)
+                    .isInstanceOf(AxonConfigurationException.class)
+                    .hasMessageContaining("client key file is missing");
+        }
 
-        AxonServerConnectionManager.Builder builderTestSubject = AxonServerConnectionManager.builder()
-                                                                                            .axonServerConfiguration(config);
-        assertThatThrownBy(builderTestSubject::build)
-                .isInstanceOf(AxonConfigurationException.class)
-                .hasMessageContaining("client certificate file is missing");
-    }
+        @Test
+        void buildWithClientKeyWithoutClientCertificateThrowsAxonConfigurationException() {
+            AxonServerConfiguration config = AxonServerConfiguration.builder()
+                                                                    .servers("localhost:" + stubServer.getPort())
+                                                                    .ssl(tlsFile("ca.crt"))
+                                                                    .build();
+            config.setClientKeyFile(tlsFile("client.key"));
 
-    @Test
-    void buildWithClientCertificateWithoutSslEnabledThrowsAxonConfigurationException() {
-        AxonServerConfiguration config = AxonServerConfiguration.builder()
-                                                                .servers("localhost:" + stubServer.getPort())
-                                                                .build();
-        config.setClientCertFile(tlsFile("client.crt"));
-        config.setClientKeyFile(tlsFile("client.key"));
+            AxonServerConnectionManager.Builder builderTestSubject =
+                    AxonServerConnectionManager.builder().axonServerConfiguration(config);
+            assertThatThrownBy(builderTestSubject::build)
+                    .isInstanceOf(AxonConfigurationException.class)
+                    .hasMessageContaining("client certificate file is missing");
+        }
 
-        AxonServerConnectionManager.Builder builderTestSubject = AxonServerConnectionManager.builder()
-                                                                                            .axonServerConfiguration(config);
-        assertThatThrownBy(builderTestSubject::build)
-                .isInstanceOf(AxonConfigurationException.class)
-                .hasMessageContaining("SSL is not enabled");
-    }
+        @Test
+        void buildWithClientCertificateWithoutSslEnabledThrowsAxonConfigurationException() {
+            AxonServerConfiguration config = AxonServerConfiguration.builder()
+                                                                    .servers("localhost:" + stubServer.getPort())
+                                                                    .build();
+            config.setClientCertFile(tlsFile("client.crt"));
+            config.setClientKeyFile(tlsFile("client.key"));
 
-    private String tlsFile(String name) {
-        try {
-            return new File(getClass().getResource("/tls/" + name).toURI()).getAbsolutePath();
-        } catch (Exception e) {
-            throw new IllegalStateException("Could not locate test resource /tls/" + name, e);
+            AxonServerConnectionManager.Builder builderTestSubject =
+                    AxonServerConnectionManager.builder().axonServerConfiguration(config);
+            assertThatThrownBy(builderTestSubject::build)
+                    .isInstanceOf(AxonConfigurationException.class)
+                    .hasMessageContaining("SSL is not enabled");
+        }
+
+        private String tlsFile(String name) {
+            try {
+                return new File(getClass().getResource("/tls/" + name).toURI()).getAbsolutePath();
+            } catch (Exception e) {
+                throw new IllegalStateException("Could not locate test resource /tls/" + name, e);
+            }
         }
     }
 
