@@ -1,0 +1,136 @@
+[.axoniq-feature]
+= Customising Tracing
+:navtitle: Customisation
+
+The tracing surface is intentionally minimal: a single `SpanFactory` to obtain spans, a `SpanAttributesProvider` SPI to contribute attributes, plus a handful of per-component toggles.
+This page covers the common customisation tasks.
+
+== Replace the active `SpanFactory`
+
+Axon Framework uses one active `SpanFactory`.
+For local development, register `LoggingSpanFactory`:
+
+[source,java]
+----
+@Bean
+public SpanFactory spanFactory() {
+    return LoggingSpanFactory.INSTANCE;
+}
+----
+
+When spans need to be sent to multiple destinations, configure fan-out through Micrometer Tracing and the exporters
+behind it.
+
+To opt out of tracing entirely without removing the modules from the classpath, set `axon.tracing.enabled=false` (or, in plain Java, simply do not register a `SpanFactory` component).
+Tracing is off when no `SpanFactory` component exists: the tracing enhancers then leave every component undecorated, so the un-traced path carries zero overhead.
+`NoOpSpanFactory` is a null-object for tests, not an off-switch.
+
+== Disable a single decorator
+
+Each tracing module exposes a per-component toggle:
+
+[cols="<,<"]
+|===
+|Property |Effect
+
+|`axon.tracing.command-bus.enabled=false` |The `CommandBus` is not decorated.
+|`axon.tracing.event-sink.enabled=false` |`EventSink` / `EventBus` / `EventStore` are not decorated.
+|`axon.tracing.event-store.enabled=false` |The `EventStorageEngine` is not decorated; storage append transactions and their instrumented I/O are not enclosed by an Axon span.
+|`axon.tracing.event-processor.enabled=false` |Event-handling components are not decorated.
+|`axon.tracing.event-processor.disable-batch-trace=true` |The streaming-processor batch root span is suppressed; per-event handler spans still fire.
+|`axon.tracing.event-processor.distributed-in-same-trace=true` |Each event handler span continues the publisher's trace instead of the default streaming behavior, where it is parented to the batch span and linked back to the publisher. With batch tracing disabled, the default handler span starts a new trace with that publisher link.
+|`axon.tracing.event-processor.distributed-in-same-trace-time-limit=PT2M` |How recent an event must be to continue the publisher's trace when `distributed-in-same-trace` is enabled. Older events, typically replays, start their own trace linked back to the publisher.
+|`axon.tracing.query-bus.enabled=false` |The `QueryBus` (and the `QueryUpdateEmitter` operations it carries) are not decorated.
+|`axon.tracing.show-event-sourcing-handlers=true` |`@EventSourcingHandler` invocations get their own per-method handler span. Off by default: event sourcing handlers fire once per event during entity replay and would flood traces.
+|`axon.tracing.repository.enabled=false` |`Repository` instances are not decorated.
+|`axon.tracing.state-manager.enabled=false` |The `StateManager` is not decorated.
+|`axon.tracing.snapshot-store.enabled=false` |The `SnapshotStore` is not decorated.
+|`axon.tracing.command-bus-connector.enabled=false` |The distributed `CommandBusConnector` is not decorated.
+|`axon.tracing.query-bus-connector.enabled=false` |The distributed `QueryBusConnector` is not decorated.
+|`axon.tracing.thread-local-context-propagation.enabled=false` |The Micrometer worker-thread bridge is disabled. Span creation and message metadata propagation remain active.
+|===
+
+The built-in span attribute providers have their own toggles under `axon.tracing.attribute-providers.*`:
+
+[cols="<,<"]
+|===
+|Property |Effect
+
+|`axon.tracing.attribute-providers.message-id=false` |The `axoniq.message.id` attribute is not contributed.
+|`axon.tracing.attribute-providers.message-type=false` |The `axoniq.message.type` attribute is not contributed.
+|`axon.tracing.attribute-providers.metadata=false` |The `axoniq.metadata.*` attributes are not contributed.
+|`axon.tracing.attribute-providers.aggregate-identifier=false` |The `axoniq.aggregate.identifier` attribute is not contributed.
+|`axon.tracing.attribute-providers.event-tags=false` |The `axoniq.event_tag.*` attributes are not contributed (publish side and handling side).
+|===
+
+The master switch `axon.tracing.enabled=false` backs the whole autoconfiguration off: no `SpanFactory` component is registered and every component stays undecorated.
+
+== Add a custom `SpanAttributesProvider`
+
+[source,java]
+----
+public final class TenantSpanAttributesProvider implements SpanAttributesProvider {
+
+    @Override
+    public Map<String, String> provideForMessage(Message message, @Nullable ProcessingContext context) {
+        String tenant = message.metadata().get("tenant");
+        return tenant == null ? Map.of() : Map.of("axoniq.tenant", tenant);
+    }
+}
+----
+
+[source,java]
+----
+@Bean
+public SpanAttributesProvider tenantSpanAttributesProvider() {
+    return new TenantSpanAttributesProvider();
+}
+----
+
+The autoconfiguration bridges every `SpanAttributesProvider` bean into the `SpanAttributesProviderRegistry`, the single assembly point from which the `SpanFactory` receives its complete, immutable provider list at construction time.
+In plain Java, contribute a provider through the canonical registry idiom instead:
+
+[source,java]
+----
+configurer.componentRegistry(cr -> SpanAttributesProviderRegistry.register(
+        cr, config -> new TenantSpanAttributesProvider()));
+----
+
+A provider sees only messages that pass through a `Tracing*` decorator; internal-only spans (e.g. snapshot store / load, repository operations) do not trigger providers. Attributes for those are attached by the decorator itself via `Span.addAttribute(...)`.
+The same applies to attributes derived from configuration rather than from the message: the event-processor spans carry the owning processor's name (`axoniq.event-processor.name`) attached directly by the decorator.
+
+== Customise built-in attribute keys
+
+Every built-in provider takes a constructor overriding its attribute key (or, for `MetadataSpanAttributesProvider`, its prefix).
+Restoring the Axon Framework 4 keys looks like this:
+
+[source,java]
+----
+@Bean
+public MessageIdSpanAttributesProvider messageIdSpanAttributesProvider() {
+    return new MessageIdSpanAttributesProvider("axon_message_id");
+}
+
+@Bean
+public MetadataSpanAttributesProvider metadataSpanAttributesProvider() {
+    return new MetadataSpanAttributesProvider("axon_metadata_");
+}
+
+@Bean
+public AggregateIdentifierSpanAttributesProvider aggregateIdentifierSpanAttributesProvider() {
+    return new AggregateIdentifierSpanAttributesProvider("axon_aggregate_identifier");
+}
+----
+
+The default keys are the OpenTelemetry-style dotted `axoniq.*` form with `snake_case` leaf segments.
+
+== Extending tracing
+
+Beyond attribute providers, two extension points exist.
+Both target library and platform authors rather than everyday application code; for regular use, the built-in decorators and the Micrometer binding cover the framework end to end.
+
+* **Custom tracing decorators**: external modules can trace their own components with the same public `org.axonframework.messaging.tracing` API the built-in decorators use, registered through a ServiceLoader-discovered `ConfigurationEnhancer`. Each built-in decorator declares its span-name prefixes as `public static final String` constants (for example `TracingCommandBus.DISPATCH_SPAN`), which external code can reference in assertions. Consult the `SpanFactory` Javadoc and the built-in decorators for the patterns.
+* **Custom `SpanFactory` implementations**: a factory other than `MicrometerSpanFactory` or `LoggingSpanFactory` can be registered as a bean or component and takes precedence over the binding's default. When a non-Micrometer factory is active while `axoniq-tracing-micrometer` remains on the classpath, disable the worker-thread bridge with `axon.tracing.thread-local-context-propagation.enabled=false`.
+
+Tracing decorators are applied as the outermost wrapper of every decorated component, so a span covers the work of all inner decorators (interception, retries, security) and measures what the caller actually experiences.
+When registering a hand-built repository pipeline on the `StateManager`, keep any pre-applied tracing wrapper as the outermost layer; burying it under another decorator results in duplicate spans.
