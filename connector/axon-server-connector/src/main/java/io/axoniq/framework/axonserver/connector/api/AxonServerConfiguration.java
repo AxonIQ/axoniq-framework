@@ -89,6 +89,26 @@ public class AxonServerConfiguration {
     private String certFile;
 
     /**
+     * The path to the client certificate (chain) file, in PEM format, presented to the server during the TLS
+     * handshake (mutual TLS). Requires {@link #getClientKeyFile() a client key file} to be configured as well. Note
+     * the path is only used when {@link #isSslEnabled() SSL is enabled}.
+     * <p>
+     * Mutual TLS is currently only supported when connecting through Axon Server Proxy, not when connecting to Axon
+     * Server directly.
+     */
+    private String clientCertFile;
+
+    /**
+     * The path to the client's private key file, in PKCS#8 PEM format, used during the TLS handshake (mutual TLS).
+     * Requires {@link #getClientCertFile() a client certificate file} to be configured as well. Note the path is only
+     * used when {@link #isSslEnabled() SSL is enabled}.
+     * <p>
+     * Mutual TLS is currently only supported when connecting through Axon Server Proxy, not when connecting to Axon
+     * Server directly.
+     */
+    private String clientKeyFile;
+
+    /**
      * A toggle dictating whether to use TLS for the connection to Axon Server.
      */
     private boolean sslEnabled;
@@ -514,6 +534,54 @@ public class AxonServerConfiguration {
      */
     public void setCertFile(String certFile) {
         this.certFile = certFile;
+    }
+
+    /**
+     * The path to the client certificate (chain) file, in PEM format, presented to the server during the TLS
+     * handshake (mutual TLS). Note the path is only used when {@link #isSslEnabled() SSL is enabled}.
+     *
+     * @return The path to the client certificate (chain) file used for mutual TLS.
+     */
+    public String getClientCertFile() {
+        return clientCertFile;
+    }
+
+    /**
+     * Sets the path to the client certificate (chain) file, in PEM format, presented to the server during the TLS
+     * handshake (mutual TLS). Requires {@link #setClientKeyFile(String) a client key file} to be configured as well.
+     * Note the path is only used when {@link #isSslEnabled() SSL is enabled}.
+     * <p>
+     * Mutual TLS is currently only supported when connecting through Axon Server Proxy, not when connecting to Axon
+     * Server directly.
+     *
+     * @param clientCertFile The path to the client certificate (chain) file used for mutual TLS.
+     */
+    public void setClientCertFile(String clientCertFile) {
+        this.clientCertFile = clientCertFile;
+    }
+
+    /**
+     * The path to the client's private key file, in PKCS#8 PEM format, used during the TLS handshake (mutual TLS).
+     * Note the path is only used when {@link #isSslEnabled() SSL is enabled}.
+     *
+     * @return The path to the client's private key file used for mutual TLS.
+     */
+    public String getClientKeyFile() {
+        return clientKeyFile;
+    }
+
+    /**
+     * Sets the path to the client's private key file, in PKCS#8 PEM format, used during the TLS handshake (mutual
+     * TLS). Requires {@link #setClientCertFile(String) a client certificate file} to be configured as well. Note the
+     * path is only used when {@link #isSslEnabled() SSL is enabled}.
+     * <p>
+     * Mutual TLS is currently only supported when connecting through Axon Server Proxy, not when connecting to Axon
+     * Server directly.
+     *
+     * @param clientKeyFile The path to the client's private key file used for mutual TLS.
+     */
+    public void setClientKeyFile(String clientKeyFile) {
+        this.clientKeyFile = clientKeyFile;
     }
 
     /**
@@ -1490,6 +1558,13 @@ public class AxonServerConfiguration {
 
         public Builder ssl(String certFile) {
             instance.certFile = certFile;
+            instance.sslEnabled = true;
+            return this;
+        }
+
+        public Builder mutualTls(String clientCertFile, String clientKeyFile) {
+            instance.clientCertFile = clientCertFile;
+            instance.clientKeyFile = clientKeyFile;
             instance.sslEnabled = true;
             return this;
         }

@@ -41,6 +41,7 @@ import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.ReflectionUtils;
 import org.junit.jupiter.api.*;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
@@ -396,6 +397,74 @@ class AxonServerConnectionManagerTest {
         AxonServerConnectionManager.Builder builderTestSubject = AxonServerConnectionManager.builder();
         assertThatThrownBy(() -> builderTestSubject.routingServers(null))
                 .isInstanceOf(AxonConfigurationException.class);
+    }
+
+    @Test
+    void buildWithMutualTlsConfigurationSucceeds() {
+        AxonServerConfiguration config = AxonServerConfiguration.builder()
+                                                                .servers("localhost:" + stubServer.getPort())
+                                                                .mutualTls(tlsFile("client.crt"), tlsFile("client.key"))
+                                                                .build();
+        config.setCertFile(tlsFile("ca.crt"));
+
+        AxonServerConnectionManager testSubject = AxonServerConnectionManager.builder()
+                                                                             .axonServerConfiguration(config)
+                                                                             .build();
+
+        assertThat(testSubject).isNotNull();
+    }
+
+    @Test
+    void buildWithClientCertificateWithoutClientKeyThrowsAxonConfigurationException() {
+        AxonServerConfiguration config = AxonServerConfiguration.builder()
+                                                                .servers("localhost:" + stubServer.getPort())
+                                                                .ssl(tlsFile("ca.crt"))
+                                                                .build();
+        config.setClientCertFile(tlsFile("client.crt"));
+
+        AxonServerConnectionManager.Builder builderTestSubject = AxonServerConnectionManager.builder()
+                                                                                            .axonServerConfiguration(config);
+        assertThatThrownBy(builderTestSubject::build)
+                .isInstanceOf(AxonConfigurationException.class)
+                .hasMessageContaining("client");
+    }
+
+    @Test
+    void buildWithClientKeyWithoutClientCertificateThrowsAxonConfigurationException() {
+        AxonServerConfiguration config = AxonServerConfiguration.builder()
+                                                                .servers("localhost:" + stubServer.getPort())
+                                                                .ssl(tlsFile("ca.crt"))
+                                                                .build();
+        config.setClientKeyFile(tlsFile("client.key"));
+
+        AxonServerConnectionManager.Builder builderTestSubject = AxonServerConnectionManager.builder()
+                                                                                            .axonServerConfiguration(config);
+        assertThatThrownBy(builderTestSubject::build)
+                .isInstanceOf(AxonConfigurationException.class)
+                .hasMessageContaining("client");
+    }
+
+    @Test
+    void buildWithClientCertificateWithoutSslEnabledThrowsAxonConfigurationException() {
+        AxonServerConfiguration config = AxonServerConfiguration.builder()
+                                                                .servers("localhost:" + stubServer.getPort())
+                                                                .build();
+        config.setClientCertFile(tlsFile("client.crt"));
+        config.setClientKeyFile(tlsFile("client.key"));
+
+        AxonServerConnectionManager.Builder builderTestSubject = AxonServerConnectionManager.builder()
+                                                                                            .axonServerConfiguration(config);
+        assertThatThrownBy(builderTestSubject::build)
+                .isInstanceOf(AxonConfigurationException.class)
+                .hasMessageContaining("SSL is not enabled");
+    }
+
+    private String tlsFile(String name) {
+        try {
+            return new File(getClass().getResource("/tls/" + name).toURI()).getAbsolutePath();
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not locate test resource /tls/" + name, e);
+        }
     }
 
     @Test

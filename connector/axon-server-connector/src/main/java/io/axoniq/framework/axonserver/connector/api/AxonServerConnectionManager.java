@@ -26,6 +26,7 @@ import io.axoniq.axonserver.grpc.control.NodeInfo;
 import io.grpc.Channel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts;
+import io.grpc.netty.shaded.io.netty.handler.ssl.SslContextBuilder;
 import io.axoniq.framework.axonserver.connector.util.GrpcMessageSizeInterceptor;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.ObjectUtils;
@@ -291,19 +292,35 @@ public class AxonServerConnectionManager implements ConnectionManager {
                 builder.routingServers(addresses);
             }
 
+            String clientCertFile = axonServerConfiguration.getClientCertFile();
+            String clientKeyFile = axonServerConfiguration.getClientKeyFile();
+            if ((clientCertFile == null) != (clientKeyFile == null)) {
+                throw new AxonConfigurationException(
+                        "Both a client certificate file and a client key file are required for mutual TLS, "
+                                + "but only one of them was configured"
+                );
+            }
             if (axonServerConfiguration.isSslEnabled()) {
-                if (axonServerConfiguration.getCertFile() != null) {
+                if (axonServerConfiguration.getCertFile() != null || clientCertFile != null) {
                     try {
-                        File certificateFile = new File(axonServerConfiguration.getCertFile());
-                        builder.useTransportSecurity(GrpcSslContexts.forClient()
-                                                                    .trustManager(certificateFile)
-                                                                    .build());
+                        SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
+                        if (axonServerConfiguration.getCertFile() != null) {
+                            sslContextBuilder.trustManager(new File(axonServerConfiguration.getCertFile()));
+                        }
+                        if (clientCertFile != null) {
+                            sslContextBuilder.keyManager(new File(clientCertFile), new File(clientKeyFile));
+                        }
+                        builder.useTransportSecurity(sslContextBuilder.build());
                     } catch (SSLException e) {
                         throw new AxonConfigurationException("Exception configuring Transport Security", e);
                     }
                 } else {
                     builder.useTransportSecurity();
                 }
+            } else if (clientCertFile != null) {
+                throw new AxonConfigurationException(
+                        "A client certificate for mutual TLS was configured, but SSL is not enabled"
+                );
             }
 
             builder.connectTimeout(axonServerConfiguration.getConnectTimeout(), TimeUnit.MILLISECONDS)
