@@ -28,7 +28,7 @@ axon.axonserver.client-key-file=/etc/my-app/tls/client-key.pem
 
 Both `client-cert-file` and `client-key-file` must be configured together; setting only one of them fails at startup. The certificate files are read once, when the connection is set up, so the application must be restarted when its client certificate is rotated.
 
-WARNING: Mutual TLS is currently only supported when connecting through *Axon Server Proxy*, which can verify client certificates on behalf of the cluster (see the `proxy.tlsClientAuth` and `proxy.tlsTrustCerts` settings in the Axon Server Proxy reference). Axon Server itself does not yet accept client certificates for authentication. Support for mutual TLS in Axon Server is likely to be added in the future, but is not currently planned.
+WARNING: Make sure the version of Axon Server and/or Axon Server Proxy you connect to supports mutual TLS. At the time of writing, Axon Server Proxy can verify client certificates (see the `proxy.tlsClientAuth` and `proxy.tlsTrustCerts` settings in the Axon Server Proxy reference), while Axon Server does not accept them yet.
 
 === Property overview
 

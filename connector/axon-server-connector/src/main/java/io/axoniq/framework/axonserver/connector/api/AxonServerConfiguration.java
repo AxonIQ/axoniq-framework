@@ -93,8 +93,7 @@ public class AxonServerConfiguration {
      * handshake (mutual TLS). Requires {@link #getClientKeyFile() a client key file} to be configured as well. Note
      * the path is only used when {@link #isSslEnabled() SSL is enabled}.
      * <p>
-     * Mutual TLS is currently only supported when connecting through Axon Server Proxy, not when connecting to Axon
-     * Server directly.
+     * Make sure the version of Axon Server and/or Axon Server Proxy connected to supports mutual TLS.
      */
     private String clientCertFile;
 
@@ -103,8 +102,7 @@ public class AxonServerConfiguration {
      * Requires {@link #getClientCertFile() a client certificate file} to be configured as well. Note the path is only
      * used when {@link #isSslEnabled() SSL is enabled}.
      * <p>
-     * Mutual TLS is currently only supported when connecting through Axon Server Proxy, not when connecting to Axon
-     * Server directly.
+     * Make sure the version of Axon Server and/or Axon Server Proxy connected to supports mutual TLS.
      */
     private String clientKeyFile;
 
@@ -551,8 +549,7 @@ public class AxonServerConfiguration {
      * handshake (mutual TLS). Requires {@link #setClientKeyFile(String) a client key file} to be configured as well.
      * Note the path is only used when {@link #isSslEnabled() SSL is enabled}.
      * <p>
-     * Mutual TLS is currently only supported when connecting through Axon Server Proxy, not when connecting to Axon
-     * Server directly.
+     * Make sure the version of Axon Server and/or Axon Server Proxy connected to supports mutual TLS.
      *
      * @param clientCertFile The path to the client certificate (chain) file used for mutual TLS.
      */
@@ -575,8 +572,7 @@ public class AxonServerConfiguration {
      * TLS). Requires {@link #setClientCertFile(String) a client certificate file} to be configured as well. Note the
      * path is only used when {@link #isSslEnabled() SSL is enabled}.
      * <p>
-     * Mutual TLS is currently only supported when connecting through Axon Server Proxy, not when connecting to Axon
-     * Server directly.
+     * Make sure the version of Axon Server and/or Axon Server Proxy connected to supports mutual TLS.
      *
      * @param clientKeyFile The path to the client's private key file used for mutual TLS.
      */
