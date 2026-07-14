@@ -34,6 +34,7 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -78,6 +79,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
     // Services
     private final EventSink eventSink;
     private final UnitOfWorkFactory unitOfWorkFactory;
+    private final UnitOfWorkFactory bodyUnitOfWorkFactory;
     private final Clock clock;
     private final ExecutorService executorService;
     private final WorkflowScheduler timeoutScheduler;
@@ -110,6 +112,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
         this.unitOfWorkFactory = Objects.requireNonNull(
                 processingContext.component(UnitOfWorkFactory.class),
                 "Could not retrieve UoW factory");
+        this.bodyUnitOfWorkFactory = new SimpleUnitOfWorkFactory(processingContext);
         this.clock = Objects.requireNonNull(
                 processingContext.component(Clock.class),
                 "Could not retrieve Clock");
@@ -297,6 +300,17 @@ public class WorkflowContextDelegation implements WorkflowContext {
     @Nonnull
     public UnitOfWorkFactory unitOfWorkFactory() {
         return this.unitOfWorkFactory;
+    }
+
+    /**
+     * Non-transactional factory for the long-lived workflow-body wrapper unit of work; durable commits keep using
+     * {@link #unitOfWorkFactory()} via short-lived child units of work.
+     *
+     * @return the body-wrapper unit of work factory.
+     */
+    @Nonnull
+    public UnitOfWorkFactory bodyUnitOfWorkFactory() {
+        return this.bodyUnitOfWorkFactory;
     }
 
     @Nonnull
