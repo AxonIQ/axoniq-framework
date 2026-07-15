@@ -39,7 +39,7 @@ public interface TenantResolver {
      * Returns {@link TenantDescriptor} for the given {@code message}.
      *
      * @param message the {@link Message} implementation to resolve the target tenant for
-     * @param tenants the (empty) collection of tenants to resolve the target tenant from
+     * @param tenants the collection of tenants to resolve the target tenant from
      * @return the resolved {@link TenantDescriptor} based on the given {@code message}
      * @throws TenantNotResolvedException if no tenant could be resolved
      */
