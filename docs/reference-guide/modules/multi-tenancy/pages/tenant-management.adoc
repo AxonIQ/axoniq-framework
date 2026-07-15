@@ -79,7 +79,7 @@ It receives the message and the collection of known tenants, and returns the res
 [source,java]
 ----
 public void registerCustomTenantResolver(MessagingConfigurer configurer) {
-    TenantResolver<Message> resolver = (message, tenants) -> {
+    TenantResolver resolver = (message, tenants) -> {
         String tenantId = extractTenantId(message);            // <1>
         if (tenantId == null) {
             throw new TenantNotResolvedException("Could not resolve a tenant for the message");

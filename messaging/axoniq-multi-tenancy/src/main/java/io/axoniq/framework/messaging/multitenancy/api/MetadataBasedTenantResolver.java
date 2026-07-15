@@ -42,10 +42,10 @@ import static org.axonframework.common.BuilderUtils.assertNonEmpty;
  * Example usage:
  * <pre><code>
  *     // Using default metadata key "tenantId"
- *     TenantResolver&lt;Message&gt; resolver = new MetadataBasedTenantResolver();
+ *     TenantResolver resolver = new MetadataBasedTenantResolver();
  *
  *     // Using custom metadata key
- *     TenantResolver&lt;Message&gt; resolver = new MetadataBasedTenantResolver("customTenantKey");
+ *     TenantResolver resolver = new MetadataBasedTenantResolver("customTenantKey");
  * </code></pre>
  *
  * @param metadataKey the key to use when extracting the tenant identifier from message metadata, default is

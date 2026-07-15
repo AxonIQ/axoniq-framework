@@ -26,9 +26,8 @@ import java.util.Collections;
 import java.util.Optional;
 
 /**
- * Resolves the target tenant of a given {@link Message} implementation of type {@code M}.
+ * Resolves the target tenant of a given {@link Message}.
  *
- * @param <M> The {@link Message} implementation this resolver acts on.
  * @author Stefan Dragisic
  * @author Jan Galinski
  * @since 5.3.0
