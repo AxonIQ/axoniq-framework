@@ -33,6 +33,7 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.SearchScope;
 import org.axonframework.common.lifecycle.Phase;
@@ -178,14 +179,15 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
                 HandlerInterceptorRegistry.class,
                 0,
                 (config, name, delegate) -> delegate
-                        .registerCommandInterceptor(c -> new RegisterTenantDescriptorHandlerInterceptor(
-                                c.getComponent(TenantResolver.class),
-                                c.getComponent(TenantProvider.class)
-                        ))
-                        .registerQueryInterceptor(c -> new RegisterTenantDescriptorHandlerInterceptor(
-                                c.getComponent(TenantResolver.class),
-                                c.getComponent(TenantProvider.class)
-                        ))
+                        .registerCommandInterceptor(MultiTenancyConfigurationDefaults::interceptorFactory)
+                        .registerQueryInterceptor(MultiTenancyConfigurationDefaults::interceptorFactory)
+        );
+    }
+
+    private static RegisterTenantDescriptorHandlerInterceptor interceptorFactory(Configuration config) {
+        return new RegisterTenantDescriptorHandlerInterceptor(
+                config.getComponent(TenantResolver.class),
+                config.getComponent(TenantProvider.class)
         );
     }
 }

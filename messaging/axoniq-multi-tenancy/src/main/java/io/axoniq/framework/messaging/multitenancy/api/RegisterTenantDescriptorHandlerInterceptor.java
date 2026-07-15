@@ -33,7 +33,9 @@ import org.slf4j.LoggerFactory;
 import java.util.Collections;
 
 /**
- * A {@link MessageHandlerInterceptor} that registers a {@link TenantDescriptor} in the {@link ProcessingContext}
+ * A {@link MessageHandlerInterceptor} that registers a {@link TenantDescriptor} in the {@link ProcessingContext}.
+ * When the {@link TenantResolver} is unable to resolve a {@link TenantDescriptor} for the given {@link Message},
+ * the interceptor logs a warning and proceeds without registering a {@link TenantDescriptor} in the {@link ProcessingContext}.
  *
  * @param tenantResolver    the {@link TenantResolver} to resolve the {@link TenantDescriptor} from the {@link Message}
  * @param tenantDescriptors optional list of known {@link TenantDescriptor}s to resolve the {@link TenantDescriptor}
