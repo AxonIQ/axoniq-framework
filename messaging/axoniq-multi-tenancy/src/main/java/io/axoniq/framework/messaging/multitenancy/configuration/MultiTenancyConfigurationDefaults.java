@@ -24,6 +24,7 @@ import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolve
 import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerTenantConnectPredicate;
@@ -36,21 +37,21 @@ import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.SearchScope;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
-import org.axonframework.messaging.core.correlation.CorrelationDataProviderRegistry;
 import org.axonframework.messaging.core.interception.HandlerInterceptorRegistry;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled.isEnabled;
 
 /**
- * {@link ConfigurationEnhancer} registering the default multi-tenancy components.
- * <p>
- * Furthermore, it decorates the {@link CorrelationDataProviderRegistry} to propagate the tenant identifier as message
- * metadata, registers the {@link TenantComponentParameterResolverFactory} to inject tenant-scoped components into
- * message handlers, and registers the {@link TenantComponentProviderSubscriber} to subscribe every
- * {@link TenantComponentProvider} to the {@link TenantProvider} at startup.
+ * {@link ConfigurationEnhancer} registering the default multi-tenancy components:
+ * <ul>
+ *     <li>the default {@link TenantResolver}, which resolves the tenant from message metadata, unless a user registred a custom {@link TenantResolver}</li>
+ *     <li>the {@link TenantProvider} which is responsible for managing tenants and lifecycle, default to {@link AxonServerTenantProvider}</li>
+ *     <li>the {@link TenantComponentParameterResolverFactory} to inject tenant-scoped components into message handlers</li>
+ *     <li>the {@link TenantComponentProviderSubscriber} to subscribe every {@link TenantComponentProvider} to the {@link TenantProvider} at startup</li>
+ *     <li>the {@link RegisterTenantDescriptorHandlerInterceptor} which takes the resolved {@link TenantDescriptor} from the message and stores it in the {@link ProcessingContext}</li>
+ * </ul>
  *
  * @author Stefan Dragisic
  * @author Steven van Beelen
@@ -83,8 +84,6 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      */
     private static final int TENANT_COMPONENT_SUBSCRIBER_PHASE = TENANT_PROVIDER_PHASE + 10;
 
-    private static final Logger logger = LoggerFactory.getLogger(MultiTenancyConfigurationDefaults.class);
-
     @Override
     public int order() {
         return ENHANCER_ORDER;
@@ -92,7 +91,7 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
 
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
-        // TODO: see #258 - find a way that is is not user facing but only needed for our mixed-scope itests.
+        // TODO: see #258 - find a way that is not user facing but only needed for our mixed-scope itests.
         if (!isEnabled(componentRegistry)) {
             return;
         }
