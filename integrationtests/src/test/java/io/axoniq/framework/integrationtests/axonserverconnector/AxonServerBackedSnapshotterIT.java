@@ -30,8 +30,6 @@ import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.disableMultiTenancyEnhancer;
-
 /**
  * Tests the {@link org.axonframework.eventsourcing.handler.SnapshottingEntityLifecycleHandler} with an {@link AxonServerSnapshotStore}.
  *

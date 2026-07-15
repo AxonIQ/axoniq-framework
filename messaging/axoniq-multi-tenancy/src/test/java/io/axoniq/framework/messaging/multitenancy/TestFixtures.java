@@ -20,6 +20,7 @@
 package io.axoniq.framework.messaging.multitenancy;
 
 
+// TODO: should hold base shared data, like TENANT_A ... but archunit currently forbids this. If not fixed, remove before mergening to main.
 public enum TestFixtures {
     ;
 
