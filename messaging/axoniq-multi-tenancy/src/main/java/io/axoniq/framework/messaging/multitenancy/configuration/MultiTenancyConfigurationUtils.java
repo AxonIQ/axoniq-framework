@@ -40,7 +40,7 @@ public final class MultiTenancyConfigurationUtils {
 
     /**
      * To selectively enable the {@link MultiTenancyConfigurationDefaults} enhancer in a {@link ComponentRegistry}, use
-     * this record to indicate whether multi-tenancy is enabled or disabled.
+     * this enum to indicate whether multi-tenancy is enabled or disabled.
      * TODO: We need a more general approach to control this, see issue #258.
      */
     public enum MultiTenancyEnabled {
