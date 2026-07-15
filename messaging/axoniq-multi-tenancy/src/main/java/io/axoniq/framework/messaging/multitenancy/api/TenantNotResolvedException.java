@@ -32,7 +32,14 @@ import java.util.function.Supplier;
 @SuppressWarnings("java:S110") // S110: "TenantNotResolvedException" has 5 parent classes.
 public class TenantNotResolvedException extends AxonNonTransientException {
 
-
+    /**
+     * Returns a {@code Supplier} that creates a new {@code TenantNotResolvedException} with the given message and
+     * arguments, useful in lambda expressions or method references.
+     *
+     * @param message the message (template) for the exception
+     * @param args the arguments for the message template
+     * @return a {@code Supplier} that creates a new {@code TenantNotResolvedException} with the given message and arguments
+     */
     static Supplier<TenantNotResolvedException> tenantNotResolved(String message, Object... args) {
         return () -> new TenantNotResolvedException(message, args);
     }
@@ -44,7 +51,7 @@ public class TenantNotResolvedException extends AxonNonTransientException {
      * @param args    the arguments for the message template
      */
     public TenantNotResolvedException(String message, Object... args) {
-        super(message.formatted(args));
+        super(args.length > 0 ? message.formatted(args) : message);
     }
 
     /**
