@@ -52,7 +52,7 @@ public final class MultiTenancyApiUtils {
      * A {@link Function} that retrieves the {@link TenantDescriptor} from a {@link ProcessingContext}. If no
      *
      * @param processingContext the {@link ProcessingContext} to retrieve the {@link TenantDescriptor} from
-     * @return the       {@link TenantDescriptor} from the {@link ProcessingContext}
+     * @return the {@link TenantDescriptor} from the {@link ProcessingContext}
      * @throws TenantNotResolvedException if no {@link TenantDescriptor} is found in the {@link ProcessingContext}
      */
     public static TenantDescriptor getTenantDescriptor(ProcessingContext processingContext)

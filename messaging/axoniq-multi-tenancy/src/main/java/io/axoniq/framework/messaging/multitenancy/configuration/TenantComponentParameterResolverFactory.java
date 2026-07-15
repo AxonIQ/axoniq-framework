@@ -49,8 +49,7 @@ import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtil
  * For each handler parameter it looks for a registered {@link TenantComponentProvider} whose
  * {@link TenantComponentProvider#componentType() component type} fits the parameter type. When one is found, the
  * resolved parameter value is that provider's instance for the tenant of the message being handled. The tenant is
- * derived through the {@link TenantResolver}, honoring message-type-specific resolvers, and defaults to a
- * {@link MetadataBasedTenantResolver} when the registry has none configured.
+ * derived from the current {@link ProcessingContext} (see {@link io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor}).
  * <p>
  * Registering several providers (one per component type) is supported: each parameter is matched to the provider for
  * its own type. A single exact type match settles the choice, even when assignable supertype candidates exist. When the
