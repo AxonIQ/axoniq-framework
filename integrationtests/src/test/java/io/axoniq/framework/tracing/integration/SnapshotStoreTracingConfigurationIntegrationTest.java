@@ -132,7 +132,7 @@ class SnapshotStoreTracingConfigurationIntegrationTest {
                                                 EventCriteria.havingTags(Tag.of("GuestList", listId)))
                                         // afterEvents(n) triggers when eventsApplied() > n — with 0, any sourcing
                                         // that applied at least one event snapshots the entity.
-                                        .snapshotPolicy(c -> SnapshotPolicy.afterEvents(0))
+                                        .snapshotPolicy(SnapshotPolicy.afterEvents(0))
                                         .build();
         CommandHandlingModule commandHandlingModule =
                 CommandHandlingModule.named("tracing-snapshot-test")

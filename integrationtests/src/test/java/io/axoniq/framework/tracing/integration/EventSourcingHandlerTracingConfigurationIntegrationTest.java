@@ -140,7 +140,7 @@ class EventSourcingHandlerTracingConfigurationIntegrationTest {
                                                             ));
         if (showEventSourcingHandlers != null) {
             MessagingTracingSettings settings = MessagingTracingSettings.enabledByDefault()
-                                                                        .withShowEventSourcingHandlers(
+                                                                        .withEventSourcingHandlersEnabled(
                                                                                 showEventSourcingHandlers);
             configurer.componentRegistry(
                     registry -> registry.registerComponent(MessagingTracingSettings.class, c -> settings));
