@@ -40,7 +40,8 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.tenantDescriptorFrom;
+import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.tenantDescriptor;
+
 
 /**
  * {@link ParameterResolverFactory} injecting tenant-scoped components into message-handling methods.
@@ -150,7 +151,7 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
                 ));
             }
             try {
-                TenantDescriptor tenant = tenantDescriptorFrom(context);
+                TenantDescriptor tenant = tenantDescriptor(context);
                 Object component = provider.componentFor(tenant);
                 return CompletableFuture.completedFuture(component);
             } catch (RuntimeException e) {

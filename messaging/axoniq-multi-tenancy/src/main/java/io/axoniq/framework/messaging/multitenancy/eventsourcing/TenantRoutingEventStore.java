@@ -39,11 +39,14 @@ import org.jspecify.annotations.Nullable;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 
+import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.tenantDescriptorOptional;
+import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException.tenantNotResolved;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -62,22 +65,12 @@ import static java.util.Objects.requireNonNull;
  */
 public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComponent, TenantDescriptors {
 
-    /**
-     * The order in which the {@link TenantRoutingEventStore} is applied as a decorator to the {@link EventStore}.
-     * <p>
-     * Uses an order HIGHER than {@code InterceptingEventStore} (which is at {@code Integer.MIN_VALUE + 50}) to ensure
-     * multi-tenant routing is the outermost layer. Interceptors (correlation data, etc.) are applied per-tenant inside
-     * each tenant's event store segment, not on the outer multi-tenant store.
-     */
-    public static final int DECORATION_ORDER = Integer.MIN_VALUE + 75;
-
     private final Map<TenantDescriptor, EventStore> tenantSegments = new ConcurrentHashMap<>();
     private final List<BiFunction<List<? extends EventMessage>, @Nullable ProcessingContext, CompletableFuture<?>>> eventsBatchConsumers =
             new CopyOnWriteArrayList<>();
     private final Map<TenantDescriptor, Registration> subscribeRegistrations = new ConcurrentHashMap<>();
 
     private final TenantEventSegmentFactory tenantSegmentFactory;
-
     private final TenantResolver tenantResolver;
 
     /**
@@ -94,21 +87,37 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
 
     @Override
     public CompletableFuture<Void> publish(@Nullable ProcessingContext context, List<? extends EventMessage> events) {
+        // no events to publish
         if (events.isEmpty()) {
             return CompletableFuture.completedFuture(null);
         }
 
-        Message resolveFrom = context != null ? Message.fromContext(context) : null;
-        if (resolveFrom == null) {
-            resolveFrom = events.getFirst();
-        }
-        if (resolveFrom == null) {
-            throw new IllegalStateException(
-                    "Cannot publish to multi-tenant EventStore: no message found in ProcessingContext and no events available."
-            );
-        }
+        TenantDescriptor tenantDescriptor = resolveTenantFromContext(context)
+                .or(() -> resolveTenantFromMessage(events.getFirst()))
+                .orElseThrow(tenantNotResolved("Tenant could not be resolved"));
 
-        return resolveTenant(resolveFrom).publish(context, events);
+        return eventStoreForTenant(tenantDescriptor).publish(context, events);
+    }
+
+    private Optional<TenantDescriptor> resolveTenantFromContext(@Nullable ProcessingContext context) {
+        if (context == null) {
+            return Optional.empty();
+        }
+        return tenantDescriptorOptional(context)
+                .or(() -> Optional.ofNullable(Message.fromContext(context))
+                                  .flatMap(this::resolveTenantFromMessage)
+                );
+    }
+
+    private Optional<TenantDescriptor> resolveTenantFromMessage(@Nullable Message message) {
+        if (message == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(tenantResolver.resolveTenant(message, tenants()));
+        } catch (TenantNotResolvedException e) {
+            return Optional.empty();
+        }
     }
 
     @Override
@@ -131,43 +140,10 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
     }
 
     @Override
-    public MessageStream<EventMessage> open(StreamingCondition condition,
-                                            @Nullable ProcessingContext context) {
-        throw new UnsupportedOperationException(
-                "Multi-tenant event streaming is not directly supported. Use individual tenant segments."
-        );
-    }
-
-    @Override
     public EventStoreTransaction transaction(ProcessingContext processingContext) {
-        Message message = Message.fromContext(processingContext);
-        if (message == null) {
-            throw new IllegalStateException(
-                    "Cannot resolve tenant for event store transaction without a message in context");
-        }
-        EventStore tenantEventStore = resolveTenant(message);
-        return tenantEventStore.transaction(processingContext);
-    }
-
-    @Override
-    public CompletableFuture<TrackingToken> firstToken(@Nullable ProcessingContext context) {
-        throw new UnsupportedOperationException(
-                "Multi-tenant token operations are not directly supported. Use individual tenant segments."
-        );
-    }
-
-    @Override
-    public CompletableFuture<TrackingToken> latestToken(@Nullable ProcessingContext context) {
-        throw new UnsupportedOperationException(
-                "Multi-tenant token operations are not directly supported. Use individual tenant segments."
-        );
-    }
-
-    @Override
-    public CompletableFuture<TrackingToken> tokenAt(Instant at, @Nullable ProcessingContext context) {
-        throw new UnsupportedOperationException(
-                "Multi-tenant token operations are not directly supported. Use individual tenant segments."
-        );
+        TenantDescriptor tenantDescriptor = resolveTenantFromContext(processingContext)
+                .orElseThrow(tenantNotResolved("Tenant could not be resolved"));
+        return eventStoreForTenant(tenantDescriptor).transaction(processingContext);
     }
 
     @Override
@@ -204,8 +180,7 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
         return tenantSegments.remove(tenantDescriptor);
     }
 
-    private EventStore resolveTenant(Message message) {
-        TenantDescriptor tenantDescriptor = tenantResolver.resolveTenant(message, tenantSegments.keySet());
+    private EventStore eventStoreForTenant(TenantDescriptor tenantDescriptor) {
         EventStore tenantEventStore = tenantSegments.get(tenantDescriptor);
         if (tenantEventStore == null) {
             throw TenantNotResolvedException.forTenantId(tenantDescriptor.tenantId());
@@ -216,5 +191,33 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
     @Override
     public List<TenantDescriptor> tenants() {
         return List.copyOf(tenantSegments.keySet());
+    }
+
+
+    @Override
+    public CompletableFuture<TrackingToken> firstToken(@Nullable ProcessingContext context) {
+        throw multiTenantStreamingNotSupported();
+    }
+
+    @Override
+    public CompletableFuture<TrackingToken> latestToken(@Nullable ProcessingContext context) {
+        throw multiTenantStreamingNotSupported();
+    }
+
+    @Override
+    public CompletableFuture<TrackingToken> tokenAt(Instant at, @Nullable ProcessingContext context) {
+        throw multiTenantStreamingNotSupported();
+    }
+
+    @Override
+    public MessageStream<EventMessage> open(StreamingCondition condition, @Nullable ProcessingContext context) {
+        throw multiTenantStreamingNotSupported();
+    }
+
+    private static UnsupportedOperationException multiTenantStreamingNotSupported() {
+        return new UnsupportedOperationException(
+                "Multi-tenant event streaming is not directly supported. "
+                        + "Use individual tenant segments."
+        );
     }
 }

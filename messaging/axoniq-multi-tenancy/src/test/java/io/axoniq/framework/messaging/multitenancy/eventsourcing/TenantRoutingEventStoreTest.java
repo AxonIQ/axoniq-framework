@@ -18,12 +18,15 @@
 
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
 import org.axonframework.common.Registration;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.test.fixture.RecordingEventStore;
@@ -135,6 +138,32 @@ class TenantRoutingEventStoreTest {
         assertThat(testSubject.tenants())
                 .hasSize(2)
                 .containsExactlyInAnyOrder(TENANT_1, TENANT_2);
+    }
+
+    @Test
+    void publishRoutesToTenantDescriptorResourceOnContext() {
+
+        TenantRoutingEventStore testSubject = new TenantRoutingEventStore(
+                tenantEventStores::apply,
+                alwaysTenant(TENANT_2)  // resolver always returns TENANT_2
+        );
+
+        RecordingEventStore tenant1 = tenantEventStores.entry(TENANT_1, recordingEventStore());
+        RecordingEventStore tenant2 = tenantEventStores.entry(TENANT_2, recordingEventStore());
+
+        testSubject.registerTenant(TENANT_1);
+        testSubject.registerTenant(TENANT_2);
+
+        // context carries TENANT_1 as resource — should override the resolver
+        ProcessingContext context = new StubProcessingContext()
+                .withResource(MultiTenancyApiUtils.TENANT_RESOURCE_KEY, TENANT_1);
+
+        EventMessage event = new GenericEventMessage(new MessageType("TestEvent"), "payload");
+        testSubject.publish(context, List.of(event)).join();
+
+        assertThat(tenant1.recorded()).hasSize(1);
+        assertThat(tenant1.recorded().getFirst()).isSameAs(event);
+        assertThat(tenant2.recorded()).isEmpty();
     }
 
     @Test

@@ -22,10 +22,8 @@ package io.axoniq.framework.messaging.multitenancy.api;
 import org.axonframework.messaging.core.Context.ResourceKey;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
-import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException.tenantNotResolved;
@@ -54,12 +52,22 @@ public final class MultiTenancyApiUtils {
      * @param processingContext the {@link ProcessingContext} to retrieve the {@link TenantDescriptor} from
      * @return the {@link TenantDescriptor} from the {@link ProcessingContext}
      * @throws TenantNotResolvedException if no {@link TenantDescriptor} is found in the {@link ProcessingContext}
+     * @see #tenantDescriptorOptional(ProcessingContext)
      */
-    public static TenantDescriptor tenantDescriptorFrom(ProcessingContext processingContext)
+    public static TenantDescriptor tenantDescriptor(ProcessingContext processingContext)
             throws TenantNotResolvedException {
-        return Optional
-                .ofNullable(processingContext.getResource(TENANT_RESOURCE_KEY))
+        return tenantDescriptorOptional(processingContext)
                 .orElseThrow(tenantNotResolved("No tenant descriptor found in processing context"));
+    }
+
+    /**
+     * A {@link Function} that tries to retrive the {@link TenantDescriptor} from a {@link ProcessingContext}.
+     *
+     * @param processingContext the {@link ProcessingContext} to retrieve the {@link TenantDescriptor} from
+     * @return the {@link TenantDescriptor} from the {@link ProcessingContext}, wrapped in an {@link Optional}
+     */
+    public static Optional<TenantDescriptor> tenantDescriptorOptional(ProcessingContext processingContext) {
+        return Optional.ofNullable(processingContext.getResource(TENANT_RESOURCE_KEY));
     }
 
     private MultiTenancyApiUtils() {

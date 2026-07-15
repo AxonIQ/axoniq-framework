@@ -40,7 +40,7 @@ public class TenantNotResolvedException extends AxonNonTransientException {
      * @param args the arguments for the message template
      * @return a {@code Supplier} that creates a new {@code TenantNotResolvedException} with the given message and arguments
      */
-    static Supplier<TenantNotResolvedException> tenantNotResolved(String message, Object... args) {
+    public static Supplier<TenantNotResolvedException> tenantNotResolved(String message, Object... args) {
         return () -> new TenantNotResolvedException(message, args);
     }
 

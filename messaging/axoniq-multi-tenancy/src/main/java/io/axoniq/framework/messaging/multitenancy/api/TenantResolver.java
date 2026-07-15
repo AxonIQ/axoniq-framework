@@ -48,7 +48,6 @@ public interface TenantResolver {
             Collection<TenantDescriptor> tenants
     ) throws TenantNotResolvedException;
 
-
     /**
      * Returns {@link TenantDescriptor} for the given {@code message}. This method is a convenience method that calls
      * {@link #resolveTenant(Message, Collection)} with an empty collection of tenants.
