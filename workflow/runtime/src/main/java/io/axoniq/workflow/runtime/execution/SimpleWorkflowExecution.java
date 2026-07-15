@@ -135,6 +135,13 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * The body runs inside a unit of work spanning the instance's entire lifetime. It is created from the
+     * non-transactional {@link WorkflowContextDelegation#workflowBodyUnitOfWorkFactory()} so that no transactional
+     * resources are held while the instance is parked.
+     */
     @Override
     public void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler) {
         this.executable = true;
@@ -143,7 +150,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         ProcessingContextUtils
                 .executeWithResultInSeparateThread(
                         contextDelegate.workflowId(),
-                        contextDelegate.bodyUnitOfWorkFactory(),
+                        contextDelegate.workflowBodyUnitOfWorkFactory(),
                         contextDelegate.executorService(),
                         this.processingContext(),
                         ctx -> {

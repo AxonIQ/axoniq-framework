@@ -79,7 +79,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
     // Services
     private final EventSink eventSink;
     private final UnitOfWorkFactory unitOfWorkFactory;
-    private final UnitOfWorkFactory bodyUnitOfWorkFactory;
+    private final UnitOfWorkFactory workflowBodyUnitOfWorkFactory;
     private final Clock clock;
     private final ExecutorService executorService;
     private final WorkflowScheduler timeoutScheduler;
@@ -112,7 +112,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
         this.unitOfWorkFactory = Objects.requireNonNull(
                 processingContext.component(UnitOfWorkFactory.class),
                 "Could not retrieve UoW factory");
-        this.bodyUnitOfWorkFactory = new SimpleUnitOfWorkFactory(processingContext);
+        this.workflowBodyUnitOfWorkFactory = new SimpleUnitOfWorkFactory(processingContext);
         this.clock = Objects.requireNonNull(
                 processingContext.component(Clock.class),
                 "Could not retrieve Clock");
@@ -303,14 +303,19 @@ public class WorkflowContextDelegation implements WorkflowContext {
     }
 
     /**
-     * Non-transactional factory for the long-lived workflow-body wrapper unit of work; durable commits keep using
-     * {@link #unitOfWorkFactory()} via short-lived child units of work.
+     * Factory for the unit of work wrapping a workflow instance's body execution.
+     * <p>
+     * The body-wrapper unit of work stays open for the workflow instance's entire lifetime, including any time the
+     * body spends parked at {@code awaitEvent}, {@code sleep}, or retry backoff. It is therefore non-transactional,
+     * as a transaction bound to it would hold its resources per in-flight instance for as long as the instance
+     * lives. Workflow and step events are published in short-lived child units of work created from the
+     * transactional {@link #unitOfWorkFactory()} instead.
      *
-     * @return the body-wrapper unit of work factory.
+     * @return the non-transactional unit of work factory used for the workflow-body wrapper.
      */
     @Nonnull
-    public UnitOfWorkFactory bodyUnitOfWorkFactory() {
-        return this.bodyUnitOfWorkFactory;
+    public UnitOfWorkFactory workflowBodyUnitOfWorkFactory() {
+        return this.workflowBodyUnitOfWorkFactory;
     }
 
     @Nonnull
