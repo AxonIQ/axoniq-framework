@@ -228,7 +228,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
           WHERE t.global_index > (SELECT sort_index FROM snap)
             AND (t.key, t.value) IN ({key-value-pairs})
           GROUP BY t.global_index
-          HAVING COUNT(DISTINCT t.key) = ?
+          HAVING COUNT(DISTINCT (t.key, t.value)) = ?
         """;
 
     /**
