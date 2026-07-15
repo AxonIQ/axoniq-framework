@@ -25,6 +25,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.StringJoiner;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * A descriptor for tenants.
  *
@@ -41,8 +43,8 @@ public class TenantDescriptor {
      * @param properties The (empty) properties of this tenant - usually context properties of an Axon Server context.
      */
     public TenantDescriptor(String tenantId, Map<String, String> properties) {
-        this.tenantId = tenantId;
-        this.properties = properties;
+        this.tenantId = requireNonNull(tenantId, "tenantId must not be null");
+        this.properties = requireNonNull(Map.copyOf(properties), "properties must not be null");
     }
 
     /**
