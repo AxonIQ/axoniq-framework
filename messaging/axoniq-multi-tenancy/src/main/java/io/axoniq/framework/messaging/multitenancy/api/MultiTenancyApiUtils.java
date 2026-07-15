@@ -67,7 +67,7 @@ public final class MultiTenancyApiUtils {
      *
      * @param processingContext the {@link ProcessingContext} to set the {@link TenantDescriptor} in
      * @param tenantDescriptor  the {@link TenantDescriptor} to set in the {@link ProcessingContext}
-     * @return the previous {@link TenantDescriptor} in the {@link ProcessingContext
+     * @return the previous {@link TenantDescriptor} in the {@link ProcessingContext}
      */
     @Nullable
     public static TenantDescriptor setTenantDescriptor(ProcessingContext processingContext,
