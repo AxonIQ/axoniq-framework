@@ -35,7 +35,6 @@ import java.io.IOException;
 import java.util.UUID;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
-import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.disableMultiTenancyEnhancer;
 
 class StudentAxonTestFixtureAxonServerIntegrationIT {
 
