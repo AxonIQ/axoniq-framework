@@ -32,10 +32,13 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 
+import static java.util.Objects.requireNonNull;
+
 /**
- * A {@link MessageHandlerInterceptor} that registers a {@link TenantDescriptor} in the {@link ProcessingContext}.
- * When the {@link TenantResolver} is unable to resolve a {@link TenantDescriptor} for the given {@link Message},
- * the interceptor logs a warning and proceeds without registering a {@link TenantDescriptor} in the {@link ProcessingContext}.
+ * A {@link MessageHandlerInterceptor} that registers a {@link TenantDescriptor} in the {@link ProcessingContext}. When
+ * the {@link TenantResolver} is unable to resolve a {@link TenantDescriptor} for the given {@link Message}, the
+ * interceptor logs a warning and proceeds without registering a {@link TenantDescriptor} in the
+ * {@link ProcessingContext}.
  *
  * @param tenantResolver    the {@link TenantResolver} to resolve the {@link TenantDescriptor} from the {@link Message}
  * @param tenantDescriptors optional list of known {@link TenantDescriptor}s to resolve the {@link TenantDescriptor}
@@ -61,6 +64,19 @@ public record RegisterTenantDescriptorHandlerInterceptor(
      */
     public RegisterTenantDescriptorHandlerInterceptor(TenantResolver tenantResolver) {
         this(tenantResolver, Collections::emptyList);
+    }
+
+    /**
+     * Verifies the non-null contract of the {@code tenantResolver} and {@code tenantDescriptors} parameters.
+     *
+     * @param tenantResolver    the {@link TenantResolver} to resolve the {@link TenantDescriptor} from the
+     *                          {@link Message}
+     * @param tenantDescriptors the known {@link TenantDescriptors} to resolve the {@link TenantDescriptor} from the
+     *                          {@link Message}
+     */
+    public RegisterTenantDescriptorHandlerInterceptor {
+        requireNonNull(tenantResolver, "tenantResolver must not be null");
+        requireNonNull(tenantDescriptors, "tenantDescriptors must not be null");
     }
 
     @Override
