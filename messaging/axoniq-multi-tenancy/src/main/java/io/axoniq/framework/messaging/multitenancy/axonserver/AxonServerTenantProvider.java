@@ -74,7 +74,7 @@ import static java.util.Objects.requireNonNull;
  * @since 5.3.0
  */
 @Internal
-public class AxonServerTenantProvider implements TenantProvider, TenantDescriptors {
+public class AxonServerTenantProvider implements TenantProvider {
 
     /**
      * The configuration property that can be used to provide a comma-separated list of predefined context names.
