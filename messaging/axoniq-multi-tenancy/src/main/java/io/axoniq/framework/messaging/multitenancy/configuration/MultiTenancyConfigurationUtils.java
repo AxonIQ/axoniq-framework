@@ -77,7 +77,7 @@ public final class MultiTenancyConfigurationUtils {
     /**
      * Disables the {@link MultiTenancyConfigurationDefaults} enhancer in a {@link ComponentRegistry}.
      */
-    public static Consumer<ComponentRegistry> disableMultiTenancyEnhancer = componentRegistry ->
+    public static final Consumer<ComponentRegistry> disableMultiTenancyEnhancer = componentRegistry ->
             componentRegistry.disableEnhancer(MultiTenancyConfigurationDefaults.class);
 
 
