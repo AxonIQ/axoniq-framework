@@ -39,8 +39,10 @@ public class TenantDescriptor {
     private final Map<String, String> properties;
 
     /**
-     * @param tenantId   The identifier of this tenant.
-     * @param properties The (empty) properties of this tenant - usually context properties of an Axon Server context.
+     * Creates a new TenantDescriptor with the given {@code tenantId} and {@code properties}.
+     *
+     * @param tenantId   the identifier of this TenantDescriptor.
+     * @param properties the (empty) properties of this tenant - usually context properties of an Axon Server context
      */
     public TenantDescriptor(String tenantId, Map<String, String> properties) {
         this.tenantId = requireNonNull(tenantId, "tenantId must not be null");
@@ -50,7 +52,7 @@ public class TenantDescriptor {
     /**
      * Constructs a TenantDescriptor with the given {@code tenantId}.
      *
-     * @param tenantId The identifier of this TenantDescriptor.
+     * @param tenantId the identifier of this TenantDescriptor.
      */
     public TenantDescriptor(String tenantId) {
         this(tenantId, Collections.emptyMap());
@@ -59,8 +61,8 @@ public class TenantDescriptor {
     /**
      * Constructs a TenantDescriptor with the given {@code tenantId}.
      *
-     * @param tenantId The identifier of this TenantDescriptor.
-     * @return A TenantDescriptor with the given {@code tenantId}.
+     * @param tenantId the identifier of this TenantDescriptor
+     * @return a TenantDescriptor with the given {@code tenantId}.
      */
     public static TenantDescriptor tenantWithId(String tenantId) {
         return new TenantDescriptor(tenantId);
@@ -69,7 +71,7 @@ public class TenantDescriptor {
     /**
      * Returns the identifier of this tenant.
      *
-     * @return The identifier of this tenant.
+     * @return the identifier of this TenantDescriptor
      */
     public String tenantId() {
         return tenantId;
@@ -78,7 +80,7 @@ public class TenantDescriptor {
     /**
      * Returns the properties of this tenant.
      *
-     * @return The properties of this tenant.
+     * @return the properties of this tenant
      */
     public Map<String, String> properties() {
         return Map.copyOf(properties);
