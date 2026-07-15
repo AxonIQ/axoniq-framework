@@ -157,7 +157,7 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      *                           provider
      * @return a {@link ComponentDefinition} for the {@link TenantProvider} that is backed by Axon Server.
      */
-    // TODO: we need to find a better way to configure the predefined contexts.
+    // TODO: we need to find a better way to configure the predefined contexts, see issue #260.
     public static ComponentDefinition<TenantProvider> axonServerTenantProvider(@Nullable String predefinedContexts) {
         return ComponentDefinition
                 .ofType(TenantProvider.class)

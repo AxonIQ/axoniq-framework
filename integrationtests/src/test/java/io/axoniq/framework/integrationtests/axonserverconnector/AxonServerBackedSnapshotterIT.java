@@ -46,8 +46,6 @@ public class AxonServerBackedSnapshotterIT extends SnapshottingEntityLifecycleHa
 
     @Override
     protected void registerComponents(ComponentRegistry registry) {
-        // TODO: fails when we do not disable the multi-tenancy enhancer, find a better way
-        disableMultiTenancyEnhancer.accept(registry);
 
         registry.registerComponent(
                 AxonServerConfiguration.class,

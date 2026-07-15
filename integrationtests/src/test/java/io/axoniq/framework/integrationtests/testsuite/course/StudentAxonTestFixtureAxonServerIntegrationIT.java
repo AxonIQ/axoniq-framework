@@ -85,8 +85,6 @@ class StudentAxonTestFixtureAxonServerIntegrationIT {
         AxonServerConfiguration axonServerConfiguration = new AxonServerConfiguration();
         axonServerConfiguration.setServers(container.getHost() + ":" + container.getGrpcPort());
 
-        // TODO: fails when we do not disable the multi-tenancy enhancer, find a better way
-        configurer.componentRegistry(disableMultiTenancyEnhancer);
 
         configurer.componentRegistry(cr -> cr.registerComponent(
                 AxonServerConfiguration.class,
