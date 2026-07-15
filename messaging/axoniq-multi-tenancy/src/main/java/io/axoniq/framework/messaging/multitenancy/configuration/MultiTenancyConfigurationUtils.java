@@ -87,7 +87,7 @@ public final class MultiTenancyConfigurationUtils {
      * @param tenantResolver the {@link TenantResolver} to register
      * @return a {@link Consumer} that registers the given {@code tenantResolver} to a {@link ComponentRegistry}
      */
-    public static Consumer<ComponentRegistry> registerTenantResolver(TenantResolver<Message> tenantResolver) {
+    public static Consumer<ComponentRegistry> registerTenantResolver(TenantResolver tenantResolver) {
         return componentRegistry -> componentRegistry.registerComponent(
                 TenantResolver.class,
                 c -> tenantResolver

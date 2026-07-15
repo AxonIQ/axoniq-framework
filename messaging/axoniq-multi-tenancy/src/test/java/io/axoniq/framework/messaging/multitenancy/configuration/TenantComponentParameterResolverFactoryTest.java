@@ -383,7 +383,7 @@ class TenantComponentParameterResolverFactoryTest {
         return new GenericMessage("message-id",
                                   new MessageType("TestCommand"),
                                   "payload".getBytes(),
-                                  Map.of(MetadataBasedTenantResolver.DEFAULT_TENANT_KEY, tenantId));
+                                  Map.of(MetadataBasedTenantResolver.DEFAULT_TENANT_METADATA_KEY, tenantId));
     }
 
     private static Message messageWithoutTenant() {

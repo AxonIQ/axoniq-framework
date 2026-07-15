@@ -20,37 +20,44 @@
 package io.axoniq.framework.messaging.multitenancy.api;
 
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageHandlerInterceptor;
 import org.axonframework.messaging.core.MessageHandlerInterceptorChain;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.queryhandling.QueryMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 
 /**
  * A {@link MessageHandlerInterceptor} that registers a {@link TenantDescriptor} in the {@link ProcessingContext}
  *
- * @param tenantResolver the {@link TenantResolver} to resolve the {@link TenantDescriptor} from the {@link Message}
- * @param tenantDescriptors optional list of known {@link TenantDescriptor}s to resolve the {@link TenantDescriptor} from the {@link Message}
- *
+ * @param tenantResolver    the {@link TenantResolver} to resolve the {@link TenantDescriptor} from the {@link Message}
+ * @param tenantDescriptors optional list of known {@link TenantDescriptor}s to resolve the {@link TenantDescriptor}
+ *                          from the {@link Message}
  * @author Jan Galinski
  * @since 5.3.0
  */
 @Internal
 public record RegisterTenantDescriptorHandlerInterceptor(
-        TenantResolver<Message> tenantResolver,
+        TenantResolver tenantResolver,
         TenantDescriptors tenantDescriptors
 ) implements MessageHandlerInterceptor<Message> {
 
+    private static final Logger logger = LoggerFactory.getLogger(RegisterTenantDescriptorHandlerInterceptor.class);
+
     /**
-     * A {@code RegisterTenantDescriptorHandlerInterceptor} that registers a {@link TenantDescriptor}
-     * in the {@link ProcessingContext} using the given {@code tenantResolver}.
-     * Convenience constructor that initializes the {@code tenantDescriptors} to an empty list.
+     * A {@code RegisterTenantDescriptorHandlerInterceptor} that registers a {@link TenantDescriptor} in the
+     * {@link ProcessingContext} using the given {@code tenantResolver}. Convenience constructor that initializes the
+     * {@code tenantDescriptors} to an empty list.
      *
-     * @param tenantResolver the {@link TenantResolver} to resolve the {@link TenantDescriptor} from the {@link Message}
+     * @param tenantResolver the {@link TenantResolver} to resolve the {@link TenantDescriptor} from the
+     *                       {@link Message}
      */
-    public RegisterTenantDescriptorHandlerInterceptor(TenantResolver<Message> tenantResolver) {
+    public RegisterTenantDescriptorHandlerInterceptor(TenantResolver tenantResolver) {
         this(tenantResolver, Collections::emptyList);
     }
 
@@ -58,9 +65,20 @@ public record RegisterTenantDescriptorHandlerInterceptor(
     public MessageStream<?> interceptOnHandle(Message message,
                                               ProcessingContext context,
                                               MessageHandlerInterceptorChain<Message> interceptorChain) {
-        return interceptorChain.proceed(message, context.withResource(
-                MultiTenancyApiUtils.TENANT_RESOURCE_KEY,
-                tenantResolver.resolveTenant(message, tenantDescriptors.tenants())
-        ));
+        if (message instanceof CommandMessage || message instanceof QueryMessage) {
+            try {
+                TenantDescriptor tenantDescriptor = tenantResolver.resolveTenant(message, tenantDescriptors.tenants());
+                return interceptorChain.proceed(message, context.withResource(
+                        MultiTenancyApiUtils.TENANT_RESOURCE_KEY,
+                        tenantDescriptor
+                ));
+            } catch (TenantNotResolvedException e) {
+                logger.warn("Tenant could not be resolved for message: {}. Proceeding without tenant context. {}",
+                            message,
+                            e.getMessage());
+            }
+        }
+
+        return interceptorChain.proceed(message, context);
     }
 }

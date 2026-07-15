@@ -92,6 +92,7 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
 
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
+        // TODO: see #258 - find a way that is is not user facing but only needed for our mixed-scope itests.
         if (!isEnabled(componentRegistry)) {
             return;
         }
@@ -177,13 +178,15 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
         componentRegistry.registerDecorator(
                 HandlerInterceptorRegistry.class,
                 0,
-                (config, name, delegate) ->
-                        delegate.registerInterceptor(
-                                c -> new RegisterTenantDescriptorHandlerInterceptor(
-                                        config.getComponent(TenantResolver.class),
-                                        config.getComponent(TenantProvider.class)
-                                )
-                        )
+                (config, name, delegate) -> delegate
+                        .registerCommandInterceptor(c -> new RegisterTenantDescriptorHandlerInterceptor(
+                                c.getComponent(TenantResolver.class),
+                                c.getComponent(TenantProvider.class)
+                        ))
+                        .registerQueryInterceptor(c -> new RegisterTenantDescriptorHandlerInterceptor(
+                                c.getComponent(TenantResolver.class),
+                                c.getComponent(TenantProvider.class)
+                        ))
         );
     }
 }

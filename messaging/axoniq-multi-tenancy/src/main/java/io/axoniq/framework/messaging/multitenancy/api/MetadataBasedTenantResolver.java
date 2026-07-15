@@ -56,18 +56,18 @@ import static org.axonframework.common.BuilderUtils.assertNonEmpty;
  * @see SimpleCorrelationDataProvider
  * @since 5.3.0
  */
-public record MetadataBasedTenantResolver(String metadataKey) implements TenantResolver<Message> {
+public record MetadataBasedTenantResolver(String metadataKey) implements TenantResolver {
 
     /**
      * The default metadata key used to store the tenant identifier.
      */
-    public static final String DEFAULT_TENANT_KEY = "tenantId";
+    public static final String DEFAULT_TENANT_METADATA_KEY = MultiTenancyApiUtils.TENANT_ID_KEY;
 
     /**
      * Constructs a {@code MetadataBasedTenantResolver} using the default metadata key {@code "tenantId"}.
      */
     public MetadataBasedTenantResolver() {
-        this(DEFAULT_TENANT_KEY);
+        this(DEFAULT_TENANT_METADATA_KEY);
     }
 
     /**

@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.api;
 
+import org.axonframework.messaging.commandhandling.GenericCommandMessage;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageHandlerInterceptorChain;
@@ -33,6 +34,8 @@ import java.util.Map;
 
 import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.getTenantDescriptor;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.*;
 
 class RegisterTenantDescriptorHandlerInterceptorTest {
 
@@ -45,14 +48,15 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
     class ConstructorWithTenantResolver {
 
         @Test
-        void registersTheResolvedTenantDescriptorBeforeProceeding() {
+        void registersTheResolvedTenantDescriptorBeforeProceedingForCommandMessages() {
             // given
             RegisterTenantDescriptorHandlerInterceptor testSubject =
                     new RegisterTenantDescriptorHandlerInterceptor(new MetadataBasedTenantResolver("lateTenantKey"));
-            Message message = new GenericMessage("message-id",
-                                                 new MessageType("TestCommand"),
-                                                 "payload".getBytes(),
-                                                 Map.of("lateTenantKey", TENANT_A.tenantId()));
+            Message message = new GenericCommandMessage(
+                    new MessageType("TestCommand"),
+                    "payload",
+                    Map.of("lateTenantKey", TENANT_A.tenantId())
+            );
             ProcessingContext context = StubProcessingContext.forMessage(message);
             CapturingChain interceptorChain = new CapturingChain();
 
@@ -71,10 +75,11 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
             // given
             RegisterTenantDescriptorHandlerInterceptor testSubject =
                     new RegisterTenantDescriptorHandlerInterceptor(new MetadataBasedTenantResolver("lateTenantKey"));
-            Message message = new GenericMessage("message-id",
-                                                 new MessageType("TestCommand"),
-                                                 "payload".getBytes(),
-                                                 Map.of("lateTenantKey", TENANT_A.tenantId()));
+            Message message = new GenericCommandMessage(
+                    new MessageType("TestCommand"),
+                    "payload",
+                    Map.of("lateTenantKey", TENANT_A.tenantId())
+            );
             ProcessingContext context = StubProcessingContext.forMessage(message);
             TenantDescriptor tenantDescriptor = new MetadataBasedTenantResolver("lateTenantKey").resolveTenant(message);
             MultiTenancyApiUtils.setTenantDescriptor(context, tenantDescriptor);
@@ -88,6 +93,53 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
             assertThat(getTenantDescriptor(interceptorChain.context)).isEqualTo(TenantDescriptor.tenantWithId(
                     TENANT_A.tenantId()
             ));
+        }
+
+        @Test
+        void proceedsWithoutTenantContextWhenTheTenantCannotBeResolved() {
+            // given
+            RegisterTenantDescriptorHandlerInterceptor testSubject =
+                    new RegisterTenantDescriptorHandlerInterceptor(new MetadataBasedTenantResolver("lateTenantKey"));
+            Message message = new GenericCommandMessage(new MessageType("TestCommand"), "payload");
+            ProcessingContext context = StubProcessingContext.forMessage(message);
+            CapturingChain interceptorChain = new CapturingChain();
+
+            // when
+            MessageStream<?> result = testSubject.interceptOnHandle(message, context, interceptorChain);
+
+            // then
+            assertThat(result).isSameAs(interceptorChain.result);
+            assertThatThrownBy(() -> MultiTenancyApiUtils.getTenantDescriptor(interceptorChain.context))
+                    .isInstanceOf(TenantNotResolvedException.class)
+                    .hasMessageContaining("No tenant descriptor found in processing context");
+        }
+
+        @Test
+        void skipsResolvingTheTenantForNonCommandAndNonQueryMessages() {
+            // given
+            TenantResolver tenantResolver = mock(TenantResolver.class);
+            when(tenantResolver.resolveTenant(any(Message.class), any())).thenReturn(TENANT_A);
+
+            RegisterTenantDescriptorHandlerInterceptor testSubject =
+                    new RegisterTenantDescriptorHandlerInterceptor(tenantResolver);
+            Message message = new GenericMessage("message-id",
+                                                 new MessageType("TestEvent"),
+                                                 "payload".getBytes(),
+                                                 Map.of("lateTenantKey", TENANT_A.tenantId()));
+            ProcessingContext context = StubProcessingContext.forMessage(message);
+            CapturingChain interceptorChain = new CapturingChain();
+
+            // when
+            MessageStream<?> result = testSubject.interceptOnHandle(message, context, interceptorChain);
+
+            // then
+            assertThat(result).isSameAs(interceptorChain.result);
+            verify(tenantResolver, never()).resolveTenant(any(Message.class), any());
+            assertThat(interceptorChain.context).isSameAs(context);
+
+            assertThatThrownBy(() -> MultiTenancyApiUtils.getTenantDescriptor(interceptorChain.context))
+                    .isInstanceOf(TenantNotResolvedException.class)
+                    .hasMessageContaining("No tenant descriptor found in processing context");
         }
     }
 

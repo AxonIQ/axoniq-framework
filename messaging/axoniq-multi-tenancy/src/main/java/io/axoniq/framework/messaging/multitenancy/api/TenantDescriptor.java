@@ -23,20 +23,27 @@ import org.jspecify.annotations.Nullable;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
+import java.util.StringJoiner;
 
 /**
  * A descriptor for tenants.
  *
- * @param tenantId   The identifier of this tenant.
- * @param properties The (empty) properties of this tenant - usually context properties of an Axon Server context.
- * @author Stefan Dragisic
  * @author Jan Galinski
  * @since 5.3.0
  */
-public record TenantDescriptor(
-        String tenantId,
-        Map<String, String> properties
-) {
+public class TenantDescriptor {
+
+    private final String tenantId;
+    private final Map<String, String> properties;
+
+    /**
+     * @param tenantId   The identifier of this tenant.
+     * @param properties The (empty) properties of this tenant - usually context properties of an Axon Server context.
+     */
+    public TenantDescriptor(String tenantId, Map<String, String> properties) {
+        this.tenantId = tenantId;
+        this.properties = properties;
+    }
 
     /**
      * Constructs a TenantDescriptor with the given {@code tenantId}.
@@ -57,6 +64,23 @@ public record TenantDescriptor(
         return new TenantDescriptor(tenantId);
     }
 
+    /**
+     * Returns the identifier of this tenant.
+     *
+     * @return The identifier of this tenant.
+     */
+    public String tenantId() {
+        return tenantId;
+    }
+
+    /**
+     * Returns the properties of this tenant.
+     *
+     * @return The properties of this tenant.
+     */
+    public Map<String, String> properties() {
+        return Map.copyOf(properties);
+    }
 
     @Override
     public boolean equals(@Nullable Object o) {
@@ -77,5 +101,13 @@ public record TenantDescriptor(
     @Override
     public int hashCode() {
         return Objects.hash(tenantId);
+    }
+
+    @Override
+    public String toString() {
+        return new StringJoiner(", ", TenantDescriptor.class.getSimpleName() + "[", "]")
+                .add("tenantId='" + tenantId + "'")
+                .add("properties=" + properties)
+                .toString();
     }
 }

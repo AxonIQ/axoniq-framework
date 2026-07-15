@@ -34,7 +34,7 @@ import java.util.Optional;
  * @since 5.3.0
  */
 @FunctionalInterface
-public interface TenantResolver<M extends Message> {
+public interface TenantResolver {
 
     /**
      * Returns {@link TenantDescriptor} for the given {@code message}.
@@ -45,7 +45,7 @@ public interface TenantResolver<M extends Message> {
      * @throws TenantNotResolvedException if no tenant could be resolved
      */
     TenantDescriptor resolveTenant(
-            M message,
+            Message message,
             Collection<TenantDescriptor> tenants
     ) throws TenantNotResolvedException;
 
@@ -59,7 +59,7 @@ public interface TenantResolver<M extends Message> {
      * @throws TenantNotResolvedException if no tenant could be resolved
      * @see #resolveTenant(Message, Collection)
      */
-    default TenantDescriptor resolveTenant(M message) {
+    default TenantDescriptor resolveTenant(Message message) {
         return resolveTenant(message, Collections.emptyList());
     }
 
@@ -76,12 +76,11 @@ public interface TenantResolver<M extends Message> {
      * @return the resolved {@link TenantDescriptor}
      * @throws IllegalStateException if no message is found in the processing context
      */
-    @SuppressWarnings("unchecked")
     default TenantDescriptor resolveTenant(ProcessingContext context, Collection<TenantDescriptor> tenants) {
         Message message = Optional.ofNullable(Message.fromContext(context))
                                   .orElseThrow(() -> new IllegalStateException(
                                           "Cannot resolve tenant: no message found in ProcessingContext"));
 
-        return resolveTenant((M) message, tenants);
+        return resolveTenant(message, tenants);
     }
 }

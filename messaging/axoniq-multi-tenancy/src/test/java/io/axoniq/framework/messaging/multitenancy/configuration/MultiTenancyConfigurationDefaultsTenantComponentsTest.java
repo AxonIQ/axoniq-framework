@@ -20,6 +20,7 @@
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
@@ -43,6 +44,7 @@ import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.conversion.DelegatingMessageConverter;
+import org.axonframework.messaging.core.interception.HandlerInterceptorRegistry;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.junit.jupiter.api.*;
@@ -169,7 +171,7 @@ class MultiTenancyConfigurationDefaultsTenantComponentsTest {
                     "message-id",
                     new MessageType("TestEvent"),
                     "payload".getBytes(),
-                    Map.of(MetadataBasedTenantResolver.DEFAULT_TENANT_KEY, TENANT_A.tenantId())
+                    Map.of(MetadataBasedTenantResolver.DEFAULT_TENANT_METADATA_KEY, TENANT_A.tenantId())
             );
 
             ProcessingContext context = StubProcessingContext.forMessage(message);
@@ -190,6 +192,31 @@ class MultiTenancyConfigurationDefaultsTenantComponentsTest {
     class HandlerInterceptorWiring {
 
         @Test
+        void registersTheTenantDescriptorInterceptorForCommandAndQueryHandlersOnly() {
+            // given
+            HandlerInterceptorRegistry registry = configuration.getComponent(HandlerInterceptorRegistry.class);
+
+            // when
+            var commandInterceptors = registry.commandInterceptors(configuration,
+                                                                  TenantAwareCommandHandler.class,
+                                                                  "handle");
+            var queryInterceptors = registry.queryInterceptors(configuration,
+                                                              TenantAwareQueryHandler.class,
+                                                              "handle");
+            var eventInterceptors = registry.eventInterceptors(configuration,
+                                                              SampleHandlers.class,
+                                                              "handle");
+
+            // then
+            assertThat(commandInterceptors)
+                    .anyMatch(RegisterTenantDescriptorHandlerInterceptor.class::isInstance);
+            assertThat(queryInterceptors)
+                    .anyMatch(RegisterTenantDescriptorHandlerInterceptor.class::isInstance);
+            assertThat(eventInterceptors)
+                    .noneMatch(RegisterTenantDescriptorHandlerInterceptor.class::isInstance);
+        }
+
+        @Test
         void commandBusHandlingResolvesTenantScopedComponentsWithoutManuallySeedingTheProcessingContext() {
             // given
             TenantAwareCommandHandler handler = new TenantAwareCommandHandler();
@@ -208,7 +235,7 @@ class MultiTenancyConfigurationDefaultsTenantComponentsTest {
             GenericCommandMessage command = new GenericCommandMessage(
                     new MessageType("tenant-aware-command"),
                     "payload",
-                    Map.of(MetadataBasedTenantResolver.DEFAULT_TENANT_KEY, TENANT_A.tenantId())
+                    Map.of(MetadataBasedTenantResolver.DEFAULT_TENANT_METADATA_KEY, TENANT_A.tenantId())
             );
 
             // when
@@ -238,6 +265,15 @@ class MultiTenancyConfigurationDefaultsTenantComponentsTest {
         @CommandHandler(commandName = "tenant-aware-command")
         String handle(String command, CourseRepository repository) {
             this.resolvedRepository = repository;
+            return repository.tenant.tenantId();
+        }
+    }
+
+    @SuppressWarnings("unused")
+    private static final class TenantAwareQueryHandler {
+
+        @org.axonframework.messaging.queryhandling.annotation.QueryHandler(queryName = "tenant-aware-query")
+        String handle(String query, CourseRepository repository) {
             return repository.tenant.tenantId();
         }
     }

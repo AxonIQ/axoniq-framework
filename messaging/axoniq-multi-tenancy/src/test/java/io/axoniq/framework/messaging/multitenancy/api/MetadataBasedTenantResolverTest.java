@@ -46,7 +46,7 @@ class MetadataBasedTenantResolverTest {
                 "message-id",
                 new MessageType("TestCommand"),
                 "payload".getBytes(),
-                Map.of(MetadataBasedTenantResolver.DEFAULT_TENANT_KEY, TENANT_A.tenantId())
+                Map.of(MetadataBasedTenantResolver.DEFAULT_TENANT_METADATA_KEY, TENANT_A.tenantId())
         );
 
         TenantDescriptor resolved = testSubject.resolveTenant(message, List.of(TENANT_A));
@@ -60,7 +60,7 @@ class MetadataBasedTenantResolverTest {
                 "message-id",
                 new MessageType("TestCommand"),
                 "payload".getBytes(),
-                Map.of(MetadataBasedTenantResolver.DEFAULT_TENANT_KEY, "foo-b")
+                Map.of(MetadataBasedTenantResolver.DEFAULT_TENANT_METADATA_KEY, "foo-b")
         );
 
         TenantDescriptor resolved = testSubject.resolveTenant(message, List.of(TENANT_A));
