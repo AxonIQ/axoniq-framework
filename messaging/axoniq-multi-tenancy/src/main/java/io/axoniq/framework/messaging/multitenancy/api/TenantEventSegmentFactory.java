@@ -18,7 +18,6 @@
  */
 package io.axoniq.framework.messaging.multitenancy.api;
 
-
 import org.axonframework.eventsourcing.eventstore.EventStore;
 
 import java.util.function.Function;

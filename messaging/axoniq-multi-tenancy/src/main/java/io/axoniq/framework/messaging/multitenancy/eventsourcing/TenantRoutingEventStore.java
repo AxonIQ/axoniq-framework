@@ -19,10 +19,11 @@
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
-import io.axoniq.framework.messaging.multitenancy.api.NoSuchTenantException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
 import io.axoniq.framework.messaging.multitenancy.api.TenantEventSegmentFactory;
+import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
+import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStore;
@@ -36,65 +37,59 @@ import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Tenant aware implementation of the {@link EventStore}.
  * <p>
  * Tenant-specific {@code EventStore} segments are resolved from the {@link EventMessage#metadata() event's metadata}.
- * The {@link #open(StreamingCondition, ProcessingContext)} operation throws an
- * {@link UnsupportedOperationException} as multi-tenant streaming requires combining streams from all tenants,
- * which should be handled at a higher level.
- *
- * @see TenantResolver
+ * The {@link #open(StreamingCondition, ProcessingContext)} operation throws an {@link UnsupportedOperationException} as
+ * multi-tenant streaming requires combining streams from all tenants, which should be handled at a higher level.
  *
  * @author Stefan Dragisic
  * @author Steven van Beelen
  * @author Theo Emanuelsson
  * @author Jan Galinski
+ * @see TenantResolver
  * @since 5.3.0
  */
-public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComponent {
+public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComponent, TenantDescriptors {
 
     /**
      * The order in which the {@link TenantRoutingEventStore} is applied as a decorator to the {@link EventStore}.
      * <p>
-     * Uses an order HIGHER than {@code InterceptingEventStore} (which is at {@code Integer.MIN_VALUE + 50})
-     * to ensure multi-tenant routing is the outermost layer. Interceptors (correlation data, etc.) are applied
-     * per-tenant inside each tenant's event store segment, not on the outer multi-tenant store.
+     * Uses an order HIGHER than {@code InterceptingEventStore} (which is at {@code Integer.MIN_VALUE + 50}) to ensure
+     * multi-tenant routing is the outermost layer. Interceptors (correlation data, etc.) are applied per-tenant inside
+     * each tenant's event store segment, not on the outer multi-tenant store.
      */
     public static final int DECORATION_ORDER = Integer.MIN_VALUE + 75;
 
     private final Map<TenantDescriptor, EventStore> tenantSegments = new ConcurrentHashMap<>();
-    private final List<BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>>> eventsBatchConsumers =
+    private final List<BiFunction<List<? extends EventMessage>, @Nullable ProcessingContext, CompletableFuture<?>>> eventsBatchConsumers =
             new CopyOnWriteArrayList<>();
     private final Map<TenantDescriptor, Registration> subscribeRegistrations = new ConcurrentHashMap<>();
 
     private final TenantEventSegmentFactory tenantSegmentFactory;
 
-    // TODO: either switch to TenantResolver<EventMessage> or remove the TenantResolverRegistry and always just use one default.
-    private final TenantResolver<Message> tenantResolver;
+    private final TenantResolver tenantResolver;
 
     /**
-     * Instantiate a TenantRoutingEventStore with the given {@code tenantSegmentFactory} and
-     * {@code tenantResolver}.
+     * Instantiate a TenantRoutingEventStore with the given {@code tenantSegmentFactory} and {@code tenantResolver}.
      *
      * @param tenantSegmentFactory the factory to create tenant-specific {@link EventStore} segments
      * @param tenantResolver       the resolver to determine the target tenant from a message
      */
     public TenantRoutingEventStore(TenantEventSegmentFactory tenantSegmentFactory,
-                                   TenantResolver<Message> tenantResolver) {
-        this.tenantSegmentFactory = Objects.requireNonNull(tenantSegmentFactory,
-                                                           "TenantEventSegmentFactory may not be null");
-        this.tenantResolver = Objects.requireNonNull(tenantResolver,
-                                                     "TenantResolver may not be null");
+                                   TenantResolver tenantResolver) {
+        this.tenantSegmentFactory = requireNonNull(tenantSegmentFactory, "TenantEventSegmentFactory may not be null");
+        this.tenantResolver = requireNonNull(tenantResolver, "TenantResolver may not be null");
     }
 
     @Override
@@ -105,7 +100,7 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
 
         Message resolveFrom = context != null ? Message.fromContext(context) : null;
         if (resolveFrom == null) {
-            resolveFrom = events.get(0);
+            resolveFrom = events.getFirst();
         }
         if (resolveFrom == null) {
             throw new IllegalStateException(
@@ -118,19 +113,20 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
 
     @Override
     public Registration subscribe(
-            BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>> eventsBatchConsumer
+            BiFunction<List<? extends EventMessage>, @Nullable ProcessingContext, CompletableFuture<?>> eventsBatchConsumer
     ) {
         eventsBatchConsumers.add(eventsBatchConsumer);
 
         tenantSegments.forEach((tenant, segment) ->
-                subscribeRegistrations.computeIfAbsent(tenant, t -> segment.subscribe(eventsBatchConsumer)));
+                                       subscribeRegistrations.computeIfAbsent(tenant,
+                                                                              t -> segment.subscribe(eventsBatchConsumer)));
 
         return () -> {
             eventsBatchConsumers.remove(eventsBatchConsumer);
             return subscribeRegistrations.values().stream()
-                                        .map(Registration::cancel)
-                                        .reduce((prev, acc) -> prev && acc)
-                                        .orElse(false);
+                                         .map(Registration::cancel)
+                                         .reduce((prev, acc) -> prev && acc)
+                                         .orElse(false);
         };
     }
 
@@ -146,7 +142,8 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
     public EventStoreTransaction transaction(ProcessingContext processingContext) {
         Message message = Message.fromContext(processingContext);
         if (message == null) {
-            throw new IllegalStateException("Cannot resolve tenant for event store transaction without a message in context");
+            throw new IllegalStateException(
+                    "Cannot resolve tenant for event store transaction without a message in context");
         }
         EventStore tenantEventStore = resolveTenant(message);
         return tenantEventStore.transaction(processingContext);
@@ -180,7 +177,7 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
 
     @Override
     public Registration registerTenant(TenantDescriptor tenantDescriptor) {
-        tenantSegments.computeIfAbsent(tenantDescriptor, tenantSegmentFactory::apply);
+        tenantSegments.computeIfAbsent(tenantDescriptor, tenantSegmentFactory);
         return () -> unregisterTenant(tenantDescriptor) != null;
     }
 
@@ -198,10 +195,7 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
         return () -> unregisterTenant(tenantDescriptor) != null;
     }
 
-    public Map<TenantDescriptor, EventStore> tenantSegments() {
-        return Collections.unmodifiableMap(tenantSegments);
-    }
-
+    @Nullable
     private EventStore unregisterTenant(TenantDescriptor tenantDescriptor) {
         Registration registration = subscribeRegistrations.remove(tenantDescriptor);
         if (registration != null) {
@@ -214,8 +208,13 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
         TenantDescriptor tenantDescriptor = tenantResolver.resolveTenant(message, tenantSegments.keySet());
         EventStore tenantEventStore = tenantSegments.get(tenantDescriptor);
         if (tenantEventStore == null) {
-            throw new NoSuchTenantException(tenantDescriptor.tenantId());
+            throw TenantNotResolvedException.forTenantId(tenantDescriptor.tenantId());
         }
         return tenantEventStore;
+    }
+
+    @Override
+    public List<TenantDescriptor> tenants() {
+        return List.copyOf(tenantSegments.keySet());
     }
 }
