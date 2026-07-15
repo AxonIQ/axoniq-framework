@@ -1,2 +1,3 @@
 * xref:multi-tenancy:index.adoc[[.advanced-framework]#Multi-Tenancy#]
-** xref:multi-tenancy:tenant-aware-components.adoc[]
+** xref:multi-tenancy:tenant-management.adoc[]
+** xref:multi-tenancy:tenant-scoped-components.adoc[]
