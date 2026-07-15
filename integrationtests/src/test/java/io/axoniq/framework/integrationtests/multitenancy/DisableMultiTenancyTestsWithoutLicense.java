@@ -38,6 +38,6 @@ public class DisableMultiTenancyTestsWithoutLicense implements ExecutionConditio
     public ConditionEvaluationResult evaluateExecutionCondition(@NonNull ExtensionContext context) {
         return AxonServerTestInfrastructure.licenseExists()
                 ? ConditionEvaluationResult.enabled("Axon Server license exists, multi-tenancy tests can run")
-                : ConditionEvaluationResult.disabled("Axon Server license does not exist, multi-tenancy tests are disabled");
+                : ConditionEvaluationResult.disabled("Axon Server license does not exist, multi-tenancy tests are disabled. If you want to run them, place a valid license under `/axon-server-test.license` in the classpath");
     }
 }
