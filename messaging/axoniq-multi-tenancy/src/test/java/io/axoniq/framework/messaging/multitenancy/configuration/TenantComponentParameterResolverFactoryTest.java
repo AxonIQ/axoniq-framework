@@ -40,7 +40,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.TENANT_RESOURCE_KEY;
-import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.setTenantDescriptor;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
@@ -269,15 +268,12 @@ class TenantComponentParameterResolverFactoryTest {
                                                  "payload".getBytes(),
                                                  Map.of("lateTenantKey", TENANT_A.tenantId()));
 
-            ProcessingContext context = StubProcessingContext.forMessage(message);
             TenantDescriptor tenantDescriptor = new MetadataBasedTenantResolver("lateTenantKey").resolveTenant(message);
-            setTenantDescriptor(context, tenantDescriptor);
+            ProcessingContext context = StubProcessingContext.forMessage(message)
+                                                             .withResource(TENANT_RESOURCE_KEY, tenantDescriptor);
 
             // when
-            Object resolved = resolver.resolveParameterValue(
-                    StubProcessingContext.forMessage(message)
-                                         .withResource(TENANT_RESOURCE_KEY, TENANT_A)
-            ).join();
+            Object resolved = resolver.resolveParameterValue(context).join();
 
             // then the late resolver is picked up by the later inspection
             assertThat(resolved).isSameAs(provider.componentFor(TENANT_A));

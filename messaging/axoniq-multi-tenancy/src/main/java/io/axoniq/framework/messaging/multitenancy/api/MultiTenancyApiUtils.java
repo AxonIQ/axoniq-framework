@@ -55,24 +55,11 @@ public final class MultiTenancyApiUtils {
      * @return the {@link TenantDescriptor} from the {@link ProcessingContext}
      * @throws TenantNotResolvedException if no {@link TenantDescriptor} is found in the {@link ProcessingContext}
      */
-    public static TenantDescriptor getTenantDescriptor(ProcessingContext processingContext)
+    public static TenantDescriptor tenantDescriptorFrom(ProcessingContext processingContext)
             throws TenantNotResolvedException {
         return Optional
                 .ofNullable(processingContext.getResource(TENANT_RESOURCE_KEY))
                 .orElseThrow(tenantNotResolved("No tenant descriptor found in processing context"));
-    }
-
-    /**
-     * A {@link BiConsumer} that sets the {@link TenantDescriptor} in a {@link ProcessingContext}.
-     *
-     * @param processingContext the {@link ProcessingContext} to set the {@link TenantDescriptor} in
-     * @param tenantDescriptor  the {@link TenantDescriptor} to set in the {@link ProcessingContext}
-     * @return the previous {@link TenantDescriptor} in the {@link ProcessingContext}
-     */
-    @Nullable
-    public static TenantDescriptor setTenantDescriptor(ProcessingContext processingContext,
-                                                       TenantDescriptor tenantDescriptor) {
-        return processingContext.putResource(TENANT_RESOURCE_KEY, tenantDescriptor);
     }
 
     private MultiTenancyApiUtils() {

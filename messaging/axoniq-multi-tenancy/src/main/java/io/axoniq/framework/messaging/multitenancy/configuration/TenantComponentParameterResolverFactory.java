@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
-import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
@@ -41,7 +40,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.getTenantDescriptor;
+import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.tenantDescriptorFrom;
 
 /**
  * {@link ParameterResolverFactory} injecting tenant-scoped components into message-handling methods.
@@ -151,7 +150,7 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
                 ));
             }
             try {
-                TenantDescriptor tenant = getTenantDescriptor(context);
+                TenantDescriptor tenant = tenantDescriptorFrom(context);
                 Object component = provider.componentFor(tenant);
                 return CompletableFuture.completedFuture(component);
             } catch (RuntimeException e) {

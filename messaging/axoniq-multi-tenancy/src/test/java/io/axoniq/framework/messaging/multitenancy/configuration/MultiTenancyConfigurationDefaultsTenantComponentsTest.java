@@ -53,7 +53,7 @@ import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.setTenantDescriptor;
+import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.TENANT_RESOURCE_KEY;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -174,10 +174,9 @@ class MultiTenancyConfigurationDefaultsTenantComponentsTest {
                     Map.of(MetadataBasedTenantResolver.DEFAULT_TENANT_METADATA_KEY, TENANT_A.tenantId())
             );
 
-            ProcessingContext context = StubProcessingContext.forMessage(message);
             TenantDescriptor tenantDescriptor = new MetadataBasedTenantResolver().resolveTenant(message);
-            setTenantDescriptor(context, tenantDescriptor);
-
+            ProcessingContext context = StubProcessingContext.forMessage(message)
+                                                             .withResource(TENANT_RESOURCE_KEY, tenantDescriptor);
 
             // when
             Object resolved = resolver.resolveParameterValue(context).join();
