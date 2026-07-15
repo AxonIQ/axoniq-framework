@@ -44,8 +44,20 @@ import java.util.Map;
 public class AxonServerConfiguration {
 
     private static final String DEFAULT_SERVERS = "localhost";
+
+    /**
+     * The default context name for Axon Server.
+     */
     public static final String DEFAULT_CONTEXT = "default";
+
+    /**
+     * The context name for the Axon Server Admin context.
+     */
     public static final String ADMIN_CONTEXT = "_admin";
+
+    /**
+     * The default replication group name for Axon Server.
+     */
     public static final String DEFAULT_REPLICATION_GROUP = "default";
 
     /**
