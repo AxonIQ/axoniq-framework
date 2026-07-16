@@ -42,7 +42,6 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -84,7 +83,7 @@ class WaitForDelegateDriftTest {
 
         delegate = new WaitForDelegate(
                 workflowContext, workflowExecution, parent,
-                Clock.systemUTC(), unitOfWorkFactory, eventSink, executor
+                Clock.systemUTC(), unitOfWorkFactory, eventSink, executor, new DefaultWorkflowScheduler(Clock.systemUTC())
         );
     }
 

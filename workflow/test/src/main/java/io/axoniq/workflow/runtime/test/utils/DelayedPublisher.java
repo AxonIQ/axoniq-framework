@@ -19,39 +19,34 @@
 package io.axoniq.workflow.runtime.test.utils;
 
 import jakarta.annotation.Nonnull;
-import org.axonframework.messaging.core.MessageTypeResolver;
-import org.axonframework.messaging.eventhandling.EventSink;
-import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Publisher that delays the publication of events.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 public class DelayedPublisher {
 
     private static final Logger logger = LoggerFactory.getLogger(DelayedPublisher.class);
 
-    private final EventSink eventSink;
     private final Executor executor;
     private final List<Schedule> schedules = new ArrayList<>();
-    private final MessageTypeResolver messageTypeResolver;
-    private final EventConverter converter;
+    private final TestEventPublisher eventPublisher;
 
-    public DelayedPublisher(@Nonnull EventSink eventSink,
-                            @Nonnull Executor executor,
-                            @Nonnull MessageTypeResolver messageTypeResolver,
-                            @Nonnull EventConverter converter) {
-        this.eventSink = eventSink;
+    public DelayedPublisher(@Nonnull TestEventPublisher eventPublisher,
+                            @Nonnull Executor executor) {
         this.executor = executor;
-        this.messageTypeResolver = messageTypeResolver;
-        this.converter = converter;
+        this.eventPublisher = eventPublisher;
     }
 
     public void addSchedules(List<Schedule> schedules) {
@@ -66,15 +61,7 @@ public class DelayedPublisher {
                     .thenCompose(v ->
                                          CompletableFuture
                                                  .supplyAsync(() -> {
-                                                                  var eventMessage = new GenericEventMessage(
-                                                                          messageTypeResolver.resolveOrThrow(schedule.event),
-                                                                          schedule.event
-                                                                  ).withConverter(converter);
-                                                                  logger.info("Publishing Event: {}, {}",
-                                                                              eventMessage.type(),
-                                                                              eventMessage.payloadAs(Map.class)
-                                                                  );
-                                                                  eventSink.publish(null, eventMessage);
+                                                                  this.eventPublisher.publish(schedule.event);
                                                                   return null;
                                                               },
                                                               CompletableFuture.delayedExecutor(schedule.duration.toMillis(),

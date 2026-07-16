@@ -1,145 +1,604 @@
 = Testing Workflows
 :navtitle: Testing
 
-The Axon Workflow Engine provides a dedicated `test` module with infrastructure that uses the same configuration as production code.
-No mocking needed—your tests run real workflows with real event sourcing.
+The workflow test module provides a BDD fixture for testing workflows through the same runtime components that execute production workflows.
+The fixture starts a real Axon workflow configuration, publishes real events, records normal workflow history, and lets the test decide when execute steps complete.
 
-== Test setup
-
-To test a workflow, extend `AbstractDeclarativeTestBase` and implement the `getDeclaredDefinitions` method:
+Use a BDD fixture when you want to test workflow behavior as a sequence of observable business states:
 
 [source,java]
-.src/test/java/io/axoniq/example/order/OrderFulfillmentTest.java
 ----
-class OrderFulfillmentTest extends AbstractDeclarativeTestBase<SimpleWorkflowContext> {
+fixture.given()
+       .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
+       .executeStep("createUser");
 
-    public OrderFulfillmentTest() {
-        super(SimpleWorkflowContext.class, c -> new SimpleWorkflowContextFactory()); // <1>
+fixture.when()
+       .executeStepReturning("activateUser", Map.of());
+
+fixture.then()
+       .executionExists()
+       .waitingIn("sendWelcomeEmail");
+----
+
+The fixture is intentionally explicit.
+When a workflow reaches an `execute` step, the step is recorded as started and the workflow is visibly waiting in that
+step.
+In stepping mode, the step does not finish on its own: the fixture intercepts completion so the test can decide whether
+to run the production action, return a fake result, or fail the step explicitly.
+This keeps side effects out of fixture tests and makes each workflow transition visible.
+
+Fixture assertion methods use behavior-focused names such as `noExecution()`, `waitingIn(...)`, `hasSteps(...)`, and
+`noStep(...)` instead of `assert...` prefixes.
+
+== Dependency
+
+Add the workflow test module to the test classpath:
+
+[source,xml]
+----
+<dependency>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-workflow-test</artifactId>
+    <version>${axoniq-workflow.version}</version>
+    <scope>test</scope>
+</dependency>
+----
+
+The module includes AssertJ and Awaitility support used by the fixture assertions.
+
+== BDD fixture
+
+`WorkflowTestFixture` is the main testing API for workflow behavior.
+It is useful when the test should read as a scenario and should avoid production step side effects.
+
+The fixture has three phase entry points:
+
+[cols="1,2"]
+|===
+|Phase |Use
+
+|`given()`
+|Prepare workflow state before the behavior under test.
+
+|`when()`
+|Publish the stimulus or release the step that represents the behavior under test.
+
+|`then()`
+|Assert the resulting workflow state, history, payload, or step status.
+|===
+
+`given()` and `when()` return the action phase.
+`then()` returns the assertion phase.
+Both phases also expose shared state-selection methods such as `executionExists()`, `historyExists(...)`, `noExecution()`, and `noHistory()`.
+
+The fixture starts in stepping mode.
+In stepping mode, execute steps start normally but remain in progress until the test finishes them explicitly, and
+fixture-controlled time drives timeout tasks.
+
+== Creating a BDD fixture
+
+Create a fixture from a `WorkflowModule`.
+This is the default setup style because it matches the runtime configuration model and the lower-level
+`WorkflowTestDriver`.
+
+.src/test/java/io/axoniq/example/workflow/UserSignupFixtureTest.java
+[source,java]
+----
+import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
+import io.axoniq.workflow.configuration.WorkflowModule;
+import io.axoniq.workflow.runtime.test.fixture.GivenWhen;
+import io.axoniq.workflow.runtime.test.fixture.Then;
+import io.axoniq.workflow.runtime.test.fixture.WorkflowTestFixture;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+class UserSignupFixtureTest {
+
+    WorkflowTestFixture<GivenWhen.Phase, Then.Phase> fixture;
+
+    @BeforeEach
+    void setUp() {
+        WorkflowModule<SimpleWorkflowContext> module = WorkflowModule
+                .defaults("UserSignup", SimpleWorkflowContext.class)
+                .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+                .definition(d -> d.autodetected(c -> new UserSignupWorkflow()));
+
+        fixture = WorkflowTestFixture.of(module);
     }
 
-    @Override
-    protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>>
-    getDeclaredDefinitions() {
-        return d -> d
-                .declarative(c -> new OrderFulfillmentWorkflow()::execute)  // <2>
-                .workflowName("OrderFulfillment")
-                .on(EventConditions.fromType(OrderPlaced.class))            // <3>
-                .customized((c, w) -> w
-                        .eventNameCustomizer(namespace("io.axoniq.order.workflow"))
-                        .workflowIdProvider(fromPayloadAttribute(c, "orderId")) // <4>
-                );
+    @AfterEach
+    void tearDown() {
+        fixture.then().stop();
+    }
+
+    @Test
+    void vip_user_reaches_activation_step() {
+        fixture.given()
+               .noExecution();
+
+        fixture.when()
+               .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
+               .executeStep("createUser");
+
+        fixture.then()
+               .executionExists()
+               .waitingIn("activateUser");
     }
 }
 ----
 
-<.> Specify the DSL type and context factory.
-<.> Provide the workflow definition—a method reference to your workflow class.
-<.> Trigger the workflow when an `OrderPlaced` event is received.
-<.> Extract the workflow ID from the event's `orderId` field.
+The public fixture creation API is `WorkflowTestFixture.of(...)`.
+Use the overload that matches how much control the test needs:
 
-The base class provides several components you can use in your tests:
-
-[cols="<,<"]
+[cols="1,2"]
 |===
-|Field |Purpose
+|Factory |Use
 
-|`delayedPublisher` |Schedule events to be published at specific time offsets
-|`workflowEngine` |Start and manage workflow executions
-|`workflowHistoryRepository` |Query workflow execution history and assert on final state
+|`of(workflowModule)`
+|Create a fixture with the default action and assertion phases.
+
+|`of(workflowModule, customize)`
+|Customize the workflow configuration before the fixture starts.
+
+|`of(workflowModule, customize, givenWhenPhase, thenPhase)`
+|Create a fixture with custom action and assertion phases.
 |===
 
-== Autodetected registration
-
-If your workflow class uses the `@Workflow` annotation (like ours does), you can use autodetection instead of declarative registration:
+Use the `customize` overload when the workflow under test needs test-specific components:
 
 [source,java]
 ----
-@Override
-protected UnaryOperator<WorkflowModule.WorkflowDefinitionPhase.DetectionPhase<SimpleWorkflowContext>>
-getDeclaredDefinitions() {
-    return d -> d.autodetected(
-            c -> new OrderFulfillmentWorkflow(),
-            SimpleWorkflowContext.class
-    );
+WorkflowModule<SimpleWorkflowContext> module = WorkflowModule
+        .defaults("UserSignup", SimpleWorkflowContext.class)
+        .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+        .definition(d -> d.autodetected(c -> new UserSignupWorkflow()));
+
+WorkflowTestFixture<GivenWhen.Phase, Then.Phase> fixture =
+        WorkflowTestFixture.of(
+                module,
+                configurer -> configurer.componentRegistry(registry -> registry.registerComponent(
+                        AuditSink.class,
+                        c -> new InMemoryAuditSink()
+                ))
+        );
+----
+
+== BDD phase markers
+
+`given()`, `when()`, and `then()` are fluent phase markers.
+They make the test read as a scenario while keeping the runtime interactions explicit.
+
+[source,java]
+----
+fixture.given()
+       .publishEvent(startEvent)
+       .executeStep("prepare");
+
+fixture.when()
+       .publishEvent(domainEvent);
+
+fixture.then()
+       .workflowFinished(WorkflowStatus.COMPLETED);
+----
+
+The action phase can move to the assertion phase with `then()`.
+The assertion phase can move back to the fixture with `and()`, which preserves custom phase types when you use them.
+
+== Driving workflow progress
+
+=== Publishing events
+
+Use `publishEvent(...)` to publish either an event payload or a prebuilt `EventMessage`.
+Payload events are wrapped in a `GenericEventMessage` and published through the configured event sink.
+
+[source,java]
+----
+fixture.when()
+       .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"));
+----
+
+Events published through the fixture go through normal event conversion, workflow start conditions, correlation, and workflow history recording.
+
+=== Releasing execute steps
+
+The fixture does not stop the workflow from entering an `execute` step.
+The step is started normally, and the workflow state shows that it is currently waiting in that step.
+What changes in stepping mode is how the step finishes: it will never complete by itself until the test tells the
+fixture what to do for that step name.
+
+Think of it like a worker reaching a checkpoint.
+The worker has arrived and checked in, so everyone can see which station it is at, but the checkpoint gate stays closed
+until the test opens it.
+The test can open the gate in three ways: let the real workflow-defined action run, provide a fake successful result,
+or force the step to fail.
+
+This behavior lets a test inspect intermediate workflow state before any real side effect runs, while still using the
+normal runtime machinery for step events, payload reduction, and history recording.
+
+To release the production action:
+
+[source,java]
+----
+fixture.when()
+       .executeStep("createUser");
+----
+
+To replace the production action with a successful fake result and assert that the step completes:
+
+[source,java]
+----
+fixture.when()
+       .executeStepReturning("activateUser", Map.of("activated", true));
+----
+
+To provide a custom payload processor:
+
+[source,java]
+----
+fixture.when()
+       .executeStep("reserveCredit", (processingContext, inputPayload) -> Map.of(
+               "reservationId", "res-123",
+               "amount", inputPayload.get("amount")
+       ));
+----
+
+The custom processor receives the real reduced input payload and the real `ProcessingContext`.
+The runtime still publishes normal step events and applies the configured result payload reducer.
+
+To make a step fail and assert that it failed:
+
+[source,java]
+----
+fixture.when()
+       .executeStepFailing(
+               "reserveCredit",
+               new StepFailedException("credit denied")
+       );
+----
+
+=== Advancing time
+
+The fixture registers a mutable clock and a manual timeout scheduler.
+Use `timePasses(...)` to advance fixture-controlled time and run timeout tasks that are due.
+
+[source,java]
+----
+fixture.given()
+       .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
+       .executeStep("createUser")
+       .executeStepReturning("activateUser", Map.of())
+       .executeStepReturning("sendWelcomeEmail", Map.of());
+
+fixture.when()
+       .timePasses(Duration.ofSeconds(1));
+
+fixture.then()
+       .waitingIn("waitForMagicToHappen");
+----
+
+This is useful for `sleep`, `waitForEvent` timeouts, execute-step timeouts, and retry backoff behavior that is wired through the workflow scheduler.
+
+== Assertions
+
+Fixture assertions use Awaitility where workflow state may still be changing.
+When an assertion selects an execution or history, that object becomes the selected workflow state for later assertions.
+
+=== Shared phase assertions
+
+[cols="1,2"]
+|===
+|Method |Purpose
+
+|`executionExists()`
+|Wait until any active workflow execution exists and select it.
+
+|`executionExists(Predicate<WorkflowExecution>)`
+|Wait until an active execution matching the predicate exists and select it.
+
+|`historyExists(Predicate<WorkflowHistory>)`
+|Wait until a workflow history matching the predicate exists and select it.
+
+|`historyExists(String)`
+|Wait until a workflow history exists for the given workflow id.
+
+|`historyExists(WorkflowStatus)`
+|Wait until a workflow history exists with the given workflow status.
+
+|`noExecution()`
+|Wait until no workflow executions are active.
+
+|`noHistory()`
+|Assert that no workflow history is recorded.
+
+|`stop()`
+|Shut down the fixture's workflow configuration and services.
+|===
+
+=== Step assertions
+
+[cols="1,2"]
+|===
+|Method |Purpose
+
+|`waitingIn(String, String...)`
+|Assert that every given step exists in the selected active execution and is not terminal.
+
+|`stepsPassed(String, String...)`
+|Assert that every given step exists in the selected workflow state and is terminal.
+
+|`step(String, StepStatus)`
+|Assert that a step exists in the selected workflow state and has the expected status.
+
+|`hasSteps(String, String...)`
+|Assert that every given step exists in the selected workflow state.
+
+|`hasStepsInAnyOrder(String, String...)`
+|Assert that the selected workflow state contains exactly the given steps, regardless of order.
+
+|`noStep(String)`
+|Assert that the selected workflow state does not contain the given step.
+
+|`workflowNotFinished()`
+|Assert that the selected workflow state has a non-terminal workflow status.
+
+|`workflowFinished(WorkflowStatus)`
+|Wait until no execution is active and a history exists with the expected workflow status.
+|===
+
+=== Payload and state assertions
+
+[cols="1,2"]
+|===
+|Method |Purpose
+
+|`payloadSatisfies(Consumer<Map<String, Object>>)`
+|Apply a custom assertion to the selected workflow payload.
+
+|`payloadMatches(Predicate<Map<String, Object>>)`
+|Assert that the selected workflow payload satisfies the predicate.
+
+|`payloadEquals(Map<String, Object>)`
+|Assert that the selected workflow payload equals the expected payload.
+
+|`payloadContains(Map<String, Object>)`
+|Assert that the selected workflow payload contains the expected entries.
+
+|`workflowStateSatisfies(Consumer<WorkflowState>)`
+|Apply a custom assertion to the selected workflow state.
+|===
+
+== Custom phases
+
+The built-in phase methods are intentionally small.
+They publish events, release execute steps, advance time, and assert raw workflow state.
+Those are useful primitives, but repeated tests should not force readers to think in primitives.
+
+Build custom phases when a sequence has a business meaning.
+The custom method name should describe the business state or transition, while the method body can still use the fixture primitives.
+Good custom phase names are `vipRegistrationReceived`, `customerRegistrationCompleted`, `paymentTimesOut`, or `shipmentReserved`.
+Avoid custom names that merely restate technical work, such as `publishEventAndExecuteThreeSteps`.
+
+Custom action phases extend `GivenWhen`.
+Custom assertion phases extend `Then`.
+The generic parameters connect both phases so fluent calls keep the custom type.
+
+[source,java]
+----
+class SignupGivenWhen extends GivenWhen<SignupGivenWhen, SignupThen> {
+
+    SignupGivenWhen vipRegistrationReceived(String id, String email) {
+        return publishEvent(new RegistrationReceivedEvent(id, email, "vip"));
+    }
+
+    SignupGivenWhen customerRegistrationCompleted() {
+        return executionExists()
+                .executeStep("createUser")
+                .executeStepReturning("activateUser", Map.of())
+                .executeStepReturning("sendWelcomeEmail", Map.of());
+    }
+
+    SignupGivenWhen magicHappens(String magician) {
+        return publishEvent(new MagicHappenedEvent(magician));
+    }
+}
+
+class SignupThen extends Then<SignupThen, SignupGivenWhen> {
+
+    SignupThen customerWaitingForMagic() {
+        return executionExists()
+                .waitingIn("waitForMagicToHappen");
+    }
+
+    SignupThen signupCompletedFor(String id, String email, String magician) {
+        return workflowFinished(WorkflowStatus.COMPLETED)
+                .stepsPassed("activateUser", "sendWelcomeEmail", "waitForMagicToHappen", "modifyPayload")
+                .payloadContains(Map.of(
+                        "id", id,
+                        "email", email,
+                        "status", "vip",
+                        "magician", magician
+                ));
+    }
 }
 ----
 
-[TIP]
-====
-Use autodetected when your workflow class has `@Workflow` annotations.
-Use declarative when you want full programmatic control over triggering conditions and customization.
-====
-
-== Scheduling events
-
-The `DelayedPublisher` lets you schedule events to be published at specific time offsets.
-This simulates the real-world flow of events arriving over time:
+Pass the custom phase instances to the custom fixture factory:
 
 [source,java]
 ----
-delayedPublisher.addSchedules(List.of(
-        ofMillis(500,  new OrderPlaced("order-1", "cust-42",
-                                        "alice@shop.com", 99.99)),  // <1>
-        ofMillis(3000, new PaymentConfirmed("order-1",
-                                             "txn-abc-123"))         // <2>
-));
-delayedPublisher.start();
+WorkflowTestFixture<SignupGivenWhen, SignupThen> fixture =
+        WorkflowTestFixture.of(
+                WorkflowModule.defaults("UserSignup", SimpleWorkflowContext.class)
+                              .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+                              .definition(d -> d.autodetected(c -> new UserSignupWorkflow())),
+                UnaryOperator.identity(),
+                new SignupGivenWhen(),
+                new SignupThen()
+        );
 ----
 
-<.> Published after 500ms—triggers the workflow.
-<.> Published 3 seconds later—the `awaitPayment` step picks it up via the `orderId` association.
-
-== Running and asserting
-
-Here's a complete test that verifies our order fulfillment workflow end to end:
+The test can now use business-level steps while the custom phases keep low-level workflow control in one place:
 
 [source,java]
-.src/test/java/io/axoniq/example/order/OrderFulfillmentTest.java
+----
+fixture.given()
+       .vipRegistrationReceived("2", "piggy@muppets.biz")
+       .customerRegistrationCompleted()
+       .timePasses(Duration.ofSeconds(1));
+
+fixture.then()
+       .customerWaitingForMagic();
+
+fixture.when()
+       .magicHappens("Merlin");
+
+fixture.then()
+       .signupCompletedFor("2", "piggy@muppets.biz", "Merlin");
+----
+
+Use `and()` when you want to keep a single chain and move from assertions back to the fixture:
+
+[source,java]
+----
+fixture.then()
+       .customerWaitingForMagic()
+       .and()
+       .when()
+       .magicHappens("Merlin");
+----
+
+== Complete scenario
+
+This example tests a workflow that starts for VIP registrations, waits for a delayed step, then waits for the right event before completing.
+
+[source,java]
 ----
 @Test
-void shouldFulfillOrderEndToEnd() {
-    delayedPublisher.addSchedules(List.of(
-            ofMillis(500,  new OrderPlaced("order-1", "cust-42",
-                                            "alice@shop.com", 99.99)),
-            ofMillis(3000, new PaymentConfirmed("order-1", "txn-abc-123"))
-    ));
-    delayedPublisher.start();
+void vip_registration_completes_after_magic_event() {
+    fixture.given()
+           .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
+           .executionExists()
+           .executeStep("createUser")
+           .executeStepReturning("activateUser", Map.of())
+           .executeStepReturning("sendWelcomeEmail", Map.of())
+           .timePasses(Duration.ofSeconds(1))
+           .then()
+           .waitingIn("waitForMagicToHappen");
 
-    await().untilAsserted(() ->
-        assertThat(workflowEngine.workflowExecutions()).isNotEmpty()
-    );
-    workflowEngine.runWorkflows(false); // <1>
+    fixture.when()
+           .publishEvent(new MagicHappenedEvent("Merlin"));
 
-    await().atMost(30, TimeUnit.SECONDS).untilAsserted(() ->
-        assertThat(workflowHistoryRepository.findAll())
-                .allMatch(h -> h.state().workflowStatus().isTerminal()) // <2>
-    );
-
-    for (WorkflowHistory history : workflowHistoryRepository.findAll()) {
-        var state = history.state();
-        assertThat(state.workflowStatus())
-                .isEqualTo(WorkflowStatus.COMPLETED); // <3>
-        assertThat(state.workflowStepNames())
-                .containsExactly(                      // <4>
-                        "reserveStock",
-                        "initiatePayment",
-                        "awaitPayment",
-                        "storePaymentDetails",
-                        "shipOrder",
-                        "notifyCustomer"
-                );
-    }
+    fixture.then()
+           .workflowFinished(WorkflowStatus.COMPLETED)
+           .stepsPassed("activateUser", "sendWelcomeEmail", "waitForMagicToHappen", "modifyPayload")
+           .step("activateUser", StepStatus.COMPLETED)
+           .payloadEquals(Map.of(
+                   "magician", "Merlin",
+                   "email", "piggy@muppets.biz",
+                   "status", "vip",
+                   "id", "2"
+           ));
 }
 ----
 
-<.> Starts workflow execution after events are loaded.
-<.> Uses Awaitility to wait until the workflow reaches a terminal state.
-<.> Asserts the workflow completed successfully—not failed, cancelled, or timed out.
-<.> Verifies all six steps executed in the correct order.
+== Advanced testing
+
+Use the BDD fixture for normal workflow behavior tests.
+The lower-level APIs are useful when you need an imperative harness, custom configuration, direct runtime services, or broader integration-style coverage.
+
+=== WorkflowTestDriver
+
+`WorkflowTestDriver` is the lower-level test harness used by the BDD fixture.
+It starts a workflow module, exposes workflow test services, publishes events, waits for executions and histories, and stores the selected workflow state for later assertions.
+
+The driver can start in two modes:
+
+[cols="1,2"]
+|===
+|Factory |Mode
+
+|`WorkflowTestDriver.stepper(...)`
+|Starts the module in stepping mode.
+Execute steps start normally, but they do not finish on their own until the test calls `executeStep(...)`,
+`executeStep(..., payloadProcessor)`, or `executeStepFailing(...)`.
+`timePasses(...)` advances fixture-controlled time.
+
+|`WorkflowTestDriver.live(...)`
+|Starts the module in live mode.
+Workflow actions and runtime scheduling behave as they do in normal runtime configuration.
+Use this for integration-style tests where production actions should run.
+|===
+
+In stepping mode, use the driver directly when you want fixture behavior without the BDD facade:
+
+[source,java]
+----
+WorkflowModule<SimpleWorkflowContext> module = WorkflowModule
+        .defaults("TestModule", SimpleWorkflowContext.class)
+        .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+        .definition(d -> d.autodetected(c -> new UserSignupWorkflow()));
+
+WorkflowTestDriver driver = WorkflowTestDriver.stepper(module, false, UnaryOperator.identity());
+
+try {
+    driver.publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"));
+    driver.executionExists();
+    driver.testingState().waitingIn("createUser");
+    driver.executeStep("createUser");
+    driver.testingState().waitingIn("activateUser");
+} finally {
+    driver.shutdown();
+}
+----
+
+In live mode, the same driver can be used for broader tests that do not need manual step release:
+
+[source,java]
+----
+WorkflowTestDriver driver = WorkflowTestDriver.live(module, UnaryOperator.identity());
+----
+
+In live mode, use `publishEvent(...)`, `executionExists()`, `historyExists()`, `noExecution()`, `noHistory()`, and `testingState()` for assertions over normally running workflows.
+
+=== WorkflowTestSteppingModeEnhancer
+
+`WorkflowTestSteppingModeEnhancer` installs the stepping components used by the BDD fixture and by `WorkflowTestDriver.stepper(...)`.
+It registers:
+
+* a manual execute-step action resolver, so tests can release a step with the original action or a fake `PayloadProcessor`;
+* a mutable workflow clock;
+* a manual workflow scheduler.
+
+You usually do not need to register this enhancer directly.
+The BDD fixture and `WorkflowTestDriver.stepper(...)` already install it.
+Register it yourself only when you build a custom test configuration and still want stepping behavior:
+
+[source,java]
+----
+WorkflowConfigurer configurer = WorkflowConfigurer.create()
+        .componentRegistry(registry -> new WorkflowTestSteppingModeEnhancer().enhance(registry))
+        .registerWorkflowModule(module);
+----
+
+== When to use live-mode integration tests
+
+`WorkflowTestFixture` is best for BDD-style workflow tests where the test controls execute-step completion and time.
+
+Use `WorkflowTestDriver.live(...)` or `AbstractWorkflowTestBase` when you need a broader integration test with:
+
+* declarative workflow registration instead of autodetection;
+* production execute actions instead of stepper-controlled execute steps;
+* delayed wall-clock event schedules through `DelayedPublisher`;
+* direct access to `WorkflowEngine`, `WorkflowHistoryRepository`, or other runtime services.
+
+The live-mode style still runs real workflows and remains useful for end-to-end coverage.
+The BDD fixture is the preferred option when a test should read as a scenario and should avoid production step side effects.
 
 == Related topics
 
-* xref:understanding-steps.adoc[Understanding Steps]—timeouts, error handling, payload reducers, event naming
-* xref:workflow-lifecycle.adoc[Workflow Lifecycle]—fail/cancel, lifecycle listeners (`@OnSuccess`, `@OnFailure`, `@OnCancellation`, `@OnTimeout`)
-* xref:common-patterns.adoc[Common Patterns]—saga, fan-out/fan-in, retry, and more
-* xref:configuration.adoc[Configuration]—declarative setup, custom contexts, event naming customization
+* xref:understanding-steps.adoc[Understanding Steps]: timeouts, error handling, payload reducers, event naming
+* xref:workflow-lifecycle.adoc[Workflow Lifecycle]: fail and cancel behavior, lifecycle listeners
+* xref:common-patterns.adoc[Common Patterns]: saga, fan-out/fan-in, retry, and more
+* xref:configuration.adoc[Configuration]: declarative setup, custom contexts, event naming customization

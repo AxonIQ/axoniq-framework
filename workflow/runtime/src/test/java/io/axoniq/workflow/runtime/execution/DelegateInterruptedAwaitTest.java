@@ -40,10 +40,8 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests interrupt handling while delegates wait for a just-appended STARTED event.
@@ -86,7 +84,8 @@ class DelegateInterruptedAwaitTest {
                 Clock.systemUTC(),
                 unitOfWorkFactory,
                 eventSink,
-                executor
+                executor,
+                new DefaultWorkflowScheduler(Clock.systemUTC())
         );
         executeDelegate = new ExecuteDelegate(
                 workflowContext,
@@ -95,7 +94,9 @@ class DelegateInterruptedAwaitTest {
                 Clock.systemUTC(),
                 unitOfWorkFactory,
                 eventSink,
-                executor
+                executor,
+                new DefaultWorkflowScheduler(Clock.systemUTC()),
+                new DefaultExecuteStepActionResolver()
         );
     }
 

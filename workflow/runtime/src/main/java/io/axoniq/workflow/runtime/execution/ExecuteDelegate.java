@@ -39,11 +39,9 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -59,6 +57,7 @@ import java.util.concurrent.TimeoutException;
 public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrimitive {
 
     private static final Logger logger = LoggerFactory.getLogger(ExecuteDelegate.class);
+    private final ExecuteStepActionResolver actionResolver;
 
     /**
      * Constructs the delegate.
@@ -78,9 +77,19 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                            @Nonnull Clock clock,
                            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
                            @Nonnull EventSink eventSink,
-                           @Nonnull Executor executor
+                           @Nonnull Executor executor,
+                           @Nonnull WorkflowScheduler timeoutScheduler,
+                           @Nonnull ExecuteStepActionResolver actionResolver
     ) {
-        super(context, workflowExecution, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink, executor);
+        super(context,
+              workflowExecution,
+              parentEventNameCustomizer,
+              clock,
+              unitOfWorkFactory,
+              eventSink,
+              executor,
+              timeoutScheduler);
+        this.actionResolver = actionResolver;
     }
 
     @Nonnull
@@ -104,7 +113,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     ) {
         var stepName = command.stepName();
         var local = command.local();
-        var action = command.action();
         var parameterPayloadReducer = command.parameterPayloadReducer();
         var resultPayloadReducer = command.resultPayloadReducer();
         var timeout = command.timeout();
@@ -148,8 +156,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         var step = workflowExecution.state().getStep(stepName);
         if (step.status() == StepStatus.STARTED || step.status() == StepStatus.RETRYING) {
             var actualStartTime = step.timestamp();
-            var remainingTimeout = Duration.between(Instant.now(clock),
-                                                    actualStartTime.plus(timeout));
+            var timeoutDeadline = actualStartTime.plus(timeout);
+            var remainingTimeout = Duration.between(clock.instant(), timeoutDeadline);
             // FIXME - This is where we capture our current consistency marker
 
             var result = unitOfWorkFactory
@@ -157,11 +165,12 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                             customize -> customize.workScheduler(executor)) // FIXME -> define a new thread pool for execution customer code
                     .executeWithResult(processingContext -> {
                         var procContext = ProcessingContextUtils.copyResources(workflowExecution.state()
-                                                                                                .getStep(stepName)
-                                                                                                .context(),
+                                                                                .getStep(stepName)
+                                                                                .context(),
                                                                                processingContext);
                         var payload = parameterPayloadReducer.apply(workflowContext.workflowPayload(), local);
                         try {
+                            var action = actionResolver.resolve(workflowContext, workflowExecution, command);
                             return CompletableFuture.completedFuture(action.apply(procContext, payload));
                         } catch (StepCancellationException | WorkflowCancelledException | WorkflowFailedException t) {
                             // Framework control-flow signals must keep their original type
@@ -181,9 +190,17 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                     timeoutHandler.onTimeout(stepName, eventNameCustomizer);
                 });
             } else {
-                result
-                        .orTimeout(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
-                        .whenComplete((r, e) -> {
+                var timeoutTask = timeoutScheduler.schedule(
+                        timeoutDeadline,
+                        () -> {
+                            if (!result.isDone()) {
+                                result.completeExceptionally(new TimeoutException(
+                                        "Step '" + stepName + "' timed out"));
+                            }
+                        }
+                );
+                result.whenComplete((r, e) -> {
+                            timeoutTask.cancel();
                             workflowExecution.removeRunningStep(stepName);
                             if (r != null) {
                                 workflowExecution.appendTask(i -> {

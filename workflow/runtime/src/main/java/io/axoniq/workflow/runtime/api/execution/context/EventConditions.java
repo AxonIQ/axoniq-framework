@@ -30,6 +30,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiPredicate;
 
 /**
@@ -194,8 +195,8 @@ public class EventConditions {
             }
 
             @Override
-            public @Nonnull java.util.Set<String> serializedAssociations() {
-                return associations.serializedAssociations();
+            public @Nonnull Set<String> associations() {
+                return associations.criteria();
             }
         };
     }
@@ -205,7 +206,7 @@ public class EventConditions {
             @Nonnull Associations associations
     ) {
         var registry = associations.registry();
-        var predicates = associations.serializedAssociations().stream()
+        var predicates = associations.criteria().stream()
                                      .map(serialized -> SerializedAssociation.parse(registry, serialized))
                                      .map(serialized -> serialized.asEventMessagePredicate(registry))
                                      .toList();

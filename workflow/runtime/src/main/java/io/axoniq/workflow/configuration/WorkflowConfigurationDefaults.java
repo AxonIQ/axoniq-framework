@@ -23,6 +23,9 @@ import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
+import io.axoniq.workflow.runtime.execution.DefaultExecuteStepActionResolver;
+import io.axoniq.workflow.runtime.execution.DefaultWorkflowScheduler;
+import io.axoniq.workflow.runtime.execution.ExecuteStepActionResolver;
 import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
 import io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
@@ -30,18 +33,23 @@ import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
+import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.execution.WorkflowScheduler;
 import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
+import org.axonframework.common.ClockUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
+import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
+import org.axonframework.eventsourcing.eventstore.TagResolver;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
-import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jdbc.TokenSchema;
 
@@ -112,6 +120,9 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerPayloadReducerRegistry(componentRegistry);
         registerEventNameCustomizer(componentRegistry);
         registerClock(componentRegistry);
+        decorateTagResolver(componentRegistry);
+        registerExecuteStepActionResolver(componentRegistry);
+        registerWorkflowTimeoutScheduler(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
         registerWorkflowExecutionRepository(componentRegistry);
         registerMutableWorkflowHistoryRepository(componentRegistry);
@@ -133,10 +144,29 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     void registerClock(ComponentRegistry componentRegistry) {
-        //  Issue AxonIQ/AxonFramework#3083 will introduce an ApplicationConfigurer wide Clock,
-        //  which should replace the GenericEventMessage and subsequently this Clock.
-        //noinspection deprecation
-        componentRegistry.registerIfNotPresent(Clock.class, cfg -> GenericEventMessage.clock);
+        componentRegistry.registerIfNotPresent(Clock.class, cfg -> ClockUtils.get());
+    }
+
+    void registerExecuteStepActionResolver(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(ExecuteStepActionResolver.class,
+                                               cfg -> new DefaultExecuteStepActionResolver());
+    }
+
+    void registerWorkflowTimeoutScheduler(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(WorkflowScheduler.class,
+                                               cfg -> new DefaultWorkflowScheduler(
+                                                       cfg.getComponent(Clock.class)
+                                               ));
+    }
+
+    void decorateTagResolver(ComponentRegistry componentRegistry) {
+        componentRegistry.registerDecorator(
+                DecoratorDefinition
+                        .forType(TagResolver.class)
+                        .with((cfg, name, delegate) -> new MultiTagResolver(delegate,
+                                                                            new WorkflowEventTagResolver()))
+
+        );
     }
 
     void registerWorkflowEngineExecutor(ComponentRegistry componentRegistry) {

@@ -39,6 +39,7 @@
     <modules>
         <module>simple</module>
         <module>bike-rental</module>
+        <module>integrationtests</module>
     </modules>
 
     <build>
