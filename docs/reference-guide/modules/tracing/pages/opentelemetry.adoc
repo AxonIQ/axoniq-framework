@@ -93,8 +93,27 @@ The worker-thread bridge additionally restores the captured context snapshot and
 This makes the current Axon span visible to instrumented JDBC, WebClient, and gRPC clients and to MDC logging, without using a thread-local as the durable carrier: a database call issued inside an event handler, or the Axon Server gRPC append inside the storage transaction, becomes a child of the correct Axon span automatically.
 
 Reactive code is covered as well.
-The binding registers a `ProcessingContext` accessor with Micrometer's `ContextRegistry`, so a `ContextSnapshot` captured from a `ProcessingContext` includes the active Axon span, and Reactor's automatic context propagation restores it across reactive operators.
+The binding registers a `ProcessingContext` accessor with Micrometer's `ContextRegistry`, so a `ContextSnapshot` captured from a `ProcessingContext` includes the active Axon span.
+When enabled, Reactor's automatic context propagation restores it across reactive operators.
 Spans created inside a `Mono` or `Flux` chain therefore keep the correct parent, and MDC log correlation stays intact through asynchronous boundaries.
+
+With the worker-thread bridge enabled, Axoniq Framework registers the Micrometer context accessors, but the application must enable Reactor's automatic context propagation.
+In a Spring Boot application, set `spring.reactor.context-propagation=auto`.
+The default `limited` mode restores thread-locals only for the `handle` and `tap` operators.
+Without Spring Boot, call `Hooks.enableAutomaticContextPropagation()` once during application startup, before reactive pipelines are subscribed.
+In both cases, Reactor captures the current Axon span when the handler result is subscribed and restores it around operator callbacks after scheduler thread hops.
+
+[source,yaml]
+----
+spring:
+  reactor:
+    context-propagation: auto
+----
+
+[source,java]
+----
+Hooks.enableAutomaticContextPropagation();
+----
 
 Disable only the worker-thread bridge with:
 

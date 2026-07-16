@@ -982,6 +982,7 @@ The following files in `axon-5/` describe the API changes:
 - Added a single end-to-end same-trace example tree and a log-correlation section.
 - Reworked the pages to the framework-user perspective: the custom-decorator and custom-SpanFactory guidance is condensed into a brief "Extending tracing" mention.
 - Added a user-centric "Context propagation" section making clear the Axoniq Framework binding nests instrumented gRPC/JDBC/WebClient and MDC logging under the correct Axon span and supports Reactor context propagation via the ProcessingContext accessor.
+- Documented how to enable Reactor automatic context propagation with Spring Boot and in plain Java applications.
 - Added the Axon Framework 4 to 5 Distributed Tracing migration path (`migration/pages/paths/distributed-tracing.adoc` in the Axon Framework repository) covering dependencies, MultiSpanFactory removal, span-name and attribute-key mappings, property mappings, and topology changes; linked from the tracing index and the OSS monitoring tracing page.
 
 ---

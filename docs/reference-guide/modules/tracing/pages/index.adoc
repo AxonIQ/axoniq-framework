@@ -329,10 +329,10 @@ The Axoniq Framework Micrometer binding extends this to everything else in the a
 
 * **Instrumented libraries**: work performed inside a traced framework operation, such as Axon Server gRPC calls, JDBC statements, or WebClient requests instrumented by Micrometer or the OpenTelemetry agent, nests under the correct Axon span.
 * **Log correlation**: MDC-based trace and span identifiers are correct on whichever thread framework work runs, so log lines written by handlers and framework internals link to the right span.
-* **Reactor pipelines**: the binding registers a `ProcessingContext` accessor with Micrometer's context propagation, so Reactor's automatic context propagation carries the active Axon span across reactive operators; spans created inside a `Mono` or `Flux` chain keep the correct parent and MDC values.
+* **Reactor pipelines**: the binding registers a `ProcessingContext` accessor with Micrometer's context propagation. Once Reactor's automatic context propagation is enabled, spans created inside a `Mono` or `Flux` chain keep the correct parent and MDC values across reactive operators. See xref:tracing:opentelemetry.adoc#_automatic_instrumentation_and_context_propagation[Automatic instrumentation and context propagation] for Spring Boot and plain Java configuration.
 * **Ambient fallback**: when neither the context nor message metadata yields a parent, framework work entered from an instrumented HTTP request joins that request's trace.
 
-The worker-thread bridge behind the first two points can be disabled with `axon.tracing.thread-local-context-propagation.enabled=false`; span creation and message metadata propagation remain active without it.
+The worker-thread bridge behind the first three points can be disabled with `axon.tracing.thread-local-context-propagation.enabled=false`; span creation and message metadata propagation remain active without it.
 See xref:tracing:opentelemetry.adoc[] for the mechanics.
 
 == OpenTelemetry
