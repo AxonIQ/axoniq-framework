@@ -21,7 +21,6 @@ package io.axoniq.framework.postgresql;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.axoniq.license.entitlement.EnforcingEntitlementManager;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.eventsourcing.SnapshottingEntityLifecycleHandlerTestSuite;
@@ -32,11 +31,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.mockito.Mockito;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
-
-import javax.sql.DataSource;
 
 /**
  * Tests the {@link org.axonframework.eventsourcing.handler.SnapshottingEntityLifecycleHandler} with a
@@ -44,27 +39,28 @@ import javax.sql.DataSource;
  *
  * @author John Hendrikx
  */
-@Testcontainers
 class PostgresqlBackedSnapshotterIT extends SnapshottingEntityLifecycleHandlerTestSuite {
 
-    @SuppressWarnings("resource")
-    @Container
-    private static final PostgreSQLContainer CONTAINER = new PostgreSQLContainer("postgres:16.2")
-            .withDatabaseName("testdb")
-            .withUsername("test")
-            .withPassword("test");
-
-    private static DataSource dataSource;
+    private static PostgreSQLContainer postgresContainer;
+    private static HikariDataSource dataSource;
 
     private PostgresqlEventStorageEngine engine;
 
     @BeforeAll
+    @SuppressWarnings("resource")
     static void buildDataSource() {
+        postgresContainer = new PostgreSQLContainer("postgres:16.2")
+                .withDatabaseName("testdb")
+                .withUsername("test")
+                .withPassword("test");
+
+        postgresContainer.start();
+
         HikariConfig config = new HikariConfig();
 
-        config.setJdbcUrl(CONTAINER.getJdbcUrl());
-        config.setUsername(CONTAINER.getUsername());
-        config.setPassword(CONTAINER.getPassword());
+        config.setJdbcUrl(postgresContainer.getJdbcUrl());
+        config.setUsername(postgresContainer.getUsername());
+        config.setPassword(postgresContainer.getPassword());
         config.setMaximumPoolSize(5);
         config.setMinimumIdle(1);
         config.setAutoCommit(false);
@@ -74,7 +70,11 @@ class PostgresqlBackedSnapshotterIT extends SnapshottingEntityLifecycleHandlerTe
 
     @AfterAll
     static void closeDataSource() {
-        ((HikariDataSource) dataSource).close();
+        dataSource.close();
+
+        if (postgresContainer != null) {
+            postgresContainer.stop();
+        }
     }
 
     @AfterEach
@@ -87,10 +87,6 @@ class PostgresqlBackedSnapshotterIT extends SnapshottingEntityLifecycleHandlerTe
 
     @Override
     protected void registerComponents(ComponentRegistry registry) {
-        // Axon Server connector is on the classpath in this module; disable its enhancer so it
-        // doesn't register an AxonServerConnectionManager that attempts to reach a non-existent server.
-        registry.disableEnhancer(AxonServerConfigurationEnhancer.class);
-
         registry.registerComponent(
                 EventStorageEngine.class,
                 c -> engine = new PostgresqlEventStorageEngine(
