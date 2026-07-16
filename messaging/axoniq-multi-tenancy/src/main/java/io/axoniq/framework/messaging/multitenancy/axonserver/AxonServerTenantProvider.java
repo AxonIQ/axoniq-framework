@@ -31,17 +31,18 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.configuration.MessagingConfigurationDefaults;
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
@@ -92,11 +93,11 @@ public class AxonServerTenantProvider implements TenantProvider {
     private final List<TenantRegistration> registrations = new ArrayList<>();
     private boolean closed = false;
 
-    /**
-     * Initialized in subscribeToUpdates() and closed in shutdown(). Used to receive context updates from Axon Server.
-     */
-    @Nullable
-    private volatile ResultStream<ContextUpdate> contextUpdatesStream;
+    // Holds the active context-update stream once started. Initialised to a closed sentinel so shutdown() can
+    // unconditionally close whatever is in the reference without a null-check, and subscribeToUpdates() can use
+    // compareAndSet to avoid a race between concurrent start/shutdown calls.
+    private final AtomicReference<ResultStream<ContextUpdate>> contextUpdatesStream =
+            new AtomicReference<>(ClosedResultStream.instance());
 
     /**
      * Constructs an AxonServerTenantProvider with the given connection manager and tenant connect predicate.
@@ -128,7 +129,15 @@ public class AxonServerTenantProvider implements TenantProvider {
     private List<TenantDescriptor> getInitialTenants() {
         List<TenantDescriptor> initialTenants = Collections.emptyList();
         try {
-            initialTenants = getTenantsAPI();
+            List<ContextOverview> contexts = adminChannel()
+                    .getAllContexts()
+                    .orTimeout(30, TimeUnit.SECONDS)
+                    .join();
+
+            initialTenants = contexts.stream()
+                                     .map(AxonServerMultiTenancyUtils::tenantDescriptor)
+                                     .filter(tenantConnectPredicate)
+                                     .toList();
         } catch (Exception e) {
             logger.error("Error while getting initial tenants", e);
         }
@@ -137,11 +146,12 @@ public class AxonServerTenantProvider implements TenantProvider {
 
     private void subscribeToUpdates() {
         try {
-            contextUpdatesStream = adminChannel().subscribeToContextUpdates();
-            contextUpdatesStream.onAvailable(() -> {
+            ResultStream<ContextUpdate> stream = adminChannel().subscribeToContextUpdates();
+            contextUpdatesStream.set(stream);
+            stream.onAvailable(() -> {
                 try {
                     // nextIfAvailable() can return null despite its non-null annotation, so guard against it.
-                    ContextUpdate contextUpdate = contextUpdatesStream.nextIfAvailable();
+                    ContextUpdate contextUpdate = stream.nextIfAvailable();
                     if (contextUpdate == null) {
                         return;
                     }
@@ -183,18 +193,6 @@ public class AxonServerTenantProvider implements TenantProvider {
     @Override
     public List<TenantDescriptor> tenants() {
         return List.copyOf(tenantDescriptors);
-    }
-
-    private List<TenantDescriptor> getTenantsAPI() {
-        List<ContextOverview> contexts = adminChannel()
-                .getAllContexts()
-                .orTimeout(30, TimeUnit.SECONDS)
-                .join();
-
-        return contexts.stream()
-                       .map(AxonServerMultiTenancyUtils::tenantDescriptor)
-                       .filter(tenantConnectPredicate)
-                       .toList();
     }
 
     /**
@@ -281,10 +279,7 @@ public class AxonServerTenantProvider implements TenantProvider {
      * @return a {@link CompletableFuture} that completes when the provider has shut down
      */
     public CompletableFuture<Void> shutdown() {
-        // The stream is only opened when tenants are discovered dynamically, so it is null with predefined contexts.
-        if (contextUpdatesStream != null && !contextUpdatesStream.isClosed()) {
-            contextUpdatesStream.close();
-        }
+        contextUpdatesStream.getAndSet(ClosedResultStream.instance()).close();
         return CompletableFuture.runAsync(this::cancelAllRegistrations);
     }
 
@@ -303,5 +298,59 @@ public class AxonServerTenantProvider implements TenantProvider {
                                       MultiTenantAwareComponent component,
                                       Registration registration) {
 
+    }
+
+    /**
+     * A no-op {@link ResultStream} used as the initial and post-shutdown sentinel in {@link #contextUpdatesStream}, so
+     * the reference is never {@code null}.
+     */
+    private static final class ClosedResultStream implements ResultStream<ContextUpdate> {
+
+        private static final ClosedResultStream INSTANCE = new ClosedResultStream();
+
+        static ClosedResultStream instance() {
+            return INSTANCE;
+        }
+
+        private ClosedResultStream() {
+        }
+
+        @Override
+        public ContextUpdate peek() {
+            return null;
+        }
+
+        @Override
+        public ContextUpdate nextIfAvailable() {
+            return null;
+        }
+
+        @Override
+        public ContextUpdate nextIfAvailable(long timeout, TimeUnit unit) {
+            return null;
+        }
+
+        @Override
+        public ContextUpdate next() {
+            return null;
+        }
+
+        @Override
+        public void onAvailable(Runnable callback) {
+        }
+
+        @Override
+        public void close() {
+        }
+
+        @Override
+        public boolean isClosed() {
+            return true;
+        }
+
+        @Override
+        public Optional<Throwable> getError() {
+            return Optional.empty();
+        }
     }
 }
