@@ -44,3 +44,7 @@ docs/_playbook/build
 
 # flattened maven pom
 .flattened-pom.xml
+
+# Private credentials
+.env.local
+axon-server-test.license
