@@ -126,6 +126,8 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerExecuteStepActionResolver(componentRegistry);
         registerWorkflowTimeoutScheduler(componentRegistry);
         registerRunningWorkflows(componentRegistry);
+        registerExecuteStepActionResolver(componentRegistry);
+        registerWorkflowTimeoutScheduler(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
         registerWorkflowExecutionRepository(componentRegistry);
         registerMutableWorkflowHistoryRepository(componentRegistry);
@@ -188,8 +190,9 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                         // FIXME Register snapshot configuration eventually, see #245
                         .build()
         );
+        componentRegistry.registerIfNotPresent(Clock.class, cfg -> ClockUtils.get());
     }
-
+    
     void registerWorkflowEngineExecutor(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(ExecutorService.class,
                                                WORKFLOW_ENGINE_EXECUTOR,
