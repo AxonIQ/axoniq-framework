@@ -28,9 +28,7 @@ import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
 import org.axonframework.common.Registration;
-import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.configuration.MessagingConfigurationDefaults;
 import org.jspecify.annotations.Nullable;
@@ -38,7 +36,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -85,8 +82,6 @@ public class AxonServerTenantProvider implements TenantProvider {
 
     private final Set<TenantDescriptor> tenantDescriptors = ConcurrentHashMap.newKeySet();
 
-    @Nullable
-    private final String preDefinedContexts;
     private final TenantConnectPredicate tenantConnectPredicate;
     private final AxonServerConnectionManager axonServerConnectionManager;
 
@@ -100,6 +95,7 @@ public class AxonServerTenantProvider implements TenantProvider {
     /**
      * Initialized in subscribeToUpdates() and closed in shutdown(). Used to receive context updates from Axon Server.
      */
+    @Nullable
     private volatile ResultStream<ContextUpdate> contextUpdatesStream;
 
     /**
@@ -110,26 +106,10 @@ public class AxonServerTenantProvider implements TenantProvider {
      */
     public AxonServerTenantProvider(AxonServerConnectionManager axonServerConnectionManager,
                                     TenantConnectPredicate tenantConnectPredicate) {
-        this(axonServerConnectionManager, tenantConnectPredicate, null);
-    }
-
-    /**
-     * Constructs an AxonServerTenantProvider with the given connection manager, tenant connect predicate, and optional
-     * predefined contexts.
-     *
-     * @param axonServerConnectionManager the connection manager for Axon Server
-     * @param tenantConnectPredicate      the predicate to filter which contexts become tenants
-     * @param preDefinedContexts          comma-separated list of context names to use instead of discovering from Axon
-     *                                    Server's Admin API, or {@code null} for auto-discovery
-     */
-    public AxonServerTenantProvider(AxonServerConnectionManager axonServerConnectionManager,
-                                    TenantConnectPredicate tenantConnectPredicate,
-                                    @Nullable String preDefinedContexts) {
         this.axonServerConnectionManager = requireNonNull(axonServerConnectionManager,
                                                           "AxonServerConnectionManager is required");
         this.tenantConnectPredicate = requireNonNull(tenantConnectPredicate,
                                                      "TenantConnectPredicate is required");
-        this.preDefinedContexts = preDefinedContexts;
     }
 
     /**
@@ -141,23 +121,14 @@ public class AxonServerTenantProvider implements TenantProvider {
     public CompletableFuture<Void> start() {
         return CompletableFuture.runAsync(() -> {
             getInitialTenants().forEach(this::addTenant);
-            if (preDefinedContexts == null || preDefinedContexts.isEmpty()) {
-                subscribeToUpdates();
-            }
+            subscribeToUpdates();
         });
     }
 
     private List<TenantDescriptor> getInitialTenants() {
         List<TenantDescriptor> initialTenants = Collections.emptyList();
         try {
-            if (StringUtils.nonEmptyOrNull(preDefinedContexts)) {
-                initialTenants = Arrays.stream(preDefinedContexts.split(","))
-                                       .map(String::trim)
-                                       .map(TenantDescriptor::tenantWithId)
-                                       .toList();
-            } else {
-                initialTenants = getTenantsAPI();
-            }
+            initialTenants = getTenantsAPI();
         } catch (Exception e) {
             logger.error("Error while getting initial tenants", e);
         }

@@ -30,14 +30,12 @@ import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConf
 import io.axoniq.framework.messaging.multitenancy.util.RecordingTenantAwareComponent;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.DefaultAxonApplication;
-import org.axonframework.common.configuration.SearchScope;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
 import static io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor.tenantWithId;
-import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults.axonServerTenantProvider;
 import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.registerTenantConnectPredicate;
 import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.registerTenantResolver;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -132,36 +130,5 @@ class AxonServerTenantProviderIT {
         contextManager.deleteContext("foo");
         await().untilAsserted(() -> assertThat(tenantProvider.tenants()).isEmpty());
         await().untilAsserted(() -> assertThat(tenantDescriptorRecorder.tenants().isEmpty()));
-    }
-
-    @Test
-    void tenantProviderUsesPredefinedContexts() {
-        RecordingTenantAwareComponent tenantDescriptorRecorder = new RecordingTenantAwareComponent();
-
-        AxonConfiguration application = new DefaultAxonApplication()
-                .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                .componentRegistry(cr -> cr.registerComponent(TenantConnectPredicate.class, c -> td -> false))
-                .componentRegistry(cr -> cr.registerIfNotPresent(
-                        axonServerTenantProvider("foo,bar"),
-                        SearchScope.ALL
-                ))
-                .start();
-
-        AxonServerTenantProvider tenantProvider = (AxonServerTenantProvider) application.getComponent(TenantProvider.class);
-
-
-        tenantProvider.subscribe(tenantDescriptorRecorder);
-
-        await().untilAsserted(() -> {
-            assertThat(tenantProvider.tenants())
-                    .isNotEmpty()
-                    .extracting(TenantDescriptor::tenantId)
-                    .containsExactlyInAnyOrder("foo", "bar")
-            ;
-            assertThat(tenantDescriptorRecorder.tenants())
-                    .isNotEmpty()
-                    .extracting(TenantDescriptor::tenantId)
-                    .containsExactlyInAnyOrder("foo", "bar");
-        });
     }
 }
