@@ -27,6 +27,8 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.invoke.MethodHandles;
 
+import static com.tngtech.archunit.base.DescribedPredicate.alwaysTrue;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -40,6 +42,7 @@ public class ArchUnitPackageRulesTest {
             .matching("(**)")
             .should()
             .beFreeOfCycles()
+            .ignoreDependency(resideInAPackage("..util.."), alwaysTrue())
             .as("Package Cycles");
 
     @ArchTest

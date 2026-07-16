@@ -20,6 +20,7 @@
 package io.axoniq.framework.messaging.multitenancy.util;
 
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
@@ -58,6 +59,9 @@ public enum TestFixtures {
             "foo-b",
             Map.of("replicationGroup", DEFAULT_REPLICATION_GROUP)
     );
+
+    public static final List<TenantDescriptor> TENANT_LIST = List.of(TENANT_A, TENANT_B);
+    public static final TenantDescriptors TENANT_DESCRIPTORS = () -> TENANT_LIST;
 
     /**
      * Creates a {@link TenantResolver} that always resolves to the given tenant ID.

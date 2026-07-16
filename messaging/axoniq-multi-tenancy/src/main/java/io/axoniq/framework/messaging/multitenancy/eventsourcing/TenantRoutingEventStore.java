@@ -18,6 +18,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.OptionalTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
@@ -71,7 +72,7 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
     private final Map<TenantDescriptor, Registration> subscribeRegistrations = new ConcurrentHashMap<>();
 
     private final TenantEventSegmentFactory tenantSegmentFactory;
-    private final TenantResolver tenantResolver;
+    private final OptionalTenantResolver optionalTenantResolver;
 
     /**
      * Instantiate a TenantRoutingEventStore with the given {@code tenantSegmentFactory} and {@code tenantResolver}.
@@ -82,7 +83,9 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
     public TenantRoutingEventStore(TenantEventSegmentFactory tenantSegmentFactory,
                                    TenantResolver tenantResolver) {
         this.tenantSegmentFactory = requireNonNull(tenantSegmentFactory, "TenantEventSegmentFactory may not be null");
-        this.tenantResolver = requireNonNull(tenantResolver, "TenantResolver may not be null");
+        this.optionalTenantResolver = new OptionalTenantResolver(
+                requireNonNull(tenantResolver, "TenantResolver may not be null"), this
+        );
     }
 
     @Override
@@ -92,32 +95,25 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
             return CompletableFuture.completedFuture(null);
         }
 
-        TenantDescriptor tenantDescriptor = resolveTenantFromContext(context)
-                .or(() -> resolveTenantFromMessage(events.getFirst()))
-                .orElseThrow(tenantNotResolved("Tenant could not be resolved"));
+        // Two distinct use cases:
+        Optional<TenantDescriptor> tenantDescriptor;
 
-        return eventStoreForTenant(tenantDescriptor).publish(context, events);
-    }
+        // 1. ProcessingContext is not null -> triggered by a command, we can resolve the tenant from the context.
+        //    it should be available as a context Resource, or in the command message metadata.
+        if (context != null) {
+            tenantDescriptor = tenantDescriptorOptional(context)
+                    // TODO: debug the message on context should be the command message
+                    .or(() -> optionalTenantResolver.apply(Message.fromContext(context)));
+        }
+        // 2. ProcessingContext is null -> triggered directly via EventBus, we should be able to resolve the tenant from the event message.
+        else {
+            tenantDescriptor = optionalTenantResolver.apply(events);
+        }
+        if (tenantDescriptor.isEmpty()) {
+            throw tenantNotResolved("Tenant could not be resolved").get();
+        }
 
-    private Optional<TenantDescriptor> resolveTenantFromContext(@Nullable ProcessingContext context) {
-        if (context == null) {
-            return Optional.empty();
-        }
-        return tenantDescriptorOptional(context)
-                .or(() -> Optional.ofNullable(Message.fromContext(context))
-                                  .flatMap(this::resolveTenantFromMessage)
-                );
-    }
-
-    private Optional<TenantDescriptor> resolveTenantFromMessage(@Nullable Message message) {
-        if (message == null) {
-            return Optional.empty();
-        }
-        try {
-            return Optional.of(tenantResolver.resolveTenant(message, tenants()));
-        } catch (TenantNotResolvedException e) {
-            return Optional.empty();
-        }
+        return eventStoreForTenant(tenantDescriptor.get()).publish(context, events);
     }
 
     @Override
@@ -141,7 +137,8 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
 
     @Override
     public EventStoreTransaction transaction(ProcessingContext processingContext) {
-        TenantDescriptor tenantDescriptor = resolveTenantFromContext(processingContext)
+        TenantDescriptor tenantDescriptor = tenantDescriptorOptional(processingContext)
+                .or(() -> optionalTenantResolver.apply(Message.fromContext(processingContext)))
                 .orElseThrow(tenantNotResolved("Tenant could not be resolved"));
         return eventStoreForTenant(tenantDescriptor).transaction(processingContext);
     }
@@ -192,7 +189,6 @@ public class TenantRoutingEventStore implements EventStore, MultiTenantAwareComp
     public List<TenantDescriptor> tenants() {
         return List.copyOf(tenantSegments.keySet());
     }
-
 
     @Override
     public CompletableFuture<TrackingToken> firstToken(@Nullable ProcessingContext context) {
