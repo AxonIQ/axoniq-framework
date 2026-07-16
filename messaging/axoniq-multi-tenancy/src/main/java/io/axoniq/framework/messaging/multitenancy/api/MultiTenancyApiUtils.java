@@ -25,8 +25,6 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
-import java.util.function.BiConsumer;
-import java.util.function.Function;
 
 import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException.tenantNotResolved;
 
@@ -49,10 +47,10 @@ public final class MultiTenancyApiUtils {
     public static final ResourceKey<TenantDescriptor> TENANT_RESOURCE_KEY = ResourceKey.withLabel(TENANT_ID_KEY);
 
     /**
-     * A {@link Function} that retrieves the {@link TenantDescriptor} from a {@link ProcessingContext}. If no
+     * Retrieves the {@link TenantDescriptor} from the given {@link ProcessingContext}.
      *
      * @param processingContext the {@link ProcessingContext} to retrieve the {@link TenantDescriptor} from
-     * @return the {@link TenantDescriptor} from the {@link ProcessingContext}
+     * @return the {@link TenantDescriptor} stored in the {@link ProcessingContext}
      * @throws TenantNotResolvedException if no {@link TenantDescriptor} is found in the {@link ProcessingContext}
      */
     public static TenantDescriptor tenantDescriptorFrom(ProcessingContext processingContext)

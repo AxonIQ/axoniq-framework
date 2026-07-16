@@ -22,7 +22,6 @@ package io.axoniq.framework.messaging.multitenancy.configuration;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
@@ -69,11 +68,11 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
     /**
      * Constructs a {@code TenantComponentParameterResolverFactory} for the given {@code configuration}.
      * <p>
-     * The given {@code configuration} supplies the registered {@link TenantComponentProvider providers} and the
-     * {@link TenantResolver} used to derive the tenant of each handled message.
+     * The given {@code configuration} supplies the registered {@link TenantComponentProvider providers} matched against
+     * handler parameters. The tenant itself is read from the {@link ProcessingContext} of the message being handled.
      *
-     * @param configuration the configuration to look up the registered tenant-component providers and tenant resolvers,
-     *                      must not be {@code null}
+     * @param configuration the configuration to look up the registered tenant-component providers, must not be
+     *                      {@code null}
      */
     public TenantComponentParameterResolverFactory(Configuration configuration) {
         this.configuration = Objects.requireNonNull(configuration, "The configuration must not be null");
