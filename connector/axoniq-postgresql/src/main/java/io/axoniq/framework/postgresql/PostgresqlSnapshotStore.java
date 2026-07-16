@@ -26,6 +26,7 @@ import org.axonframework.eventsourcing.eventstore.Position;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
 import java.sql.Connection;
@@ -149,7 +150,8 @@ class PostgresqlSnapshotStore implements SnapshotStore {
     }
 
     @Override
-    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot) {
+    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
+                                         @Nullable ProcessingContext context) {
         Objects.requireNonNull(qualifiedName, "qualifiedName");
         Objects.requireNonNull(identifier, "identifier");
         Objects.requireNonNull(snapshot, "snapshot");
@@ -190,7 +192,8 @@ class PostgresqlSnapshotStore implements SnapshotStore {
     }
 
     @Override
-    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier) {
+    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
+                                                      @Nullable ProcessingContext context) {
         Objects.requireNonNull(qualifiedName, "qualifiedName");
         Objects.requireNonNull(identifier, "identifier");
 
