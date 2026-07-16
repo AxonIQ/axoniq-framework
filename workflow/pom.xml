@@ -287,7 +287,7 @@
                 <configuration>
                     <publishingServerId>central</publishingServerId>
                     <excludeArtifacts>
-                        axon-workflow-examples,axon-workflow-example-bike-rental,axon-workflow-example-simple
+                        axon-workflow-examples,axon-workflow-example-bike-rental,axon-workflow-example-simple,axon-workflow-itest
                     </excludeArtifacts>
                 </configuration>
             </plugin>

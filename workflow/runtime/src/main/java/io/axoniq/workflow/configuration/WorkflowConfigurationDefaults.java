@@ -23,6 +23,9 @@ import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
+import io.axoniq.workflow.runtime.execution.DefaultExecuteStepActionResolver;
+import io.axoniq.workflow.runtime.execution.DefaultWorkflowScheduler;
+import io.axoniq.workflow.runtime.execution.ExecuteStepActionResolver;
 import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
 import io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
@@ -32,6 +35,7 @@ import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
+import io.axoniq.workflow.runtime.execution.WorkflowScheduler;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import org.axonframework.common.ClockUtils;
 import org.axonframework.common.annotation.Internal;
@@ -112,6 +116,8 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerPayloadReducerRegistry(componentRegistry);
         registerEventNameCustomizer(componentRegistry);
         registerClock(componentRegistry);
+        registerExecuteStepActionResolver(componentRegistry);
+        registerWorkflowTimeoutScheduler(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
         registerWorkflowExecutionRepository(componentRegistry);
         registerMutableWorkflowHistoryRepository(componentRegistry);
@@ -134,6 +140,18 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
 
     void registerClock(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(Clock.class, cfg -> ClockUtils.get());
+    }
+
+    void registerExecuteStepActionResolver(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(ExecuteStepActionResolver.class,
+                                               cfg -> new DefaultExecuteStepActionResolver());
+    }
+
+    void registerWorkflowTimeoutScheduler(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(WorkflowScheduler.class,
+                                               cfg -> new DefaultWorkflowScheduler(
+                                                       cfg.getComponent(Clock.class)
+                                               ));
     }
 
     void registerWorkflowEngineExecutor(ComponentRegistry componentRegistry) {

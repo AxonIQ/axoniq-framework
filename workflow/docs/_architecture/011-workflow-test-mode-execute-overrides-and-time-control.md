@@ -7,8 +7,8 @@
 ## Context
 
 The BDD workflow fixture should let tests drive workflow progress without invoking real step side effects. In particular,
-fixture methods such as `executeStep(stepName, payload)`, `executeStep(stepName)`, and
-`executesStepFailing(stepName, failure)` need to replace the real `execute` step action with test-provided behavior.
+fixture methods such as `executeStepReturning(stepName, payload)`, `executeStep(stepName)`, and
+`executeStepFailing(stepName, failure)` need to replace the real `execute` step action with test-provided behavior.
 
 The current execute path is:
 
@@ -54,10 +54,10 @@ The default runtime component returns `command.action()`.
 The test module registers a manual resolver component. That resolver stores per-step test actions and can block an
 execute step after its `STARTED` event until the fixture supplies behavior:
 
-- `executeStep(stepName, payload)` supplies a fake processor returning `payload`;
+- `executeStepReturning(stepName, payload)` supplies a fake processor returning `payload`;
 - `executeStep(stepName, processor)` supplies the given fake processor;
 - `executeStep(stepName)` releases the original production action;
-- `executesStepFailing(stepName, failure)` supplies a fake processor throwing `failure`.
+- `executeStepFailing(stepName, failure)` supplies a fake processor throwing `failure`.
 
 This lets `waitingIn(stepName)` observe the step in `STARTED` state without running real code.
 
@@ -80,7 +80,7 @@ workflow driver thread is blocked before user code is invoked.
 For deterministic time, add a second internal component:
 
 ```java
-public interface WorkflowTimeoutScheduler {
+public interface WorkflowScheduler {
     ScheduledTask schedule(Instant deadline, Runnable task);
 }
 ```

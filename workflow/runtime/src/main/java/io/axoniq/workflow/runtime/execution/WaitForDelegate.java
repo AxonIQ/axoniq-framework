@@ -34,9 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -70,10 +68,12 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
             @Nonnull EventSink eventSink,
-            @Nonnull Executor executor
+            @Nonnull Executor executor,
+            @Nonnull WorkflowScheduler timeoutScheduler
     ) {
         super(workflowContext,
-              workflowExecution, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink, executor);
+              workflowExecution, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink, executor,
+              timeoutScheduler);
     }
 
     @Override
@@ -108,8 +108,8 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
 
         if (workflowExecution.state().getStep(stepName).status() == StepStatus.STARTED) {
             var actualStartTime = workflowExecution.state().getStep(stepName).timestamp();
-            var remainingTimeout = Duration.between(clock.instant(),
-                                                    actualStartTime.plus(timeout));
+            var timeoutDeadline = actualStartTime.plus(timeout);
+            var remainingTimeout = Duration.between(clock.instant(), timeoutDeadline);
 
             if (remainingTimeout.isNegative()) {
                 workflowExecution.appendTask(i -> {
@@ -124,7 +124,8 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                                                         eventCondition,
                                                         resultPayloadReducer,
                                                         eventNameCustomizer);
-                var timeoutFuture = CompletableFuture.runAsync(
+                var timeoutTask = timeoutScheduler.schedule(
+                        timeoutDeadline,
                         () -> {
                             workflowExecution.removeWaitCondition(stepName);
                             workflowExecution.removeRunningStep(stepName);
@@ -135,9 +136,9 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                                                              }
                                                          }
                             );
-                        },
-                        CompletableFuture.delayedExecutor(remainingTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                        }
                 );
+                var timeoutFuture = timeoutTask.completion();
                 // Attach the cancellation side-effect handler to the upstream future so that
                 // completeExceptionally on the registered future (e.g. from cancelAllRunningSteps)
                 // fires the handler immediately instead of waiting for the delayed runnable.
