@@ -28,6 +28,7 @@ import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.junit.jupiter.api.*;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import javax.sql.DataSource;
@@ -61,8 +62,10 @@ class PostgresqlConfigurationEnhancerTest {
         Statement mockedStatement = mock(Statement.class);
         Connection mockedConnection = mock(Connection.class);
         DataSource mockedDataSource = mock(DataSource.class);
+        ResultSet mockedResultSet = mock(ResultSet.class);
         when(mockedDataSource.getConnection()).thenReturn(mockedConnection);
         when(mockedConnection.createStatement()).thenReturn(mockedStatement);
+        when(mockedStatement.executeQuery(anyString())).thenReturn(mockedResultSet);
 
         Configuration result = EventSourcingConfigurer.create()
                                                       .componentRegistry(ComponentRegistry::disableEnhancerScanning)
@@ -83,8 +86,10 @@ class PostgresqlConfigurationEnhancerTest {
         Statement mockedStatement = mock(Statement.class);
         Connection mockedConnection = mock(Connection.class);
         DataSource mockedDataSource = mock(DataSource.class);
+        ResultSet mockedResultSet = mock(ResultSet.class);
         when(mockedDataSource.getConnection()).thenReturn(mockedConnection);
         when(mockedConnection.createStatement()).thenReturn(mockedStatement);
+        when(mockedStatement.executeQuery(anyString())).thenReturn(mockedResultSet);
 
         Configuration result = EventSourcingConfigurer.create()
                                                       .componentRegistry(ComponentRegistry::disableEnhancerScanning)

@@ -100,7 +100,7 @@ class PostgresqlSnapshotStoreTest {
         @Test
         void load_withNoSnapshot_returnsNull() {
             // when
-            Snapshot result = testSubject.load(QUALIFIED_NAME, IDENTIFIER)
+            Snapshot result = testSubject.load(QUALIFIED_NAME, IDENTIFIER, null)
                                          .orTimeout(5, TimeUnit.SECONDS)
                                          .join();
 
@@ -111,11 +111,11 @@ class PostgresqlSnapshotStoreTest {
         @Test
         void load_forDifferentIdentifier_returnsNull() {
             // given
-            testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(42, "1.0"))
+            testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(42, "1.0"), null)
                        .orTimeout(5, TimeUnit.SECONDS).join();
 
             // when
-            Snapshot result = testSubject.load(QUALIFIED_NAME, "other-identifier")
+            Snapshot result = testSubject.load(QUALIFIED_NAME, "other-identifier", null)
                                          .orTimeout(5, TimeUnit.SECONDS)
                                          .join();
 
@@ -126,11 +126,11 @@ class PostgresqlSnapshotStoreTest {
         @Test
         void load_forDifferentQualifiedName_returnsNull() {
             // given
-            testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(42, "1.0"))
+            testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(42, "1.0"), null)
                        .orTimeout(5, TimeUnit.SECONDS).join();
 
             // when
-            Snapshot result = testSubject.load(new QualifiedName("com.example.OtherAggregate"), IDENTIFIER)
+            Snapshot result = testSubject.load(new QualifiedName("com.example.OtherAggregate"), IDENTIFIER, null)
                                          .orTimeout(5, TimeUnit.SECONDS)
                                          .join();
 
@@ -150,8 +150,8 @@ class PostgresqlSnapshotStoreTest {
             Snapshot snapshot = new Snapshot(new GlobalIndexPosition(42), "1.0", payload, TIMESTAMP, metadata);
 
             // when
-            testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot).orTimeout(5, TimeUnit.SECONDS).join();
-            Snapshot loaded = testSubject.load(QUALIFIED_NAME, IDENTIFIER).orTimeout(5, TimeUnit.SECONDS).join();
+            testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot, null).orTimeout(5, TimeUnit.SECONDS).join();
+            Snapshot loaded = testSubject.load(QUALIFIED_NAME, IDENTIFIER, null).orTimeout(5, TimeUnit.SECONDS).join();
 
             // then
             assertThat(loaded).isNotNull();
@@ -165,14 +165,14 @@ class PostgresqlSnapshotStoreTest {
         @Test
         void store_replacesSnapshotWithDifferentVersion() {
             // given
-            testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(10, "1.0"))
+            testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(10, "1.0"), null)
                        .orTimeout(5, TimeUnit.SECONDS).join();
 
             // when
             byte[] newPayload = "new-payload".getBytes();
-            testSubject.store(QUALIFIED_NAME, IDENTIFIER, new Snapshot(new GlobalIndexPosition(20), "2.0", newPayload, TIMESTAMP, Map.of()))
+            testSubject.store(QUALIFIED_NAME, IDENTIFIER, new Snapshot(new GlobalIndexPosition(20), "2.0", newPayload, TIMESTAMP, Map.of()), null)
                        .orTimeout(5, TimeUnit.SECONDS).join();
-            Snapshot loaded = testSubject.load(QUALIFIED_NAME, IDENTIFIER).orTimeout(5, TimeUnit.SECONDS).join();
+            Snapshot loaded = testSubject.load(QUALIFIED_NAME, IDENTIFIER, null).orTimeout(5, TimeUnit.SECONDS).join();
 
             // then
             assertThat(loaded).isNotNull();
@@ -184,14 +184,14 @@ class PostgresqlSnapshotStoreTest {
         @Test
         void store_replacesSnapshotWithSameVersion() {
             // given
-            testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(10, "1.0"))
+            testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot(10, "1.0"), null)
                        .orTimeout(5, TimeUnit.SECONDS).join();
 
             // when
             byte[] updatedPayload = "updated-payload".getBytes();
-            testSubject.store(QUALIFIED_NAME, IDENTIFIER, new Snapshot(new GlobalIndexPosition(10), "1.0", updatedPayload, TIMESTAMP, Map.of()))
+            testSubject.store(QUALIFIED_NAME, IDENTIFIER, new Snapshot(new GlobalIndexPosition(10), "1.0", updatedPayload, TIMESTAMP, Map.of()), null)
                        .orTimeout(5, TimeUnit.SECONDS).join();
-            Snapshot loaded = testSubject.load(QUALIFIED_NAME, IDENTIFIER).orTimeout(5, TimeUnit.SECONDS).join();
+            Snapshot loaded = testSubject.load(QUALIFIED_NAME, IDENTIFIER, null).orTimeout(5, TimeUnit.SECONDS).join();
 
             // then
             assertThat(loaded).isNotNull();
@@ -204,7 +204,7 @@ class PostgresqlSnapshotStoreTest {
             Snapshot snapshot = new Snapshot(new AggregateSequenceNumberPosition(5), "1.0", "payload".getBytes(), TIMESTAMP, Map.of());
 
             // when / then — must throw synchronously, before any async work
-            assertThatThrownBy(() -> testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot))
+            assertThatThrownBy(() -> testSubject.store(QUALIFIED_NAME, IDENTIFIER, snapshot, null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("Unsupported position type");
         }

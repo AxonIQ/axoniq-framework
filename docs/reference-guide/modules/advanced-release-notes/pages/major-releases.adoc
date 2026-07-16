@@ -44,6 +44,7 @@ All the enhancements and features which have been introduced to our major releas
 - Support source with snapshot in single server call link:https://github.com/AxonIQ/axoniq-framework/pull/220[#220]
 - [AxonFramework#4698] Ensure message type version for Commands/Queries sent from AF4 to AF5 applications link:https://github.com/AxonIQ/axoniq-framework/pull/225[#225]
 - [AxonFramework#4625] Allow to gracefully handle events without revision for persistent streams link:https://github.com/AxonIQ/axoniq-framework/pull/227[#227]
+- [#4625] Use `EventTypeResolver` in Axon Server `EventStorageEngines` to default `null` `revision` to default version link:https://github.com/AxonIQ/axoniq-framework/pull/186[#186]
 
 === Documentation
 
