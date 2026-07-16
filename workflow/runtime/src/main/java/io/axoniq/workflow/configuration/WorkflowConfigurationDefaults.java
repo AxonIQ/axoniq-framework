@@ -28,6 +28,7 @@ import io.axoniq.workflow.runtime.execution.DefaultWorkflowScheduler;
 import io.axoniq.workflow.runtime.execution.ExecuteStepActionResolver;
 import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
 import io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.execution.RunningWorkflows;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
@@ -46,6 +47,7 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.common.lifecycle.Phase;
+import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
@@ -123,6 +125,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         decorateTagResolver(componentRegistry);
         registerExecuteStepActionResolver(componentRegistry);
         registerWorkflowTimeoutScheduler(componentRegistry);
+        registerRunningWorkflows(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
         registerWorkflowExecutionRepository(componentRegistry);
         registerMutableWorkflowHistoryRepository(componentRegistry);
@@ -166,6 +169,24 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                         .with((cfg, name, delegate) -> new MultiTagResolver(delegate,
                                                                             new WorkflowEventTagResolver()))
 
+        );
+    }
+
+    void registerRunningWorkflows(ComponentRegistry componentRegistry) {
+        componentRegistry.registerModule(
+                EventSourcedEntityModule
+                        .declarative(String.class, RunningWorkflows.class)
+                        .messagingModel((c, model) -> model
+                                .entityEvolver((entity, event, context) -> {
+                                    entity.evolve(event.metadata());
+                                    return entity;
+                                })
+                                .build())
+                        .entityFactory(c -> (identifier, firstEvent, context) -> new RunningWorkflows())
+                        .criteriaResolver(c -> (identifier, context) ->
+                                RunningWorkflows.workflowLifecycleEvents())
+                        // FIXME Register snapshot configuration eventually, see #245
+                        .build()
         );
     }
 

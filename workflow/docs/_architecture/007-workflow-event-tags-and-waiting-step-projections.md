@@ -27,12 +27,11 @@ If an engine-published event carries `workflowId` metadata, it must also get thi
 
 - `workflowId=<metadata workflowId>`
 
-### Workflow lifecycle tag
+### Workflow event tag for lifecycle events
 
 Workflow lifecycle events get this marker tag:
 
-- `workflowLifecycle=started`
-- `workflowLifecycle=terminal`
+- `workflowEvent=lifecycle`
 
 This applies to:
 
@@ -42,12 +41,11 @@ This applies to:
 - `WorkflowTimedOut`
 - `WorkflowCancelled`
 
-### Wait-step lifecycle tag
+### Workflow event tag for wait steps
 
 `waitForEvent` step lifecycle events get this marker tag:
 
-- `workflowWait=started`
-- `workflowWait=terminal`
+- `workflowEvent=waitForStep`
 
 This applies to the started event of a `waitForEvent` step and to its terminal events.
 
@@ -71,7 +69,7 @@ They may also be reused by configuration-repository or reporting use cases, but 
 
 - Workflow lifecycle and waiting-step projections can be built by reading tagged event subsets instead of replaying
   the full workflow stream.
-- Tag resolution stays centralized in AF5 event-store configuration rather than being scattered across event emitters.
+- Tag resolution stays centralized in event-store configuration rather than being scattered across event emitters.
 - `waitForEvent` started events become self-describing enough for a waiting-steps projection to rebuild outstanding
   waits, including event type, serialized associations, and deadline.
 - Wait-step events now carry a small internal marker in metadata so the tag resolver can distinguish them from other

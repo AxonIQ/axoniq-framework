@@ -31,6 +31,8 @@ import org.axonframework.messaging.eventstreaming.Tag;
 import java.util.ArrayList;
 import java.util.Set;
 
+import static io.axoniq.workflow.runtime.execution.WorkflowEventTags.*;
+
 /**
  * Resolves workflow-specific event-store tags for engine-published events.
  *
@@ -40,26 +42,6 @@ import java.util.Set;
 @Internal
 public class WorkflowEventTagResolver implements TagResolver {
 
-    /**
-     * Value for started workflow.
-     */
-    public static final String TAG_LIFECYCLE_VALUE_STARTED = "started";
-    /**
-     * Value for completed, failed, cancelled and timed-out workflow.
-     */
-    public static final String TAG_LIFECYCLE_VALUE_TERMINAL = "terminal";
-    /**
-     * Value for started waitForEvent step.
-     */
-    public static final String TAG_WAIT_FOR_VALUE_STARTED = "started";
-    /**
-     * Value for completed, cancelled and timed-out waitForeEvent step.
-     */
-    public static final String TAG_WAIT_FOR_VALUE_TERMINAL = "terminal";
-
-    static final String WORKFLOW_ID_TAG = "workflowId";
-    static final String WORKFLOW_LIFECYCLE_TAG = "workflowLifecycle";
-    static final String WORKFLOW_WAIT_TAG = "workflowWait";
 
     @Override
     @Nonnull
@@ -68,12 +50,12 @@ public class WorkflowEventTagResolver implements TagResolver {
         Metadata metadata = eventMessage.metadata();
 
         if (isEnginePublishedWorkflowEvent(metadata)) {
-            tags.add(Tag.of(WORKFLOW_ID_TAG, MetadataUtils.getWorkflowId(metadata)));
+            tags.add(Tag.of(TAG_WORKFLOW_ID, MetadataUtils.getWorkflowId(metadata)));
         }
 
         MetadataUtils.getWorkflowStatus(metadata)
                      .map(WorkflowEventTagResolver::lifecycleValue)
-                     .map(value -> Tag.of(WORKFLOW_LIFECYCLE_TAG, value))
+                     .map(value -> Tag.of(TAG_WORKFLOW_EVENT_TYPE, value))
                      .ifPresent(tags::add);
 
         if (MetadataUtils.isWaitForEventStep(metadata)) {
@@ -83,7 +65,7 @@ public class WorkflowEventTagResolver implements TagResolver {
                                  || status == StepStatus.CANCELLED
                                  || status == StepStatus.TIMED_OUT)
                          .map(WorkflowEventTagResolver::lifecycleValue)
-                         .map(value -> Tag.of(WORKFLOW_WAIT_TAG, value))
+                         .map(value -> Tag.of(TAG_WORKFLOW_EVENT_TYPE, value))
                          .ifPresent(tags::add);
         }
 
@@ -100,17 +82,15 @@ public class WorkflowEventTagResolver implements TagResolver {
     private static String lifecycleValue(@Nonnull WorkflowStatus status) {
         return switch (status) {
             case NONE -> throw new IllegalArgumentException("Workflow lifecycle tag is undefined for status NONE");
-            case STARTED -> TAG_LIFECYCLE_VALUE_STARTED;
-            case COMPLETED, FAILED, TIMED_OUT, CANCELLED -> TAG_LIFECYCLE_VALUE_TERMINAL;
+            case STARTED, COMPLETED, FAILED, TIMED_OUT, CANCELLED -> TAG_VALUE_EVENT_TYPE_LIFECYCLE;
         };
     }
 
     @Nonnull
     private static String lifecycleValue(@Nonnull StepStatus status) {
         return switch (status) {
-            case STARTED -> TAG_WAIT_FOR_VALUE_STARTED;
-            case COMPLETED, TIMED_OUT, CANCELLED -> TAG_WAIT_FOR_VALUE_TERMINAL;
-            default -> throw new IllegalArgumentException(
+            case STARTED, COMPLETED, TIMED_OUT, CANCELLED -> TAG_VALUE_EVENT_TYPE_WAIT_STEP;
+            case RETRYING, FAILED -> throw new IllegalArgumentException(
                     "Wait for step lifecycle tag is undefined for status " + status);
         };
     }

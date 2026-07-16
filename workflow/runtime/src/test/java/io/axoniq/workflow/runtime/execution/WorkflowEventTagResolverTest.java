@@ -29,20 +29,15 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventstreaming.Tag;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 
+import static io.axoniq.workflow.runtime.execution.WorkflowEventTags.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-import static io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver.TAG_LIFECYCLE_VALUE_STARTED;
-import static io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver.TAG_LIFECYCLE_VALUE_TERMINAL;
-import static io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver.TAG_WAIT_FOR_VALUE_STARTED;
-import static io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver.TAG_WAIT_FOR_VALUE_TERMINAL;
+import static org.mockito.Mockito.*;
 
 class WorkflowEventTagResolverTest {
 
@@ -67,12 +62,12 @@ class WorkflowEventTagResolverTest {
                                                          customizer);
 
         assertThat(resolver.resolve(started)).isEqualTo(Set.of(
-                Tag.of("workflowId", "wf-123"),
-                Tag.of("workflowLifecycle", TAG_LIFECYCLE_VALUE_STARTED)
+                Tag.of(TAG_WORKFLOW_ID, "wf-123"),
+                Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_LIFECYCLE)
         ));
         assertThat(resolver.resolve(timedOut)).isEqualTo(Set.of(
-                Tag.of("workflowId", "wf-123"),
-                Tag.of("workflowLifecycle", TAG_LIFECYCLE_VALUE_TERMINAL)
+                Tag.of(TAG_WORKFLOW_ID, "wf-123"),
+                Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_LIFECYCLE)
         ));
     }
 
@@ -98,12 +93,12 @@ class WorkflowEventTagResolverTest {
         );
 
         assertThat(resolver.resolve(started)).isEqualTo(Set.of(
-                Tag.of("workflowId", "wf-123"),
-                Tag.of("workflowWait", TAG_WAIT_FOR_VALUE_STARTED)
+                Tag.of(TAG_WORKFLOW_ID, "wf-123"),
+                Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_WAIT_STEP)
         ));
         assertThat(resolver.resolve(completed)).isEqualTo(Set.of(
-                Tag.of("workflowId", "wf-123"),
-                Tag.of("workflowWait", TAG_WAIT_FOR_VALUE_TERMINAL)
+                Tag.of(TAG_WORKFLOW_ID, "wf-123"),
+                Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_WAIT_STEP)
         ));
     }
 

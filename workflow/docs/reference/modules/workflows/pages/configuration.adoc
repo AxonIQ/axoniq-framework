@@ -271,10 +271,10 @@ Engine-published workflow events are also written with event-store tags.
 |`workflowId=<id>`
 |Added to every engine-published event that carries `workflowId` metadata.
 
-|`workflowLifecycle=<started|terminal>`
+|`workflowEvent=lifecycle`
 |Added to workflow lifecycle events.
 
-|`workflowWait=<started|terminal>`
+|`workflowEvent=waitForStep`
 |Added to `waitForEvent` step STARTED and terminal events.
 |===
 

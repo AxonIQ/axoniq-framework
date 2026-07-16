@@ -46,7 +46,7 @@ import static io.axoniq.workflow.runtime.association.Associations.associate;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace;
 import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
-import static io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver.*;
+import static io.axoniq.workflow.runtime.execution.WorkflowEventTags.*;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -84,16 +84,12 @@ class WorkflowEventTagsDeclarativeTest extends AbstractWorkflowTestBase<SimpleWo
             assertThat(workflowEngine.workflowExecutions()).isEmpty();
         });
 
-        var startedWorkflowEvents = eventsWithTag(Tag.of("workflowLifecycle", TAG_LIFECYCLE_VALUE_STARTED));
-        var completedWorkflowEvents = eventsWithTag(Tag.of("workflowLifecycle", TAG_LIFECYCLE_VALUE_TERMINAL));
-        var startedWaitEvents = eventsWithTag(Tag.of("workflowWait", TAG_WAIT_FOR_VALUE_STARTED));
-        var timeoutWaitEvents = eventsWithTag(Tag.of("workflowWait", TAG_WAIT_FOR_VALUE_TERMINAL));
-        var workflowEvents = eventsWithTag(Tag.of("workflowId", "tags-tagged-user"));
+        var workflowLifecycleEvents = eventsWithTag(Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_LIFECYCLE));
+        var waitLifecycleEvents = eventsWithTag(Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_WAIT_STEP));
+        var workflowEvents = eventsWithTag(Tag.of(TAG_WORKFLOW_ID, "tags-tagged-user"));
 
-        assertThat(startedWorkflowEvents).hasSize(1);
-        assertThat(completedWorkflowEvents).hasSize(1);
-        assertThat(startedWaitEvents).hasSize(1);
-        assertThat(timeoutWaitEvents).hasSize(1);
+        assertThat(workflowLifecycleEvents).hasSize(2);
+        assertThat(waitLifecycleEvents).hasSize(2);
 
         assertThat(workflowEvents)
                 .extracting(event -> event.type().qualifiedName().toString())

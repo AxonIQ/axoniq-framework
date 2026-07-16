@@ -42,8 +42,8 @@ Any async steps (started via `execute(...)` without a follow-up `await()`) that 
 ====
 The engine writes workflow lifecycle events with event-store tags as well:
 `workflowId=<id>` on engine-published workflow events and
-`workflowLifecycle=<started|terminal>` on workflow lifecycle events.
-`waitForEvent` step STARTED and terminal events additionally carry `workflowWait=<started|terminal>` tags.
+`workflowEvent=lifecycle` on workflow lifecycle events.
+`waitForEvent` step STARTED and terminal events additionally carry `workflowEvent=waitForStep`.
 ====
 
 == The workflow context
