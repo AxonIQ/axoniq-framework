@@ -35,6 +35,7 @@ import io.axoniq.axonserver.grpc.streams.PersistentStreamEvent;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.messaging.core.LegacyResources;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
@@ -81,11 +82,12 @@ class PersistentStreamConnectionTest {
             new PersistentStreamProperties(STREAM_NAME, 2, "Seq", Collections.emptyList(), "0", null);
     private final Map<String, MockPersistentStream> mockPersistentStreams = new ConcurrentHashMap<>();
 
+    private AxonServerConnectionManager mockConnectionManager;
     private PersistentStreamConnection testSubject;
 
     @BeforeEach
     void setup() {
-        AxonServerConnectionManager mockConnectionManager = mock(AxonServerConnectionManager.class);
+        mockConnectionManager = mock(AxonServerConnectionManager.class);
         AxonServerConnection mockConnection = mock(AxonServerConnection.class);
         EventChannel mockEventChannel = mock(EventChannel.class);
 
@@ -99,15 +101,21 @@ class PersistentStreamConnectionTest {
         when(mockConnection.eventChannel()).thenReturn(mockEventChannel);
         when(mockConnectionManager.getConnection(anyString())).thenReturn(mockConnection);
 
-        testSubject = new PersistentStreamConnection(
+        testSubject = testSubjectWith(EventTypeResolver.DEFAULT);
+    }
+
+    private PersistentStreamConnection testSubjectWith(EventTypeResolver eventTypeResolver) {
+        return new PersistentStreamConnection(
                 STREAM_ID,
                 mockConnectionManager,
                 new AxonServerConfiguration(),
                 new DelegatingEventConverter(new JacksonConverter()),
+                eventTypeResolver,
                 properties,
                 scheduler,
                 UnitOfWorkTestUtils.SIMPLE_FACTORY,
-                100
+                100,
+                null
         );
     }
 
@@ -714,6 +722,88 @@ class PersistentStreamConnectionTest {
     }
 
     @Nested
+    class EventTypeResolution {
+
+        @Test
+        void defaultVersionIsSubstitutedForEventWithMissingRevision() {
+            // given — a persistent stream connection without explicitly configured resolver
+            PersistentStreamConnection customSubject = new PersistentStreamConnection(
+                    STREAM_ID,
+                    mockConnectionManager,
+                    new AxonServerConfiguration(),
+                    new DelegatingEventConverter(new JacksonConverter()),
+                    properties,
+                    scheduler,
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY,
+                    100,
+                    null
+            );
+            List<EventMessage> received = Collections.synchronizedList(new LinkedList<>());
+            customSubject.open((events, ctx) -> {
+                received.addAll(events);
+                return CompletableFuture.completedFuture(null);
+            });
+            MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+            // when — the published event has no revision set
+            EventWithToken eventWithoutRevision =
+                    EventWithToken.newBuilder()
+                                  .setToken(0)
+                                  .setEvent(Event.newBuilder()
+                                                 .setMessageIdentifier(UUID.randomUUID().toString())
+                                                 .setPayload(SerializedObject.newBuilder()
+                                                                             .setType("MyEvent")
+                                                                             .setData(ByteString.copyFrom(
+                                                                                     "hello".getBytes()))))
+                                  .build();
+            mockPersistentStream.publish(0, eventWithoutRevision);
+
+            // then — the resolver falls back to the default "0.0.0"
+            await().atMost(Duration.ofSeconds(2))
+                   .until(() -> received.size() == 1);
+            assertThat(received.getFirst().type().name()).isEqualTo("MyEvent");
+            assertThat(received.getFirst().type().version()).isEqualTo("0.0.0");
+
+            mockPersistentStream.closeSegment(0);
+        }
+
+
+        @Test
+        void customDefaultVersionIsSubstitutedForEventWithMissingRevision() {
+            // given — a resolver substituting "2.0.0" for missing revisions
+            PersistentStreamConnection customSubject =
+                    testSubjectWith(EventTypeResolver.withDefaultVersion("2.0.0"));
+            List<EventMessage> received = Collections.synchronizedList(new LinkedList<>());
+            customSubject.open((events, ctx) -> {
+                received.addAll(events);
+                return CompletableFuture.completedFuture(null);
+            });
+            MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+            // when — the published event has no revision set
+            EventWithToken eventWithoutRevision =
+                    EventWithToken.newBuilder()
+                                  .setToken(0)
+                                  .setEvent(Event.newBuilder()
+                                                 .setMessageIdentifier(UUID.randomUUID().toString())
+                                                 .setPayload(SerializedObject.newBuilder()
+                                                                             .setType("MyEvent")
+                                                                             .setData(ByteString.copyFrom(
+                                                                                     "hello".getBytes()))))
+                                  .build();
+            mockPersistentStream.publish(0, eventWithoutRevision);
+
+            // then — the configured default version is applied instead of "0.0.0"
+            await().atMost(Duration.ofSeconds(2))
+                   .until(() -> received.size() == 1);
+            assertThat(received.getFirst().type().name()).isEqualTo("MyEvent");
+            assertThat(received.getFirst().type().version()).isEqualTo("2.0.0");
+
+            mockPersistentStream.closeSegment(0);
+        }
+    }
+
+    @Nested
     class Constructor {
 
         private final AxonServerConnectionManager manager = mock(AxonServerConnectionManager.class);
@@ -726,7 +816,7 @@ class PersistentStreamConnectionTest {
         void rejectsNullStreamId() {
             assertThatThrownBy(() -> new PersistentStreamConnection(
                     null, manager, config, eventConverter, props, scheduler,
-                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100))
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100, null))
                     .isInstanceOf(NullPointerException.class);
         }
 
@@ -734,7 +824,7 @@ class PersistentStreamConnectionTest {
         void rejectsNullConnectionManager() {
             assertThatThrownBy(() -> new PersistentStreamConnection(
                     STREAM_ID, null, config, eventConverter, props, scheduler,
-                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100))
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100, null))
                     .isInstanceOf(NullPointerException.class);
         }
 
@@ -742,7 +832,7 @@ class PersistentStreamConnectionTest {
         void rejectsNullServerConfig() {
             assertThatThrownBy(() -> new PersistentStreamConnection(
                     STREAM_ID, manager, null, eventConverter, props, scheduler,
-                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100))
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100, null))
                     .isInstanceOf(NullPointerException.class);
         }
 
@@ -750,15 +840,24 @@ class PersistentStreamConnectionTest {
         void rejectsNullConverter() {
             assertThatThrownBy(() -> new PersistentStreamConnection(
                     STREAM_ID, manager, config, null, props, scheduler,
-                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100))
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100, null))
                     .isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
+        void rejectsNullEventTypeResolver() {
+            assertThatThrownBy(() -> new PersistentStreamConnection(
+                    STREAM_ID, manager, config, eventConverter, null, props, scheduler,
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100, null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("eventTypeResolver");
         }
 
         @Test
         void rejectsNullPersistentStreamProperties() {
             assertThatThrownBy(() -> new PersistentStreamConnection(
                     STREAM_ID, manager, config, eventConverter, null, scheduler,
-                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100))
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100, null))
                     .isInstanceOf(NullPointerException.class);
         }
 
@@ -766,14 +865,14 @@ class PersistentStreamConnectionTest {
         void rejectsNullScheduler() {
             assertThatThrownBy(() -> new PersistentStreamConnection(
                     STREAM_ID, manager, config, eventConverter, props, null,
-                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100))
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100, null))
                     .isInstanceOf(NullPointerException.class);
         }
 
         @Test
         void rejectsNullUnitOfWorkFactory() {
             assertThatThrownBy(() -> new PersistentStreamConnection(
-                    STREAM_ID, manager, config, eventConverter, props, scheduler, null, 100))
+                    STREAM_ID, manager, config, eventConverter, props, scheduler, null, 100, null))
                     .isInstanceOf(NullPointerException.class);
         }
 
@@ -781,7 +880,7 @@ class PersistentStreamConnectionTest {
         void rejectsZeroBatchSize() {
             assertThatThrownBy(() -> new PersistentStreamConnection(
                     STREAM_ID, manager, config, eventConverter, props, scheduler,
-                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 0))
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 0, null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("batchSize");
         }
@@ -790,7 +889,7 @@ class PersistentStreamConnectionTest {
         void rejectsNegativeBatchSize() {
             assertThatThrownBy(() -> new PersistentStreamConnection(
                     STREAM_ID, manager, config, eventConverter, props, scheduler,
-                    UnitOfWorkTestUtils.SIMPLE_FACTORY, -1))
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, -1, null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("batchSize");
         }

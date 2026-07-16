@@ -25,10 +25,11 @@ import io.axoniq.axonserver.grpc.SerializedObject;
 import io.axoniq.axonserver.grpc.command.Command;
 import io.axoniq.axonserver.grpc.command.CommandResponse;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
-import io.axoniq.framework.axonserver.connector.shared.MetadataConverter;
 import io.axoniq.framework.axonserver.connector.shared.ExceptionConverter;
+import io.axoniq.framework.axonserver.connector.shared.MetadataConverter;
 import io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils;
 import org.axonframework.common.FutureUtils;
+import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.commandhandling.CommandMessage;
@@ -128,25 +129,26 @@ public final class CommandConverter {
             CommandResponse commandResponse,
             @Nullable Converter converter
     ) {
+        SerializedObject commandResponsePayload = commandResponse.getPayload();
         if (commandResponse.hasErrorMessage()) {
             return CompletableFuture.failedFuture(ExceptionConverter.convertToAxonException(
                     commandResponse.getErrorCode(),
                     commandResponse.getErrorMessage(),
-                    commandResponse.getPayload()
+                    commandResponsePayload
             ));
         }
 
-        if (commandResponse.getPayload().getType().isEmpty()) {
+        if (commandResponsePayload.getType().isEmpty()) {
             return FutureUtils.emptyCompletedFuture();
         }
 
-        MessageType messageType = new MessageType(commandResponse.getPayload().getType(),
-                                                  commandResponse.getPayload().getRevision());
+        String revision = revisionOrDefault(commandResponsePayload);
+        MessageType messageType = new MessageType(commandResponsePayload.getType(), revision);
         Map<String, String> metadata = convertMetadataValuesToGrpc(commandResponse.getMetaDataMap());
         return CompletableFuture.completedFuture(new GenericCommandResultMessage(new GenericMessage(
                 commandResponse.getMessageIdentifier(),
                 messageType,
-                commandResponse.getPayload().getData().toByteArray(),
+                commandResponsePayload.getData().toByteArray(),
                 metadata
         )).withConverter(converter));
     }
@@ -164,10 +166,12 @@ public final class CommandConverter {
         SerializedObject commandPayload = command.getPayload();
         int priority = priority(command.getProcessingInstructionsList());
         String routingKey = ProcessingInstructionUtils.routingKey(command.getProcessingInstructionsList());
+        String revision = revisionOrDefault(commandPayload);
+
         return new GenericCommandMessage(
                 new GenericMessage(
                         command.getMessageIdentifier(),
-                        new MessageType(commandPayload.getType(), commandPayload.getRevision()),
+                        new MessageType(commandPayload.getType(), revision),
                         commandPayload.getData().toByteArray(),
                         convertMetadataValuesToGrpc(command.getMetaDataMap())
                 ),
@@ -231,6 +235,19 @@ public final class CommandConverter {
             var instruction = createProcessingInstruction(ProcessingKey.PRIORITY, priority);
             builder.addProcessingInstructions(instruction);
         });
+    }
+
+    /**
+     * Return the {@link SerializedObject#getRevision()} or {@link MessageType#DEFAULT_VERSION} if the revision is
+     * {@code empty} or {@code null}.
+     *
+     * @param payload the {@link SerializedObject} to resolve the revision from
+     * @return the revision or the {@link MessageType#DEFAULT_VERSION} if the revision is {@code empty} or {@code null}
+     */
+    private static String revisionOrDefault(SerializedObject payload) {
+        return StringUtils.nonEmptyOrNull(payload.getRevision())
+                ? payload.getRevision()
+                : MessageType.DEFAULT_VERSION;
     }
 
     private CommandConverter() {

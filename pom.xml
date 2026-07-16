@@ -33,10 +33,10 @@
     </description>
 
     <properties>
-        <revision>5.2.0-SNAPSHOT</revision>
+        <revision>5.3.0-SNAPSHOT</revision>
 
         <!-- Global Axoniq version properties -->
-        <axon-framework.version>5.2.0-RC1</axon-framework.version>
+        <axon-framework.version>5.3.0-SNAPSHOT</axon-framework.version>
         <axoniq-entitlement-manager.version>1.0.1</axoniq-entitlement-manager.version>
         <axonserver-connector-java.version>2026.0.0</axonserver-connector-java.version>
 
@@ -414,11 +414,6 @@
                     <artifactId>axon-reactor</artifactId>
                     <version>${axon-framework.version}</version>
                 </dependency>
-                <dependency>
-                    <groupId>org.axonframework.extensions.tracing</groupId>
-                    <artifactId>axon-tracing-opentelemetry</artifactId>
-                    <version>${axon-framework.version}</version>
-                </dependency>
                 <!--
                   Optional dependencies of the Axon modules above. They are declared optional in
                   Axon, so they are not resolved transitively, but Javadoc must resolve their types
@@ -537,7 +532,6 @@
                                 <dependencySourceInclude>org.axonframework.extensions.kotlin:*</dependencySourceInclude>
                                 <dependencySourceInclude>org.axonframework.extensions.metrics:*</dependencySourceInclude>
                                 <dependencySourceInclude>org.axonframework.extensions.reactor:*</dependencySourceInclude>
-                                <dependencySourceInclude>org.axonframework.extensions.tracing:*</dependencySourceInclude>
                             </dependencySourceIncludes>
                             <tags>
                                 <tag>

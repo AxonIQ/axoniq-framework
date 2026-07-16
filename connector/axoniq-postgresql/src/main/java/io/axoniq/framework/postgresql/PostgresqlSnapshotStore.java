@@ -26,6 +26,7 @@ import org.axonframework.eventsourcing.eventstore.Position;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
 import java.sql.Connection;
@@ -47,9 +48,11 @@ import javax.sql.DataSource;
  * {@link PostgresqlEventStorageEngine}.
  * <p>
  * Not intended for direct use - snapshot access is exposed through the engine, which implements
- * {@link SnapshotStore} and delegates to this class. This ensures the snapshot table is always
- * co-located with the event tables on the same {@link DataSource}, which is required for the
- * future single-round-trip source-with-snapshot query.
+ * {@link SnapshotStore} and delegates to this class for direct snapshot storage and retrieval.
+ * This ensures the snapshot table is always co-located with the event tables on the same
+ * {@link DataSource}, which is what allows the engine to source with a snapshot in a single
+ * round trip: rather than delegating to this class, it reads the snapshot and the tail events
+ * in one query against both tables.
  * <p>
  * Only {@link GlobalIndexPosition} is supported as a position type. Snapshots with any other
  * position type are rejected.
@@ -147,7 +150,8 @@ class PostgresqlSnapshotStore implements SnapshotStore {
     }
 
     @Override
-    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot) {
+    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
+                                         @Nullable ProcessingContext context) {
         Objects.requireNonNull(qualifiedName, "qualifiedName");
         Objects.requireNonNull(identifier, "identifier");
         Objects.requireNonNull(snapshot, "snapshot");
@@ -188,7 +192,8 @@ class PostgresqlSnapshotStore implements SnapshotStore {
     }
 
     @Override
-    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier) {
+    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
+                                                      @Nullable ProcessingContext context) {
         Objects.requireNonNull(qualifiedName, "qualifiedName");
         Objects.requireNonNull(identifier, "identifier");
 

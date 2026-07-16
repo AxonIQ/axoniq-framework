@@ -27,6 +27,7 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import org.axonframework.common.Registration;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -97,6 +98,7 @@ class PersistentStreamEventSourceTest {
                 mockConnectionManager,
                 new AxonServerConfiguration(),
                 new DelegatingEventConverter(new JacksonConverter()),
+                EventTypeResolver.DEFAULT,
                 new PersistentStreamProperties(streamName, 1, "example", Collections.emptyList(), "HEAD", null),
                 TEST_SCHEDULER,
                 UnitOfWorkTestUtils.SIMPLE_FACTORY,
