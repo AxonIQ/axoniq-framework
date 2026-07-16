@@ -337,10 +337,12 @@ public class AxonServerTenantProvider implements TenantProvider {
 
         @Override
         public void onAvailable(Runnable callback) {
+            // this sentinel never has any updates, so the callback is never invoked
         }
 
         @Override
         public void close() {
+            // this sentinel is already closed
         }
 
         @Override
