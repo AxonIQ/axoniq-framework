@@ -54,6 +54,8 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.TENANT_RESOURCE_KEY;
+import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
+import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -62,9 +64,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * resolve to the tenant-scoped component of the tenant carried by the message.
  */
 class MultiTenancyConfigurationDefaultsTenantComponentsTest {
-
-    private static final TenantDescriptor TENANT_A = TenantDescriptor.tenantWithId("tenant-a");
-    private static final TenantDescriptor TENANT_B = TenantDescriptor.tenantWithId("tenant-b");
 
     private final StubTenantProvider tenantProvider = new StubTenantProvider();
     private final TenantComponentProvider<CourseRepository> componentProvider =

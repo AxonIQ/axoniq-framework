@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.api;
 
+import io.axoniq.framework.messaging.multitenancy.util.TestFixtures;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.junit.jupiter.api.Nested;
@@ -32,14 +33,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
+import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 class TenantComponentProviderTest {
-
-    private static final TenantDescriptor TENANT_A = TenantDescriptor.tenantWithId("tenant-a");
-    private static final TenantDescriptor TENANT_B = TenantDescriptor.tenantWithId("tenant-b");
 
     private final RecordingFactory factory = new RecordingFactory();
     private final TenantComponentProvider<TestComponent> testSubject =
