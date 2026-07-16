@@ -24,6 +24,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.util.TestFixtures;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.commandhandling.GenericCommandMessage;
@@ -40,13 +41,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.TENANT_RESOURCE_KEY;
+import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class TenantComponentParameterResolverFactoryTest {
-
-    private static final TenantDescriptor TENANT_A = TenantDescriptor.tenantWithId("tenant-a");
 
     private final Configuration configuration = mock(Configuration.class);
     private final TenantComponentParameterResolverFactory testSubject =

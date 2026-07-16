@@ -21,7 +21,6 @@ package io.axoniq.framework.postgresql;
 
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.license.entitlement.EntitlementMessageType;
-import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.tx.TransactionalExecutor;
@@ -59,8 +58,6 @@ import org.axonframework.messaging.eventstreaming.EventCriterion;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.axonframework.messaging.eventstreaming.Tag;
 import org.jspecify.annotations.Nullable;
-import org.postgresql.PGConnection;
-import org.postgresql.PGNotification;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,9 +76,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -126,7 +120,6 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PostgresqlEventStorageEngine.class);
     private static final TagFilter EMPTY = new TagFilter("", List.of());
-    private static final ExecutorService FINALIZER_EXECUTOR = Executors.newSingleThreadExecutor(Thread.ofPlatform().name("PG-Finalizer").factory());  // must be a single thread
     private static final GlobalSequenceTrackingToken GLOBAL_INDEX_START = new GlobalSequenceTrackingToken(1);
 
     /**
@@ -135,6 +128,13 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * as an actual position, without a separate code path.
      */
     private static final GlobalIndexPosition MAX_GLOBAL_INDEX_POSITION = new GlobalIndexPosition(Long.MAX_VALUE);
+
+    /**
+     * Reserved tag key used to record an event's type as a regular tag, written automatically by
+     * the {@code axon_write_type_tag} database trigger installed in the constructor. Callers 
+     * cannot supply a tag using this key themselves; see {@link #validateNoReservedTags(List)}.
+     */
+    private static final String TYPE_TAG_KEY = "__T";
 
     /**
      * CTE prefix resolving {@code snap} to a fixed, given start position, exposed as {@code
@@ -200,15 +200,18 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * or a row with no snapshot data if there is none - followed by up to {@code limit} events.
      * See {@link #RESUME_AT_SNAPSHOT} for why this leading row always sorts first. Callers must
      * always skip the first row and bind {@code limit + 1} to account for it.
+     * <p>
+     * The trailing {@code type_version} column is the event's {@code MessageType} version - not to
+     * be confused with the {@code version} column, which is the leading snapshot row's own version.
      *
      * <li>Parameter 1 {@code long}: maximum number of rows to query, excluding the leading {@code snap} row
      */
     private static final String EVENTS_READ_MULTIPLE =
         """
-        SELECT s.sort_index AS global_index, s.timestamp, NULL::varchar AS identifier, NULL::varchar AS type, s.payload, s.metadata, s.version, s.snapshot_position
+        SELECT s.sort_index AS global_index, s.timestamp, NULL::varchar AS identifier, NULL::varchar AS type, s.payload, s.metadata, s.version, s.snapshot_position, NULL::varchar AS type_version
           FROM snap s
         UNION ALL
-        SELECT e.global_index, e.timestamp, e.identifier, e.type, e.payload, e.metadata, NULL AS version, NULL::int8 AS snapshot_position
+        SELECT e.global_index, e.timestamp, e.identifier, e.type, e.payload, e.metadata, NULL AS version, NULL::int8 AS snapshot_position, e.type_version
           FROM events e
           WHERE e.global_index > (SELECT sort_index FROM snap)
         ORDER BY global_index
@@ -235,7 +238,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
           WHERE t.global_index > (SELECT sort_index FROM snap)
             AND (t.key, t.value) IN ({key-value-pairs})
           GROUP BY t.global_index
-          HAVING COUNT(DISTINCT t.key) = ?
+          HAVING COUNT(DISTINCT (t.key, t.value)) = ?
         """;
 
     /**
@@ -270,14 +273,15 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      *
      * <li>Parameter 1 {@code Instant}: the event timestamp
      * <li>Parameter 2 {@code String}: the event identifier
-     * <li>Parameter 3 {@code String}: the event type
-     * <li>Parameter 4 {@code byte[]}: the payload as a byte array
-     * <li>Parameter 5 {@code String}: the metadata in JSON format
+     * <li>Parameter 3 {@code String}: the event type's qualified name
+     * <li>Parameter 4 {@code String}: the event type's version
+     * <li>Parameter 5 {@code byte[]}: the payload as a byte array
+     * <li>Parameter 6 {@code String}: the metadata in JSON format
      */
     private static final String EVENTS_INSERT =
         """
-        INSERT INTO events (timestamp, identifier, type, payload, metadata)
-          VALUES (?, ?, ?, ?, ?::json)
+        INSERT INTO events (timestamp, identifier, type, type_version, payload, metadata)
+          VALUES (?, ?, ?, ?, ?, ?::json)
         """;
 
     /**
@@ -318,70 +322,6 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         INSERT INTO consistency_tags (tag_hash, global_index) VALUES (?, ?)
           ON CONFLICT (tag_hash) DO UPDATE
             SET global_index = LEAST(consistency_tags.global_index, EXCLUDED.global_index)
-        """;
-
-    /*
-     * The finalization statement assigns permanent global_index values to any unfinalized events,
-     * regardless of which process inserted them, and always returns the current highest global index.
-     *
-     * It is possible for this statement to run without finding any unfinalized events. This simply means
-     * that another process has already finalized them, effectively coalescing multiple finalizations
-     * into a single one. If any events were finalized, a notification is sent to listeners via pg_notify.
-     *
-     * Note: The SELECT computing latest_global_index is written carefully due to PostgreSQL sequence
-     * behavior and CTE evaluation order:
-     *
-     * 1) If no events were finalized, we fall back to the sequence's current last_value to get the latest index.
-     * 2) If events were finalized, we use their new_val values because last_value could reflect the
-     *    sequence before the CTE updates complete.
-     *
-     * The pg_notify call signals listeners but does not guarantee they receive it; it only queues the notification.
-     */
-    private static final String FINALIZE_STATEMENT =
-        """
-        WITH lock AS (
-          SELECT pg_advisory_xact_lock(42)
-        ),
-        unfinalized_events AS (
-          SELECT global_index AS old_val, NEXTVAL('events_monotonic_seq') AS new_val
-          FROM events
-          WHERE global_index < 0
-          ORDER BY global_index DESC
-        ),
-        finalized_events AS (
-          UPDATE events e
-          SET global_index = ue.new_val
-          FROM unfinalized_events ue
-          WHERE e.global_index = ue.old_val
-          RETURNING ue.old_val, ue.new_val
-        ),
-        finalized_tags AS (
-          UPDATE tags t
-          SET global_index = fe.new_val
-          FROM finalized_events fe
-          WHERE t.global_index = fe.old_val
-          RETURNING fe.new_val
-        ),
-        finalized_consistency_tags AS (
-          UPDATE consistency_tags ct
-          SET global_index = fe.new_val
-          FROM finalized_events fe
-          WHERE ct.global_index = fe.old_val
-          RETURNING fe.new_val
-        ),
-        latest AS (
-          SELECT
-            COALESCE(MAX(finalized_events.new_val), (SELECT last_value FROM events_monotonic_seq)) AS latest_global_index,
-            COUNT(finalized_events.new_val) AS finalized_count
-          FROM finalized_events
-        )
-        SELECT
-          latest.latest_global_index,
-          CASE WHEN latest.finalized_count > 0
-            THEN pg_notify('events_channel', latest.latest_global_index::text)
-            ELSE NULL
-          END
-          FROM latest;
         """;
 
     private final TransactionalExecutorProvider<Connection> transactionalExecutorProvider;
@@ -447,38 +387,21 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
 
         @Override
         public CompletableFuture<ConsistencyMarker> afterCommit(Object commitResult) {
-            return scheduleFinalization();
+            return finalizer.scheduleFinalization();
         }
     };
 
     /**
-     * Tracks runnables for callbacks attached to streams for when new events may have become available.
+     * Watches for new events arriving via Postgres {@code LISTEN}/{@code NOTIFY} and notifies
+     * registered stream callbacks.
      */
-    private final Map<Object, Runnable> streamCallbacks = new ConcurrentHashMap<>();
+    private final PostgresqlEventMonitor eventMonitor;
 
     /**
-     * The thread used to monitor for the arrival of new events inserted
-     * by another instance of this class running in a different process.
+     * Assigns permanent global indices to events appended with a temporary one, notifying
+     * {@link #eventMonitor} of the resulting high-water mark once done.
      */
-    private final Thread eventMonitoringThread;
-
-    /**
-     * Synchronized field. Future for the queued finalization which append transactions
-     * can return in the {@link AppendTransaction#afterCommit(Object, ProcessingContext)}.
-     */
-    private CompletableFuture<ConsistencyMarker> queuedFinalization;
-
-    /**
-     * Synchronized field. Tracks whether any finalizer is running currently.
-     */
-    private boolean finalizerRunning;
-
-    /**
-     * Synchronized field. Tracks the highest known global index known by
-     * this engine instance. This is updated by the instance itself or via
-     * the Postgres LISTEN/NOTIFY mechanism.
-     */
-    private long highestKnownGlobalIndex;
+    private final PostgresqlFinalizer finalizer;
 
     /**
      * Constructs a new instance.
@@ -508,180 +431,19 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         this.transactionalExecutorProvider = new JdbcTransactionalExecutorProvider(dataSource);
         this.snapshotStore = new PostgresqlSnapshotStore(dataSource, converter);
 
-        // TODO #7 Allow to configure tables, sequences and indices
-        try (
-            Connection connection = dataSource.getConnection();
-            Statement statement = connection.createStatement();
-        ) {
-            statement.execute(
-                """
-                CREATE TABLE IF NOT EXISTS events (
-                  global_index INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (INCREMENT BY -1),
-
-                  timestamp TIMESTAMPTZ NOT NULL,
-                  payload BYTEA,
-                  metadata JSON NOT NULL,
-                  identifier VARCHAR NOT NULL,
-                  type VARCHAR NOT NULL,
-
-                  -- keys
-                  PRIMARY KEY (global_index)
-                );
-
-                CREATE TABLE IF NOT EXISTS tags (
-                  global_index INT8 NOT NULL,
-
-                  key VARCHAR NOT NULL,
-                  value VARCHAR NOT NULL,
-
-                  -- keys
-                  PRIMARY KEY (key, value, global_index)
-                );
-
-                CREATE TABLE IF NOT EXISTS consistency_tags (
-                  tag_hash INT4 NOT NULL,
-                  global_index INT8 NOT NULL,
-
-                  -- keys
-                  PRIMARY KEY (tag_hash)
-                );
-
-                -- Create a sequence used for monotonic final global index values. Starts at 1.
-                CREATE SEQUENCE IF NOT EXISTS events_monotonic_seq
-                  INCREMENT BY 1
-                  CACHE 1
-                  OWNED BY events.global_index;
-
-                -- BTREE index on global_index in consistency_tags (for faster finalizations)
-                CREATE INDEX IF NOT EXISTS consistency_tags_global_index_idx
-                  ON consistency_tags (global_index);
-                """
-            );
-
-            connection.commit();
+        try {
+            PostgresqlSchemaInitializer.initialize(dataSource);
         }
         catch (SQLException e) {
             throw new IllegalStateException("Could not initialize " + getClass().getSimpleName(), e);
         }
 
-        // Setup thread and connection to detect new appends:
-        this.eventMonitoringThread = Thread.ofVirtual().start(() -> {
-            while (!Thread.currentThread().isInterrupted()) {
-                try (Connection connection = dataSource.getConnection()) {
-                    monitorForNewEvents(connection);
-                }
-                catch (SQLException e) {
-
-                    /*
-                     * The Postgres driver will wrap InterruptedExceptions in an SQLException.
-                     * To check whether the exception here was meant to terminate the monitoring
-                     * thread, the interrupted flag is checked:
-                     */
-
-                    if (Thread.currentThread().isInterrupted()) {
-                        break;
-                    }
-
-                    LOGGER.warn("Exception while accessing DataSource (retry in 5 seconds): " + dataSource, e);
-
-                    try {
-                        Thread.sleep(5000);
-                    }
-                    catch (InterruptedException ie) {
-                        break;  // exit thread when asked to terminate during retry delay
-                    }
-                }
-            }
-
-            LOGGER.info("Event Monitoring Thread terminated");
-        });
+        this.eventMonitor = new PostgresqlEventMonitor(dataSource);
+        this.finalizer = new PostgresqlFinalizer(dataSource, eventMonitor::updateHighestKnownGlobalIndex);
     }
 
     void close() {  // for testing purposes, to avoid junk exceptions
-        eventMonitoringThread.interrupt();
-        try {
-            eventMonitoringThread.join(10_000);
-        }
-        catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    private void monitorForNewEvents(Connection c) throws SQLException {
-        PGConnection pgConnection = c.unwrap(PGConnection.class);
-
-        c.setAutoCommit(true);  // required to have no transaction for receiving notifications
-
-        /*
-         * First set up a listener for global index updates:
-         */
-
-        try (PreparedStatement ps = c.prepareStatement("LISTEN events_channel")) {
-            ps.execute();
-        }
-
-        /*
-         * It's possible some notifications were missed, so perform a direct query once
-         * to find the current highest global index:
-         */
-
-        try (
-            PreparedStatement ps = c.prepareStatement(EVENTS_FIND_NEXT_AVAILABLE_GLOBAL_INDEX);
-            ResultSet resultSet = ps.executeQuery();
-        ) {
-            resultSet.next();
-
-            updateHighestKnownGlobalIndex(resultSet.getLong(1) - 1);
-        }
-
-        /*
-         * Loop and process incoming notifications, until interrupted. Note that
-         * there is no InterruptedException that can occur here, as the Postgres
-         * driver hides this fact and wraps it in a normal SQLException.
-         */
-
-        while (!Thread.currentThread().isInterrupted()) {
-            PGNotification[] notifications = pgConnection.getNotifications(60000);
-            long globalIndex = 0;
-
-            for (PGNotification notification : notifications) {
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Received notification from PID " + notification.getPID() + " on " + notification.getName() + " with " + notification.getParameter());
-                }
-
-                if (notification.getName().equals("events_channel")) {
-                    globalIndex = Math.max(Long.parseLong(notification.getParameter()), globalIndex);
-                }
-            }
-
-            if (globalIndex > 0) {
-                updateHighestKnownGlobalIndex(globalIndex);
-            }
-        }
-    }
-
-    private void updateHighestKnownGlobalIndex(long globalIndex) {
-        synchronized (streamCallbacks) {
-            if (globalIndex <= highestKnownGlobalIndex) {  // checks if notification can be skipped
-                return;
-            }
-
-            highestKnownGlobalIndex = globalIndex;
-        }
-
-        /*
-         * ContinuousMessageStream already guarantees that the callbacks do not
-         * throw exceptions, and per MessageStream documentation they must not
-         * block or do any significant amount of work in the callback. This may
-         * block or stop the monitor thread otherwise.
-         *
-         * The callbacks should still preferably be run outside the
-         * synchronization block.
-         */
-
-        for (Runnable callback : streamCallbacks.values()) {
-            callback.run();
-        }
+        eventMonitor.close();
     }
 
     /*
@@ -694,13 +456,15 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      */
 
     @Override
-    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot) {
-        return snapshotStore.store(qualifiedName, identifier, snapshot);
+    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
+                                         @Nullable ProcessingContext context) {
+        return snapshotStore.store(qualifiedName, identifier, snapshot, context);
     }
 
     @Override
-    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier) {
-        return snapshotStore.load(qualifiedName, identifier);
+    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
+                                                      @Nullable ProcessingContext context) {
+        return snapshotStore.load(qualifiedName, identifier, context);
     }
 
     @Override
@@ -715,6 +479,8 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         ProcessingContext context,
         List<TaggedEventMessage<?>> events
     ) {
+        validateNoReservedTags(events);
+
         entitlementManager.claimMessage(PostgresAxoniqAddon.IDENTIFIER, EntitlementMessageType.EVENT, events.size());
 
         if (LOGGER.isDebugEnabled()) {
@@ -734,6 +500,26 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         });
     }
 
+    /**
+     * Rejects any event carrying a tag with the reserved {@link #TYPE_TAG_KEY key}, which is written
+     * automatically by the {@code axon_write_type_tag} database trigger and must never be supplied
+     * directly.
+     *
+     * @param events the events to validate, cannot be {@code null}
+     * @throws IllegalArgumentException if any event carries a tag using the reserved key
+     */
+    private static void validateNoReservedTags(List<TaggedEventMessage<?>> events) {
+        for (TaggedEventMessage<?> tem : events) {
+            for (Tag tag : tem.tags()) {
+                if (TYPE_TAG_KEY.equals(tag.key())) {
+                    throw new IllegalArgumentException(
+                        "Tag key \"" + TYPE_TAG_KEY + "\" is reserved for internal use and cannot be supplied explicitly"
+                    );
+                }
+            }
+        }
+    }
+
     // TODO #8 performance improvement possible here by avoiding a lot of back-and-forth with the server
     private boolean internalAppendEvents(Connection connection, AppendCondition condition, List<TaggedEventMessage<?>> events) throws SQLException {
         try (
@@ -749,9 +535,10 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
 
                 eventInsert.setTimestamp(1, Timestamp.from(message.timestamp()));
                 eventInsert.setString(2, message.identifier());
-                eventInsert.setString(3, message.type().toString());
-                eventInsert.setBytes(4, converter.convertPayload(message, byte[].class));
-                eventInsert.setString(5, MetadataSerializer.toJson(message.metadata()));
+                eventInsert.setString(3, message.type().qualifiedName().toString());
+                eventInsert.setString(4, message.type().version());
+                eventInsert.setBytes(5, converter.convertPayload(message, byte[].class));
+                eventInsert.setString(6, MetadataSerializer.toJson(message.metadata()));
                 eventInsert.execute();
 
                 try (ResultSet keys = eventInsert.getGeneratedKeys()) {
@@ -791,7 +578,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     }
 
     @Override
-    public MessageStream<EventMessage> source(SourcingCondition condition) {
+    public MessageStream<EventMessage> source(SourcingCondition condition, @Nullable ProcessingContext context) {
         Set<EventCriterion> criterions = condition.criteria().flatten();
 
         return DelayedMessageStream.create(
@@ -885,18 +672,12 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         return new ContinuousMessageStream<>(
             fetcher,
             this::toMessageStreamEntry,
-            this::registerCallback
+            eventMonitor::registerCallback
         );
     }
 
     private SimpleEntry<EventMessage> toMessageStreamEntry(FinalizedEvent finalizedEvent) {
         return new SimpleEntry<>(finalizedEvent.event, trackingTokenContext(finalizedEvent));
-    }
-
-    private Registration registerCallback(MessageStream<?> ms, Runnable callback) {
-        streamCallbacks.put(ms, callback);
-
-        return () -> streamCallbacks.remove(ms) != null;
     }
 
     @Override
@@ -1073,7 +854,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         long globalIndex = resultSet.getLong(1);
         Instant timestamp = resultSet.getTimestamp(2).toInstant();
         String identifier = resultSet.getString(3);
-        MessageType messageType = MessageType.fromString(resultSet.getString(4));
+        MessageType messageType = new MessageType(new QualifiedName(resultSet.getString(4)), resultSet.getString(9));
         byte[] payload = resultSet.getBytes(5);
         Map<String, String> metadata = MetadataSerializer.fromJson(resultSet.getString(6));
 
@@ -1212,116 +993,6 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         }
 
         return lockedTags;
-    }
-
-    private synchronized CompletableFuture<ConsistencyMarker> scheduleFinalization() {
-        if (!finalizerRunning) {
-            finalizerRunning = true;
-
-            return CompletableFuture.supplyAsync(this::runFinalizationTask, FINALIZER_EXECUTOR);
-        }
-
-        if (queuedFinalization == null) {
-            queuedFinalization = CompletableFuture.supplyAsync(this::runFinalizationTask, FINALIZER_EXECUTOR);
-        }
-
-        return queuedFinalization;
-    }
-
-    private ConsistencyMarker runFinalizationTask() {
-        try {
-            long latestGlobalIndex = finalizeAndReturnLatestIndex();
-
-            updateHighestKnownGlobalIndex(latestGlobalIndex);  // will notify callbacks if needed
-
-            return new GlobalIndexConsistencyMarker(latestGlobalIndex + 1);
-        }
-        catch (SQLException e) {
-
-            /*
-             * Throwing an exception here means that the AppendCondition#afterCommit
-             * method will return a failed future, and no consistency marker. The
-             * framework should deal with this. Note that the events are still
-             * already committed and permanent, we're just unable to determine the
-             * correct marker.
-             */
-
-            throw new IllegalStateException("Finalization failed", e);
-        }
-        finally {
-            synchronized (this) {
-                if (queuedFinalization == null) {
-                    finalizerRunning = false;
-                }
-                else {
-                    queuedFinalization = null;
-                }
-            }
-        }
-    }
-
-    private long finalizeAndReturnLatestIndex() throws SQLException {
-        try (Connection connection = dataSource.getConnection()) {
-
-            /*
-             * Finalization is completely independent of any other transactions, and
-             * the connection therefore can be modified to suit finalization needs.
-             *
-             * As finalization is modifying the consistency tags table, an isolation
-             * level higher than TRANSACTION_READ_COMMITTED would result in many
-             * serialization retries, potentially even completely blocking the finalizer
-             * in a busy event store. As the finalizer only needs a single consistent
-             * view of the temporary indices in the events table to proceed, there is
-             * no need to guarantee this view has remained unchanged over the course
-             * of the transaction.
-             */
-
-            connection.setAutoCommit(false);
-            connection.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
-
-            /*
-             * The finalization statement takes all temporary IDs, assigns them permanent
-             * IDs, and then returns the latest permanent value assigned from the monotonic
-             * sequence. This value either reflects the global index of the last event it
-             * finalized, or if there was nothing to finalize, it simply reflects the global
-             * index of the last event finalized by any finalize run.
-             *
-             * Empty finalization runs can occur for two reasons:
-             *
-             * - Another JVM did the finalization.
-             *
-             * - A finalization was triggered by one transaction, and another concurrently
-             *   shortly after it. The second finalization is queued to be absolutely sure
-             *   it will include the events of the second transaction. However, if the events
-             *   were committed and visible before the first finalizer started its work,
-             *   it may include them already. The second finalization then may see no events
-             *   to finalize, but simply returns the latest global index.
-             *
-             * Note: A finalization run may include events that were committed after the
-             * events that triggered it and which do not actually share the same consistency
-             * tags. As a result, the returned global index may be slightly higher than
-             * strictly required for consistency. This is expected and safe: it still
-             * provides a valid high-water mark after which new events with potentially
-             * conflicting tags can be appended.
-             */
-
-            try (
-                PreparedStatement ps = connection.prepareStatement(FINALIZE_STATEMENT);
-                ResultSet resultSet = ps.executeQuery();
-            ) {
-                resultSet.next();  // query always returns a single row
-
-                long globalIndex = resultSet.getLong(1);
-
-                connection.commit();
-
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("finalizePositions completed with latest global index: " + globalIndex);
-                }
-
-                return globalIndex;
-            }
-        }
     }
 
     private TransactionalExecutor<Connection> connectionExecutor(ProcessingContext processingContext) {

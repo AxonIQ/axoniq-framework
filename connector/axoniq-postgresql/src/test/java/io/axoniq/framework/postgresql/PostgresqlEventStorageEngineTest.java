@@ -37,6 +37,7 @@ import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransact
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.axonframework.messaging.eventstreaming.Tag;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -46,6 +47,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import javax.sql.DataSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -204,5 +206,16 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
             // Reset mock to avoid affecting other tests
             Mockito.reset(entitlementManager);
         }
+    }
+
+    @Test
+    void appendingEventsWithReservedTypeTagKeyThrows() {
+        TaggedEventMessage<EventMessage> event = taggedEventMessage("event-0", Set.of(new Tag("__T", "bogus")));
+
+        assertThatThrownBy(() -> appendEvents(AppendCondition.none(), event))
+                .isInstanceOf(AssertionError.class)
+                .cause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("__T");
     }
 }

@@ -19,17 +19,15 @@
 
 package io.axoniq.framework.messaging.multitenancy.api;
 
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 class TenantComponentFactoryTest {
-
-    private static final TenantDescriptor TENANT_A = TenantDescriptor.tenantWithId("tenant-a");
 
     @Nested
     class DefaultDestroy {

@@ -42,7 +42,6 @@ import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
 import org.axonframework.messaging.core.interception.HandlerInterceptorRegistry;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.jspecify.annotations.Nullable;
 
 import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled.isEnabled;
 
@@ -105,7 +104,7 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
                                                SearchScope.ALL);
 
         // Register the Axon Server TenantProvider, which is the default implementation for multi-tenancy in Axon Server.
-        componentRegistry.registerIfNotPresent(axonServerTenantProvider(null), SearchScope.ALL);
+        componentRegistry.registerIfNotPresent(axonServerTenantProvider(), SearchScope.ALL);
 
         // Inject the correct tenant's instance of any registered TenantComponentProvider into message handlers.
         registerTenantComponentParameterResolverFactory(componentRegistry);
@@ -160,18 +159,14 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      * {@link AxonServerConnectionManager} to manage connections and the {@link TenantConnectPredicate} to determine
      * which tenants to connect to, defaults to {@link AxonServerTenantConnectPredicate}.
      *
-     * @param predefinedContexts an optional, comma-separated list of contexts that should be pre-defined in the tenant
-     *                           provider
      * @return a {@link ComponentDefinition} for the {@link TenantProvider} that is backed by Axon Server.
      */
-    // TODO: we need to find a better way to configure the predefined contexts, see issue #260.
-    public static ComponentDefinition<TenantProvider> axonServerTenantProvider(@Nullable String predefinedContexts) {
+    public static ComponentDefinition<TenantProvider> axonServerTenantProvider() {
         return ComponentDefinition
                 .ofType(TenantProvider.class)
                 .withBuilder(config -> new AxonServerTenantProvider(
                                      config.getComponent(AxonServerConnectionManager.class),
-                                     config.getComponent(TenantConnectPredicate.class, AxonServerTenantConnectPredicate::new),
-                                     predefinedContexts
+                                     config.getComponent(TenantConnectPredicate.class, AxonServerTenantConnectPredicate::new)
                              )
                 )
                 .onStart(TENANT_PROVIDER_PHASE,
