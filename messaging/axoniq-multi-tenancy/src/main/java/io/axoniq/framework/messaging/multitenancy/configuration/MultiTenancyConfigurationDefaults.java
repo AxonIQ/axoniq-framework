@@ -28,7 +28,9 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerTenantConnectPredicate;
+import io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerTenantEventSegmentFactory;
 import io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerTenantProvider;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantRoutingEventStore;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
@@ -113,6 +115,10 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
 
         // Register HandlerInterceptor that puts a ResourceKey with the resolved TenantDescriptor into {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}.
         registerTenantDescriptorInterceptor(componentRegistry);
+
+        // Register the TenantRoutingEventStore, which routes event store operations to the correct tenant's event store segment
+        // using the Axon Server TenantEventSegmentFactory.
+        registerAxonServerTenantRoutingEventStore(componentRegistry);
     }
 
     /**
@@ -189,5 +195,14 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
                 config.getComponent(TenantResolver.class),
                 config.getComponent(TenantProvider.class)
         );
+    }
+
+    static void registerAxonServerTenantRoutingEventStore(ComponentRegistry componentRegistry) {
+        componentRegistry.registerComponent(
+                TenantRoutingEventStore.class,
+                config -> new TenantRoutingEventStore(
+                        AxonServerTenantEventSegmentFactory.buildComponent(config),
+                        config.getComponent(TenantResolver.class)
+                ));
     }
 }

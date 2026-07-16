@@ -36,9 +36,11 @@ import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 
+import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_REPLICATION_GROUP;
 import static io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor.tenantWithId;
 
 /**
@@ -46,6 +48,16 @@ import static io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor.te
  */
 public enum TestFixtures {
     ;
+
+    public static final TenantDescriptor TENANT_A = new TenantDescriptor(
+            "foo-a",
+            Map.of("replicationGroup", DEFAULT_REPLICATION_GROUP)
+    );
+
+    public static final TenantDescriptor TENANT_B = new TenantDescriptor(
+            "foo-b",
+            Map.of("replicationGroup", DEFAULT_REPLICATION_GROUP)
+    );
 
     /**
      * Creates a {@link TenantResolver} that always resolves to the given tenant ID.
