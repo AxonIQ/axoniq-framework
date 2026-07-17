@@ -126,19 +126,6 @@
             <artifactId>reactor-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- Logging - (required due to different logging approach in Axon Framework test Jars) -->
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-core-test</artifactId>
-            <version>${log4j.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-slf4j2-impl</artifactId>
-            <version>${log4j.version}</version>
-            <scope>test</scope>
-        </dependency>
         <!-- Testing -->
         <dependency>
             <groupId>org.testcontainers</groupId>
