@@ -112,9 +112,20 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      */
     private record Batch(@Nullable Snapshot snapshot, List<FinalizedEvent> events, long highestGlobalIndex) {}
 
-    private record TagFilter(CharSequence sql, List<List<String>> tagParameters) {
+    /**
+     * The parameters needed to bind one criterion's {@link #FILTER_SUB_QUERY} instance, in the
+     * order its {@code ?} place-holders appear: the criterion's tag key/value pairs, then its
+     * type array (if it restricts by type), then the distinct key/value pair count for {@code HAVING}.
+     *
+     * @param tagParameters    the criterion's tag keys and values, alternating, cannot be {@code null}, may be empty
+     * @param typeParameters   the criterion's type names, cannot be {@code null}, empty if the criterion does not restrict by type
+     * @param distinctTagCount the number of distinct tags required to match: one per tag, plus one more if typeParameters is non-empty
+     */
+    private record CriterionFilter(List<String> tagParameters, List<String> typeParameters, int distinctTagCount) {}
+
+    private record TagFilter(CharSequence sql, List<CriterionFilter> criterionFilters) {
         boolean isEmpty() {
-            return tagParameters.isEmpty();
+            return criterionFilters.isEmpty();
         }
     }
 
@@ -226,17 +237,18 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * filters need to be applied. This is added to the main query as a JOIN on the tags
      * table.
      * <p>
-     * The {@code key-value-pairs} place-holder must be replaced with multiple parameter
-     * place-holders, one pair for each tag to filter on.
+     * The {@code condition} place-holder must be replaced with the criterion's tag and/or type
+     * condition - see {@link #buildTagFilter(Set)}.
      *
-     * <li>Parameter 1 {@code long}: the number of tags that must match (should be equal to number of tags filtered on)
+     * <li>Parameter 1 {@code long}: the number of distinct key/value pairs that must match (one per
+     * tag, plus one more for the reserved type tag if the criterion also restricts by type)
      */
     private static final String FILTER_SUB_QUERY =
         """
         SELECT t.global_index
           FROM tags t
           WHERE t.global_index > (SELECT sort_index FROM snap)
-            AND (t.key, t.value) IN ({key-value-pairs})
+            AND ({condition})
           GROUP BY t.global_index
           HAVING COUNT(DISTINCT (t.key, t.value)) = ?
         """;
@@ -797,12 +809,16 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
 
                 ps.setLong(parameterIndex++, positionValue);  // RESUME_AT_POSITION's start position or RESUME_AT_SNAPSHOT's maximum position
 
-                for (List<String> parameterGroup : tagFilter.tagParameters) {
-                    for (String parameter : parameterGroup) {
+                for (CriterionFilter criterionFilter : tagFilter.criterionFilters) {
+                    for (String parameter : criterionFilter.tagParameters()) {
                         ps.setString(parameterIndex++, parameter);  // tag parameters in subquery
                     }
 
-                    ps.setInt(parameterIndex++, parameterGroup.size() / 2);  // HAVING COUNT in each subquery
+                    if (!criterionFilter.typeParameters().isEmpty()) {
+                        ps.setArray(parameterIndex++, connection.createArrayOf("varchar", criterionFilter.typeParameters().toArray()));
+                    }
+
+                    ps.setInt(parameterIndex++, criterionFilter.distinctTagCount());  // HAVING COUNT in each subquery
                 }
 
                 ps.setLong(parameterIndex++, limit + 1L);  // LIMIT ?, +1 for the leading snap row
@@ -893,25 +909,42 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         return TrackingToken.addToContext(Context.empty(), new GlobalSequenceTrackingToken(event.position + 1));
     }
 
+    /**
+     * Builds the tag/type filter for the given criteria, unioning one {@link #FILTER_SUB_QUERY}
+     * instance per criterion. A criterion with neither tags nor types restricts nothing, so the
+     * whole filter collapses to {@link #EMPTY} (match everything) the moment one is encountered -
+     * that is correct even with other, more restrictive criteria present, since criteria combine
+     * with OR semantics.
+     * <p>
+     * Otherwise, each criterion's condition is one of:
+     * <ul>
+     *     <li>tags only - {@code (t.key, t.value) IN (...)}
+     *     <li>types only - {@code t.key = '__T' AND t.value = ANY(?)}, no tags to join on at all
+     *     <li>both - the two conditions above, combined with {@code OR}
+     * </ul>
+     *
+     * @param criterions the criteria to filter events on, cannot be {@code null}
+     * @return the resulting filter, never {@code null}
+     */
     private static TagFilter buildTagFilter(Set<EventCriterion> criterions) {
         if (criterions.isEmpty()) {
             return EMPTY;
         }
 
         StringBuilder sql = new StringBuilder();
-        List<List<String>> parameterGroups = new ArrayList<>();
+        List<CriterionFilter> criterionFilters = new ArrayList<>();
         boolean firstCriterion = true;
 
         for (EventCriterion criterion : criterions) {
-            if (criterion.tags().isEmpty()) {
-                return EMPTY;  // no tag restriction means match all events, so no filter needed
+            if (criterion.tags().isEmpty() && criterion.types().isEmpty()) {
+                return EMPTY;  // no restriction at all means match all events, so no filter needed
             }
 
             if (!firstCriterion) {
                 sql.append(" UNION ");
             }
 
-            List<String> parameters = new ArrayList<>();
+            List<String> tagParameters = new ArrayList<>();
             StringBuilder keyValuePairs = new StringBuilder();
 
             for (Tag tag : criterion.tags()) {
@@ -921,18 +954,28 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
 
                 keyValuePairs.append("(?, ?)");
 
-                parameters.add(tag.key());
-                parameters.add(tag.value());
+                tagParameters.add(tag.key());
+                tagParameters.add(tag.value());
             }
 
-            parameterGroups.add(parameters);
+            List<String> typeParameters = criterion.types().stream().map(QualifiedName::fullName).toList();
+            String typeCondition = "t.key = '" + TYPE_TAG_KEY + "' AND t.value = ANY(?)";
+            String condition = keyValuePairs.isEmpty()
+                ? typeCondition
+                : typeParameters.isEmpty()
+                    ? "(t.key, t.value) IN (" + keyValuePairs + ")"
+                    : "(t.key, t.value) IN (" + keyValuePairs + ") OR (" + typeCondition + ")";
 
-            sql.append(FILTER_SUB_QUERY.replace("{key-value-pairs}", keyValuePairs));
+            int distinctTagCount = criterion.tags().size() + (typeParameters.isEmpty() ? 0 : 1);
+
+            criterionFilters.add(new CriterionFilter(tagParameters, typeParameters, distinctTagCount));
+
+            sql.append(FILTER_SUB_QUERY.replace("{condition}", condition));
 
             firstCriterion = false;
         }
 
-        return new TagFilter(sql, parameterGroups);
+        return new TagFilter(sql, criterionFilters);
     }
 
     /**
