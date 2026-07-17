@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS events (
   metadata     JSON        NOT NULL,
   identifier   VARCHAR     NOT NULL,
   type         VARCHAR     NOT NULL,
+  type_version VARCHAR     NOT NULL,
   PRIMARY KEY (global_index)
 );
 
@@ -41,9 +42,15 @@ CREATE SEQUENCE IF NOT EXISTS events_monotonic_seq
 
 CREATE INDEX IF NOT EXISTS consistency_tags_global_index_idx
   ON consistency_tags (global_index);
+
+CREATE INDEX IF NOT EXISTS tags_global_index_idx
+  ON tags (global_index);
+
+CREATE UNIQUE INDEX IF NOT EXISTS tags_type_unique
+  ON tags (global_index) WHERE key = '__T';
 ----
 
-The `events` table is the main event log; `payload` holds the serialized event as bytes and `metadata` is stored as JSON.
+The `events` table is the main event log; `payload` holds the serialized event as bytes, `metadata` is stored as JSON, and `type`/`type_version` together form the event's message type.
 The `tags` table associates DCB tags with events.
 The `consistency_tags` table is a bounded conflict-detection structure used when appending events with consistency requirements; it does not grow with event volume.
 

@@ -1,0 +1,50 @@
+[.axoniq-feature]
+[#connection_security]
+== Connection security
+
+The connection between an application and Axon Server can be secured with Transport Layer Security (TLS). All security-related settings live under the `axon.axonserver.` property prefix.
+
+=== Server authentication (TLS)
+
+To enable TLS, set `axon.axonserver.ssl-enabled` to `true`. By default, the server's certificate is verified against the Certificate Authorities trusted by the JVM. When the server uses a certificate signed by a private CA, point `axon.axonserver.cert-file` to a PEM file containing the CA certificates to trust instead:
+
+[source,properties]
+----
+axon.axonserver.ssl-enabled=true
+axon.axonserver.cert-file=/etc/my-app/tls/server-ca.pem
+----
+
+=== Mutual TLS (client certificates)
+
+In addition to verifying the server, the application can present its own certificate during the TLS handshake, allowing the server to authenticate the application. Configure the client certificate chain and the matching private key (in PKCS#8 PEM format):
+
+[source,properties]
+----
+axon.axonserver.ssl-enabled=true
+axon.axonserver.cert-file=/etc/my-app/tls/server-ca.pem
+axon.axonserver.client-cert-file=/etc/my-app/tls/client-cert.pem
+axon.axonserver.client-key-file=/etc/my-app/tls/client-key.pem
+----
+
+Both `client-cert-file` and `client-key-file` must be configured together; setting only one of them fails at startup. The certificate files are read once, when the connection is set up, so the application must be restarted when its client certificate is rotated.
+
+WARNING: Make sure the version of Axon Server and/or Axon Server Proxy you connect to supports mutual TLS. At the time of writing, Axon Server Proxy can verify client certificates (see the `proxy.tlsClientAuth` and `proxy.tlsTrustCerts` settings in the Axon Server Proxy reference), while Axon Server does not accept them yet.
+
+=== Property overview
+
+[cols="2,3"]
+|===
+|Property |Description
+
+|`axon.axonserver.ssl-enabled`
+|Enables TLS for the connection. Defaults to `false`.
+
+|`axon.axonserver.cert-file`
+|PEM file with CA certificates used to verify the server's certificate. When unset, the JVM's default trusted CAs are used.
+
+|`axon.axonserver.client-cert-file`
+|PEM file with the client certificate (chain) presented to the server (mutual TLS). Requires `client-key-file`.
+
+|`axon.axonserver.client-key-file`
+|PEM file with the client's PKCS#8 private key (mutual TLS). Requires `client-cert-file`.
+|===

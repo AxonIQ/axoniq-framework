@@ -28,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.List;
 
 /**
  * {@link TestInfrastructure} implementation that wires tests against a real Axon Server instance managed by
@@ -54,12 +55,20 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
 
     private static final Logger LOG = LoggerFactory.getLogger(AxonServerTestInfrastructure.class);
 
+    public static final String AXON_SERVER_TEST_LICENSE = "axon-server-test.license";
     private static final AxonServerContainer CONTAINER =
             new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:latest")
                     .withAxonServerHostname("localhost")
                     .withDevMode(true)
                     .withReuse(true)
-                    .withDcbContext(true);
+                    .withDcbContext(true)
+                    .withLicense(licenseExists()
+                                         ? AXON_SERVER_TEST_LICENSE
+                                         : null);
+
+    public static boolean licenseExists() {
+        return AxonServerTestInfrastructure.class.getResource("/" + AXON_SERVER_TEST_LICENSE) != null;
+    }
 
     @Override
     public void start() {
@@ -79,17 +88,21 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
 
     @Override
     public void purgeData() {
-        try {
-            LOG.info("Purging events from Axon Server.");
-            AxonServerContainerUtils.purgeEventsFromAxonServer(
-                    CONTAINER.getHost(),
-                    CONTAINER.getHttpPort(),
-                    "default",
-                    AxonServerContainerUtils.DCB_CONTEXT
-            );
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to purge AxonServer event storage", e);
-        }
+        LOG.info("Purging events from Axon Server.");
+        getContextManager().getContexts().stream().filter(c -> !"_admin".equals(c))
+                           .forEach(context -> {
+                               try {
+                                   AxonServerContainerUtils.purgeEventsFromAxonServer(
+                                           CONTAINER.getHost(),
+                                           CONTAINER.getHttpPort(),
+                                           context,
+                                           AxonServerContainerUtils.DCB_CONTEXT,
+                                           "default"
+                                   );
+                               } catch (IOException e) {
+                                   throw new RuntimeException("Failed to purge events from Axon Server", e);
+                               }
+                           });
     }
 
     @Override
@@ -97,5 +110,78 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
         // The container is shared across the JVM (static final, withReuse(true)).
         // Testcontainers + Ryuk handle cleanup on JVM exit; stopping per test would
         // defeat reuse. No-op on purpose.
+    }
+
+    public ContextManager getContextManager() {
+        return new ContextManager() {
+            @Override
+            public List<String> getContexts() {
+                try {
+                    return AxonServerContainerUtils.contexts(CONTAINER.getHost(),
+                                                             CONTAINER.getHttpPort());
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to list contexts from Axon Server", e);
+                }
+            }
+
+            @Override
+            public void createContext(String name, boolean dcb) {
+                try {
+                    AxonServerContainerUtils.createContext(CONTAINER.getHost(),
+                                                           CONTAINER.getHttpPort(),
+                                                           name,
+                                                           dcb,
+                                                           "default");
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to create context in Axon Server", e);
+                }
+            }
+
+            @Override
+            public void deleteContext(String name) {
+                try {
+                    AxonServerContainerUtils.deleteContext(CONTAINER.getHost(), CONTAINER.getHttpPort(), name);
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to delete context in Axon Server", e);
+                }
+            }
+        };
+    }
+
+    /**
+     * Utility to manage contexts for an {@code AxonServerTestInfrastructure}
+     */
+    public interface ContextManager {
+
+        /**
+         * List all contexts
+         *
+         * @return the list of context names
+         */
+        List<String> getContexts();
+
+        /**
+         * Create a new DCB context
+         *
+         * @param name the context name
+         */
+        default void createContext(String name) {
+            createContext(name, true);
+        }
+
+        /**
+         * Create a new context
+         *
+         * @param name the context name
+         * @param dcb  flag to indicate if it should be a DCB context
+         */
+        void createContext(String name, boolean dcb);
+
+        /**
+         * Delete a context
+         *
+         * @param name the context name
+         */
+        void deleteContext(String name);
     }
 }

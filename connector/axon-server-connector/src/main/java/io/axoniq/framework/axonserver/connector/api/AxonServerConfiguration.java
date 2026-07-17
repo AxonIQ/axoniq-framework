@@ -89,6 +89,28 @@ public class AxonServerConfiguration {
     private String certFile;
 
     /**
+     * The path to the client certificate (chain) file, in PEM format, presented to the server during the TLS
+     * handshake (mutual TLS). Requires {@link #getClientKeyFile() a client key file} to be configured as well. Note
+     * the path is only used when {@link #isSslEnabled() SSL is enabled}.
+     * <p>
+     * Make sure the version of Axon Server and/or Axon Server Proxy connected to supports mutual TLS.
+     *
+     * @since 5.3.0
+     */
+    private String clientCertFile;
+
+    /**
+     * The path to the client's private key file, in PKCS#8 PEM format, used during the TLS handshake (mutual TLS).
+     * Requires {@link #getClientCertFile() a client certificate file} to be configured as well. Note the path is only
+     * used when {@link #isSslEnabled() SSL is enabled}.
+     * <p>
+     * Make sure the version of Axon Server and/or Axon Server Proxy connected to supports mutual TLS.
+     *
+     * @since 5.3.0
+     */
+    private String clientKeyFile;
+
+    /**
      * A toggle dictating whether to use TLS for the connection to Axon Server.
      */
     private boolean sslEnabled;
@@ -514,6 +536,56 @@ public class AxonServerConfiguration {
      */
     public void setCertFile(String certFile) {
         this.certFile = certFile;
+    }
+
+    /**
+     * The path to the client certificate (chain) file, in PEM format, presented to the server during the TLS
+     * handshake (mutual TLS). Note the path is only used when {@link #isSslEnabled() SSL is enabled}.
+     *
+     * @return The path to the client certificate (chain) file used for mutual TLS.
+     * @since 5.3.0
+     */
+    public String getClientCertFile() {
+        return clientCertFile;
+    }
+
+    /**
+     * Sets the path to the client certificate (chain) file, in PEM format, presented to the server during the TLS
+     * handshake (mutual TLS). Requires {@link #setClientKeyFile(String) a client key file} to be configured as well.
+     * Note the path is only used when {@link #isSslEnabled() SSL is enabled}.
+     * <p>
+     * Make sure the version of Axon Server and/or Axon Server Proxy connected to supports mutual TLS.
+     *
+     * @param clientCertFile The path to the client certificate (chain) file used for mutual TLS.
+     * @since 5.3.0
+     */
+    public void setClientCertFile(String clientCertFile) {
+        this.clientCertFile = clientCertFile;
+    }
+
+    /**
+     * The path to the client's private key file, in PKCS#8 PEM format, used during the TLS handshake (mutual TLS).
+     * Note the path is only used when {@link #isSslEnabled() SSL is enabled}.
+     *
+     * @return The path to the client's private key file used for mutual TLS.
+     * @since 5.3.0
+     */
+    public String getClientKeyFile() {
+        return clientKeyFile;
+    }
+
+    /**
+     * Sets the path to the client's private key file, in PKCS#8 PEM format, used during the TLS handshake (mutual
+     * TLS). Requires {@link #setClientCertFile(String) a client certificate file} to be configured as well. Note the
+     * path is only used when {@link #isSslEnabled() SSL is enabled}.
+     * <p>
+     * Make sure the version of Axon Server and/or Axon Server Proxy connected to supports mutual TLS.
+     *
+     * @param clientKeyFile The path to the client's private key file used for mutual TLS.
+     * @since 5.3.0
+     */
+    public void setClientKeyFile(String clientKeyFile) {
+        this.clientKeyFile = clientKeyFile;
     }
 
     /**
@@ -1490,6 +1562,21 @@ public class AxonServerConfiguration {
 
         public Builder ssl(String certFile) {
             instance.certFile = certFile;
+            instance.sslEnabled = true;
+            return this;
+        }
+
+        /**
+         * Enables SSL with mutual TLS, presenting the given client certificate during the TLS handshake.
+         *
+         * @param clientCertFile The path to the client certificate (chain) file, in PEM format.
+         * @param clientKeyFile  The path to the client's private key file, in PKCS#8 PEM format.
+         * @return This builder, for fluent interfacing.
+         * @since 5.3.0
+         */
+        public Builder mutualTls(String clientCertFile, String clientKeyFile) {
+            instance.clientCertFile = clientCertFile;
+            instance.clientKeyFile = clientKeyFile;
             instance.sslEnabled = true;
             return this;
         }
