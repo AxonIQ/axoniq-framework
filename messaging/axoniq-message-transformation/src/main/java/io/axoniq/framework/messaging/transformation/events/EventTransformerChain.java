@@ -137,6 +137,14 @@ public final class EventTransformerChain implements DescribableComponent {
      * Applies the chain to a single event and returns every event it produces, re-applying the chain to each output
      * so a transformation registered later still fires. {@code depth} bounds the recursion against
      * {@link #maxIterationsPerEvent} to stop a cyclic or self-matching configuration.
+     * <p>
+     * This returns a materialized {@link List} rather than a {@link MessageStream}, even though a split conceptually
+     * yields a stream of events. The streaming boundary is the public {@link #transform} method: it expands this list
+     * into the output stream and grafts each produced event back onto the input entry's
+     * {@link org.axonframework.messaging.core.Context}, keeping the input's tracking token and stream position. The
+     * expansion done here is synchronous and bounded by {@link #maxIterationsPerEvent}, with each output re-entering
+     * the chain depth-first, so a short-lived list per input event is enough and avoids nesting a stream per
+     * recursion level.
      */
     private List<EventMessage> applyChainToOneEvent(EventMessage event, TransformationContext context, int depth) {
         EventTransformation match = index.findMatch(event.type());

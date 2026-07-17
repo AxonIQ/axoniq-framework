@@ -242,7 +242,7 @@ public final class CourseListedWithSeatsSplit {
 ----
 <1> `split(from, inputType)` matches the source by exact identity, like a concrete `from(...)`, and reads the stored payload into the typed `Listing` record once.
 <2> Each `producing(identity, mapper)` declares one produced event. Outputs are emitted in declaration order, each inheriting the source event's stream position, and the declared identities widen a type-filtering read back to the source.
-<3> `build()` completes the split. At least one `producing(...)` is required.
+<3> `build()` completes the split. At least two `producing(...)` declarations are required: with none you should use the drop transformation, and with one you should use a 1:1 transformation.
 --
 ====
 

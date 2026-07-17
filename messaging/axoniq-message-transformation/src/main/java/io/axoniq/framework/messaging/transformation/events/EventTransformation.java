@@ -117,7 +117,6 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
      */
     String TARGET_NOT_NULL = "target may not be null";
 
-
     /**
      * Begin a 1:1 transformation matching the given {@code from} identity by exact equality. Continue
      * with {@code to(...)} then {@code transform(...)}.
@@ -173,8 +172,9 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
      * @return a builder awaiting one or more {@code producing(...)} declarations
      */
     static <T> SplitStep<T> split(MessageType source, Class<T> inputType) {
-        requireNonNull(source, SOURCE_NOT_NULL);
-        requireNonNull(inputType, "inputType may not be null");
+        // Guard the Class here so fromClass(...) never sees null; source and the resulting TypeReference are checked
+        // once in the SplitStep constructor, shared with the TypeReference overload below.
+        requireNonNull(inputType, SplitStep.INPUT_TYPE_NOT_NULL);
         return new SplitStep<>(source, TypeReference.fromClass(inputType));
     }
 
@@ -188,8 +188,6 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
      * @return a builder awaiting one or more {@code producing(...)} declarations
      */
     static <T> SplitStep<T> split(MessageType source, TypeReference<T> inputType) {
-        requireNonNull(source, SOURCE_NOT_NULL);
-        requireNonNull(inputType, "inputType may not be null");
         return new SplitStep<>(source, inputType);
     }
 
@@ -283,6 +281,7 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
      */
     final class SplitStep<T> {
 
+        private static final String INPUT_TYPE_NOT_NULL = "inputType may not be null";
         private static final String PRODUCED_TYPE_NOT_NULL = "producedType may not be null";
         private static final String OUTPUT_MAPPER_NOT_NULL = "outputMapper may not be null";
 
@@ -291,8 +290,8 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
         private final List<SplitEventTransformation.Output<T>> outputs = new ArrayList<>();
 
         private SplitStep(MessageType source, TypeReference<T> inputType) {
-            this.source = source;
-            this.inputType = inputType;
+            this.source = requireNonNull(source, SOURCE_NOT_NULL);
+            this.inputType = requireNonNull(inputType, INPUT_TYPE_NOT_NULL);
         }
 
         /**
@@ -327,16 +326,18 @@ public sealed interface EventTransformation extends MessageTransformation<EventM
         }
 
         /**
-         * Complete the split.
+         * Complete the split. A split must declare at least two outputs: with none the event would simply be removed,
+         * and with one it would be a plain 1:1 transformation, neither of which is a split.
          *
          * @return the resulting {@link EventTransformation}
-         * @throws IllegalArgumentException if no output was declared via {@code producing(...)}
+         * @throws IllegalArgumentException if fewer than two outputs were declared via {@code producing(...)}
          */
         public EventTransformation build() {
-            if (outputs.isEmpty()) {
+            if (outputs.size() < 2) {
                 throw new IllegalArgumentException(
-                        "A split requires at least one producing(...) declaration. "
-                                + "Use drop(...) to remove events from the read stream.");
+                        "A split requires at least two producing(...) declarations. "
+                                + "Use drop(...) to remove an event, or from(...).to(...).transform(...) "
+                                + "or rename(...) for a 1:1 transformation.");
             }
             return new SplitEventTransformation<>(source, inputType, outputs);
         }

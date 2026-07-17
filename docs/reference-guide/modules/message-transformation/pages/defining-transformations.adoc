@@ -313,7 +313,7 @@ record Id(String value) { }
 ----
 <1> `split(from, inputType)` matches the stored event by exact identity, like a concrete `from(...)`. It does not take a predicate. The stored payload is read into the typed `Listing` record once, so field access is compile-checked and every output derives from the same converted input.
 <2> Each `producing(identity, mapper)` declares one produced event, pairing its identity with the mapper deriving its payload. A split is several 1:1 output declarations sharing one `from`.
-<3> `build()` completes the split. At least one `producing(...)` is required.
+<3> `build()` completes the split. At least two `producing(...)` declarations are required: with none you should use the drop transformation, and with one you should use a 1:1 transformation.
 <4> Each output mapper returns the produced event's payload, wrapped by the framework into an `EventMessage`.
 <5> The stored shapes are small `record` types that mirror the wire form, exactly as in <<_mapping_to_a_typed_event,mapping to a typed event>>. Keep them next to the transformation and out of your domain model.
 

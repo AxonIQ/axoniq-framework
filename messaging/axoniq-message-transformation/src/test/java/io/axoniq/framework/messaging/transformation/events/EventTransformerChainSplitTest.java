@@ -154,12 +154,25 @@ final class EventTransformerChainSplitTest {
         }
 
         @Test
-        void buildRequiresAtLeastOneProducedEvent() {
+        void buildRejectsASplitWithNoProducedEvents() {
+            // a split with no outputs is a drop, not a split
             EventTransformation.SplitStep<Combined> step = EventTransformation.split(COMBINED, Combined.class);
 
             assertThatThrownBy(step::build)
                     .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("at least one");
+                    .hasMessageContaining("at least two");
+        }
+
+        @Test
+        void buildRejectsASplitWithASingleProducedEvent() {
+            // a split with a single output is a plain 1:1 transformation, not a split
+            EventTransformation.SplitStep<Combined> step =
+                    EventTransformation.split(COMBINED, Combined.class)
+                                       .producing(STUDENT_ENROLLED, combined -> new Enrollment(combined.student()));
+
+            assertThatThrownBy(step::build)
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("at least two");
         }
     }
 
@@ -187,28 +200,6 @@ final class EventTransformerChainSplitTest {
             assertThat(outputs.get(0).payload()).isEqualTo(new Enrollment("alice"));
             assertThat(outputs.get(1).type()).isEqualTo(COURSE_CAPACITY_UPDATED);
             assertThat(outputs.get(1).payload()).isEqualTo(new CapacityChange(30));
-        }
-
-        @Test
-        void aSplitWithASingleDeclaredOutputEmitsThatOneEvent() {
-            // given a split declaring exactly one output
-            EventTransformation singleOutputSplit =
-                    EventTransformation.split(COMBINED, Combined.class)
-                                       .producing(STUDENT_ENROLLED, combined -> new Enrollment(combined.student()))
-                                       .build();
-            EventTransformerChain chain = EventTransformerChain.builder().register(singleOutputSplit).build();
-            EventMessage stored = eventOf(COMBINED, new Combined("peter", 6));
-
-            // when the chain reads the stream
-            List<EventMessage> outputs = collectMessages(chain.transform(
-                    MessageStream.fromIterable(List.of(stored)),
-                    null, neverInvokedConverter(), alwaysEmptyMessageTypeResolver()));
-
-            // then exactly the single declared event appears in place of the source
-            assertThat(outputs).singleElement().satisfies(output -> {
-                assertThat(output.type()).isEqualTo(STUDENT_ENROLLED);
-                assertThat(output.payload()).isEqualTo(new Enrollment("peter"));
-            });
         }
 
         @Test
@@ -640,11 +631,13 @@ final class EventTransformerChainSplitTest {
 
         @Test
         void aContextAwareOutputMapperReceivesTheProcessingContext() {
-            // given a split whose output mapper branches on whether a ProcessingContext was supplied
+            // given a split whose first output mapper branches on whether a ProcessingContext was supplied
             EventTransformation split =
                     EventTransformation.split(COMBINED, Combined.class)
                                        .producing(STUDENT_ENROLLED, (combined, context) ->
                                                new Enrollment(context == null ? "no-context" : combined.student()))
+                                       .producing(COURSE_CAPACITY_UPDATED,
+                                                  combined -> new CapacityChange(combined.capacity()))
                                        .build();
             EventMessage stored = eventOf(COMBINED, new Combined("olivia", 3));
 
@@ -655,9 +648,7 @@ final class EventTransformerChainSplitTest {
             List<EventMessage> withContextOutputs = collectMessages(split.transform(stored, withContext));
 
             // then the mapper observed the non-null context and used the payload
-            assertThat(withContextOutputs).singleElement()
-                                          .extracting(EventMessage::payload)
-                                          .isEqualTo(new Enrollment("olivia"));
+            assertThat(withContextOutputs.getFirst().payload()).isEqualTo(new Enrollment("olivia"));
 
             // when the split transforms on a read path that supplies no context
             TransformationContext withoutContext = new TransformationContext(
@@ -665,9 +656,7 @@ final class EventTransformerChainSplitTest {
             List<EventMessage> withoutContextOutputs = collectMessages(split.transform(stored, withoutContext));
 
             // then the mapper observed the null context
-            assertThat(withoutContextOutputs).singleElement()
-                                             .extracting(EventMessage::payload)
-                                             .isEqualTo(new Enrollment("no-context"));
+            assertThat(withoutContextOutputs.getFirst().payload()).isEqualTo(new Enrollment("no-context"));
         }
     }
 

@@ -51,6 +51,8 @@ final class EventTransformerChainSafetyBoundTest {
 
     private static final MessageType V1 = new MessageType("com.example.Sample", "1.0.0");
     private static final MessageType V2 = new MessageType("com.example.Sample", "2.0.0");
+    private static final MessageType V3 = new MessageType("com.example.Sample", "3.0.0");
+    private static final MessageType TERMINAL = new MessageType("com.example.Terminal", "1.0.0");
     private static final MessageConverter CONVERTER = neverInvokedConverter();
     private static final MessageTypeResolver RESOLVER = alwaysEmptyMessageTypeResolver();
 
@@ -84,6 +86,71 @@ final class EventTransformerChainSafetyBoundTest {
                 .hasMessageContaining("maxIterationsPerEvent");
         assertThat(totalMapperInvocations.get())
                 .as("the chain must apply exactly maxIterationsPerEvent transformations before bailing")
+                .isEqualTo(3);
+    }
+
+    @Test
+    void aChainReachingAFixedPointOnTheLastAllowedIterationTerminatesCleanly() {
+        // A linear chain of exactly two hops (V1 -> V2 -> V3, with V3 matching nothing) with the bound set to
+        // exactly two. The last transformation applies on the final allowed iteration. The fixed point is then
+        // reached without exceeding the bound. Pins that hitting the bound exactly is not an error, only exceeding
+        // it is: the recursive check must let the last in-bound hop through.
+        AtomicInteger totalMapperInvocations = new AtomicInteger();
+        EventTransformation v1ToV2 = EventTransformation.from(V1).to(V2)
+                                                        .transform(JsonNode.class, (in, ctx) -> {
+                                                            totalMapperInvocations.incrementAndGet();
+                                                            return in;
+                                                        });
+        EventTransformation v2ToV3 = EventTransformation.from(V2).to(V3)
+                                                        .transform(JsonNode.class, (in, ctx) -> {
+                                                            totalMapperInvocations.incrementAndGet();
+                                                            return in;
+                                                        });
+        EventTransformerChain chain = EventTransformerChain.builder()
+                                                           .maxIterationsPerEvent(2)
+                                                           .register(v1ToV2)
+                                                           .register(v2ToV3)
+                                                           .build();
+        EventMessage event = new GenericEventMessage(V1, JsonNodeFactory.instance.objectNode());
+
+        List<EventMessage> outputs = collectMessages(chain.transform(
+                MessageStream.fromIterable(List.of(event)), null, CONVERTER, RESOLVER));
+
+        assertThat(outputs).singleElement()
+                           .satisfies(output -> assertThat(output.type()).isEqualTo(V3));
+        assertThat(totalMapperInvocations.get())
+                .as("both hops must run once each, reaching the fixed point exactly at the bound")
+                .isEqualTo(2);
+    }
+
+    @Test
+    void aSplitWhoseOutputReEntersTheChainTripsTheBound() {
+        // A self-matching split: it emits an event of its own source type, which re-enters the chain and splits
+        // again, plus a terminal output. This expands without a fixed point, so it must trip the per-event bound.
+        AtomicInteger totalSplitInvocations = new AtomicInteger();
+        EventTransformation selfSplit = EventTransformation.split(V1, String.class)
+                                                           .producing(V1, payload -> {
+                                                               totalSplitInvocations.incrementAndGet();
+                                                               return payload;
+                                                           })
+                                                           .producing(TERMINAL, payload -> payload)
+                                                           .build();
+        EventTransformerChain chain = EventTransformerChain.builder()
+                                                           .maxIterationsPerEvent(3)
+                                                           .register(selfSplit)
+                                                           .build();
+        EventMessage event = new GenericEventMessage(V1, "payload");
+        MessageStream<EventMessage> outputStream = chain.transform(
+                MessageStream.fromIterable(List.of(event)), null, CONVERTER, RESOLVER);
+
+        assertThatThrownBy(() -> collectMessages(outputStream))
+                .isInstanceOf(CompletionException.class)
+                .cause()
+                .isInstanceOf(ChainConfigurationException.class)
+                .hasMessageContaining("exceeded 3 iterations")
+                .hasMessageContaining("maxIterationsPerEvent");
+        assertThat(totalSplitInvocations.get())
+                .as("the self-producing output re-enters up to the bound, then trips")
                 .isEqualTo(3);
     }
 
