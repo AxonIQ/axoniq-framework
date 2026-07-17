@@ -2,7 +2,10 @@ package io.axoniq.framework.integrationtests.multitenancy;
 
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.extension.*;
 
+import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
+import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -12,7 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Jakob Hatzl
  * @since 5.3.0
  */
-public class MultiTenancyIT {
+@ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
+class MultiTenancyIT {
 
     private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
     private AxonServerTestInfrastructure.ContextManager contextManager;
@@ -32,18 +36,17 @@ public class MultiTenancyIT {
 
     @Test
     void canManageContexts() {
-        Assumptions.assumeTrue(AxonServerTestInfrastructure.licenseExists());
         assertThat(contextManager.getContexts())
-                .containsExactlyInAnyOrder("_admin", "default");
+                .containsExactlyInAnyOrder(ADMIN_CONTEXT, DEFAULT_CONTEXT);
 
         contextManager.createContext("context1");
 
         assertThat(contextManager.getContexts())
-                .containsExactlyInAnyOrder("_admin", "default", "context1");
+                .containsExactlyInAnyOrder(ADMIN_CONTEXT, DEFAULT_CONTEXT, "context1");
 
         contextManager.deleteContext("context1");
 
         assertThat(contextManager.getContexts())
-                .containsExactlyInAnyOrder("_admin", "default");
+                .containsExactlyInAnyOrder(ADMIN_CONTEXT, DEFAULT_CONTEXT);
     }
 }

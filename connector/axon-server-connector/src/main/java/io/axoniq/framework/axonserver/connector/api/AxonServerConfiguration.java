@@ -44,7 +44,21 @@ import java.util.Map;
 public class AxonServerConfiguration {
 
     private static final String DEFAULT_SERVERS = "localhost";
-    private static final String DEFAULT_CONTEXT = "default";
+
+    /**
+     * The default context name for Axon Server.
+     */
+    public static final String DEFAULT_CONTEXT = "default";
+
+    /**
+     * The context name for the Axon Server Admin context.
+     */
+    public static final String ADMIN_CONTEXT = "_admin";
+
+    /**
+     * The default replication group name for Axon Server.
+     */
+    public static final String DEFAULT_REPLICATION_GROUP = "default";
 
     /**
      * Whether (automatic) configuration of the Axon Server Connector is enabled. When {@code false}, the connector will
@@ -315,16 +329,16 @@ public class AxonServerConfiguration {
     private PersistentStreamSettings autoPersistentStreamsSettings = new PersistentStreamSettings();
 
     /**
-     * Instantiate a {@link Builder} to create an {@link AxonServerConfiguration}.
+     * Instantiate a {@link Builder} to create an {@code AxonServerConfiguration}.
      *
-     * @return a {@link Builder} to be able to create an {@link AxonServerConfiguration}.
+     * @return a {@link Builder} to be able to create an {@code AxonServerConfiguration}.
      */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Instantiate a default {@link AxonServerConfiguration}.
+     * Instantiate a default {@code AxonServerConfiguration}.
      */
     public AxonServerConfiguration() {
     }

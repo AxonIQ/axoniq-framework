@@ -321,4 +321,8 @@ public class AxonServerContainerUtils {
         }
         waitForContextsCondition(hostname, port, contexts -> contexts.contains(context));
     }
+
+    private AxonServerContainerUtils() {
+        // Utility class
+    }
 }

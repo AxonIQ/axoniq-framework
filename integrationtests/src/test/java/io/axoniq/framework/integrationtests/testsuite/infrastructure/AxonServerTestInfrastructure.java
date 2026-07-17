@@ -28,7 +28,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Consumer;
+
+import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.*;
 
 /**
  * {@link TestInfrastructure} implementation that wires tests against a real Axon Server instance managed by
@@ -70,6 +75,34 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
         return AxonServerTestInfrastructure.class.getResource("/" + AXON_SERVER_TEST_LICENSE) != null;
     }
 
+    private final List<Consumer<ComponentRegistry>> infrastructureConfigurators;
+
+    public AxonServerTestInfrastructure() {
+        this(Collections.emptyList());
+    }
+
+    /**
+     * Creates a new {@code AxonServerTestInfrastructure} instance with the given infrastructure configurators.
+     *
+     * @param infrastructureConfigurators to be executed when {@link #configureInfrastructure(ComponentRegistry)} is
+     *                                    called.
+     * @see AxonServerTestInfrastructure#AxonServerTestInfrastructure(List)
+     */
+    @SafeVarargs
+    public AxonServerTestInfrastructure(Consumer<ComponentRegistry>... infrastructureConfigurators) {
+        this(List.of(infrastructureConfigurators));
+    }
+
+    /**
+     * Creates a new {@code AxonServerTestInfrastructure} instance with the given infrastructure configurators.
+     *
+     * @param infrastructureConfigurators to be executed when {@link #configureInfrastructure(ComponentRegistry)} is
+     *                                    called.
+     */
+    public AxonServerTestInfrastructure(List<Consumer<ComponentRegistry>> infrastructureConfigurators) {
+        this.infrastructureConfigurators = infrastructureConfigurators;
+    }
+
     @Override
     public void start() {
         boolean wasRunning = CONTAINER.isRunning();
@@ -81,9 +114,12 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
 
     @Override
     public void configureInfrastructure(ComponentRegistry registry) {
-        AxonServerConfiguration config = new AxonServerConfiguration();
-        config.setServers(CONTAINER.getHost() + ":" + CONTAINER.getGrpcPort());
-        registry.registerComponent(AxonServerConfiguration.class, c -> config);
+        // builder so we can eventually add more configuration options if needed, without having to change impl.
+        AxonServerConfiguration.Builder builder = builder()
+                .servers(CONTAINER.getHost() + ":" + CONTAINER.getGrpcPort());
+
+        registry.registerComponent(AxonServerConfiguration.class, c -> builder.build());
+        infrastructureConfigurators.forEach(configurator -> configurator.accept(registry));
     }
 
     @Override
@@ -97,7 +133,7 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
                                            CONTAINER.getHttpPort(),
                                            context,
                                            AxonServerContainerUtils.DCB_CONTEXT,
-                                           "default"
+                                           DEFAULT_REPLICATION_GROUP
                                    );
                                } catch (IOException e) {
                                    throw new RuntimeException("Failed to purge events from Axon Server", e);
@@ -131,7 +167,7 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
                                                            CONTAINER.getHttpPort(),
                                                            name,
                                                            dcb,
-                                                           "default");
+                                                           DEFAULT_REPLICATION_GROUP);
                 } catch (IOException e) {
                     throw new RuntimeException("Failed to create context in Axon Server", e);
                 }
@@ -183,5 +219,14 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
          * @param name the context name
          */
         void deleteContext(String name);
+
+        /**
+         * Delete all contexts except the default and admin contexts
+         */
+        default void deleteAllCustomContexts() {
+            getContexts().stream()
+                         .filter(it -> !Set.of(DEFAULT_CONTEXT, ADMIN_CONTEXT).contains(it))
+                         .forEach(this::deleteContext);
+        }
     }
 }

@@ -44,6 +44,13 @@
             <artifactId>entitlement-manager</artifactId>
         </dependency>
 
+        <!-- Axoniq Framework -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axon-server-connector</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Core Axon Framework -->
         <dependency>
             <groupId>org.axonframework</groupId>
