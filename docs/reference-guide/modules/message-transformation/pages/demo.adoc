@@ -20,6 +20,10 @@ The demo composes a chain of transformations, each illustrating a technique cove
 | the legacy `CourseOffered` event is renamed to `CoursePublished`
 | a xref:defining-transformations.adoc#_renaming_an_event[rename] whose output then flows through the `CoursePublished` version chain
 
+| `CourseListedWithSeatsSplit`
+| a legacy `CourseListedWithSeats` becomes a `CoursePublished` and a `CourseCapacityChanged`
+| a xref:defining-transformations.adoc#_splitting_an_event[split], one event in and several out, whose `CoursePublished` output then flows through the version chain
+
 | `CoursePublishedV1ToV2`
 | a single `capacity` field becomes `minCapacity` and `maxCapacity`
 | a single xref:defining-transformations.adoc[structural transformation] on an untyped `JsonNode`
