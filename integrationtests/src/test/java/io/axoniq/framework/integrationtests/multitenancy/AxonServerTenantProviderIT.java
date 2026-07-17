@@ -129,6 +129,6 @@ class AxonServerTenantProviderIT {
         // unsubscribe on remove of context
         contextManager.deleteContext("foo");
         await().untilAsserted(() -> assertThat(tenantProvider.tenants()).isEmpty());
-        await().untilAsserted(() -> assertThat(tenantDescriptorRecorder.tenants().isEmpty()));
+        await().untilAsserted(() -> assertThat(tenantDescriptorRecorder.tenants()).isEmpty());
     }
 }
