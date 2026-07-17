@@ -49,3 +49,4 @@ runtime:
 ui:
   bundle:
     url: localLinks/axoniq-library-ui/build/ui-bundle.zip
+    snapshot: true

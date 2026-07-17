@@ -125,10 +125,8 @@ axoniq-framework/messaging/axoniq-message-transformation/    (NEW module, 5.2.0)
 |     |     |                                   # hybrid QN-index + predicate list (FR-007, FR-011); .build() locks (FR-004)
 |     |     |
 |     |     |-- EventTransformation.java        # factory: from(...).to(...).transform(...) (FR-001, MUST),
-|     |     |                                   # rename(...) (FR-002, SHOULD), split(...).transform(...)
+|     |     |                                   # rename(...) (FR-002, SHOULD), split(...).producing(...)
 |     |     |                                   # and drop(...) (FR-003, nice-to-have)
-|     |     |
-|     |     |-- TransformedEvent.java           # value type: output of 1:N split mappers
 |     |     |
 |     |     |-- TransformingEventStore.java     # decorator on EventStore (events read path);
 |     |     |                                   # DECORATION_ORDER = Integer.MIN_VALUE + 1000
