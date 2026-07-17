@@ -267,7 +267,9 @@ Events that carry no propagated trace metadata simply get no link; the process s
 |Span name |Kind |Description
 
 |`QueryBus.query <queryName>` |`PRODUCER` |The bus is dispatching a direct query.
-|`QueryBus.subscriptionQuery <queryName>` |`PRODUCER` |The bus is dispatching a subscription query.
+|`QueryBus.respond <queryName>` |`INTERNAL` |A finite direct-query response stream continues after its handler returns. The span ends when that stream completes or is cancelled.
+|`QueryBus.subscriptionQuery <queryName>` |`PRODUCER` |The bus is dispatching a subscription query. Carries the subscription query identifier in `messaging.message.conversation_id`.
+|`QueryBus.initialResponse <queryName>` |`INTERNAL` |The finite first answer of a subscription query continues after its handler returns. Carries the same `messaging.message.conversation_id` and never covers the unbounded update stream.
 |`QueryBus.handleQuery <queryName>` |`CONSUMER` |The bus is handing the query to its handler.
 |`QueryBus.emitUpdate` |`INTERNAL` |An update is being emitted to subscription queries.
 |`QueryBus.completeSubscriptions` |`INTERNAL` |Matching subscription queries are completed.
@@ -279,6 +281,16 @@ Events that carry no propagated trace metadata simply get no link; the process s
 ====
 In Axon Framework 5 `QueryUpdateEmitter` is a thin layer on top of `QueryBus` (its `emit` / `complete` / `completeExceptionally` calls delegate to the bus). Tracing the bus therefore also traces the emitter; no separate tracing surface is needed.
 ====
+
+==== Subscription query conversation lookup
+
+All spans that identify one distributed subscription carry `messaging.message.conversation_id` with the subscription query message identifier as their value.
+This includes `QueryBus.subscriptionQuery`, `QueryBus.initialResponse`, `QueryBusConnector.subscriptionQuery`, and both `QueryBusConnector.queryUpdate` transport legs.
+In Jaeger or another backend that indexes span attributes, search for `messaging.message.conversation_id=<subscription-query-identifier>` to find the subscription setup, initial answer, and every delivered update.
+
+The conversation identifier complements Axon's `correlationId` metadata rather than replacing it.
+An update's correlation identifier follows the command and event flow that caused that update, so it can change between updates delivered to the same subscription.
+The conversation identifier remains stable for the subscription and provides the lookup key across those separate causal traces.
 
 === Modelling
 
@@ -315,9 +327,9 @@ When the distributed messaging module is present, the transport leg between the 
 |`CommandBusConnector.dispatch <commandName>` |`PRODUCER` |The connector is sending the command over the transport (for example Axon Server). Child of `CommandBus.dispatchCommand`.
 |`CommandBusConnector.handle <commandName>` |`CONSUMER` |The connector received the command on the handling node. Parent of `CommandBus.handleCommand`.
 |`QueryBusConnector.query <queryName>` |`PRODUCER` |The connector is sending a direct query. The span stays open until the result stream terminates, so lazily consumed responses are timed.
-|`QueryBusConnector.subscriptionQuery <queryName>` |`PRODUCER` |The connector is setting up a subscription query. Covers subscription setup only, not the unbounded update stream.
+|`QueryBusConnector.subscriptionQuery <queryName>` |`PRODUCER` |The connector is setting up a subscription query. Covers subscription setup only, not the unbounded update stream, and carries `messaging.message.conversation_id`.
 |`QueryBusConnector.handle <queryName>` |`CONSUMER` |The connector received the query on the handling node.
-|`QueryBusConnector.queryUpdate <updateType>` |`PRODUCER` / `CONSUMER` |One producer span on the emitting node and one linked consumer span on the subscribing node per delivered update. The consumer span carries a span link back to the originating `QueryBus.subscriptionQuery`.
+|`QueryBusConnector.queryUpdate <updateType>` |`PRODUCER` / `CONSUMER` |One producer span on the emitting node and one linked consumer span on the subscribing node per delivered update. Both carry the subscription's `messaging.message.conversation_id`; the consumer span also carries a span link back to the originating `QueryBus.subscriptionQuery`.
 |===
 
 == Context propagation

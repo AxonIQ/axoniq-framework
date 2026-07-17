@@ -65,6 +65,8 @@ public final class TracingQueryBusConnector implements QueryBusConnector {
     /** Prefix for connector subscription-query update spans ({@code "QueryBusConnector.queryUpdate <name>"}). */
     public static final String QUERY_UPDATE_SPAN = "QueryBusConnector.queryUpdate";
 
+    private static final String MESSAGE_CONVERSATION_ID_ATTRIBUTE = "messaging.message.conversation_id";
+
     private final QueryBusConnector delegate;
     private final SpanFactory spanFactory;
 
@@ -98,7 +100,7 @@ public final class TracingQueryBusConnector implements QueryBusConnector {
                 SUBSCRIPTION_QUERY_SPAN + " " + query.type().qualifiedName().name(),
                 query,
                 context
-        );
+        ).addAttribute(MESSAGE_CONVERSATION_ID_ATTRIBUTE, query.identifier());
         // A subscription's update stream may be unbounded, so the dispatch span deliberately covers setup only.
         return span.branch(
                 context,
@@ -119,6 +121,8 @@ public final class TracingQueryBusConnector implements QueryBusConnector {
                                                              query,
                                                              scoped
                                                      )
+                                                     .addAttribute(MESSAGE_CONVERSATION_ID_ATTRIBUTE,
+                                                                   query.identifier())
                                                      .branch(null, ignored -> null);
                                       }
                                   })
@@ -178,7 +182,9 @@ public final class TracingQueryBusConnector implements QueryBusConnector {
                                                   UpdateCallback updateCallback) {
             return delegate.registerUpdateHandler(
                     subscriptionQueryMessage,
-                    new TracingUpdateCallback(updateCallback, spanFactory)
+                    new TracingUpdateCallback(updateCallback,
+                                              spanFactory,
+                                              subscriptionQueryMessage.identifier())
             );
         }
     }
@@ -191,10 +197,14 @@ public final class TracingQueryBusConnector implements QueryBusConnector {
 
         private final UpdateCallback delegate;
         private final SpanFactory spanFactory;
+        private final String subscriptionQueryIdentifier;
 
-        private TracingUpdateCallback(UpdateCallback delegate, SpanFactory spanFactory) {
+        private TracingUpdateCallback(UpdateCallback delegate,
+                                      SpanFactory spanFactory,
+                                      String subscriptionQueryIdentifier) {
             this.delegate = delegate;
             this.spanFactory = spanFactory;
+            this.subscriptionQueryIdentifier = subscriptionQueryIdentifier;
         }
 
         @Override
@@ -203,7 +213,7 @@ public final class TracingQueryBusConnector implements QueryBusConnector {
                     QUERY_UPDATE_SPAN + " " + update.type().qualifiedName().name(),
                     update,
                     null
-            );
+            ).addAttribute(MESSAGE_CONVERSATION_ID_ATTRIBUTE, subscriptionQueryIdentifier);
             return span.branchAsync(
                     null,
                     ignored -> delegate.sendUpdate(span.propagateContext(update))

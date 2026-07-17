@@ -52,6 +52,7 @@ class TracingQueryBusConnectorTest {
     private static final String HANDLE_SPAN = "QueryBusConnector.handle MyQuery";
     private static final String QUERY_UPDATE_SPAN = "QueryBusConnector.queryUpdate MyUpdate";
     private static final String EMITTER_SPAN = "Emitter";
+    private static final String MESSAGE_CONVERSATION_ID_ATTRIBUTE = "messaging.message.conversation_id";
 
     private TestSpanFactory spanFactory;
     private RecordingConnector delegate;
@@ -103,6 +104,9 @@ class TracingQueryBusConnectorTest {
             spanFactory.verifySpanCompleted(SUBSCRIPTION_QUERY_SPAN);
             spanFactory.verifySpanHasType(SUBSCRIPTION_QUERY_SPAN, TestSpanType.DISPATCH);
             spanFactory.verifySpanPropagated(SUBSCRIPTION_QUERY_SPAN, query);
+            spanFactory.verifySpanHasAttributeValue(SUBSCRIPTION_QUERY_SPAN,
+                                                    MESSAGE_CONVERSATION_ID_ATTRIBUTE,
+                                                    query.identifier());
         }
 
         @Test
@@ -138,6 +142,9 @@ class TracingQueryBusConnectorTest {
             spanFactory.verifySpanHasType(QUERY_UPDATE_SPAN, TestSpanType.LINKED_HANDLER);
             spanFactory.verifySpanHasParent(QUERY_UPDATE_SPAN, EMITTER_SPAN);
             spanFactory.verifySpanHasLink(QUERY_UPDATE_SPAN, SUBSCRIPTION_QUERY_SPAN);
+            spanFactory.verifySpanHasAttributeValue(QUERY_UPDATE_SPAN,
+                                                    MESSAGE_CONVERSATION_ID_ATTRIBUTE,
+                                                    query.identifier());
         }
 
         @Test
@@ -218,6 +225,9 @@ class TracingQueryBusConnectorTest {
             spanFactory.verifySpanCompleted(QUERY_UPDATE_SPAN, update);
             spanFactory.verifySpanHasType(QUERY_UPDATE_SPAN, TestSpanType.DISPATCH);
             spanFactory.verifySpanPropagated(QUERY_UPDATE_SPAN, update);
+            spanFactory.verifySpanHasAttributeValue(QUERY_UPDATE_SPAN,
+                                                    MESSAGE_CONVERSATION_ID_ATTRIBUTE,
+                                                    query.identifier());
 
             // when a second update of the same type is emitted
             SubscriptionQueryUpdateMessage secondUpdate =

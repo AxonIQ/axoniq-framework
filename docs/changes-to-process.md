@@ -984,6 +984,7 @@ The following files in `axon-5/` describe the API changes:
 - Added a user-centric "Context propagation" section making clear the Axoniq Framework binding nests instrumented gRPC/JDBC/WebClient and MDC logging under the correct Axon span and supports Reactor context propagation via the ProcessingContext accessor.
 - Documented how to enable Reactor automatic context propagation with Spring Boot and in plain Java applications.
 - Added the Axon Framework 4 to 5 Distributed Tracing migration path (`migration/pages/paths/distributed-tracing.adoc` in the Axon Framework repository) covering dependencies, MultiSpanFactory removal, span-name and attribute-key mappings, property mappings, and topology changes; linked from the tracing index and the OSS monitoring tracing page.
+- Documented `messaging.message.conversation_id` across subscription-query setup, initial response, and distributed update spans, including how users search one subscription without conflating it with causal `correlationId` metadata.
 
 ---
 
