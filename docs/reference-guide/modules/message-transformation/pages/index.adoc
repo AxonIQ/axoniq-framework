@@ -36,10 +36,7 @@ A single transformation looks like this:
 
 [source,java]
 ----
-EventTransformation transformation =
-        EventTransformation.from(new MessageType("coursecatalog.CoursePublished", "1.0.0")) // <1>
-                           .to(new MessageType("coursecatalog.CoursePublished", "2.0.0"))   // <2>
-                           .transform(JsonNode.class, CoursePublishedV1ToV2::map);          // <3>
+include::example$messagetransformation/index/WhatTransformationLooksLike.java[tag=single-transformation-overview,indent=0]
 ----
 <1> `from(...)` selects the stored event identity to match.
 <2> `to(...)` declares the identity the transformation produces: same name, new version.

@@ -90,6 +90,8 @@
         <module>messaging/axoniq-message-transformation</module>
 
         <module>testing/axoniq-testcontainer</module>
+
+        <module>docs/_samples</module>
     </modules>
 
     <inceptionYear>2026</inceptionYear>
@@ -199,7 +201,10 @@
                 <extensions>true</extensions>
                 <configuration>
                     <publishingServerId>central</publishingServerId>
-                    <excludeArtifacts>axoniq-integrationtests</excludeArtifacts>
+                    <excludeArtifacts>
+                        <excludeArtifact>axoniq-integrationtests</excludeArtifact>
+                        <excludeArtifact>axoniq-docs-samples</excludeArtifact>
+                    </excludeArtifacts>
                 </configuration>
             </plugin>
 
