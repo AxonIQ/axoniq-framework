@@ -6,7 +6,7 @@
 
 === Removal of `axon.axonserver.contexts`
 
-The AF4 property `axon.axonserver.contexts`, a static CSV list of context names used as the base for tenants, has been removed.
+The Axon Framework 4 property `axon.axonserver.contexts`, a static CSV list of context names used as the base for tenants, has been removed.
 Remove it from your configuration; it is ignored.
 
 Instead, register a `TenantConnectPredicate` that returns `true` for the contexts you want to treat as tenants.
