@@ -207,8 +207,21 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
                     }
             );
             var backoffFuture = backoffTask.completion();
+            // Mirror WaitForDelegate's timeout-future wiring: a cancellation cause completing the registered future
+            // must drop the pending launch and record the step CANCELLED; other causes (e.g. engine shutdown's
+            // interrupt, or the task's own CancellationException) leave the durable RETRYING state untouched so the
+            // retry resumes on the next start.
             backoffFuture.exceptionally(e -> {
-                // Cancelled during backoff — cancellation handled by the event flow
+                workflowExecution.removeRunningStep(stepName);
+                if (isCancellation(e)) {
+                    backoffTask.cancel();
+                    var terminationCause = unwrapCancellation(e);
+                    workflowExecution.appendTask(i -> {
+                        if (!i.state().getStep(stepName).status().isTerminal()) {
+                            cancelled(stepName, terminationCause, command.eventNameCustomizer());
+                        }
+                    });
+                }
                 return null;
             });
             workflowExecution.registerRunningStep(stepName, backoffFuture);
