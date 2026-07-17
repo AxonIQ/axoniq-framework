@@ -390,15 +390,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     @Override
     public void cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause) {
-        boolean cancelled = runningSteps.cancelWithCause(stepName, cause);
-        if (cancelled) {
-            try {
-                awaitStateChange(s -> s.containsStep(stepName)
-                        && s.getStep(stepName).status().isTerminal());
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
+        runningSteps.cancelWithCause(stepName, cause);
     }
 
     /**
@@ -458,6 +450,20 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                 Thread.currentThread().interrupt();
             }
         });
+        drainPendingTasks();
+    }
+
+    /**
+     * Processes all queued tasks so that pending step events are published before a terminal workflow event.
+     */
+    private void drainPendingTasks() {
+        while (!hasTasks()) {
+            var task = getNextTask();
+            if (task == null) {
+                return;
+            }
+            task.accept(this);
+        }
     }
 
     @Override
