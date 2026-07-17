@@ -193,6 +193,37 @@ public abstract class AbstractStepExecutor {
         ), getContext(stepName));
     }
 
+    /**
+     * Registers the given future as the step's running phase while the step is parked (a wait timeout window, a retry
+     * backoff window). When the future is completed exceptionally with a cancellation cause, the step is recorded
+     * CANCELLED through the guarded publish path and the cleanup hook runs; any other completion only removes the
+     * running-step registration, leaving the durable step state untouched.
+     *
+     * @param stepName            name of the parked step.
+     * @param future              future representing the parked phase.
+     * @param eventNameCustomizer event name customizer of the step.
+     * @param onCancelled         cleanup to run when the parked phase is cancelled.
+     */
+    protected void registerParkedStep(@Nonnull String stepName,
+                                      @Nonnull CompletableFuture<?> future,
+                                      @Nonnull EventNameCustomizer eventNameCustomizer,
+                                      @Nonnull Runnable onCancelled) {
+        future.whenComplete((result, e) -> {
+            workflowExecution.removeRunningStep(stepName);
+            if (e != null && isCancellation(e)) {
+                onCancelled.run();
+                var terminationCause = unwrapCancellation(e);
+                workflowExecution.appendTask(i -> {
+                    // FIXME - This is where we should publish using an append condition
+                    if (!i.state().getStep(stepName).status().isTerminal()) {
+                        cancelled(stepName, terminationCause, eventNameCustomizer);
+                    }
+                });
+            }
+        });
+        workflowExecution.registerRunningStep(stepName, future);
+    }
+
     @Nonnull
     protected CompletableFuture<Void> failed(@Nonnull String stepName, @Nonnull Throwable ex,
                                              @Nonnull EventNameCustomizer eventNameCustomizer) {

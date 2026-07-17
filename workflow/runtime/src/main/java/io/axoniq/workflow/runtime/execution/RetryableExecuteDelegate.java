@@ -195,36 +195,20 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
                 }
             });
         } else {
-            var backoffTask = timeoutScheduler.schedule(
-                    retryReadyAt,
-                    () -> {
-                        workflowExecution.removeRunningStep(stepName);
-                        workflowExecution.appendTask(i -> {
-                            if (!i.state().getStep(stepName).status().isTerminal()) {
-                                launchWithRetry(command, nextAttempt);
-                            }
-                        });
-                    }
-            );
-            var backoffFuture = backoffTask.completion();
-            // Mirror WaitForDelegate's timeout-future wiring: a cancellation cause completing the registered future
-            // must drop the pending launch and record the step CANCELLED; other causes (e.g. engine shutdown's
-            // interrupt, or the task's own CancellationException) leave the durable RETRYING state untouched so the
-            // retry resumes on the next start.
-            backoffFuture.exceptionally(e -> {
-                workflowExecution.removeRunningStep(stepName);
-                if (isCancellation(e)) {
-                    backoffTask.cancel();
-                    var terminationCause = unwrapCancellation(e);
-                    workflowExecution.appendTask(i -> {
-                        if (!i.state().getStep(stepName).status().isTerminal()) {
-                            cancelled(stepName, terminationCause, command.eventNameCustomizer());
-                        }
-                    });
+            // The scheduled task is a pure timer tick; the backoff window itself is the step's parked phase. The
+            // timer firing completes the future normally and launches the next attempt. Anything that ends the parked
+            // phase exceptionally (a step cancellation, an engine shutdown interrupt) makes the later tick a no-op,
+            // so a doomed attempt can never launch; what the ending means for the step is decided by the parked-step
+            // registration, not here.
+            var backoffFuture = timeoutScheduler.schedule(retryReadyAt, () -> {
+            }).completion();
+            backoffFuture.thenRun(() -> workflowExecution.appendTask(i -> {
+                if (!i.state().getStep(stepName).status().isTerminal()) {
+                    launchWithRetry(command, nextAttempt);
                 }
-                return null;
+            }));
+            registerParkedStep(stepName, backoffFuture, command.eventNameCustomizer(), () -> {
             });
-            workflowExecution.registerRunningStep(stepName, backoffFuture);
         }
     }
 
