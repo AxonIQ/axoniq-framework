@@ -19,9 +19,10 @@
 
 
 /**
- * Part of the Axon Messaging module. Contains the checkpoint protocol that lets an event-handling unit manage its own
- * progress: it decides when its work for a segment is durable and requests the owning streaming processor to advance
- * the stored {@link org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken}.
+ * Part of the Axoniq Framework event-streaming module. Contains the checkpoint protocol that lets an event-handling
+ * unit manage its own progress: it decides when its work for a segment is durable and requests the owning streaming
+ * processor to advance the stored
+ * {@link org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken}.
  */
 @NullMarked
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;

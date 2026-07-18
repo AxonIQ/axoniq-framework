@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.progress.SegmentProgressContext;
@@ -48,7 +49,7 @@ import java.util.function.Function;
  *
  * @author Allard Buijze
  * @see CheckpointingProgressStrategy
- * @since 5.2.0
+ * @since 5.3.0
  */
 @Internal
 public final class CheckpointingProgressStrategyFactory implements SegmentProgressStrategyFactory {
@@ -67,7 +68,11 @@ public final class CheckpointingProgressStrategyFactory implements SegmentProgre
      */
     public CheckpointingProgressStrategyFactory(List<Checkpointing> participants, boolean autoCheckpointing) {
         this.participants = List.copyOf(Objects.requireNonNull(participants, "The participants may not be null."));
+        if (this.participants.isEmpty()) {
+            throw new IllegalArgumentException("The participants may not be empty.");
+        }
         this.autoCheckpointing = autoCheckpointing;
+        EntitlementManager.INSTANCE.registerAddon(CheckpointingAxoniqAddon.class);
     }
 
     /**

@@ -48,7 +48,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.pooled.Poo
  * classpath is sufficient to activate checkpointing detection.
  *
  * @author Allard Buijze
- * @since 5.2.0
+ * @since 5.3.0
  */
 public class CheckpointingConfigurationEnhancer implements ConfigurationEnhancer {
 

@@ -58,7 +58,7 @@ import java.util.concurrent.CompletableFuture;
  * currently intended primarily for internal and advanced use and whose shape may change in a minor or patch release.
  *
  * @author Allard Buijze
- * @since 5.2.0
+ * @since 5.3.0
  */
 @Internal
 public class CheckpointTriggerParameterResolverFactory implements ParameterResolverFactory {

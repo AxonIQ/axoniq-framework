@@ -64,7 +64,7 @@ import static org.axonframework.common.FutureUtils.emptyCompletedFuture;
  * @author Allard Buijze
  * @see Checkpointing
  * @see CheckpointTrigger
- * @since 5.2.0
+ * @since 5.3.0
  */
 @Internal
 public final class CheckpointingProgressStrategy implements SegmentProgressStrategy {
@@ -101,6 +101,9 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
                                          boolean autoCheckpointing) {
         this.context = requireNonNull(context, "The SegmentProgressContext may not be null.");
         this.participants = List.copyOf(requireNonNull(participants, "The participants may not be null."));
+        if (this.participants.isEmpty()) {
+            throw new IllegalArgumentException("The participants may not be empty.");
+        }
         this.autoCheckpointing = autoCheckpointing;
     }
 

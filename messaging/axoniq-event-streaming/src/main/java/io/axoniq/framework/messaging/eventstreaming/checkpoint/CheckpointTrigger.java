@@ -50,7 +50,7 @@ import java.util.Optional;
  *
  * @author Allard Buijze
  * @see Checkpointing
- * @since 5.2.0
+ * @since 5.3.0
  */
 @Internal
 public interface CheckpointTrigger {

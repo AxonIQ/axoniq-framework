@@ -65,7 +65,6 @@ import static org.mockito.Mockito.verify;
  * through its public {@code WorkPackageHarness} bridge.
  *
  * @author Allard Buijze
- * @since 5.2.0
  */
 public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProgressStrategyTestSupport {
 

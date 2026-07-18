@@ -109,7 +109,7 @@ import java.util.concurrent.CompletableFuture;
  *
  * @author Allard Buijze
  * @see CheckpointTrigger
- * @since 5.2.0
+ * @since 5.3.0
  */
 @Internal
 public interface Checkpointing {
