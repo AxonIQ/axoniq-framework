@@ -93,42 +93,23 @@ class DistributedQueryBusTest {
     }
 
     @Test
-    void queryUsesLocalHandlerWhenShortcutEnabledAndHandlerRegistered() {
-        // Given
+    void queryAlwaysDelegatesToConnector() {
+        // The local shortcut now lives in LocalShortcutQueryBusConnector; the bus itself always uses the connector.
         testSubject = new DistributedQueryBus(localSegment, connector, configuration);
         QualifiedName queryName = new QualifiedName("TestQuery");
+        QueryMessage query = queryMessage(queryName);
 
-        QueryHandler handler = (query, context) -> {
+        // When - a local handler is registered and a query is dispatched
+        testSubject.subscribe(queryName, (q, context) -> {
             QueryResponseMessage response = mock(QueryResponseMessage.class);
             return MessageStream.fromIterable(() -> List.of(response).iterator());
-        };
-
-        QueryMessage query = queryMessage(queryName);
-
-        // When - Subscribe handler first
-        testSubject.subscribe(queryName, handler);
+        });
         testSubject.query(query, null);
 
-        // Then - Query should use local segment (connector not invoked for query)
+        // Then - the connector is used regardless of the local handler
         assertThat(connector.queryCount.get())
-                .as("Connector should not be used when local handler is available")
-                .isZero();
-    }
-
-    @Test
-    void queryUsesConnectorWhenNoLocalHandlerRegistered() {
-        // Given
-        testSubject = new DistributedQueryBus(localSegment, connector, configuration);
-        QualifiedName queryName = new QualifiedName("TestQuery");
-        QueryMessage query = queryMessage(queryName);
-
-        // When - Query without registering a local handler
-        testSubject.query(query, null);
-
-        // Then - Should use connector
-        assertThat(connector.queryCount.get())
-                .as("Connector should be used when no local handler is registered")
-                        .isEqualTo(1);
+                .as("Bus should always delegate queries to the connector")
+                .isEqualTo(1);
     }
 
     @Test
@@ -201,115 +182,6 @@ class DistributedQueryBusTest {
         @Override
         public void describeTo(@NonNull ComponentDescriptor descriptor) {
             descriptor.describeProperty("name", "StubQueryBusConnector");
-        }
-    }
-
-    @Nested
-    @DisplayName("Local Query Shortcut Tests")
-    class LocalQueryShortcutTests {
-
-        @Test
-        void localShortcutBypassesConnectorWhenHandlerRegistered() {
-            // Given
-            testSubject = new DistributedQueryBus(localSegment, connector, configuration);
-            QualifiedName queryName = new QualifiedName("TestQuery");
-
-            QueryHandler handler = (query, context) -> {
-                QueryResponseMessage response = mock(QueryResponseMessage.class);
-                return MessageStream.fromIterable(() -> List.of(response).iterator());
-            };
-
-            QueryMessage query = queryMessage(queryName);
-
-            // When - Register handler and execute query
-            testSubject.subscribe(queryName, handler);
-            testSubject.query(query, null);
-
-            // Then - Verify connector not used for query
-            assertThat(connector.queryCount.get())
-                    .as("Local shortcut should bypass connector when handler is registered")
-                    .isZero();
-        }
-
-        @Test
-        void queriesForDifferentHandlerStillUseConnector() {
-            // Given
-            testSubject = new DistributedQueryBus(localSegment, connector, configuration);
-            QualifiedName registeredQueryName = new QualifiedName("RegisteredQuery");
-            QualifiedName unregisteredQueryName = new QualifiedName("UnregisteredQuery");
-
-            QueryHandler handler = (query, context) -> {
-                QueryResponseMessage response = mock(QueryResponseMessage.class);
-                return MessageStream.fromIterable(() -> List.of(response).iterator());
-            };
-
-            QueryMessage query = queryMessage(unregisteredQueryName);
-
-            // When - Register handler for one query, execute different query
-            testSubject.subscribe(registeredQueryName, handler);
-            testSubject.query(query, null);
-
-            // Then - Should use connector since no local handler for this query
-            assertThat(connector.queryCount.get())
-                    .as("Connector should be used for queries without a local handler")
-                    .isEqualTo(1);
-        }
-
-        @Test
-        void multipleHandlerRegistrationsAllowLocalShortcut() {
-            // Given
-            testSubject = new DistributedQueryBus(localSegment, connector, configuration);
-            QualifiedName queryName1 = new QualifiedName("Query1");
-            QualifiedName queryName2 = new QualifiedName("Query2");
-
-            QueryHandler handler1 = (query, context) -> {
-                QueryResponseMessage response = mock(QueryResponseMessage.class);
-                return MessageStream.fromIterable(() -> List.of(response).iterator());
-            };
-            QueryHandler handler2 = (query, context) -> {
-                QueryResponseMessage response = mock(QueryResponseMessage.class);
-                return MessageStream.fromIterable(() -> List.of(response).iterator());
-            };
-
-            QueryMessage query1 = queryMessage(queryName1);
-            QueryMessage query2 = queryMessage(queryName2);
-
-            // When - Register multiple handlers
-            testSubject.subscribe(queryName1, handler1);
-            testSubject.subscribe(queryName2, handler2);
-
-            testSubject.query(query1, null);
-            testSubject.query(query2, null);
-
-            // Then - Both should use local segment
-            assertThat(connector.queryCount.get())
-                    .as("Both queries should use local shortcut when handlers are registered")
-                    .isZero();
-        }
-
-        @Test
-        void disablingLocalShortcutForcesConnectorUsage() {
-            // Given - Configuration with local shortcut disabled
-            DistributedQueryBusConfiguration configWithoutShortcut =
-                    configuration.preferLocalQueryHandler(false);
-            testSubject = new DistributedQueryBus(localSegment, connector, configWithoutShortcut);
-            QualifiedName queryName = new QualifiedName("TestQuery");
-
-            QueryHandler handler = (query, context) -> {
-                QueryResponseMessage response = mock(QueryResponseMessage.class);
-                return MessageStream.fromIterable(() -> List.of(response).iterator());
-            };
-
-            QueryMessage query = queryMessage(queryName);
-
-            // When - Register local handler and execute query
-            testSubject.subscribe(queryName, handler);
-            testSubject.query(query, null);
-
-            // Then - Connector should be used despite local handler being available
-            assertThat(connector.queryCount.get())
-                    .as("Connector should be used when local shortcut is disabled, even if handler is registered")
-                    .isEqualTo(1);
         }
     }
 }

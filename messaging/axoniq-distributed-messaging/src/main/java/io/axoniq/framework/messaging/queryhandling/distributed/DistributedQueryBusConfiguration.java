@@ -33,14 +33,15 @@ import static org.axonframework.common.BuilderUtils.assertStrictPositive;
 /**
  * Configuration for the {@link DistributedQueryBus}.
  * <p>
- * Can be used to modify non-critical settings of the bus, such as the query and query response thread pools.
+ * Can be used to modify non-critical settings of the bus, such as the query processing thread pool.
  *
  * @param queryThreads            The number of threads used by the {@link DistributedQueryBus}.
  * @param queryQueueCapacity      The initial capacity of the priority queue used for query processing tasks.
  * @param executorServiceFactory   The {@link ExecutorServiceFactory} constructing the priority-aware
  *                                {@link ExecutorService} for the {@link DistributedQueryBus}.
  * @param preferLocalQueryHandler Whether to use local query handlers directly when available, bypassing remote
- *                                dispatch.
+ *                                dispatch. Deprecated in favor of registering a {@link LocalQueryDispatchPredicate};
+ *                                see {@link #preferLocalQueryHandler(boolean)}.
  * @author Steven van Beelen
  * @author Allard Buijze
  * @since 5.0.0
@@ -141,7 +142,12 @@ public record DistributedQueryBusConfiguration(
      * @param preferLocalQueryHandler {@code true} to use local handlers directly when available, {@code false} to
      *                                always dispatch through the connector
      * @return the updated instance of {@code DistributedQueryBusConfiguration}, allowing for fluent API usage
+     * @deprecated Register a {@link LocalQueryDispatchPredicate} component instead, which offers the same local
+     * shortcut with per-query control. Enabling this flag is equivalent to registering a predicate that always returns
+     * {@code true}; disabling it is equivalent to registering no predicate. Both settings continue to work by
+     * installing a {@link LocalShortcutQueryBusConnector} on the {@link QueryBusConnector}.
      */
+    @Deprecated(since = "5.3.0", forRemoval = true)
     public DistributedQueryBusConfiguration preferLocalQueryHandler(boolean preferLocalQueryHandler) {
         return new DistributedQueryBusConfiguration(
                 queryThreads, queryQueueCapacity, executorServiceFactory, preferLocalQueryHandler

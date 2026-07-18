@@ -11,7 +11,7 @@ The `DistributedQueryBus` combined with the `AxonServerQueryBusConnector` provid
 * *Load balancing*: When the same application is deployed across multiple instances, Axon Server can distribute queries among those instances
 * *Subscription query support*: Full support for subscription queries with update distribution across nodes
 * *Query prioritization*: Support for query priority to ensure critical queries are processed first
-* *Local handler shortcut*: When enabled (default), queries for which a local handler is registered are executed locally without going through the connector, improving performance by avoiding network overhead
+* *Local handler shortcut*: Direct (point-to-point) queries for which a local handler is registered can be executed locally without going through the connector, avoiding network overhead. A `LocalQueryDispatchPredicate` decides, per query, whether to take this shortcut. Subscription queries are never shortcut
 
 [NOTE]
 ====
@@ -27,9 +27,37 @@ Available configuration options:
 * *Query threads*: Number of threads used for query processing (default: 10)
 * *Query queue capacity*: Capacity of the priority queue for query processing tasks (default: 1000)
 * *Custom executor service*: Provide a custom `ExecutorService` for query processing
-* *Local query handler preference*: Enable or disable the local handler shortcut (default: enabled)
 
-The local handler shortcut, when enabled, allows the distributed query bus to use local query handlers directly when available, bypassing remote dispatch. This improves performance by avoiding network overhead when a handler is available locally. Only when no local handler is available will the query be dispatched remotely through the connector.
+===== Local handler shortcut
+
+The local handler shortcut applies to direct (point-to-point) queries only. A `LocalQueryDispatchPredicate` lets a node prefer its own query handler for selected direct queries instead of routing them through the connector. The predicate is consulted for every outgoing direct query and receives the `QueryMessage` and the (nullable) `ProcessingContext`, so the decision can be based on the query's payload, type, metadata, or a flag placed on the context by the dispatcher.
+
+The shortcut only takes effect when the local segment actually subscribed a handler for the query. When it did not, the query is routed through the connector as usual, regardless of the predicate. This ensures a locally-preferred query that this node cannot handle is still routed to a segment that can.
+
+Subscription queries are never shortcut; they are always routed through the connector, because their update registrations must be coordinated across all nodes. The `LocalQueryDispatchPredicate` is not consulted for subscription queries.
+
+To enable the shortcut, register a `LocalQueryDispatchPredicate` component:
+
+[source,java]
+----
+import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import io.axoniq.framework.messaging.queryhandling.distributed.LocalQueryDispatchPredicate;
+
+public class AxonConfig {
+    public void configureLocalQueryShortcut(MessagingConfigurer configurer) {
+        configurer.componentRegistry(registry -> registry.registerComponent(
+                LocalQueryDispatchPredicate.class,
+                config -> (query, context) -> true   // always prefer the local handler when subscribed
+        ));
+    }
+}
+----
+
+[NOTE]
+.The `preferLocalQueryHandler` setting
+====
+`DistributedQueryBusConfiguration.preferLocalQueryHandler(boolean)` is deprecated in favor of the `LocalQueryDispatchPredicate`. It continues to work: with no predicate registered, `preferLocalQueryHandler(true)` (the default) behaves as a predicate that always prefers the local handler, and `preferLocalQueryHandler(false)` installs no shortcut. When a `LocalQueryDispatchPredicate` is registered, it is authoritative and this setting is ignored.
+====
 
 ===== Configuration examples
 
@@ -50,8 +78,7 @@ public class AxonConfig {
         // Customize the configuration
         DistributedQueryBusConfiguration config = DistributedQueryBusConfiguration.DEFAULT
                 .queryThreads(20)                        // Set number of query processing threads
-                .queryQueueCapacity(2000)                // Set queue capacity
-                .preferLocalQueryHandler(true);         // Enable local handler shortcut (default)
+                .queryQueueCapacity(2000);               // Set queue capacity
 
         // Register the custom configuration
         configurer.registerComponent(DistributedQueryBusConfiguration.class, c -> config);
@@ -59,13 +86,7 @@ public class AxonConfig {
 }
 ----
 
-To disable the local handler shortcut:
-
-[source,java]
-----
-DistributedQueryBusConfiguration config = DistributedQueryBusConfiguration.DEFAULT
-        .preferLocalQueryHandler(false);  // Force all queries through connector
-----
+To control the local handler shortcut, register a `LocalQueryDispatchPredicate` as shown above rather than using the deprecated `preferLocalQueryHandler` setting.
 --
 
 Spring Boot::
@@ -86,6 +107,7 @@ axon.axonserver.query-threads=20
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
+import io.axoniq.framework.messaging.queryhandling.distributed.LocalQueryDispatchPredicate;
 
 @Configuration
 public class AxonConfig {
@@ -93,8 +115,13 @@ public class AxonConfig {
     @Bean
     public DistributedQueryBusConfiguration queryBusConfiguration() {
         return DistributedQueryBusConfiguration.DEFAULT
-                .queryThreads(20)
-                .preferLocalQueryHandler(true);
+                .queryThreads(20);
+    }
+
+    @Bean
+    public LocalQueryDispatchPredicate localQueryDispatchPredicate() {
+        // Prefer the local handler for every query that this node can handle.
+        return (query, context) -> true;
     }
 }
 ----
