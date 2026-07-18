@@ -51,8 +51,8 @@ public abstract class DelegatingCommandBusConnector implements CommandBusConnect
     }
 
     @Override
-    public CompletableFuture<CommandResultMessage> dispatch(CommandMessage command,
-                                                            @Nullable ProcessingContext processingContext) {
+    public CompletableFuture<@Nullable CommandResultMessage> dispatch(CommandMessage command,
+                                                                      @Nullable ProcessingContext processingContext) {
         return delegate.dispatch(command, processingContext);
     }
 

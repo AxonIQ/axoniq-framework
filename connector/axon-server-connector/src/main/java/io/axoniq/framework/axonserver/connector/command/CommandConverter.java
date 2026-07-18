@@ -123,9 +123,10 @@ public final class CommandConverter {
      * @param commandResponse the command response to convert to a {@link CommandResultMessage}
      * @param converter the converter to use for payload conversion in the resulting {@link CommandResultMessage}
      * @return the {@code commandResponse} converted to a {@link CommandResultMessage}, wrapped in a
-     * {@link CompletableFuture} for convenience
+     * {@link CompletableFuture} for convenience; the future completes with {@code null} when the response carries no
+     * payload, or completes exceptionally when the response holds an error
      */
-    public static CompletableFuture<CommandResultMessage> convertCommandResponse(
+    public static CompletableFuture<@Nullable CommandResultMessage> convertCommandResponse(
             CommandResponse commandResponse,
             @Nullable Converter converter
     ) {

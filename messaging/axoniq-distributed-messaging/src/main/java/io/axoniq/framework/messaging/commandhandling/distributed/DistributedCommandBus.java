@@ -92,8 +92,8 @@ public class DistributedCommandBus implements CommandBus {
     }
 
     @Override
-    public CompletableFuture<CommandResultMessage> dispatch(CommandMessage command,
-                                                            @Nullable ProcessingContext processingContext) {
+    public CompletableFuture<@Nullable CommandResultMessage> dispatch(CommandMessage command,
+                                                                      @Nullable ProcessingContext processingContext) {
         return connector.dispatch(command, processingContext);
     }
 

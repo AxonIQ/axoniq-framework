@@ -110,8 +110,8 @@ public class AxonServerCommandBusConnector implements CommandBusConnector {
     }
 
     @Override
-    public CompletableFuture<CommandResultMessage> dispatch(CommandMessage command,
-                                                            @Nullable ProcessingContext processingContext) {
+    public CompletableFuture<@Nullable CommandResultMessage> dispatch(CommandMessage command,
+                                                                      @Nullable ProcessingContext processingContext) {
         shutdownLatch.ifShuttingDown("Cannot dispatch new commands as this bus is being shutdown");
         try (ShutdownLatch.ActivityHandle commandInTransit = shutdownLatch.registerActivity()) {
             return connection.commandChannel()

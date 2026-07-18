@@ -48,10 +48,11 @@ public interface CommandBusConnector extends DescribableComponent {
      *
      * @param command           The command message to dispatch.
      * @param processingContext The processing context for the command.
-     * @return A {@link CompletableFuture} that will complete with the result of the command handling.
+     * @return A {@link CompletableFuture} that will complete with the result of the command handling. The result may be
+     * {@code null} when the command handler produced no result message.
      */
-    CompletableFuture<CommandResultMessage> dispatch(CommandMessage command,
-                                                     @Nullable ProcessingContext processingContext);
+    CompletableFuture<@Nullable CommandResultMessage> dispatch(CommandMessage command,
+                                                               @Nullable ProcessingContext processingContext);
 
     /**
      * Subscribes to a command with the given {@code commandName} and a {@code loadFactor}.
