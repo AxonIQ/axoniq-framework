@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: multi-tenancy-spring-boot-4
+  main:
+    banner-mode: off
+  autoconfigure:
+    exclude:
+      - io.axoniq.framework.springboot.autoconfig.MultiTenancyAutoConfiguration
+
+axon:
+  axonserver:
+    servers: localhost
+
+platform:
+  environmentId: ${ENVIRONMENT_ID}
+  accessToken: ${ACCESS_TOKEN}
+  host: inspector.dev.axoniq.net

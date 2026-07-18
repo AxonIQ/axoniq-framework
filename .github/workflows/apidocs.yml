@@ -68,7 +68,7 @@ jobs:
           echo "Building $TAG -> $DOCS_BUCKET/$MAJOR_MINOR"
 
       - name: Checkout release tag
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.target.outputs.tag }}
           fetch-depth: 0   # fetch all tags so the highest release can be determined
@@ -86,8 +86,23 @@ jobs:
           fi
           echo "Built ${{ steps.target.outputs.version }}; highest release is $HIGHEST"
 
+      - name: Remove unpublished extensions from apidocs profile
+        # Some extension artifacts listed in the apidocs profile may not yet be published to
+        # Maven Central for the tag being built. Strip any missing ones here so the build
+        # does not fail on a dependency-resolution error.
+        # Remove once axon-tracing-opentelemetry is published at the axon-framework.version
+        # used by this tag.
+        run: |
+          python3 -c "
+          import re
+          src = open('pom.xml').read()
+          src = re.sub(r'\s*<dependency>\s*<groupId>org[.]axonframework[.]extensions[.]tracing</groupId>.*?</dependency>', '', src, flags=re.DOTALL)
+          src = re.sub(r'\s*<dependencySourceInclude>org[.]axonframework[.]extensions[.]tracing:[*]</dependencySourceInclude>', '', src)
+          open('pom.xml', 'w').write(src)
+          "
+
       - name: Set up JDK 21
-        uses: actions/setup-java@v5.2.0
+        uses: actions/setup-java@v5.5.0
         with:
           distribution: 'zulu'
           java-version: 21
@@ -97,12 +112,12 @@ jobs:
         run: ./mvnw -B -U -ntp -Dstyle.color=always -Papidocs -DskipTests clean javadoc:aggregate
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Publish to versioned folder
         run: |

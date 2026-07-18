@@ -33,10 +33,10 @@
     </description>
 
     <properties>
-        <revision>5.2.0-SNAPSHOT</revision>
+        <revision>5.3.0-SNAPSHOT</revision>
 
         <!-- Global Axoniq version properties -->
-        <axon-framework.version>5.2.0-SNAPSHOT</axon-framework.version>
+        <axon-framework.version>5.3.0-SNAPSHOT</axon-framework.version>
         <axoniq-entitlement-manager.version>1.0.1</axoniq-entitlement-manager.version>
         <axonserver-connector-java.version>2026.0.0</axonserver-connector-java.version>
 
@@ -55,7 +55,7 @@
 
 
         <!-- Build / Plugin -->
-        <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
+        <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
         <eclipse.transformer-maven-plugin.version>1.0.0</eclipse.transformer-maven-plugin.version>
         <jacoco-maven.version>0.8.15</jacoco-maven.version>
         <maven-assembly.version>3.8.0</maven-assembly.version>
@@ -87,6 +87,8 @@
         <module>messaging/axoniq-dead-letter</module>
         <module>messaging/axoniq-distributed-messaging</module>
         <module>messaging/axoniq-event-streaming</module>
+        <module>messaging/axoniq-message-transformation</module>
+        <module>messaging/axoniq-multi-tenancy</module>
 
         <module>testing/axoniq-testcontainer</module>
     </modules>
@@ -413,11 +415,6 @@
                     <artifactId>axon-reactor</artifactId>
                     <version>${axon-framework.version}</version>
                 </dependency>
-                <dependency>
-                    <groupId>org.axonframework.extensions.tracing</groupId>
-                    <artifactId>axon-tracing-opentelemetry</artifactId>
-                    <version>${axon-framework.version}</version>
-                </dependency>
                 <!--
                   Optional dependencies of the Axon modules above. They are declared optional in
                   Axon, so they are not resolved transitively, but Javadoc must resolve their types
@@ -536,7 +533,6 @@
                                 <dependencySourceInclude>org.axonframework.extensions.kotlin:*</dependencySourceInclude>
                                 <dependencySourceInclude>org.axonframework.extensions.metrics:*</dependencySourceInclude>
                                 <dependencySourceInclude>org.axonframework.extensions.reactor:*</dependencySourceInclude>
-                                <dependencySourceInclude>org.axonframework.extensions.tracing:*</dependencySourceInclude>
                             </dependencySourceIncludes>
                             <tags>
                                 <tag>

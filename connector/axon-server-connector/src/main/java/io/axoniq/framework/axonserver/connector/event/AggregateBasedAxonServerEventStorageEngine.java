@@ -31,6 +31,7 @@ import io.grpc.StatusRuntimeException;
 import io.axoniq.framework.axonserver.connector.shared.MetadataConverter;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AggregateBasedConsistencyMarker;
+import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.eventsourcing.eventstore.AggregateBasedConsistencyMarker.AggregateSequencer;
 import org.axonframework.eventsourcing.eventstore.AggregateBasedEventStorageEngineUtils;
 import org.axonframework.eventsourcing.eventstore.AggregateSequenceNumberPosition;
@@ -81,18 +82,37 @@ public class AggregateBasedAxonServerEventStorageEngine implements EventStorageE
 
     private final AxonServerConnection connection;
     private final EventConverter converter;
+    private final EventTypeResolver eventTypeResolver;
 
     /**
-     * Initialize the {@code LegacyAxonServerEventStorageEngine} with given {@code connection} to Axon Server and given
-     * {@code payloadConverter} to convert payloads of appended messages (to bytes).
+     * Constructs an {@code AggregateBasedAxonServerEventStorageEngine} with the given {@code connection} and
+     * {@code converter}, using {@link EventTypeResolver#DEFAULT} to resolve
+     * {@link org.axonframework.messaging.core.MessageType MessageTypes} when reading events back from Axon Server.
      *
-     * @param connection       The backing connection to Axon Server
-     * @param converter The converter to use to serialize payloads to bytes
+     * @param connection the backing connection to Axon Server
+     * @param converter  the converter to use to serialize payloads to bytes
      */
     public AggregateBasedAxonServerEventStorageEngine(AxonServerConnection connection,
                                                       EventConverter converter) {
+        this(connection, converter, EventTypeResolver.DEFAULT);
+    }
+
+    /**
+     * Constructs an {@code AggregateBasedAxonServerEventStorageEngine} with the given {@code connection},
+     * {@code converter}, and {@code eventTypeResolver}.
+     *
+     * @param connection        the backing connection to Axon Server
+     * @param converter         the converter to use to serialize payloads to bytes
+     * @param eventTypeResolver the resolver used to construct a {@link org.axonframework.messaging.core.MessageType
+     *                          MessageType} from the event name and version stored in Axon Server, handling missing or
+     *                          empty versions for legacy events
+     */
+    public AggregateBasedAxonServerEventStorageEngine(AxonServerConnection connection,
+                                                      EventConverter converter,
+                                                      EventTypeResolver eventTypeResolver) {
         this.connection = Objects.requireNonNull(connection, "The connection must not be null.");
         this.converter = Objects.requireNonNull(converter, "The converter must not be null.");
+        this.eventTypeResolver = Objects.requireNonNull(eventTypeResolver, "The EventTypeResolver must not be null.");
     }
 
     @Override
@@ -174,7 +194,7 @@ public class AggregateBasedAxonServerEventStorageEngine implements EventStorageE
     }
 
     @Override
-    public MessageStream<EventMessage> source(SourcingCondition condition) {
+    public MessageStream<EventMessage> source(SourcingCondition condition, @Nullable ProcessingContext context) {
         CompletableFuture<Void> endOfStreams = new CompletableFuture<>();
         List<AggregateSource> aggregateSources = condition.criteria()
                                                           .flatten()
@@ -264,7 +284,7 @@ public class AggregateBasedAxonServerEventStorageEngine implements EventStorageE
         SerializedObject payload = event.getPayload();
         return new GenericEventMessage(
                 event.getMessageIdentifier(),
-                new MessageType(payload.getType(), payload.getRevision()),
+                eventTypeResolver.resolve(payload.getType(), payload.getRevision()),
                 payload.getData().toByteArray(),
                 getMetadata(event.getMetaDataMap()),
                 Instant.ofEpochMilli(event.getTimestamp())
@@ -298,6 +318,7 @@ public class AggregateBasedAxonServerEventStorageEngine implements EventStorageE
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("connection", connection);
         descriptor.describeProperty("converter", converter);
+        descriptor.describeProperty("eventTypeResolver", eventTypeResolver);
     }
 
     /**

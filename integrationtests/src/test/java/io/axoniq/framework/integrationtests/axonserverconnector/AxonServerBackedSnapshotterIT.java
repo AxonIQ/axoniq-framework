@@ -44,6 +44,7 @@ public class AxonServerBackedSnapshotterIT extends SnapshottingEntityLifecycleHa
 
     @Override
     protected void registerComponents(ComponentRegistry registry) {
+
         registry.registerComponent(
                 AxonServerConfiguration.class,
                 c -> AxonServerConfiguration.builder()

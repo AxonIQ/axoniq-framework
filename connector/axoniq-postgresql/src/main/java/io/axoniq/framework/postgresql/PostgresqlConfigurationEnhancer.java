@@ -20,17 +20,21 @@
 package io.axoniq.framework.postgresql;
 
 import org.axonframework.common.configuration.ApplicationConfigurer;
+import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.SearchScope;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
+import java.util.concurrent.atomic.AtomicReference;
 import javax.sql.DataSource;
 
 /**
  * A {@link ConfigurationEnhancer} that is auto-loadable by the {@link ApplicationConfigurer}, setting the
  * {@link PostgresqlEventStorageEngine} as the {@link EventStorageEngine} to use when no other is present.
+ * The engine is also made available as a {@link SnapshotStore}.
  * <p>
  * The {@link #ENHANCER_ORDER} is set such that this {@code ConfigurationEnhancer} will follow after the
  * {@code AxonServerConfigurationEnhancer}, thus giving precedence over to the Axon Server {@code EventStorageEngine}.
@@ -48,14 +52,19 @@ public class PostgresqlConfigurationEnhancer implements ConfigurationEnhancer {
 
     @Override
     public void enhance(ComponentRegistry registry) {
-        registry.registerIfNotPresent(
-                EventStorageEngine.class,
-                configuration -> new PostgresqlEventStorageEngine(
+        if (!registry.hasComponent(DataSource.class, SearchScope.ALL)) {
+            return;
+        }
+
+        AtomicReference<PostgresqlEventStorageEngine> instance = new AtomicReference<>();
+        ComponentBuilder<PostgresqlEventStorageEngine> shared = configuration ->
+                instance.updateAndGet(e -> e != null ? e : new PostgresqlEventStorageEngine(
                         configuration.getComponent(DataSource.class),
                         configuration.getComponent(EventConverter.class)
-                ),
-                SearchScope.ALL
-        );
+                ));
+
+        registry.registerIfNotPresent(EventStorageEngine.class, shared, SearchScope.ALL);
+        registry.registerIfNotPresent(SnapshotStore.class, shared, SearchScope.ALL);
     }
 
     @Override

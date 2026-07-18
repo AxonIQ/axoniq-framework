@@ -18,7 +18,7 @@ jobs:
       matrix:
         include:
           - java-version: 21
-            sonar-enabled: true
+            sonar-enabled: false
             deploy-enabled: true
           - java-version: 25
             sonar-enabled: false
@@ -26,10 +26,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up JDK ${{ matrix.java-version }}
-        uses: actions/setup-java@v5.2.0
+        uses: actions/setup-java@v5.5.0
         with:
           distribution: 'zulu'
           java-version: ${{ matrix.java-version }}
@@ -37,6 +37,15 @@ jobs:
           server-id: central
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
+
+      - name: Write Axon Server test license
+        run: |
+          mkdir -p integrationtests/src/test/resources
+          printf '%s' "$AXON_SERVER_LICENSE" > integrationtests/src/test/resources/axon-server-test.license
+          echo "Axon Server test license written to integrationtests/src/test/resources/axon-server-test.license"
+          echo "License file size: $(wc -c < integrationtests/src/test/resources/axon-server-test.license) bytes"
+        env:
+          AXON_SERVER_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
 
       - name: Regular Build
         if: ${{ !matrix.sonar-enabled }}

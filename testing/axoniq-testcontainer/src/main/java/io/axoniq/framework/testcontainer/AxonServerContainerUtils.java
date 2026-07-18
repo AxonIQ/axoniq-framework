@@ -33,12 +33,10 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
+
+import static org.awaitility.Awaitility.await;
 
 
 /**
@@ -180,36 +178,10 @@ public class AxonServerContainerUtils {
     private static void waitForContextsCondition(String hostname,
                                                  int port,
                                                  Predicate<List<String>> condition) {
-        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-        CountDownLatch latch = new CountDownLatch(1);
-        try {
-            scheduler.submit(() -> checkContextsCondition(hostname, port, condition, latch, scheduler))
-                     .get();
-            if (!latch.await(60, TimeUnit.SECONDS)) {
-                throw new RuntimeException("Condition on contexts has not been met!");
-            }
-        } catch (InterruptedException | ExecutionException e) {
-            throw new RuntimeException(e);
-        } finally {
-            scheduler.shutdown();
-        }
-    }
-
-    private static void checkContextsCondition(String hostname, int port,
-                                               Predicate<List<String>> condition,
-                                               CountDownLatch latch, ScheduledExecutorService scheduler) {
-        try {
-            if (condition.test(internalContexts(hostname, port))) {
-                latch.countDown();
-            } else {
-                scheduler.schedule(
-                        () -> checkContextsCondition(hostname, port, condition, latch, scheduler),
-                        10, TimeUnit.MILLISECONDS
-                );
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        await().atMost(60, TimeUnit.SECONDS)
+               .pollInterval(100, TimeUnit.MILLISECONDS)
+               .ignoreExceptionsInstanceOf(IOException.class)
+               .until(() -> condition.test(internalContexts(hostname, port)));
     }
 
     private static boolean initialized(String hostname, int port) throws IOException {
@@ -236,8 +208,27 @@ public class AxonServerContainerUtils {
                                                  int port,
                                                  String context,
                                                  boolean dcbContext) throws IOException {
+        purgeEventsFromAxonServer(hostname, port, context, dcbContext, context);
+    }
+
+    /**
+     * Calls the API of Axon Server at given {@code hostname} and (http) {@code port} to purge events of the given
+     * {@code context}.
+     *
+     * @param hostname         The hostname where AxonServer can be reached.
+     * @param port             The HTTP port AxonServer listens to for API calls.
+     * @param context          The context to purge.
+     * @param dcbContext       A {@code boolean} stating whether a DCB or non-DCB context is being purged.
+     * @param replicationGroup The replication group to use for recreating the contest.
+     * @throws IOException When an error occurs communicating with Axon Server.
+     * @since 5.0.0
+     */
+    public static void purgeEventsFromAxonServer(String hostname,
+                                                 int port,
+                                                 String context,
+                                                 boolean dcbContext, String replicationGroup) throws IOException {
         deleteContext(hostname, port, context);
-        createContext(hostname, port, context, dcbContext);
+        createContext(hostname, port, context, dcbContext, replicationGroup);
         try {
             Thread.sleep(500);
         } catch (InterruptedException e) {
@@ -284,6 +275,24 @@ public class AxonServerContainerUtils {
      * @throws IOException When an error occurs communicating with Axon Server.
      */
     public static void createContext(String hostname, int port, String context, boolean dcbContext) throws IOException {
+        // TODO this retains the previous behavior but it is flawed, see https://github.com/AxonIQ/axoniq-framework/issues/223
+        createContext(hostname, port, context, dcbContext, context);
+    }
+
+    /**
+     * Calls the API of Axon Server at the given {@code hostname} and (http) {@code port} to create a context with the
+     * given {@code context} name. The {@code dcbContext} dictates whether the context to be created support DCB, yes or
+     * no.
+     *
+     * @param hostname         The hostname where Axon Server can be reached.
+     * @param port             The HTTP port Axon Server listens to for API calls.
+     * @param context          The context to create.
+     * @param dcbContext       A {@code boolean} stating whether a DCB or non-DCB context is being created.
+     * @param replicationGroup The replication group to be used.
+     * @throws IOException When an error occurs communicating with Axon Server.
+     */
+    public static void createContext(String hostname, int port, String context, boolean dcbContext,
+                                     String replicationGroup) throws IOException {
         URL url = URI.create(String.format("http://%s:%d/v1/context", hostname, port)).toURL();
         HttpURLConnection connection = null;
         try {
@@ -291,7 +300,7 @@ public class AxonServerContainerUtils {
                     "{\"context\": \"%s\", \"dcbContext\": %b, \"replicationGroup\": \"%s\", \"roles\": [{ \"node\": \"axonserver\", \"role\": \"PRIMARY\" }]}",
                     context,
                     dcbContext,
-                    context
+                    replicationGroup
             );
             connection = (HttpURLConnection) url.openConnection();
             connection.setRequestProperty("Content-Type", "application/json");
@@ -311,5 +320,9 @@ public class AxonServerContainerUtils {
             }
         }
         waitForContextsCondition(hostname, port, contexts -> contexts.contains(context));
+    }
+
+    private AxonServerContainerUtils() {
+        // Utility class
     }
 }
