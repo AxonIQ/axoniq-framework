@@ -70,9 +70,9 @@ public class LocalShortcutCommandBusConnector extends DelegatingCommandBusConnec
      * Initialize the connector to delegate to the given {@code delegate}, taking a local shortcut for commands accepted
      * by the given {@code localDispatchPredicate} that are also handled by the local segment.
      *
-     * @param delegate               The {@link CommandBusConnector} to delegate to when not dispatching locally.
-     * @param localDispatchPredicate The predicate deciding whether a command should be dispatched to the local segment
-     *                               directly.
+     * @param delegate               the {@link CommandBusConnector} to delegate to when not dispatching locally
+     * @param localDispatchPredicate the predicate deciding whether a command should be dispatched to the local segment
+     *                               directly
      */
     public LocalShortcutCommandBusConnector(CommandBusConnector delegate,
                                             LocalCommandDispatchPredicate localDispatchPredicate) {

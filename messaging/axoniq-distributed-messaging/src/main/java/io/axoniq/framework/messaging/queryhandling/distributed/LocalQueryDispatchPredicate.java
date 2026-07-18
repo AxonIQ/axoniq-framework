@@ -47,11 +47,11 @@ public interface LocalQueryDispatchPredicate {
      * Indicates whether the given {@code query} should be dispatched to the local segment directly, rather than being
      * routed through the connector.
      *
-     * @param query   The query message about to be dispatched.
-     * @param context The processing context active for the dispatch, or {@code null} when the query is dispatched
-     *                outside of an existing processing context.
+     * @param query   the query message about to be dispatched
+     * @param context the processing context active for the dispatch, or {@code null} when the query is dispatched
+     *                outside of an existing processing context
      * @return {@code true} to attempt to dispatch the query to the local segment, {@code false} to route it through the
-     * connector as usual.
+     * connector as usual
      */
     boolean shouldDispatchLocally(QueryMessage query, @Nullable ProcessingContext context);
 }

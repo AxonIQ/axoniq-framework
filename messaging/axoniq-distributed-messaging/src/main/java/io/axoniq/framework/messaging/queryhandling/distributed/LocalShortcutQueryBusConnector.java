@@ -75,9 +75,9 @@ public class LocalShortcutQueryBusConnector extends DelegatingQueryBusConnector 
      * Initialize the connector to delegate to the given {@code delegate}, taking a local shortcut for queries accepted
      * by the given {@code localDispatchPredicate} that are also handled by the local segment.
      *
-     * @param delegate               The {@link QueryBusConnector} to delegate to when not querying locally.
-     * @param localDispatchPredicate The predicate deciding whether a query should be dispatched to the local segment
-     *                               directly.
+     * @param delegate               the {@link QueryBusConnector} to delegate to when not querying locally
+     * @param localDispatchPredicate the predicate deciding whether a query should be dispatched to the local segment
+     *                               directly
      */
     public LocalShortcutQueryBusConnector(QueryBusConnector delegate,
                                           LocalQueryDispatchPredicate localDispatchPredicate) {

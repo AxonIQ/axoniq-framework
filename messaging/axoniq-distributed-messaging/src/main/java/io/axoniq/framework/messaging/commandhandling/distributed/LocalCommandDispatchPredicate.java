@@ -47,11 +47,11 @@ public interface LocalCommandDispatchPredicate {
      * Indicates whether the given {@code command} should be dispatched to the local segment directly, rather than being
      * routed through the connector.
      *
-     * @param command The command message about to be dispatched.
-     * @param context The processing context active for the dispatch, or {@code null} when the command is dispatched
-     *                outside of an existing processing context.
+     * @param command the command message about to be dispatched
+     * @param context the processing context active for the dispatch, or {@code null} when the command is dispatched
+     *                outside of an existing processing context
      * @return {@code true} to attempt to dispatch the command to the local segment, {@code false} to route it through
-     * the connector as usual.
+     * the connector as usual
      */
     boolean shouldDispatchLocally(CommandMessage command, @Nullable ProcessingContext context);
 }

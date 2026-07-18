@@ -66,6 +66,8 @@ public class LocalShortcutQueryBusConnectorConfigurationEnhancer implements Conf
      * top of the range achieves this. {@link Integer#MAX_VALUE} is deliberately halved rather than used directly: it
      * leaves ample room above for a decorator that must legitimately observe or transform <em>every</em> query, local
      * or remote, by choosing a still-higher order.
+     *
+     * @since 5.3.0
      */
     public static final int LOCAL_SHORTCUT_CONNECTOR_ORDER = Integer.MAX_VALUE >> 1;
 
