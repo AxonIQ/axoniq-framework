@@ -43,6 +43,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * handling - only without leaving the JVM. Because this connector wraps the payload-converting connector (rather than
  * the other way around), the shortcut also avoids the payload serialization round-trip.
  * <p>
+ * Because short-cut commands are handled through this same {@link Handler}, they are queued onto and executed by the
+ * same bounded, priority-ordered worker pool as commands arriving from remote segments. A burst of locally-preferred
+ * commands is therefore subject to the same back-pressure and cannot flood the local segment beyond what it would
+ * already accept from remote traffic.
+ * <p>
  * The shortcut only kicks in when the local segment can actually handle the command, tracked through the
  * {@link #subscribe(QualifiedName, int)}/{@link #unsubscribe(QualifiedName)} calls this connector observes. When the
  * command's {@link CommandMessage#type() type} is not locally subscribed, the command is routed through the wrapped
