@@ -41,11 +41,11 @@ The `DistributedCommandBusConfiguration` allows customization of load factor, th
 
 === Local handler shortcut
 
-A node can prefer its own command handler for selected commands instead of routing every command through the connector. Register a `LocalCommandDispatchPredicate` to enable this; it is consulted for each outgoing dispatch and receives the `CommandMessage` and the (nullable) `ProcessingContext`, so the decision can be based on the command's payload, type, metadata, or a flag placed on the context by the dispatcher.
+A node can prefer its own command handler for selected commands instead of routing every command through the connector. Register a `LocalCommandDispatchPredicate` to enable this. It is consulted for each outgoing dispatch and receives the `CommandMessage` and the (nullable) `ProcessingContext`, so the decision can be based on the command's payload, type, metadata, or a flag placed on the context by the dispatcher.
 
-The shortcut only takes effect when the local segment actually subscribed a handler for the command. When it did not, the command is routed through the connector as usual, regardless of the predicate. This ensures a locally-preferred command that this node cannot handle is still routed to a segment that can.
+The shortcut only takes effect when the local segment actually subscribed a handler for the command. When it did not, the command is routed through the connector as usual, regardless of the predicate. This ensures a locally preferred command that this node cannot handle is still routed to a segment that can.
 
-Short-cut commands are handled on the same bounded, priority-ordered worker pool as commands arriving from remote segments, because the shortcut reuses the same local-handling path. A burst of locally-preferred commands is therefore subject to the same back-pressure and cannot flood the local segment beyond what it would already accept from remote traffic.
+Short-cut commands are handled on the same bounded, priority-ordered worker pool as commands arriving from remote segments, because the shortcut reuses the same local-handling path. A burst of locally preferred commands is therefore subject to the same back-pressure and cannot flood the local segment beyond what it would already accept from remote traffic.
 
 [source,java]
 ----
