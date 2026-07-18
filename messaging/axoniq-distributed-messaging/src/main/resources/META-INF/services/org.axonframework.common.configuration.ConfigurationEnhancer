@@ -17,4 +17,5 @@
 #  https://www.axoniq.io/pricing
 #
 io.axoniq.framework.messaging.commandhandling.distributed.DistributedCommandBusConfigurationEnhancer
+io.axoniq.framework.messaging.commandhandling.distributed.LocalShortcutCommandBusConnectorConfigurationEnhancer
 io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfigurationEnhancer

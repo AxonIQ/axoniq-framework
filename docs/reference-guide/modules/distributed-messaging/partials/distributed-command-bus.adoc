@@ -39,6 +39,29 @@ The local segment covers command handler registration and command handler invoca
 The `CommandBusConnector` is in charge of dispatching and receiving commands to and from other JVM. The `CommandBusConnector` has several implementation, as described further below.
 The `DistributedCommandBusConfiguration` allows customization of load factor, threads, and executor used by the `DistributedCommandBus`.
 
+=== Local handler shortcut
+
+A node can prefer its own command handler for selected commands instead of routing every command through the connector. Register a `LocalCommandDispatchPredicate` to enable this; it is consulted for each outgoing dispatch and receives the `CommandMessage` and the (nullable) `ProcessingContext`, so the decision can be based on the command's payload, type, metadata, or a flag placed on the context by the dispatcher.
+
+The shortcut only takes effect when the local segment actually subscribed a handler for the command. When it did not, the command is routed through the connector as usual, regardless of the predicate. This ensures a locally-preferred command that this node cannot handle is still routed to a segment that can.
+
+[source,java]
+----
+import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import io.axoniq.framework.messaging.commandhandling.distributed.LocalCommandDispatchPredicate;
+
+public class AxonConfig {
+    public void configureLocalCommandShortcut(MessagingConfigurer configurer) {
+        configurer.componentRegistry(registry -> registry.registerComponent(
+                LocalCommandDispatchPredicate.class,
+                config -> (command, context) -> true   // prefer the local handler when subscribed
+        ));
+    }
+}
+----
+
+The shortcut is opt-in: without a `LocalCommandDispatchPredicate`, commands are always routed through the connector, leaving the default distributed behavior unchanged.
+
 === `AxonServerCommandBusConnector`
 
 The `AxonServerCommandBusConnector` connects to https://www.axoniq.io/products/axon-server[Axon Server,window=_blank,role=external] for distributed command routing.
