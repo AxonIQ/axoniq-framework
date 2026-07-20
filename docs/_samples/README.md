@@ -69,7 +69,10 @@ partial** belongs to, so partials include samples the same way pages do.
   `[source,java,role=axon4]` for Axon Framework 4 "before" code on migration pages,
   `[source,java,role=pseudocode]` for illustrative pseudo-code (for example a snippet that elides a
   required argument with `/* ... */`). Everything else must be an include.
-- **ASCII only, LF line endings**, 4-space indentation, no license headers in sample files.
+- **ASCII only, LF line endings**, 4-space indentation.
+- **License header required**: every sample file starts with the standard AxonIQ copyright header,
+  the same one applied across the codebase (see `copyright-template.xml`). Place it above the
+  `package` declaration, outside every tagged region, so it never appears in a rendered snippet.
 
 ## Verifying
 

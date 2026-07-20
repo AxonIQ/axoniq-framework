@@ -17,11 +17,13 @@
  *  https://www.axoniq.io/pricing
  */
 
-package deadletterqueue.index.enable;
+package deadletterqueue.index.custompolicy;
+
+import deadletterqueue.index.CustomEnqueuePolicy;
 
 import static deadletterqueue.index.support.Handlers.myHandlerComponent;
 
-// tag::configure-dead-letter-queue[]
+// tag::configure-custom-enqueue-policy[]
 import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
@@ -37,9 +39,10 @@ public class AxonConfig {
                                         .declarative("myHandler", cfg -> myHandlerComponent))
                                 .customized((cfg, processorConfig) -> processorConfig
                                         .extend(DeadLetterQueueConfiguration.class,
-                                                () -> new DeadLetterQueueConfiguration().enabled()))
-                )
+                                                () -> new DeadLetterQueueConfiguration()
+                                                        .enabled()
+                                                        .enqueuePolicy(new CustomEnqueuePolicy()))))
         ));
     }
 }
-// end::configure-dead-letter-queue[]
+// end::configure-custom-enqueue-policy[]

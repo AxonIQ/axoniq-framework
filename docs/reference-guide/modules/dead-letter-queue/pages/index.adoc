@@ -187,28 +187,9 @@ Set it to 0 to disable caching entirely. This is useful when memory is constrain
 Configuration API::
 +
 --
-[source,java,role=pseudocode]
+[source,java]
 ----
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-
-public class AxonConfig {
-
-    public void configureDeadLetterQueue(MessagingConfigurer configurer) {
-        configurer.eventProcessing(ep -> ep.pooledStreaming(ps -> ps
-                .processor(
-                        EventProcessorModule
-                                .pooledStreaming("my-processor")
-                                .eventHandlingComponents(/* ... */)
-                                .customized((cfg, processorConfig) -> processorConfig
-                                        .extend(DeadLetterQueueConfiguration.class,
-                                                () -> new DeadLetterQueueConfiguration()
-                                                        .enabled()
-                                                        .cacheMaxSize(4096)))) // Set a larger cache
-        ));
-    }
-}
+include::example$deadletterqueue/index/cachesize/AxonConfig.java[tag=configure-dead-letter-queue-cache-size,indent=0]
 ----
 --
 
@@ -241,36 +222,9 @@ In Spring Boot, configure each processor individually using `axon.eventhandling.
 
 You can set dead-letter queue defaults that apply to all pooled streaming processors, which individual processors can then override:
 
-[source,java,role=pseudocode]
+[source,java]
 ----
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-
-public class AxonConfig {
-
-    public void configureDeadLetterQueue(MessagingConfigurer configurer) {
-        configurer.eventProcessing(ep -> ep.pooledStreaming(ps -> ps
-                // Enable DLQ for all pooled streaming processors by default
-                .defaults(d -> d.extend(DeadLetterQueueConfiguration.class,
-                        () -> new DeadLetterQueueConfiguration()
-                                .enabled()
-                                .cacheMaxSize(2048)))
-                // This processor inherits the defaults
-                .processor(EventProcessorModule
-                        .pooledStreaming("processor-with-dlq")
-                        .eventHandlingComponents(/* ... */)
-                        .notCustomized())
-                // This processor explicitly disables DLQ
-                .processor(EventProcessorModule
-                        .pooledStreaming("processor-without-dlq")
-                        .eventHandlingComponents(/* ... */)
-                        .customized((cfg, c) -> c
-                                .extend(DeadLetterQueueConfiguration.class,
-                                        () -> new DeadLetterQueueConfiguration().disabled())))
-        ));
-    }
-}
+include::example$deadletterqueue/index/defaults/AxonConfig.java[tag=configure-dead-letter-queue-defaults,indent=0]
 ----
 
 === Configuring DLQ with an `EventProcessorDefinition` bean
@@ -435,28 +389,9 @@ See the following example for configuring a custom policy:
 Configuration API::
 +
 --
-[source,java,role=pseudocode]
+[source,java]
 ----
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-
-public class AxonConfig {
-
-    public void configureDeadLetterQueue(MessagingConfigurer configurer) {
-        configurer.eventProcessing(ep -> ep.pooledStreaming(ps -> ps
-                .processor(
-                        EventProcessorModule
-                                .pooledStreaming("my-processor")
-                                .eventHandlingComponents(/* ... */)
-                                .customized((cfg, processorConfig) -> processorConfig
-                                        .extend(DeadLetterQueueConfiguration.class,
-                                                () -> new DeadLetterQueueConfiguration()
-                                                        .enabled()
-                                                        .enqueuePolicy(new CustomEnqueuePolicy()))))
-        ));
-    }
-}
+include::example$deadletterqueue/index/custompolicy/AxonConfig.java[tag=configure-custom-enqueue-policy,indent=0]
 ----
 --
 

@@ -56,16 +56,9 @@ If your node topology is instable, routing of commands with the same key will no
 
 The default `AnnotationRoutingStrategy` uses the `routingKey` attribute on the `@Command` annotation:
 
-[source,java,role=pseudocode]
+[source,java]
 ----
-@Command(routingKey = "orderId")
-public class ShipOrderCommand {
-
-    private final String orderId;
-    private final String trackingNumber;
-
-    // constructor, getters
-}
+include::example$distributedmessaging/distributedcommandbus/routing/ShipOrderCommand.java[tag=routing-strategy-command,indent=0]
 ----
 
 The `routingKey` attribute specifies which property of the command should be used for routing.
