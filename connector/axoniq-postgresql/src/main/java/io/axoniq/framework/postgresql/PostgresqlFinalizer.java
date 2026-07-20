@@ -70,6 +70,21 @@ final class PostgresqlFinalizer {
      *    sequence before the CTE updates complete.
      *
      * The pg_notify call signals listeners but does not guarantee they receive it; it only queues the notification.
+     *
+     * consistency_tags is the only table here that a concurrently-running append transaction can also
+     * be touching (events and tags are only ever touched again by the one transaction that inserted
+     * them, then once, here, by whichever finalizer run picks them up - never by another transaction
+     * in between). PostgresqlEventStorageEngine's own consistency_tags writes always acquire their row
+     * locks in ascending tag_hash order (see its hashesToLock TreeSet) specifically to avoid ABBA
+     * deadlocks between concurrent appends; for that same guarantee to hold against this statement too,
+     * consistency_tags_ordered_lock takes the affected rows' locks in that same ascending tag_hash
+     * order before finalized_consistency_tags writes them. UPDATE has no ORDER BY of its own, and an
+     * ORDER BY inside a plain FROM-subquery is not guaranteed to control lock acquisition order (the
+     * planner is free to join however it likes) - SELECT ... ORDER BY ... FOR UPDATE is the one
+     * construct Postgres actually documents as locking rows in the order they arrive at its LockRows
+     * node, which is why the ordering step needs to be its own, explicit SELECT rather than folded
+     * into finalized_consistency_tags directly. It is marked MATERIALIZED so the planner can never
+     * inline it back into the surrounding query and lose that guarantee.
      */
     private static final String FINALIZE_STATEMENT =
         """
@@ -96,12 +111,19 @@ final class PostgresqlFinalizer {
           WHERE t.global_index = fe.old_val
           RETURNING fe.new_val
         ),
+        consistency_tags_ordered_lock AS MATERIALIZED (
+          SELECT ct.tag_hash, fe.new_val
+            FROM consistency_tags ct
+            JOIN finalized_events fe ON ct.global_index = fe.old_val
+            ORDER BY ct.tag_hash
+            FOR UPDATE OF ct
+        ),
         finalized_consistency_tags AS (
           UPDATE consistency_tags ct
-          SET global_index = fe.new_val
-          FROM finalized_events fe
-          WHERE ct.global_index = fe.old_val
-          RETURNING fe.new_val
+          SET global_index = otl.new_val
+          FROM consistency_tags_ordered_lock otl
+          WHERE ct.tag_hash = otl.tag_hash
+          RETURNING otl.new_val
         ),
         latest AS (
           SELECT
