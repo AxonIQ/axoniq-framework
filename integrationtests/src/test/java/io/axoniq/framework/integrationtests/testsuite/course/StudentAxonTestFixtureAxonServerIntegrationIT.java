@@ -34,6 +34,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.UUID;
 
+import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
+
 class StudentAxonTestFixtureAxonServerIntegrationIT {
 
     protected static final Logger logger = LoggerFactory.getLogger(StudentAxonTestFixtureAxonServerIntegrationIT.class);
@@ -72,7 +74,7 @@ class StudentAxonTestFixtureAxonServerIntegrationIT {
         try {
             AxonServerContainerUtils.purgeEventsFromAxonServer(container.getHost(),
                                                                container.getHttpPort(),
-                                                               "default",
+                                                               DEFAULT_CONTEXT,
                                                                AxonServerContainerUtils.DCB_CONTEXT);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -81,6 +83,8 @@ class StudentAxonTestFixtureAxonServerIntegrationIT {
                     container.getHttpPort());
         AxonServerConfiguration axonServerConfiguration = new AxonServerConfiguration();
         axonServerConfiguration.setServers(container.getHost() + ":" + container.getGrpcPort());
+
+
         configurer.componentRegistry(cr -> cr.registerComponent(
                 AxonServerConfiguration.class,
                 c -> axonServerConfiguration

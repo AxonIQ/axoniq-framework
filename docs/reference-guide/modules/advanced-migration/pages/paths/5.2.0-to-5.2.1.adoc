@@ -1,0 +1,68 @@
+[.axoniq-feature]
+= Axoniq Framework 5.2.0 to 5.2.1 Migration
+:navtitle: Axoniq Framework 5.2.0 to 5.2.1 Migration
+
+[#postgresql_event_storage_engine]
+== PostgreSQL event storage engine
+
+[#postgresql_type_version_column]
+=== Schema change: separate `type_version` column
+
+The `events` table's `type` column used to hold an event's full message type as a single combined `qualifiedName#version` string.
+It now holds only the qualified name, with the version split out into a new, required `type_version` column.
+
+This schema change is applied automatically on startup, the same way the rest of the schema is: `PostgresqlEventStorageEngine` detects a pre-existing `events` table without a `type_version` column, splits every existing `type` value into the two columns, and only then makes `type_version` required. See xref:tuning:rdbms-tuning.adoc#postgresql_operations[PostgreSQL operations] for the full schema.
+
+[IMPORTANT]
+.This is not a rolling-upgrade-safe change
+====
+Unlike most schema changes made by this connector, this one is not something older, unaware application instances can keep running against.
+Once the migration has run, `type_version` is required, and an instance still inserting events using the old, single-column `type` value fails outright - there is no default value for the migration to fall back on.
+
+Upgrade every instance appending events to this database to Axoniq Framework 5.2.1 (or later) together, rather than relying on a gradual rollout.
+====
+
+If you manage the schema yourself through a migration tool such as Flyway or Liquibase, apply the equivalent change before upgrading any application instance.
+The engine detects whether its migration already ran by checking for a single trigger's existence, so this must be the complete change - column split, trigger, and backfill together - not just the column split: applying only part of it leaves the engine either re-running the rest redundantly (harmless) or, if you create the trigger without the backfill, silently skipping the one-time backfill for pre-existing events (not harmless).
+
+[source,sql]
+----
+ALTER TABLE events ADD COLUMN IF NOT EXISTS type_version VARCHAR;
+
+UPDATE events
+  SET type_version = split_part(type, '#', 2),
+      type = split_part(type, '#', 1)
+  WHERE type_version IS NULL;
+
+ALTER TABLE events ALTER COLUMN type_version SET NOT NULL;
+
+CREATE OR REPLACE FUNCTION axon_write_type_tag() RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO tags (global_index, key, value) VALUES (NEW.global_index, '__T', NEW.type)
+    ON CONFLICT (global_index) WHERE key = '__T' DO UPDATE SET value = EXCLUDED.value;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER axon_events_write_type_tag
+  AFTER INSERT ON events
+  FOR EACH ROW EXECUTE FUNCTION axon_write_type_tag();
+
+CREATE OR REPLACE FUNCTION axon_validate_type_tag() RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.key = '__T' AND NOT EXISTS (
+    SELECT 1 FROM events WHERE global_index = NEW.global_index AND type = NEW.value
+  ) THEN
+    RAISE EXCEPTION 'Type tag value % does not match event type for global_index %', NEW.value, NEW.global_index;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER axon_tags_validate_type
+  BEFORE INSERT OR UPDATE ON tags
+  FOR EACH ROW EXECUTE FUNCTION axon_validate_type_tag();
+
+INSERT INTO tags (global_index, key, value)
+  SELECT global_index, '__T', type FROM events;
+----

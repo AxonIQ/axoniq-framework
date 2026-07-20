@@ -225,8 +225,8 @@ consumers.
    token T,
    **When** the split transformation produces N output events,
    **Then** all N output events share sequence number S and tracking token T. The framework MUST
-   NOT renumber. The order among the N outputs is the order returned by the transformation
-   function.
+   NOT renumber. The order among the N outputs is the declaration order of the produced
+   outputs.
 
 ---
 
@@ -662,11 +662,13 @@ a last resort if the old stream must be fully replaced.
   _Traces to: US1, US2._
 - **FR-002 (Rename)**: A pure rename is FR-001 with no payload mapper, no separate API needed.
   _Traces to: US2._
-- **FR-003 (1:N / 1:0 transformations)**: For splits and drops, developers MUST declare only the
-  `from` identity together with a mapper that produces 0..N replacement events. Each replacement
-  carries its own identity and payload as the mapper determines, the framework imposes no
-  constraint on output identities for this pattern. Self-loop detection (FR-008) does not apply
-  since no `to` identity is declared.
+- **FR-003 (1:N / 1:0 transformations)**: For splits, developers MUST declare the `from` identity,
+  the input payload type, and one or more output declarations, each pairing a produced
+  `MessageType` with the mapper deriving that output's payload from the converted input. A split
+  emits exactly its declared outputs, in declaration order, for every matched event, so the
+  produced identities are known at registration time and read-criteria widening derives from
+  them. A 1:0 removal is the dedicated drop factory, which declares only the `from` identity.
+  Self-loop detection (FR-008) does not apply to drops since no `to` identity is declared.
   _Traces to: US3, US4._
 - **FR-004 (Resolution and lifecycle)**: Exact (concrete `MessageType`) `from` matches are resolved
   by identity, independent of registration order; registration order governs only the
@@ -736,8 +738,9 @@ a last resort if the old stream must be fully replaced.
   `TypeReference<T>` (for generic targets like `Map<String, Object>`, `List<Foo>`; per
   `.claude/rules/type-safety.md` and mirroring `Configuration.getComponent(TypeReference)`,
   the `TypeReference<T>` overload binds `T` at compile time so the lambda parameter type is
-  inferred -- no manual cast). Mapper shape: `BiFunction<T, ProcessingContext, U>` for 1:1,
-  `BiFunction<T, ProcessingContext, List<TransformedEvent>>` for 1:N. The framework's read
+  inferred -- no manual cast). Mapper shape: `BiFunction<T, ProcessingContext, U>` for 1:1; for
+  1:N, one such mapper per declared output, each paired with its produced `MessageType` and all
+  sharing the once-converted input payload. The framework's read
   paths supply a non-null `ProcessingContext` on the entity-load path (`transaction(ctx)`);
   on the tracking-processor path (`open(condition, @Nullable ProcessingContext)`), the
   context may be null if the caller passes null. Mappers MUST null-check before calling
@@ -825,10 +828,11 @@ a last resort if the old stream must be fully replaced.
   framework SKIPS the check and trusts the mapper to produce the correct `to` identity; this
   is not a silent failure -- it is the only feasible behaviour, since no class-based identity
   exists. The check is satisfied trivially for pure renames (FR-002), the framework sets the
-  output identity itself. It does NOT apply to 1:N/1:0 transformations, output identities are
-  mapper-determined by design, and the developer has full responsibility for each replacement
-  event's identity (the framework does not validate that the chosen identity is meaningful or
-  subscribed to).
+  output identity itself. It does NOT apply to 1:N splits or 1:0 drops: a split's outputs are
+  emitted under the identities declared through `producing(...)`, and an output payload may be a
+  stored-shape type whose own resolved identity differs from the declared one (so the split can
+  emit an older-version payload that re-enters the chain to be lifted onward), so no
+  output-identity check is applied. A drop produces no output.
   _Traces to: US1, US6 scenario 6._
 - **FR-019 (Commands and queries)**: The transformer mechanism MUST support commands and queries
   in addition to events, using the same uniform stream-in / stream-out shape. The chain MUST

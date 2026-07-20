@@ -18,7 +18,8 @@
   ~  https://www.axoniq.io/pricing
   -->
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -67,6 +68,7 @@
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
+
         <!-- Axoniq Framework -->
         <dependency>
             <groupId>io.axoniq.framework</groupId>
@@ -82,10 +84,25 @@
         </dependency>
         <dependency>
             <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-multi-tenancy</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-multi-tenancy</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-testcontainer</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
+
         <dependency>
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-postgresql</artifactId>
@@ -97,6 +114,7 @@
             <artifactId>HikariCP</artifactId>
             <scope>test</scope>
         </dependency>
+
         <!-- Reactive -->
         <dependency>
             <groupId>io.projectreactor</groupId>

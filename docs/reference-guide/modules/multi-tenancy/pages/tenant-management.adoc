@@ -1,0 +1,92 @@
+[.axoniq-feature]
+= Tenant Management
+:navtitle: Tenant management
+:reftext: Tenant management
+
+Tenant management covers how tenants become known to the application and how the tenant of a message is resolved during processing.
+A tenant is represented by a `TenantDescriptor`, identified by its `tenantId`, which corresponds to an Axon Server context.
+
+== Enabling multi-tenancy
+
+Multi-tenancy is opt-in.
+Register the `MultiTenancyEnabled` component on the configurer to activate it.
+When it is absent, multi-tenancy is not active and the application behaves as a single-tenant application.
+
+[source,java]
+----
+public void enableMultiTenancy(MessagingConfigurer configurer) {
+    configurer.componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer);
+}
+----
+
+With multi-tenancy enabled, tenants are taken from your Axon Server contexts and the tenant of each message is resolved automatically.
+The sections below show how to customize which contexts become tenants and how the tenant of a message is resolved.
+
+[NOTE]
+====
+Multi-tenancy is enabled and configured through the Configuration API.
+There is no dedicated Spring Boot auto-configuration for multi-tenancy, so use the Configuration API shown here even in a Spring Boot application.
+====
+
+== How tenants become known
+
+Each tenant maps to an Axon Server context.
+With multi-tenancy enabled, the contexts of the connected Axon Server are discovered as tenants at startup, and the set is kept current at runtime: contexts added or removed on Axon Server become tenants that are added or removed in the running application, without further configuration.
+
+=== Filtering which contexts are tenants
+
+By default, every Axon Server context except the `_admin` context is treated as a tenant.
+To narrow the set, register a `TenantConnectPredicate`, for example to include only contexts matching a naming convention:
+
+[source,java]
+----
+public void registerTenantFilter(MessagingConfigurer configurer) {
+    TenantConnectPredicate predicate = tenant -> tenant.tenantId().startsWith("tenant-");
+    configurer.componentRegistry(registerTenantConnectPredicate(predicate));
+}
+----
+
+[#tenant-resolution]
+== Tenant resolution
+
+Tenant resolution determines, for each message, which tenant it belongs to.
+The resolved tenant determines which tenant's xref:multi-tenancy:tenant-scoped-components.adoc[tenant-scoped components] a handler receives.
+
+Resolution is performed by a `TenantResolver`, and the same resolved tenant is used throughout the handling of that message.
+
+When no tenant can be resolved for a message, resolution fails with a `TenantNotResolvedException`, and the message is not handled for any tenant.
+
+=== The default resolver
+
+When multi-tenancy is enabled and no other resolver is registered, the default is a `MetadataBasedTenantResolver`.
+It reads the tenant identifier from the message metadata under the `tenantId` key.
+A message whose metadata does not contain that key cannot be resolved and fails with a `TenantNotResolvedException`.
+
+=== Customizing tenant resolution
+
+To read the tenant from a different metadata key, register a `MetadataBasedTenantResolver` with that key:
+
+[source,java]
+----
+public void registerTenantResolverForKey(MessagingConfigurer configurer) {
+    configurer.componentRegistry(registerTenantResolver(new MetadataBasedTenantResolver("tenant")));
+}
+----
+
+To resolve the tenant from something other than metadata, register your own `TenantResolver`.
+It receives the message and the collection of known tenants, and returns the resolved `TenantDescriptor`, or throws a `TenantNotResolvedException` when it cannot:
+
+[source,java]
+----
+public void registerCustomTenantResolver(MessagingConfigurer configurer) {
+    TenantResolver resolver = (message, tenants) -> {
+        String tenantId = extractTenantId(message);            // <1>
+        if (tenantId == null) {
+            throw new TenantNotResolvedException("Could not resolve a tenant for the message");
+        }
+        return TenantDescriptor.tenantWithId(tenantId);
+    };
+    configurer.componentRegistry(registerTenantResolver(resolver));
+}
+----
+<1> Application-specific logic deriving the tenant identifier from the message.

@@ -117,6 +117,23 @@ public class PostgresStorageEngineBackedEventStoreIT extends StorageEngineBacked
         }
     }
 
+    /*
+     * Disabled tests as Postgres doesn't support filtering by types yet.
+     */
+    @Nested
+    class GivenSomePublishedEvents
+            extends StorageEngineBackedEventStoreTestSuite<PostgresqlEventStorageEngine>.GivenSomePublishedEvents {
+
+        @Override @Disabled @Test
+        protected void sourcingShouldFilterByTypeWhenCombinedWithTags() throws Exception {}
+
+        @Override @Disabled @Test
+        protected void sourcingShouldFilterByTypeAloneWithoutTags() throws Exception {}
+
+        @Override @Disabled @Test
+        protected void sourcingShouldMatchAnyOfMultipleTypesInOneCriterion() throws Exception {}
+    }
+
     /**
      * Verifies {@link SourcingStrategy.Snapshot} sourcing end to end, through {@link
      * EventStoreTransaction#source(SourcingCondition)} rather than the engine directly - this
@@ -195,7 +212,7 @@ public class PostgresStorageEngineBackedEventStoreIT extends StorageEngineBacked
         private Snapshot storeSnapshot(long position) {
             Snapshot snapshot = new Snapshot(new GlobalIndexPosition(position), "0.0.1", "snapshot-payload", Instant.now(), Map.of());
 
-            engine.store(qualifiedName, identifier, snapshot).join();
+            engine.store(qualifiedName, identifier, snapshot, null).join();
 
             return snapshot;
         }

@@ -130,6 +130,13 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     private static final GlobalIndexPosition MAX_GLOBAL_INDEX_POSITION = new GlobalIndexPosition(Long.MAX_VALUE);
 
     /**
+     * Reserved tag key used to record an event's type as a regular tag, written automatically by
+     * the {@code axon_write_type_tag} database trigger installed in the constructor. Callers 
+     * cannot supply a tag using this key themselves; see {@link #validateNoReservedTags(List)}.
+     */
+    private static final String TYPE_TAG_KEY = "__T";
+
+    /**
      * CTE prefix resolving {@code snap} to a fixed, given start position, exposed as {@code
      * sort_index} minus one so that {@link #EVENTS_READ_MULTIPLE} can use a uniform {@code >}
      * comparison (see {@link #RESUME_AT_SNAPSHOT} for why). The remaining columns are {@code
@@ -193,15 +200,18 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * or a row with no snapshot data if there is none - followed by up to {@code limit} events.
      * See {@link #RESUME_AT_SNAPSHOT} for why this leading row always sorts first. Callers must
      * always skip the first row and bind {@code limit + 1} to account for it.
+     * <p>
+     * The trailing {@code type_version} column is the event's {@code MessageType} version - not to
+     * be confused with the {@code version} column, which is the leading snapshot row's own version.
      *
      * <li>Parameter 1 {@code long}: maximum number of rows to query, excluding the leading {@code snap} row
      */
     private static final String EVENTS_READ_MULTIPLE =
         """
-        SELECT s.sort_index AS global_index, s.timestamp, NULL::varchar AS identifier, NULL::varchar AS type, s.payload, s.metadata, s.version, s.snapshot_position
+        SELECT s.sort_index AS global_index, s.timestamp, NULL::varchar AS identifier, NULL::varchar AS type, s.payload, s.metadata, s.version, s.snapshot_position, NULL::varchar AS type_version
           FROM snap s
         UNION ALL
-        SELECT e.global_index, e.timestamp, e.identifier, e.type, e.payload, e.metadata, NULL AS version, NULL::int8 AS snapshot_position
+        SELECT e.global_index, e.timestamp, e.identifier, e.type, e.payload, e.metadata, NULL AS version, NULL::int8 AS snapshot_position, e.type_version
           FROM events e
           WHERE e.global_index > (SELECT sort_index FROM snap)
         ORDER BY global_index
@@ -228,7 +238,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
           WHERE t.global_index > (SELECT sort_index FROM snap)
             AND (t.key, t.value) IN ({key-value-pairs})
           GROUP BY t.global_index
-          HAVING COUNT(DISTINCT t.key) = ?
+          HAVING COUNT(DISTINCT (t.key, t.value)) = ?
         """;
 
     /**
@@ -263,14 +273,15 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      *
      * <li>Parameter 1 {@code Instant}: the event timestamp
      * <li>Parameter 2 {@code String}: the event identifier
-     * <li>Parameter 3 {@code String}: the event type
-     * <li>Parameter 4 {@code byte[]}: the payload as a byte array
-     * <li>Parameter 5 {@code String}: the metadata in JSON format
+     * <li>Parameter 3 {@code String}: the event type's qualified name
+     * <li>Parameter 4 {@code String}: the event type's version
+     * <li>Parameter 5 {@code byte[]}: the payload as a byte array
+     * <li>Parameter 6 {@code String}: the metadata in JSON format
      */
     private static final String EVENTS_INSERT =
         """
-        INSERT INTO events (timestamp, identifier, type, payload, metadata)
-          VALUES (?, ?, ?, ?, ?::json)
+        INSERT INTO events (timestamp, identifier, type, type_version, payload, metadata)
+          VALUES (?, ?, ?, ?, ?, ?::json)
         """;
 
     /**
@@ -420,7 +431,12 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         this.transactionalExecutorProvider = new JdbcTransactionalExecutorProvider(dataSource);
         this.snapshotStore = new PostgresqlSnapshotStore(dataSource, converter);
 
-        PostgresqlSchemaInitializer.initialize(dataSource);
+        try {
+            PostgresqlSchemaInitializer.initialize(dataSource);
+        }
+        catch (SQLException e) {
+            throw new IllegalStateException("Could not initialize " + getClass().getSimpleName(), e);
+        }
 
         this.eventMonitor = new PostgresqlEventMonitor(dataSource);
         this.finalizer = new PostgresqlFinalizer(dataSource, eventMonitor::updateHighestKnownGlobalIndex);
@@ -440,13 +456,15 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      */
 
     @Override
-    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot) {
-        return snapshotStore.store(qualifiedName, identifier, snapshot);
+    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
+                                         @Nullable ProcessingContext context) {
+        return snapshotStore.store(qualifiedName, identifier, snapshot, context);
     }
 
     @Override
-    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier) {
-        return snapshotStore.load(qualifiedName, identifier);
+    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
+                                                      @Nullable ProcessingContext context) {
+        return snapshotStore.load(qualifiedName, identifier, context);
     }
 
     @Override
@@ -461,6 +479,8 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         ProcessingContext context,
         List<TaggedEventMessage<?>> events
     ) {
+        validateNoReservedTags(events);
+
         entitlementManager.claimMessage(PostgresAxoniqAddon.IDENTIFIER, EntitlementMessageType.EVENT, events.size());
 
         if (LOGGER.isDebugEnabled()) {
@@ -480,6 +500,26 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         });
     }
 
+    /**
+     * Rejects any event carrying a tag with the reserved {@link #TYPE_TAG_KEY key}, which is written
+     * automatically by the {@code axon_write_type_tag} database trigger and must never be supplied
+     * directly.
+     *
+     * @param events the events to validate, cannot be {@code null}
+     * @throws IllegalArgumentException if any event carries a tag using the reserved key
+     */
+    private static void validateNoReservedTags(List<TaggedEventMessage<?>> events) {
+        for (TaggedEventMessage<?> tem : events) {
+            for (Tag tag : tem.tags()) {
+                if (TYPE_TAG_KEY.equals(tag.key())) {
+                    throw new IllegalArgumentException(
+                        "Tag key \"" + TYPE_TAG_KEY + "\" is reserved for internal use and cannot be supplied explicitly"
+                    );
+                }
+            }
+        }
+    }
+
     // TODO #8 performance improvement possible here by avoiding a lot of back-and-forth with the server
     private boolean internalAppendEvents(Connection connection, AppendCondition condition, List<TaggedEventMessage<?>> events) throws SQLException {
         try (
@@ -495,9 +535,10 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
 
                 eventInsert.setTimestamp(1, Timestamp.from(message.timestamp()));
                 eventInsert.setString(2, message.identifier());
-                eventInsert.setString(3, message.type().toString());
-                eventInsert.setBytes(4, converter.convertPayload(message, byte[].class));
-                eventInsert.setString(5, MetadataSerializer.toJson(message.metadata()));
+                eventInsert.setString(3, message.type().qualifiedName().toString());
+                eventInsert.setString(4, message.type().version());
+                eventInsert.setBytes(5, converter.convertPayload(message, byte[].class));
+                eventInsert.setString(6, MetadataSerializer.toJson(message.metadata()));
                 eventInsert.execute();
 
                 try (ResultSet keys = eventInsert.getGeneratedKeys()) {
@@ -537,7 +578,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     }
 
     @Override
-    public MessageStream<EventMessage> source(SourcingCondition condition) {
+    public MessageStream<EventMessage> source(SourcingCondition condition, @Nullable ProcessingContext context) {
         Set<EventCriterion> criterions = condition.criteria().flatten();
 
         return DelayedMessageStream.create(
@@ -813,7 +854,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         long globalIndex = resultSet.getLong(1);
         Instant timestamp = resultSet.getTimestamp(2).toInstant();
         String identifier = resultSet.getString(3);
-        MessageType messageType = MessageType.fromString(resultSet.getString(4));
+        MessageType messageType = new MessageType(new QualifiedName(resultSet.getString(4)), resultSet.getString(9));
         byte[] payload = resultSet.getBytes(5);
         Map<String, String> metadata = MetadataSerializer.fromJson(resultSet.getString(6));
 

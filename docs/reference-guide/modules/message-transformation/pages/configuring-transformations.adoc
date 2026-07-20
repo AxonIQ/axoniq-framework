@@ -52,7 +52,7 @@ Both approaches do the same thing: they provide one `EventTransformerChain` comp
 Register no chain and the event store is left untouched.
 
 The chain is built once at startup and is immutable afterwards.
-The xref:message-transformation:demo.adoc[course catalog example] assembles a fuller chain the same way, adding a rename and more version hops alongside the drop shown here.
+The xref:message-transformation:demo.adoc[course catalog example] assembles a fuller chain the same way, adding a rename, a split, and more version hops alongside the drop shown here.
 
 [NOTE]
 .Transformation runs before interceptors
