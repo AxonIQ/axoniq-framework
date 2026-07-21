@@ -22,7 +22,7 @@
     <parent>
         <groupId>io.axoniq.framework.examples</groupId>
         <artifactId>axoniq-workflow-examples</artifactId>
-        <version>0.1.1-SNAPSHOT</version>
+        <version>0.2.0</version>
     </parent>
 
     <properties>
