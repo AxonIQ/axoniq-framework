@@ -202,7 +202,9 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                 result.whenComplete((r, e) -> {
                             timeoutTask.cancel();
                             workflowExecution.removeRunningStep(stepName);
-                            if (r != null) {
+                            if (e == null) {
+                                // Normal completion — a null action result sanitizes to an empty map in completed(),
+                                // so a null-returning action COMPLETES rather than wedging on a null-e dereference.
                                 workflowExecution.appendTask(i -> {
                                     // FIXME - This is where we should publish using an append condition
                                     completed(stepName, r, resultPayloadReducer.name(), eventNameCustomizer);

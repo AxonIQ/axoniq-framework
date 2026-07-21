@@ -159,7 +159,8 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                        workflowExecution,
                                                        unitOfWorkFactory,
                                                        eventSink,
-                                                       executorService);
+                                                       executorService,
+                                                       stepParent);
         this.payloadDelegate = new PayloadDelegate(workflowContext,
                                                    workflowExecution,
                                                    stepParent,
@@ -247,20 +248,30 @@ public class WorkflowContextDelegation implements WorkflowContext {
     }
 
     @Override
-    public void terminate(@Nonnull TerminatePrimitive.TerminateCommand command) {
-        if (command.isStepCancellation()) {
-            terminateDelegate.terminate(command);
-            return;
-        }
+    public void cancelWorkflow(@Nonnull TerminatePrimitive.CancelWorkflow command) {
         workflowExecution.state().throwTerminalCause();
-        terminateDelegate.terminate(new TerminatePrimitive.TerminateCommand(
-                command.error(),
+        terminateDelegate.cancelWorkflow(new TerminatePrimitive.CancelWorkflow(
                 command.cause(),
                 merge(workflowExecution.workflowConfiguration().eventNameCustomizer(),
                       command.eventNameCustomizer()),
-                workflowExecution.workflowName(),
-                null
+                workflowExecution.workflowName()
         ));
+    }
+
+    @Override
+    public void failWorkflow(@Nonnull TerminatePrimitive.FailWorkflow command) {
+        workflowExecution.state().throwTerminalCause();
+        terminateDelegate.failWorkflow(new TerminatePrimitive.FailWorkflow(
+                command.cause(),
+                merge(workflowExecution.workflowConfiguration().eventNameCustomizer(),
+                      command.eventNameCustomizer()),
+                workflowExecution.workflowName()
+        ));
+    }
+
+    @Override
+    public boolean cancelStep(@Nonnull TerminatePrimitive.CancelStep command) {
+        return terminateDelegate.cancelStep(command);
     }
 
     @Nonnull

@@ -76,7 +76,8 @@ class TerminateDelegateDriftTest {
         doCallRealMethod().when(workflowExecution).guardAgainstReplayDrift(anyString());
 
         delegate = new TerminateDelegate(
-                workflowContext, workflowExecution, unitOfWorkFactory, eventSink, executor
+                workflowContext, workflowExecution, unitOfWorkFactory, eventSink, executor,
+                DefaultEventNameCustomizer.Builder.defaults()
         );
     }
 
@@ -87,10 +88,10 @@ class TerminateDelegateDriftTest {
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
 
-        var cmd = TerminatePrimitive.TerminateCommand.fail(
-                new RuntimeException("oops"), DefaultEventNameCustomizer.Builder.defaults());
+        var cmd = new TerminatePrimitive.FailWorkflow(
+                new RuntimeException("oops"), DefaultEventNameCustomizer.Builder.defaults(), null);
 
-        assertThatThrownBy(() -> delegate.terminate(cmd))
+        assertThatThrownBy(() -> delegate.failWorkflow(cmd))
                 .isInstanceOf(WorkflowReplayDriftException.class)
                 .satisfies(ex -> {
                     var drift = (WorkflowReplayDriftException) ex;
@@ -106,10 +107,10 @@ class TerminateDelegateDriftTest {
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
 
-        var cmd = TerminatePrimitive.TerminateCommand.cancel(
-                null, DefaultEventNameCustomizer.Builder.defaults());
+        var cmd = new TerminatePrimitive.CancelWorkflow(
+                null, DefaultEventNameCustomizer.Builder.defaults(), null);
 
-        assertThatThrownBy(() -> delegate.terminate(cmd))
+        assertThatThrownBy(() -> delegate.cancelWorkflow(cmd))
                 .isInstanceOf(WorkflowReplayDriftException.class);
     }
 
@@ -120,10 +121,10 @@ class TerminateDelegateDriftTest {
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
 
-        var cmd = TerminatePrimitive.TerminateCommand.cancelledStep(
+        var cmd = new TerminatePrimitive.CancelStep(
                 "newCancelTarget", null, DefaultEventNameCustomizer.Builder.defaults());
 
-        assertThatThrownBy(() -> delegate.terminate(cmd))
+        assertThatThrownBy(() -> delegate.cancelStep(cmd))
                 .isInstanceOf(WorkflowReplayDriftException.class)
                 .satisfies(ex -> {
                     var drift = (WorkflowReplayDriftException) ex;
@@ -141,12 +142,12 @@ class TerminateDelegateDriftTest {
 
         // Workflow-level fail does eventually publish — we only assert no drift was thrown by
         // catching any non-drift throwable as "passes" for our purposes.
-        var cmd = TerminatePrimitive.TerminateCommand.fail(
-                new RuntimeException("expected"), DefaultEventNameCustomizer.Builder.defaults());
+        var cmd = new TerminatePrimitive.FailWorkflow(
+                new RuntimeException("expected"), DefaultEventNameCustomizer.Builder.defaults(), null);
 
         assertThatCode(() -> {
             try {
-                delegate.terminate(cmd);
+                delegate.failWorkflow(cmd);
             } catch (WorkflowReplayDriftException e) {
                 throw e;
             } catch (Throwable t) {

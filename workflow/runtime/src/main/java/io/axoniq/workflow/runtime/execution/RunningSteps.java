@@ -60,6 +60,16 @@ public class RunningSteps implements DescribableComponent {
     }
 
     /**
+     * Returns a snapshot of the names of the currently-running steps.
+     *
+     * @return a snapshot set of the running step names.
+     */
+    @Nonnull
+    public Set<String> stepNames() {
+        return new HashSet<>(runningFutures.keySet());
+    }
+
+    /**
      * Cancel and remove a running step.
      *
      * @param stepName              step name.

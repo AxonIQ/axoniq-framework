@@ -25,7 +25,10 @@ import org.axonframework.common.annotation.Internal;
 import java.util.Objects;
 
 /**
- * Primitive for programmatically terminating a workflow with either failure or cancellation.
+ * Primitive for programmatically terminating a workflow (cancellation or failure) or cancelling a single running step.
+ * <p>
+ * Each intent is carried by its own typed command record rather than a single field-sniffed command, so callers and
+ * implementations never have to inspect flags to discover what is being terminated.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -33,70 +36,102 @@ import java.util.Objects;
 public interface TerminatePrimitive {
 
     /**
-     * Terminate a step or entire workflow.
+     * Cancels the entire workflow, publishing the terminal {@code <workflow>:CANCELLED} event.
      *
-     * @param command termination command.
+     * @param command cancellation command.
      */
-    void terminate(@Nonnull TerminateCommand command);
+    void cancelWorkflow(@Nonnull CancelWorkflow command);
 
+    /**
+     * Fails the entire workflow, publishing the terminal {@code <workflow>:FAILED} event.
+     *
+     * @param command failure command.
+     */
+    void failWorkflow(@Nonnull FailWorkflow command);
+
+    /**
+     * Cancels a single running step, publishing its {@code <step>:CANCELLED} event while the workflow itself stays
+     * non-terminal. The {@code <step>:CANCELLED} record is authored directly on the control thread (guarded on the
+     * step still being non-terminal) before the step's future is torn down.
+     *
+     * @param command step cancellation command.
+     * @return {@code true} if the step was non-terminal and a {@code <step>:CANCELLED} record was published;
+     * {@code false} if the step was unknown or already terminal (nothing published).
+     */
+    boolean cancelStep(@Nonnull CancelStep command);
+
+    /**
+     * Command carrying the intent to cancel an entire workflow.
+     *
+     * @param cause                optional cancellation cause, or {@code null} if none.
+     * @param eventNameCustomizer  customizer for the published event names.
+     * @param workflowNameOverride optional override for the workflow name used on the published event, or {@code null}
+     *                             to use the execution's own name.
+     * @author Stefan Dragisic
+     * @since 1.0.0
+     */
     @Internal
-    record TerminateCommand(
-            boolean error,
+    record CancelWorkflow(
             @Nullable Throwable cause,
             @Nonnull EventNameCustomizer eventNameCustomizer,
-            @Nullable String workflowNameOverride,
-            @Nullable String stepName
+            @Nullable String workflowNameOverride
     ) {
 
-        public TerminateCommand {
+        /**
+         * Compact constructor validating the mandatory event name customizer.
+         */
+        public CancelWorkflow {
             Objects.requireNonNull(eventNameCustomizer, "EventNameCustomizer is required");
         }
+    }
+
+    /**
+     * Command carrying the intent to fail an entire workflow.
+     *
+     * @param cause                optional failure cause, or {@code null} if none.
+     * @param eventNameCustomizer  customizer for the published event names.
+     * @param workflowNameOverride optional override for the workflow name used on the published event, or {@code null}
+     *                             to use the execution's own name.
+     * @author Stefan Dragisic
+     * @since 1.0.0
+     */
+    @Internal
+    record FailWorkflow(
+            @Nullable Throwable cause,
+            @Nonnull EventNameCustomizer eventNameCustomizer,
+            @Nullable String workflowNameOverride
+    ) {
 
         /**
-         * Indicates whether this command targets a single step cancellation instead of whole-workflow termination.
-         *
-         * @return {@code true} when this command cancels a specific step, otherwise {@code false}
+         * Compact constructor validating the mandatory event name customizer.
          */
-        public boolean isStepCancellation() {
-            return stepName != null;
+        public FailWorkflow {
+            Objects.requireNonNull(eventNameCustomizer, "EventNameCustomizer is required");
         }
+    }
+
+    /**
+     * Command carrying the intent to cancel a single running step.
+     *
+     * @param stepName            logical name of the step to cancel.
+     * @param cause               optional cancellation cause, or {@code null} if none.
+     * @param eventNameCustomizer customizer for the published event names.
+     * @author Stefan Dragisic
+     * @since 1.0.0
+     */
+    @Internal
+    record CancelStep(
+            @Nonnull String stepName,
+            @Nullable Throwable cause,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) {
 
         /**
-         * Creates a workflow cancellation command.
-         *
-         * @param cause optional cancellation cause
-         * @param eventNameCustomizer customizer for published event names
-         * @return termination command representing workflow cancellation
+         * Compact constructor validating the mandatory step name and event name customizer.
          */
-        public static TerminateCommand cancel(@Nullable Throwable cause,
-                                              @Nonnull EventNameCustomizer eventNameCustomizer) {
-            return new TerminateCommand(false, cause, eventNameCustomizer, null, null);
-        }
-
-        /**
-         * Creates a workflow failure command.
-         *
-         * @param cause optional failure cause
-         * @param eventNameCustomizer customizer for published event names
-         * @return termination command representing workflow failure
-         */
-        public static TerminateCommand fail(@Nullable Throwable cause,
-                                            @Nonnull EventNameCustomizer eventNameCustomizer) {
-            return new TerminateCommand(true, cause, eventNameCustomizer, null, null);
-        }
-
-        /**
-         * Creates a cancellation command for a specific running step.
-         *
-         * @param stepName logical name of the step to cancel
-         * @param cause optional cancellation cause
-         * @param eventNameCustomizer customizer for published event names
-         * @return termination command representing step cancellation
-         */
-        public static TerminateCommand cancelledStep(@Nonnull String stepName,
-                                                     @Nullable Throwable cause,
-                                                     @Nonnull EventNameCustomizer eventNameCustomizer) {
-            return new TerminateCommand(false, cause, eventNameCustomizer, null, stepName);
+        public CancelStep {
+            Objects.requireNonNull(stepName, "Step name is required");
+            Objects.requireNonNull(eventNameCustomizer, "EventNameCustomizer is required");
         }
     }
 }

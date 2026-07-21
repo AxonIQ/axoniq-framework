@@ -200,26 +200,29 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
 
     @Override
     public void fail(@Nonnull FailWorkflowDefinition definition) {
-        delegate.terminate(
-                TerminateCommand.fail(
-                        definition.cause(),
-                        definition.primitiveMetadata().eventNameCustomizer()
-                )
-        );
+        delegate.failWorkflow(new FailWorkflow(
+                definition.cause(),
+                definition.primitiveMetadata().eventNameCustomizer(),
+                null
+        ));
     }
 
     @Override
     public void cancel(@Nonnull CancelWorkflowDefinition definition) {
-        delegate.terminate(TerminateCommand.cancel(definition.cause(),
-                                                   definition.primitiveMetadata().eventNameCustomizer()));
+        delegate.cancelWorkflow(new CancelWorkflow(
+                definition.cause(),
+                definition.primitiveMetadata().eventNameCustomizer(),
+                null
+        ));
     }
 
     @Override
     public void cancelStep(@Nonnull CancelStepDefinition definition) {
-        delegate.terminate(TerminateCommand.cancelledStep(definition.primitiveMetadata().stepName(),
-                                                          definition.cause(),
-                                                          definition.primitiveMetadata().eventNameCustomizer())
-        );
+        delegate.cancelStep(new CancelStep(
+                definition.primitiveMetadata().stepName(),
+                definition.cause(),
+                definition.primitiveMetadata().eventNameCustomizer()
+        ));
     }
 
 
@@ -245,8 +248,18 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     }
 
     @Override
-    public void terminate(@Nonnull TerminateCommand command) {
-        delegate.terminate(command);
+    public void cancelWorkflow(@Nonnull CancelWorkflow command) {
+        delegate.cancelWorkflow(command);
+    }
+
+    @Override
+    public void failWorkflow(@Nonnull FailWorkflow command) {
+        delegate.failWorkflow(command);
+    }
+
+    @Override
+    public boolean cancelStep(@Nonnull CancelStep command) {
+        return delegate.cancelStep(command);
     }
 
 

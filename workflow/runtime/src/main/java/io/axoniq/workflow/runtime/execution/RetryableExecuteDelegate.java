@@ -37,6 +37,7 @@ import org.axonframework.messaging.eventhandling.EventSink;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
 /**
@@ -188,22 +189,32 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
                 : Duration.between(Instant.now(clock), retryReadyAt);
 
         if (delay.isNegative() || delay.isZero()) {
-            // No backoff or already elapsed (crash recovery) — launch on next task cycle
-            workflowExecution.appendTask(i -> {
-                if (!i.state().getStep(stepName).status().isTerminal()) {
+            // No backoff or already elapsed (crash recovery). Park the (near-instant) retry gap on a cancellable
+            // future, exactly like the delayed branch below, so a step cancellation or a whole-workflow terminal
+            // interrupt completes it exceptionally (the parked-step registration deregisters it) instead of launching
+            // the next attempt. The launch is fired by the future's normal completion and is additionally gated on the
+            // workflow not being terminal (a cheap defensive guard).
+            var gapFuture = new CompletableFuture<Void>();
+            gapFuture.thenRun(() -> workflowExecution.appendTask(i -> {
+                if (!i.state().getStep(stepName).status().isTerminal()
+                        && !i.state().workflowStatus().isTerminal()) {
                     launchWithRetry(command, nextAttempt);
                 }
+            }));
+            registerParkedStep(stepName, gapFuture, command.eventNameCustomizer(), () -> {
             });
+            workflowExecution.appendTask(i -> gapFuture.complete(null));
         } else {
             // The scheduled task is a pure timer tick; the backoff window itself is the step's parked phase. The
-            // timer firing completes the future normally and launches the next attempt. Anything that ends the parked
-            // phase exceptionally (a step cancellation, an engine shutdown interrupt) makes the later tick a no-op,
-            // so a doomed attempt can never launch; what the ending means for the step is decided by the parked-step
-            // registration, not here.
+            // timer firing completes the future normally and launches the next attempt, gated on neither the step nor
+            // the workflow being terminal. Anything that ends the parked phase exceptionally (a step cancellation, an
+            // engine shutdown interrupt, a whole-workflow terminal interrupt) makes the later tick a no-op, so a
+            // doomed attempt can never launch.
             var backoffFuture = timeoutScheduler.schedule(retryReadyAt, () -> {
             }).completion();
             backoffFuture.thenRun(() -> workflowExecution.appendTask(i -> {
-                if (!i.state().getStep(stepName).status().isTerminal()) {
+                if (!i.state().getStep(stepName).status().isTerminal()
+                        && !i.state().workflowStatus().isTerminal()) {
                     launchWithRetry(command, nextAttempt);
                 }
             }));

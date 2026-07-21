@@ -143,27 +143,100 @@ public interface WorkflowExecution extends DescribableComponent {
     void removeRunningStep(@Nonnull String stepName);
 
     /**
-     * Cancel a running step.
+     * Cancels a running step by completing its registered future exceptionally with the given cause. The owning step
+     * executor's completion handler then publishes the {@code <step>:CANCELLED} record through its guarded publish path
+     * and runs its own cleanup; nothing is published directly here.
      *
      * @param stepName name of the step.
-     * @param cause    optional cause of the cancellation.
+     * @param cause    optional cause of the cancellation, or {@code null} if none.
+     * @return {@code true} if a running future was registered for the step and was completed by this call;
+     * {@code false} if no running future was registered.
      */
-    void cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause);
+    boolean cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause);
 
     /**
-     * Cancel all running steps.
+     * Cooperatively cancels a single running step from the workflow's own control thread (the in-body twin of
+     * {@link #requestStepCancellation(String, Throwable)}).
+     * <p>
+     * Unlike {@link #requestStepCancellation(String, Throwable)}, this completes the step's future and then
+     * <b>awaits</b> the durable {@code <step>:CANCELLED} record (the caller is already the control thread), so the
+     * record is durable before the caller proceeds — it cannot be lost to a subsequent whole-workflow terminal
+     * discarding the queue. The record itself is published by the owning step executor's completion handler, not
+     * authored here. Used by {@code WorkflowStepResult.cancel()}.
      *
-     * @param cause optional cause of the cancellation.
+     * @param stepName name of the step to cancel.
+     * @param cause    optional cause of the cancellation, or {@code null} if none.
+     * @return {@code true} if the step was non-terminal and a {@code <step>:CANCELLED} record was published;
+     * {@code false} if the step was unknown or already terminal.
      */
-    void cancelAllRunningSteps(@Nullable Throwable cause);
+    boolean cancelStep(@Nonnull String stepName, @Nullable Throwable cause);
+
+    /**
+     * Requests cooperative cancellation of a single running step from any thread.
+     * <p>
+     * Mirrors {@link #requestWorkflowCancellation(Throwable)}: the cancellation is enqueued as a task onto the
+     * workflow's control thread — the single consumer of the task queue — so the caller never drives workflow logic
+     * directly. When the task runs it tears the step's future down; the owning step executor's completion handler
+     * then records the step {@code <step>:CANCELLED} through its guarded publish path (a step already terminal is
+     * skipped). The workflow itself stays alive so its body can catch the resulting
+     * {@link io.axoniq.workflow.runtime.api.execution.state.StepCancellationException} and compensate.
+     * <p>
+     * The returned boolean reflects the step's status at request time: {@code true} when the step exists and is
+     * non-terminal (a cancellation was enqueued), {@code false} when the step is unknown or already terminal (nothing
+     * enqueued).
+     *
+     * @param stepName name of the step to cancel.
+     * @param cause    optional cause of the cancellation, or {@code null} if none.
+     * @return {@code true} if the step was non-terminal and a cancellation was enqueued; {@code false} otherwise.
+     */
+    boolean requestStepCancellation(@Nonnull String stepName, @Nullable Throwable cause);
+
+    /**
+     * Requests cooperative cancellation of every currently-running step of this workflow from any thread, leaving the
+     * workflow itself alive.
+     * <p>
+     * Mirrors {@link #requestStepCancellation(String, Throwable)} applied to each running step: the work is enqueued
+     * onto the control thread and each non-terminal running step is recorded {@code <step>:CANCELLED}. Cancellation is
+     * cooperative — each cancelled step raises a
+     * {@link io.axoniq.workflow.runtime.api.execution.state.StepCancellationException} into the workflow body; an
+     * uncaught exception propagates and leaves the workflow wedged non-terminal (the documented caller
+     * responsibility).
+     *
+     * @param cause optional cause of the cancellation, or {@code null} if none.
+     * @return the number of currently-running steps for which a cancellation was enqueued.
+     */
+    int requestAllRunningStepsCancellation(@Nullable Throwable cause);
+
+    /**
+     * Whole-workflow terminal teardown. Interrupts every still-running step future with a
+     * non-cancellation cause — so the step-completion handlers publish no per-step terminal event and merely
+     * deregister — and discards every queued task so a queued retry-failure/launch task never runs. Running steps are
+     * left in their last recorded state in the event log; the caller publishes the single workflow-level terminal
+     * event afterwards. Must be invoked on the workflow control thread, before publishing the terminal event.
+     */
+    void interruptStepsAndDiscardQueue();
+
+    /**
+     * Requests cooperative cancellation of this workflow from any thread.
+     * <p>
+     * The request is enqueued as a task onto the workflow's control thread — the single consumer of the task queue —
+     * so the caller never drives workflow logic directly (this reuses the control-thread-safe cancellation).
+     * Once the task runs it cancels any running steps and drives the workflow to a durable {@code CANCELLED}
+     * terminal state through the same path a workflow-level cancellation takes. It does not block on completion; the
+     * durable {@code <workflow>:CANCELLED} event is committed asynchronously by the control thread.
+     *
+     * @param cause optional cause of the cancellation, or {@code null} if none.
+     */
+    void requestWorkflowCancellation(@Nullable Throwable cause);
 
     /**
      * Interrupt all running steps without producing any step/workflow cancellation events. Unlike
-     * {@link #cancelAllRunningSteps(Throwable)}, this method is for abrupt process-level teardown (e.g. an engine
-     * shutdown lifecycle hook): it completes in-flight step futures with a non-cancellation failure so the running
-     * step is removed from bookkeeping and no {@code <Step>Cancelled} event is published. The workflow's state in the
-     * event store is left at its most recent {@code <Step>Started} entry so the step can resume on the next app
-     * start. Safe to call from any thread.
+     * {@link #interruptStepsAndDiscardQueue()} (a whole-workflow terminal teardown), this method is for abrupt
+     * process-level teardown (e.g. an engine shutdown lifecycle hook): it completes in-flight step futures with a
+     * non-cancellation failure so the running step is removed from bookkeeping and no {@code <Step>Cancelled} event is
+     * published, and it unblocks the parked control thread. The workflow's state in the event store is left at its
+     * most recent {@code <Step>Started} entry so the step can resume on the next app start. Safe to call from any
+     * thread.
      */
     void interrupt();
 

@@ -24,13 +24,13 @@ A workflow is always in one of these states:
 
 |`COMPLETED`
 |The workflow method returned normally—all work is done.
-Any async steps (started via `execute(...)` without a follow-up `await()`) that are still running are cancelled before the workflow transitions to `COMPLETED`.
+Any async steps (started via `execute(...)` without a follow-up `await()`) that are still running are *interrupted* when the workflow transitions to `COMPLETED`—no per-step terminal event is published, so they remain in their last recorded (`STARTED`) state in the log.
 
 |`FAILED`
 |The workflow was explicitly failed via `ctx.fail()`.
 
 |`CANCELLED`
-|The workflow was cancelled via `ctx.cancel()` or `execution.cancel()`.
+|The workflow was cancelled via `ctx.cancel()` (from inside the workflow) or externally via the `WorkflowManager` API.
 
 |`TIMED_OUT`
 |The workflow exceeded its overall timeout.
@@ -98,7 +98,7 @@ Both terminate the workflow, but they signal different intent and are called fro
 |Inside the workflow
 |The workflow detected an error and cannot continue. Called from your workflow code.
 
-|`ctx.cancel()` / `ctx.cancel("reason")` / `execution.cancel("reason")`
+|`ctx.cancel()` / `ctx.cancel("reason")` (inside) or `workflowManager.cancel(query, reason)` (outside)
 |`CANCELLED`
 |Inside or outside the workflow
 |The workflow should stop gracefully, either by workflow logic or by an external action (user, admin, API).
@@ -108,7 +108,7 @@ Both terminate the workflow, but they signal different intent and are called fro
 
 Use `fail` inside your workflow code when the business logic determines the workflow should stop.
 
-If the workflow has running steps (for example, parallel steps started with `execute`), `fail` cancels all of them first, producing cancellation events for each, before publishing the workflow failure event:
+If the workflow has running steps (for example, parallel steps started with `execute`), `fail` *interrupts* all of them—no per-step terminal event is published—and then publishes only the workflow failure event. The interrupted steps stay in their last recorded (`STARTED`) state in the log:
 
 [source,java]
 ----
@@ -129,26 +129,25 @@ if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
     ctx.fail(new RuntimeException("Stock unavailable")); // <1>
 }
 ----
-<.> Cancels `shipOrder` and `notifyCustomer` first, then terminates the workflow with FAILED status.
+<.> Interrupts `shipOrder` and `notifyCustomer` (no per-step event), then terminates the workflow with FAILED status.
 
 ++++
 <!-- vale off -->
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="ctx.fail()">
-1 cancelled ShipOrderCancelled {"type": "...WorkflowFailedException", "message": "Stock unavailable"}
-2 cancelled NotifyCustomerCancelled {"type": "...WorkflowFailedException", "message": "Stock unavailable"}
-3 failed OrderFulfillmentWorkflow#ExecuteFailed {"type": "java.lang.RuntimeException", "message": "Stock unavailable"}
+1 failed OrderFulfillmentWorkflow#ExecuteFailed {"type": "java.lang.RuntimeException", "message": "Stock unavailable"}
   </div>
 </div>
 <!-- vale on -->
 ++++
 
-Running steps are cancelled first—each CANCELLED event carries the reason as a `WorkflowFailedException`. Then the workflow itself is terminated with a FAILED event that records the original exception's class and message (`RuntimeException` in this case), not the wrapper.
+Running steps are *interrupted*, not individually cancelled—no per-step `CANCELLED` event is published, and each interrupted step stays in its last recorded (`STARTED`) state. Only the workflow itself is terminated, with a FAILED event that records the original exception's class and message (`RuntimeException` in this case), not the wrapper. If you need a running step to record a terminal outcome and run compensation, cancel it individually with `ctx.cancelStep(...)` or `WorkflowManager.cancelStep(...)` before failing the workflow.
 
 === `cancel`—external termination
 
-Use `cancel` from outside the workflow—for example, when a user or API wants to stop a running workflow.
-Like `fail`, `cancel` first cancels all running steps, then terminates the workflow.
+Use the `WorkflowManager` API from outside the workflow—for example, when a user or API wants to stop a running workflow.
+Like `fail`, cancellation *interrupts* running steps (no per-step event) and then terminates the workflow with a single workflow-level event.
+External cancellation is *cooperative* and *asynchronous*: it is enqueued onto the workflow's own control thread (never driven from the caller thread) and the call returns immediately without blocking on the workflow reaching its terminal state.
 
 Given a workflow with parallel steps running:
 
@@ -164,34 +163,35 @@ var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
                                 step -> step.timeout(Duration.ofMinutes(1)));
 ----
 
-An external caller cancels the workflow while those steps are still running:
+An external caller cancels the workflow while those steps are still running, using the `WorkflowManager` API (resolve it from the configuration as a registered component):
 
 [source,java]
 ----
-var execution = workflowExecutionRepository.findById(workflowId);
-execution.cancel("Cancelled by user");
+WorkflowManager workflowManager = configuration.getComponent(WorkflowManager.class);
+workflowManager.cancel(new WorkflowQuery.ById(workflowId),
+                       CancellationReason.of("Cancelled by user"));
 ----
+
+`WorkflowManager.cancel` also accepts a `WorkflowQuery.ByPredicate(Predicate<WorkflowState>)` to cancel every non-terminal instance whose state matches a predicate, and returns a `CancellationResult` with the matched/cancelled counts and the cancelled workflow ids.
 
 ++++
 <!-- vale off -->
 <div class="et-player" data-autoplay>
-  <div class="et-src" data-title="execution.cancel()">
-1 cancelled ShipOrderCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
-2 cancelled NotifyCustomerCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
-3 cancelled OrderFulfillmentWorkflow#ExecuteCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
+  <div class="et-src" data-title="workflowManager.cancel()">
+1 cancelled OrderFulfillmentWorkflow#ExecuteCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
   </div>
 </div>
 <!-- vale on -->
 ++++
 
-All running steps are cancelled first, then the workflow itself is terminated with a CANCELLED event (not FAILED).
+Running steps are *interrupted*, not individually cancelled—no per-step `CANCELLED` event is published, and each interrupted step stays in its last recorded (`STARTED`) state. Only the workflow itself is terminated, with a CANCELLED event (not FAILED). To record a terminal outcome and run compensation for a specific step, cancel it individually with `WorkflowManager.cancelStep(...)` (see xref:step-orchestration.adoc[]).
 
 [[complete-with-running-steps]]
 === Normal completion with running steps
 
-The same "cancel first, terminate after" rule applies when the workflow method simply returns while async steps are still running.
+The same "interrupt, then terminate" rule applies when the workflow method simply returns while async steps are still running.
 A step started with `execute(...)` and never awaited keeps running in the background.
-When your workflow body returns, the engine cancels any such step and waits for its `CANCELLED` event to be written **before** publishing the `CompletedWorkflow` event:
+When your workflow body returns, the engine *interrupts* any such step—no per-step event is published—and then publishes the `CompletedWorkflow` event; the interrupted step remains in its last recorded (`STARTED`) state:
 
 [source,java]
 ----
@@ -208,13 +208,13 @@ public void execute(SimpleWorkflowContext ctx) {
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="normal completion">
-1 cancelled SendReceiptCancelled {"reason": "StepCancellationException: Workflow completed"}
-2 completed OrderFulfillmentWorkflow#ExecuteCompleted {}
+1 completed OrderFulfillmentWorkflow#ExecuteCompleted {}
   </div>
 </div>
 ++++
 
-This guarantees that every started step has a terminal event in the log—no silent losses from a step that would have failed after the workflow had already completed.
+The workflow terminal is a single workflow-level event; a step left running is interrupted, not driven to a terminal state. If you need a started step to reach a terminal state (for example to trigger compensation), await it or cancel it individually before the workflow completes.
+Interrupting a step only completes its future; it does not force-interrupt a user `execute` action already running on the executor. That action runs to completion and its late result is simply discarded.
 
 [TIP]
 ====

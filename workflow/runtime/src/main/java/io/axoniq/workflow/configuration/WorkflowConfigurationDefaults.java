@@ -22,7 +22,9 @@ import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.management.WorkflowManager;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
+import io.axoniq.workflow.runtime.execution.DefaultWorkflowManager;
 import io.axoniq.workflow.runtime.execution.DefaultExecuteStepActionResolver;
 import io.axoniq.workflow.runtime.execution.DefaultWorkflowScheduler;
 import io.axoniq.workflow.runtime.execution.ExecuteStepActionResolver;
@@ -124,6 +126,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowConfigurationRegistry(componentRegistry);
         registerSafePointStore(componentRegistry);
         registerWorkflowEngine(componentRegistry);
+        registerWorkflowManager(componentRegistry);
         registerWorkflowHistoryProjector(componentRegistry);
         registerWorkflowStateParameterResolverFactory(componentRegistry);
     }
@@ -170,6 +173,13 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                 cfg.getComponent(SafePointStore.class, COMPONENT_SAFE_POINT_STORE)
                         ))
                         .onShutdown(Phase.INBOUND_EVENT_CONNECTORS, WorkflowEngine::shutdown)
+        );
+    }
+
+    void registerWorkflowManager(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(
+                WorkflowManager.class,
+                cfg -> new DefaultWorkflowManager(cfg.getComponent(WorkflowExecutionRepository.class))
         );
     }
 

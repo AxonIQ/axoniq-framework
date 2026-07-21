@@ -19,7 +19,7 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive.TerminateCommand;
+import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive.FailWorkflow;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
@@ -43,7 +43,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.isA;
 
 /**
  * @author Stefan Dragisic
@@ -95,29 +94,31 @@ class TerminateDelegateFailTest {
                 workflowExecution,
                 unitOfWorkFactory,
                 eventSink,
-                executor
+                executor,
+                defaults()
         );
     }
 
     @Test
-    void terminateFailCancelsAllRunningSteps() {
-        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.fail(new RuntimeException("boom"), eventNameCustomizer)))
+    void terminateFailInterruptsRunningStepsWithoutPerStepEvent() {
+        assertThatThrownBy(() -> delegate.failWorkflow(new FailWorkflow(new RuntimeException("boom"), eventNameCustomizer, null)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        verify(workflowExecution).cancelAllRunningSteps(isA(WorkflowFailedException.class));
+        // Whole-workflow fail interrupts running steps + discards the queue; no per-step cancellation is published.
+        verify(workflowExecution).interruptStepsAndDiscardQueue();
     }
 
     @Test
-    void terminateFailWithNullCausePassesWorkflowFailedExceptionToSteps() {
-        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.fail(null, eventNameCustomizer)))
+    void terminateFailWithNullCauseInterruptsRunningSteps() {
+        assertThatThrownBy(() -> delegate.failWorkflow(new FailWorkflow(null, eventNameCustomizer, null)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        verify(workflowExecution).cancelAllRunningSteps(isA(WorkflowFailedException.class));
+        verify(workflowExecution).interruptStepsAndDiscardQueue();
     }
 
     @Test
     void terminateFailPublishesFailedWorkflowEvent() {
-        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.fail(new RuntimeException("boom"), eventNameCustomizer)))
+        assertThatThrownBy(() -> delegate.failWorkflow(new FailWorkflow(new RuntimeException("boom"), eventNameCustomizer, null)))
                 .isInstanceOf(WorkflowFailedException.class);
 
         verify(eventSink).publish(eq(processingContext), any(EventMessage.class));
@@ -127,14 +128,14 @@ class TerminateDelegateFailTest {
     void terminateFailThrowsWorkflowFailedExceptionWithCause() {
         var cause = new RuntimeException("boom");
 
-        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.fail(cause, eventNameCustomizer)))
+        assertThatThrownBy(() -> delegate.failWorkflow(new FailWorkflow(cause, eventNameCustomizer, null)))
                 .isInstanceOf(WorkflowFailedException.class)
                 .hasCause(cause);
     }
 
     @Test
     void terminateFailWithNullCauseThrowsWorkflowFailedExceptionWithMessage() {
-        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.fail(null, eventNameCustomizer)))
+        assertThatThrownBy(() -> delegate.failWorkflow(new FailWorkflow(null, eventNameCustomizer, null)))
                 .isInstanceOf(WorkflowFailedException.class)
                 .hasRootCauseMessage("Workflow failed");
     }
@@ -144,10 +145,10 @@ class TerminateDelegateFailTest {
         var cause = new RuntimeException("boom");
         var order = inOrder(workflowExecution, eventSink);
 
-        assertThatThrownBy(() -> delegate.terminate(TerminateCommand.fail(cause, eventNameCustomizer)))
+        assertThatThrownBy(() -> delegate.failWorkflow(new FailWorkflow(cause, eventNameCustomizer, null)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        order.verify(workflowExecution).cancelAllRunningSteps(any());
+        order.verify(workflowExecution).interruptStepsAndDiscardQueue();
         order.verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
     }
 
@@ -159,8 +160,8 @@ class TerminateDelegateFailTest {
         when(workflowExecution.state()).thenReturn(state);
 
         var cause = new RuntimeException("boom");
-        assertThatThrownBy(() -> delegate.terminate(
-                new TerminateCommand(true, cause, eventNameCustomizer, "test-workflow", null)))
+        assertThatThrownBy(() -> delegate.failWorkflow(
+                new FailWorkflow(cause, eventNameCustomizer, "test-workflow")))
                 .isInstanceOf(WorkflowFailedException.class);
 
         state.evolve(EventMessageUtils.failedWorkflow(workflowContext, "test-workflow", cause, eventNameCustomizer), processingContext);

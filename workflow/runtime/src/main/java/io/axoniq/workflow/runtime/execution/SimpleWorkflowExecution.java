@@ -27,7 +27,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
-import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
@@ -40,7 +39,6 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -219,10 +217,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         definition.accept(this.contextDelegate.typedWorkflowContext());
 
         if (!this.state().workflowStatus().isTerminal()) {
-            // Cancel any async steps still running so their CANCELLED events land
-            // while the workflow is still non-terminal (sendStepEvent rejects events
-            // once the workflow reaches a terminal state).
-            cancelAllRunningSteps(new StepCancellationException("Workflow completed"));
+            // Whole-workflow terminal: publish only the workflow-level terminal event. Any async steps
+            // still running are interrupted (no per-step terminal event) and the task queue is discarded before the
+            // terminal event is published, so a queued retry-failure/launch task can never run. Running steps are
+            // left in their last recorded (STARTED) state — single-step cancel is the way to get a step terminal.
+            interruptStepsAndDiscardQueue();
 
             sendWorkflowEvent(
                     completedWorkflow(this.workflowContext(),
@@ -250,9 +249,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
             case WorkflowFailedException wfe -> {
                 // if Events are already sent by TerminateDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
-                    // Mirror the completion path: cancel running async steps so their
-                    // terminal events land before the workflow itself becomes terminal.
-                    cancelAllRunningSteps(wfe);
+                    // Whole-workflow terminal: interrupt running steps (no per-step terminal event) and
+                    // discard the queue, then publish only the workflow-level FAILED event.
+                    interruptStepsAndDiscardQueue();
                     sendWorkflowEvent(failedWorkflow(
                                               this.workflowContext(),
                                               workflowName,
@@ -269,7 +268,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
             case WorkflowCancelledException wce -> {
                 // if Events are already sent by TerminateDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
-                    cancelAllRunningSteps(wce);
+                    // Whole-workflow terminal: interrupt running steps (no per-step terminal event) and
+                    // discard the queue, then publish only the workflow-level CANCELLED event.
+                    interruptStepsAndDiscardQueue();
                     sendWorkflowEvent(
                             cancelledWorkflow(this.workflowContext(),
                                               workflowName,
@@ -285,7 +286,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
             }
             case TimeoutException te -> {
                 if (!this.state().workflowStatus().isTerminal()) {
-                    cancelAllRunningSteps(new StepCancellationException("Workflow timed out"));
+                    // Whole-workflow terminal: interrupt running steps (no per-step terminal event) and
+                    // discard the queue, then publish only the workflow-level TIMED_OUT event.
+                    interruptStepsAndDiscardQueue();
                     sendWorkflowEvent(timeoutWorkflow(
                                               this.workflowContext(),
                                               workflowName,
@@ -389,81 +392,104 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
     @Override
-    public void cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause) {
-        runningSteps.cancelWithCause(stepName, cause);
-    }
-
-    /**
-     * Cancels the workflow.
-     * FIXME as part of https://github.com/AxonIQ/extension-workflow/issues/195
-     */
-    public void cancel() {
-        workflowContext().terminate(
-                TerminatePrimitive.TerminateCommand.cancel(null, DefaultEventNameCustomizer.Builder.defaults())
-        );
-    }
-
-    /**
-     * Cancels the workflow with the given reason.
-     * FIXME as part of https://github.com/AxonIQ/extension-workflow/issues/195
-     *
-     * @param reason reason for cancellation
-     */
-    public void cancel(@NonNull String reason) {
-        workflowContext().terminate(
-                TerminatePrimitive.TerminateCommand.cancel(new WorkflowCancelledException(reason),
-                                                           DefaultEventNameCustomizer.Builder.defaults())
-        );
-    }
-
-    /**
-     * Cancels the workflow with the given cause.
-     * FIXME as part of https://github.com/AxonIQ/extension-workflow/issues/195
-     *
-     * @param cause reason for cancellation
-     */
-    public void cancel(@NonNull Throwable cause) {
-        workflowContext().terminate(
-                TerminatePrimitive.TerminateCommand.cancel(cause,
-                                                           DefaultEventNameCustomizer.Builder.defaults()));
+    public boolean cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause) {
+        return runningSteps.cancelWithCause(stepName, cause);
     }
 
     @Override
-    public void cancelAllRunningSteps(@Nullable Throwable cause) {
-        runningSteps.cancelAll(cause, cancelledSteps -> {
-            if (cancelledSteps.isEmpty()) {
+    public boolean cancelStep(@Nonnull String stepName, @Nullable Throwable cause) {
+        // In-body single-step cancel: complete the step's future on the control thread and await the durable
+        // <step>:CANCELLED record (published by the owning executor's handler) so it is durable before the body
+        // proceeds.
+        return contextDelegate.cancelStep(new TerminatePrimitive.CancelStep(
+                stepName, cause, workflowConfiguration.eventNameCustomizer()));
+    }
+
+    @Override
+    public boolean requestStepCancellation(@Nonnull String stepName, @Nullable Throwable cause) {
+        // Enqueue-only external single-step cancel (mirrors requestWorkflowCancellation): the control thread is the
+        // single consumer, so we never pump the queue from the caller thread. The boolean reflects the step's status
+        // at request time; the enqueued task re-checks non-terminal on the control thread before publishing.
+        if (!state().containsStep(stepName) || state().getStep(stepName).status().isTerminal()) {
+            return false;
+        }
+        appendTask(i -> contextDelegate.cancelStep(new TerminatePrimitive.CancelStep(
+                stepName, cause, workflowConfiguration.eventNameCustomizer())));
+        return true;
+    }
+
+    @Override
+    public int requestAllRunningStepsCancellation(@Nullable Throwable cause) {
+        // Cooperative cancel of every currently-running step (the workflow stays alive): snapshot the running step
+        // names now and enqueue one control-thread task that single-step-cancels each still-running step. Returns the
+        // count of steps for which a cancellation was enqueued.
+        var stepNames = runningSteps.stepNames();
+        if (stepNames.isEmpty()) {
+            return 0;
+        }
+        appendTask(i -> {
+            for (var stepName : stepNames) {
+                contextDelegate.cancelStep(new TerminatePrimitive.CancelStep(
+                        stepName, cause, workflowConfiguration.eventNameCustomizer()));
+            }
+        });
+        return stepNames.size();
+    }
+
+    @Override
+    public void requestWorkflowCancellation(@Nullable Throwable cause) {
+        // Enqueue only: the control thread is the single consumer of the task queue, so we never pump the queue from
+        // the caller thread (reuses the control-thread-safe cancellation). When the task runs it drives the
+        // whole-workflow terminal: interrupt any running steps (no per-step terminal event), discard the
+        // queue, publish only the durable <workflow>:CANCELLED event, then unblock the parked body thread so it
+        // unwinds and exits — its step await() loop never observes a step terminal now that whole-workflow cancel
+        // publishes no per-step event.
+        appendTask(i -> {
+            if (state().workflowStatus().isTerminal()) {
                 return;
             }
-            Predicate<WorkflowState> allTerminal = workflowState -> cancelledSteps
-                    .stream()
-                    .allMatch(stepName -> workflowState.containsStep(stepName)
-                            && workflowState.getStep(stepName).status().isTerminal());
-            // If every cancelled step is already terminal (e.g., the future had already
-            // completed before we requested cancellation), there are no pending tasks
-            // to wait for — awaitStateChange would block on an empty task queue.
-            if (allTerminal.test(this.state())) {
-                return;
+            // Do not double-wrap: an operator reason arrives as a WorkflowCancelledException whose message already is
+            // that reason, so reuse it as-is and keep the reason the top-level message. Only a foreign cause is wrapped.
+            WorkflowCancelledException wce;
+            if (cause instanceof WorkflowCancelledException already) {
+                wce = already;
+            } else if (cause != null) {
+                wce = new WorkflowCancelledException("Workflow cancelled externally", cause);
+            } else {
+                wce = new WorkflowCancelledException("Workflow cancelled externally");
             }
+            interruptStepsAndDiscardQueue();
+            sendWorkflowEvent(
+                    cancelledWorkflow(workflowContext(), workflowName, wce,
+                                      workflowConfiguration.eventNameCustomizer()),
+                    processingContext()
+            ).join();
             try {
-                awaitStateChange(allTerminal);
+                awaitStateChange(s -> s.workflowStatus().isTerminal());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
+            // Unblock the workflow driver thread parked on taskQueue.take() inside a step's await() loop: it sets the
+            // driver thread's interrupt flag; the next taskQueue.take() observes it and throws InterruptedException,
+            // propagating up so the (already-terminal) driver thread exits cleanly.
+            taskQueue.offer(x -> Thread.currentThread().interrupt());
         });
-        drainPendingTasks();
     }
 
     /**
-     * Processes all queued tasks so that pending step events are published before a terminal workflow event.
+     * {@inheritDoc}
+     * <p>
+     * Interrupts every still-running step future with a non-cancellation cause so the step-completion handlers publish
+     * no per-step terminal event ({@link AbstractStepExecutor#isCancellation} is false — they merely deregister), then
+     * discards every queued task so a queued retry-failure/launch task never runs. Running steps are left in their
+     * last recorded (STARTED) state in the event log; callers publish the single {@code <workflow>:<terminal>} event
+     * afterwards.
      */
-    private void drainPendingTasks() {
-        while (!hasTasks()) {
-            var task = getNextTask();
-            if (task == null) {
-                return;
-            }
-            task.accept(this);
-        }
+    @Override
+    public void interruptStepsAndDiscardQueue() {
+        runningSteps.cancelAll(new InterruptedException("Workflow reached terminal state"), cancelled -> {
+        });
+        this.taskQueue.clear();
     }
 
     @Override

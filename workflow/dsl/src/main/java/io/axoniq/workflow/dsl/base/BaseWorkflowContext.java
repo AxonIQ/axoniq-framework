@@ -33,6 +33,7 @@ import io.axoniq.workflow.runtime.api.execution.context.VersionStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
+import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.payload.PayloadModification;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
@@ -326,6 +327,12 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
     ) {
         var result = super.waitForEvent(apply(defaultWaitForStepDefinition(stepName, EventConditions.never()),
                                               customizer));
+        // A cancelled sleep must surface, symmetric with awaitExecute/awaitEvent — otherwise a cancellation is
+        // silently swallowed and the body sails past the sleep as if the delay had simply elapsed.
+        if (result.canceled()) {
+            throw new StepCancellationException("Step '" + stepName + "' was cancelled before completing");
+        }
+        // A timed-out sleep is the normal, expected completion of a sleep — return without throwing.
         if (result.failure() && result.error().isPresent()) {
             throw result.error().get();
         }

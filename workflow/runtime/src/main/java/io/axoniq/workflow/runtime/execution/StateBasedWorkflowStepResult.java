@@ -144,11 +144,11 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     @Override
     public void cancel() {
-        workflowExecution.cancelRunningStep(stepName, new StepCancellationException("Step cancelled"));
+        workflowExecution.cancelStep(stepName, new StepCancellationException("Step cancelled"));
     }
 
     @Override
     public void cancel(@Nonnull String reason) {
-        workflowExecution.cancelRunningStep(stepName, new StepCancellationException(reason));
+        workflowExecution.cancelStep(stepName, new StepCancellationException(reason));
     }
 }

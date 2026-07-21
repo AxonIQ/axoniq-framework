@@ -20,6 +20,8 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.workflow.runtime.api.management.WorkflowManager;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -43,6 +45,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 
 import static io.axoniq.workflow.runtime.util.ProcessingContextUtils.RESTART_TOKEN_RESOURCE_KEY;
 
@@ -63,6 +66,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
     private final SafePointStore safePointStore;
+    private final WorkflowManager workflowManager;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
     private final AtomicReference<TrackingToken> currentTrackingToken = new AtomicReference<>();
     private final AtomicReference<TrackingToken> lastProcessedTrackingToken = new AtomicReference<>();
@@ -83,6 +87,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
         this.workflowExecutionRepository = workflowExecutionRepository;
         this.safePointStore = safePointStore;
+        this.workflowManager = new DefaultWorkflowManager(workflowExecutionRepository);
     }
 
     @Nonnull
@@ -261,6 +266,21 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
      */
     public Set<WorkflowExecution> workflowExecutions() {
         return workflowExecutionRepository.findAll();
+    }
+
+    /**
+     * Cancels every non-terminal workflow instance whose current {@link WorkflowState} matches the given selector.
+     * <p>
+     * Cancellation is cooperative and asynchronous: each match is driven towards a durable {@code CANCELLED} terminal
+     * state on its own control thread and this method does not block on completion. Delegates to the
+     * {@link WorkflowManager}.
+     *
+     * @param selector predicate evaluated against each instance's current {@link WorkflowState}.
+     * @return the outcome describing how many instances matched and how many were requested to cancel.
+     */
+    @Nonnull
+    public WorkflowManager.CancellationResult cancel(@Nonnull Predicate<WorkflowState> selector) {
+        return workflowManager.cancel(selector, WorkflowManager.CancellationReason.none());
     }
 
     /**
