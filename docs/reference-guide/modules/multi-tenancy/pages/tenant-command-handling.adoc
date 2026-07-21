@@ -30,13 +30,13 @@ This is what allows a tenant-scoped component, such as a per-tenant external ser
 [source,java]
 ----
 @CommandHandler
-public void on(NotifyCourseSubscription command, NotificationService notificationService, EventAppender appender) { // <1>
+public void on(NotifyCourseSubscription command, @TenantScoped NotificationService notificationService, EventAppender appender) { // <1>
     notificationService.notifyStudentCourseCreation(command.studentId(), command.courseId());
     appender.append(new CourseSubscriptionNotified(command.courseId(),
                 command.studentId()));
 }
 ----
-<1> `notificationService` is the `NotificationService` instance specific for the current tenant, transparently resolved by a tenant aware parameter resolver.
+<1> `notificationService` is the `NotificationService` instance specific for the current tenant. The `@TenantScoped` annotation marks it as tenant scoped, transparently resolved by a tenant aware parameter resolver.
 
 See xref:tenant-scoped-components.adoc[Tenant-scoped components] for more details on how to register such components and inject them into a handler.
 

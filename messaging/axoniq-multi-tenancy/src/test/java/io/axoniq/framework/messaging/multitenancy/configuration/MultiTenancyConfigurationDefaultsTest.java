@@ -27,6 +27,7 @@ import io.axoniq.axonserver.grpc.admin.ContextUpdate;
 import io.axoniq.axonserver.grpc.admin.ReplicationGroupOverview;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
+import io.axoniq.framework.messaging.multitenancy.annotation.TenantScoped;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
@@ -384,7 +385,7 @@ class MultiTenancyConfigurationDefaultsTest {
 
     @SuppressWarnings("unused")
     private static final class SampleHandlers {
-        void handle(CourseRepository repository) {
+        void handle(@TenantScoped CourseRepository repository) {
             // Reflection target only. The parameter type drives the matching under test.
         }
     }
@@ -393,7 +394,7 @@ class MultiTenancyConfigurationDefaultsTest {
     private static final class TenantAwareCommandHandler {
 
         @CommandHandler(commandName = "tenant-aware-command")
-        void handle(String command, CourseRepository repository) {
+        void handle(String command, @TenantScoped CourseRepository repository) {
             // Reflection target only. The interceptor lookup does not invoke this method.
         }
     }
@@ -402,7 +403,7 @@ class MultiTenancyConfigurationDefaultsTest {
     private static final class TenantAwareQueryHandler {
 
         @QueryHandler(queryName = "tenant-aware-query")
-        void handle(String query, CourseRepository repository) {
+        void handle(String query, @TenantScoped CourseRepository repository) {
             // Reflection target only. The interceptor lookup does not invoke this method.
         }
     }

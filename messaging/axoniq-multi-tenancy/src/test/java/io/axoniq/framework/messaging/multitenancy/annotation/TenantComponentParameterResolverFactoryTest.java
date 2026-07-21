@@ -17,14 +17,13 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.configuration;
+package io.axoniq.framework.messaging.multitenancy.annotation;
 
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
-import io.axoniq.framework.messaging.multitenancy.util.TestFixtures;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.commandhandling.GenericCommandMessage;
@@ -100,6 +99,19 @@ class TenantComponentParameterResolverFactoryTest {
         }
 
         @Test
+        void matchesProviderFromParentConfiguration() throws Exception {
+            // given a provider holding the concrete JdbcCourseRepository while the handler declares the interface
+            givenProviders(auditServiceProvider());
+            givenProvidersInParentConfiguration(jdbcCourseRepositoryProvider());
+
+            // when
+            ParameterResolver<?> resolver = resolverFor("handlesCourseRepository", CourseRepository.class);
+
+            // then
+            assertThat(resolver).isNotNull();
+        }
+
+        @Test
         void rejectsDuplicateProvidersForTheSameExactComponentType() {
             // given two providers registered under different names for the same component type
             givenProviders(courseRepositoryProvider(), courseRepositoryProvider());
@@ -135,6 +147,18 @@ class TenantComponentParameterResolverFactoryTest {
 
             // then
             assertThat(resolver).isNotNull();
+        }
+
+        @Test
+        void doesNotMatchProviderWithoutTenantScopedAnnotation() throws Exception {
+            // given a provider holding the concrete JdbcCourseRepository while the handler declares the interface
+            givenProviders(jdbcCourseRepositoryProvider());
+
+            // when
+            ParameterResolver<?> resolver = resolverFor("doesNotResolveUnannotated", CourseRepository.class);
+
+            // then
+            assertThat(resolver).isNull();
         }
     }
 
@@ -354,6 +378,17 @@ class TenantComponentParameterResolverFactoryTest {
         when(configuration.getComponents(TenantComponentProvider.class)).thenReturn(byName);
     }
 
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void givenProvidersInParentConfiguration(TenantComponentProvider<?>... providers) {
+        Map<String, TenantComponentProvider> byName = new HashMap<>();
+        for (int i = 0; i < providers.length; i++) {
+            byName.put("provider-" + i, providers[i]);
+        }
+        Configuration parent = mock(Configuration.class);
+        when(configuration.getParent()).thenReturn(parent);
+        when(parent.getComponents(TenantComponentProvider.class)).thenReturn(byName);
+    }
+
     private ParameterResolver<?> resolverFor(String methodName, Class<?> parameterType) throws Exception {
         Method method = SampleHandlers.class.getDeclaredMethod(methodName, parameterType);
         return testSubject.createInstance(method, method.getParameters(), 0);
@@ -389,15 +424,19 @@ class TenantComponentParameterResolverFactoryTest {
     @SuppressWarnings("unused")
     private static final class SampleHandlers {
 
-        void handlesCourseRepository(CourseRepository repository) {
+        void handlesCourseRepository(@TenantScoped CourseRepository repository) {
             // Reflection target only. The parameter type drives the matching under test.
         }
 
-        void handlesJdbcRepository(JdbcCourseRepository repository) {
+        void handlesJdbcRepository(@TenantScoped JdbcCourseRepository repository) {
             // Reflection target only. The parameter type drives the matching under test.
         }
 
-        void handlesUnrelated(String value) {
+        void handlesUnrelated(@TenantScoped String value) {
+            // Reflection target only. The parameter type drives the matching under test.
+        }
+
+        void doesNotResolveUnannotated(CourseRepository repository) {
             // Reflection target only. The parameter type drives the matching under test.
         }
     }

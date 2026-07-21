@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.configuration;
+package io.axoniq.framework.messaging.multitenancy.annotation;
 
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentRegistry;

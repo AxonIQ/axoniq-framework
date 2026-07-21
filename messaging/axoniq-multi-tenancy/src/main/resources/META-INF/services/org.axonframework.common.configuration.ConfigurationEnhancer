@@ -18,4 +18,4 @@
 #
 
 io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults
-io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentParameterResolverFactoryConfigurationEnhancer
+io.axoniq.framework.messaging.multitenancy.annotation.TenantComponentParameterResolverFactoryConfigurationEnhancer

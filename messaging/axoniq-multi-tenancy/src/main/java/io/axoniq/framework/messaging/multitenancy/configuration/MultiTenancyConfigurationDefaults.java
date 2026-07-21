@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.multitenancy.configuration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
+import io.axoniq.framework.messaging.multitenancy.annotation.TenantComponentParameterResolverFactory;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;

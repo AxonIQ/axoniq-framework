@@ -17,12 +17,14 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.configuration;
+package io.axoniq.framework.messaging.multitenancy.annotation;
 
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.common.Priority;
+import org.axonframework.common.annotation.AnnotationUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.Message;
@@ -57,10 +59,12 @@ import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtil
  * @author Theo Emanuelsson
  * @author Jan Galinski
  * @author Laura Devriendt
+ * @author Jakob Hatzl
  * @see TenantComponentProvider
  * @since 5.3.0
  */
 @Internal
+@Priority(Priority.HIGH)
 public class TenantComponentParameterResolverFactory implements ParameterResolverFactory {
 
     private final Configuration configuration;
@@ -82,6 +86,9 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
     public @Nullable ParameterResolver<?> createInstance(Executable executable,
                                                          Parameter[] parameters,
                                                          int parameterIndex) {
+        if (!AnnotationUtils.isAnnotationPresent(parameters[parameterIndex], TenantScoped.class)) {
+            return null;
+        }
         Class<?> parameterType = parameters[parameterIndex].getType();
         TenantComponentProvider<?> provider = findProviderFor(parameterType);
         if (provider == null) {
