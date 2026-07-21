@@ -32,8 +32,8 @@ import org.junit.jupiter.api.*;
 
 import java.util.Map;
 
-import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.TENANT_RESOURCE_KEY;
-import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.tenantDescriptorFrom;
+import static io.axoniq.framework.messaging.multitenancy.api.TenantUtils.TENANT_RESOURCE_KEY;
+import static io.axoniq.framework.messaging.multitenancy.api.TenantUtils.tenantDescriptorFrom;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
@@ -110,7 +110,7 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
 
             // then
             assertThat(result).isSameAs(interceptorChain.result);
-            assertThatThrownBy(() -> MultiTenancyApiUtils.tenantDescriptorFrom(interceptorChain.context))
+            assertThatThrownBy(() -> TenantUtils.tenantDescriptorFrom(interceptorChain.context))
                     .isInstanceOf(TenantNotResolvedException.class)
                     .hasMessageContaining("No tenant descriptor found in processing context");
         }
@@ -138,7 +138,7 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
             verify(tenantResolver, never()).resolveTenant(any(Message.class), any());
             assertThat(interceptorChain.context).isSameAs(context);
 
-            assertThatThrownBy(() -> MultiTenancyApiUtils.tenantDescriptorFrom(interceptorChain.context))
+            assertThatThrownBy(() -> TenantUtils.tenantDescriptorFrom(interceptorChain.context))
                     .isInstanceOf(TenantNotResolvedException.class)
                     .hasMessageContaining("No tenant descriptor found in processing context");
         }

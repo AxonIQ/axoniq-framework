@@ -41,7 +41,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.tenantDescriptorFrom;
+import static io.axoniq.framework.messaging.multitenancy.api.TenantUtils.tenantDescriptorFrom;
 
 /**
  * {@link ParameterResolverFactory} injecting tenant-scoped components into message-handling methods.

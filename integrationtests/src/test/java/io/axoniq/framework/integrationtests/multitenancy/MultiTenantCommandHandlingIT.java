@@ -22,7 +22,7 @@ package io.axoniq.framework.integrationtests.multitenancy;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import io.axoniq.framework.messaging.multitenancy.annotation.TenantScoped;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
-import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils;
+import io.axoniq.framework.messaging.multitenancy.api.TenantUtils;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
@@ -225,7 +225,7 @@ class MultiTenantCommandHandlingIT {
             ProcessingContext context
     ) {
         RecordTenantCommand payload = command.payloadAs(RecordTenantCommand.class);
-        String tenantId = MultiTenancyApiUtils.tenantDescriptorFrom(context).tenantId();
+        String tenantId = TenantUtils.tenantDescriptorFrom(context).tenantId();
         recordedCommands.add(new RecordedCommand(payload.id(), tenantId));
         return MessageStream.just(new GenericCommandResultMessage(new MessageType(String.class), "ok"));
     }
