@@ -25,7 +25,7 @@
         <version>0.1.1-SNAPSHOT</version>
     </parent>
 
-    <artifactId>axon-workflow-example-simple</artifactId>
+    <artifactId>axoniq-workflow-example-simple</artifactId>
     <name>Axoniq Framework - Workflow - Example Simple</name>
 
     <dependencies>

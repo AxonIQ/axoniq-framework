@@ -26,7 +26,7 @@
         <version>0.1.1-SNAPSHOT</version>
     </parent>
 
-    <artifactId>axon-workflow-integrationtests</artifactId>
+    <artifactId>axoniq-workflow-integrationtests</artifactId>
     <name>Axoniq Framework - Workflow - Integration testing</name>
     <description>This module provides integration testing support for Axoniq Workflow
         and intentionally not using BDD Testing fixture, since the live mode of the engine
