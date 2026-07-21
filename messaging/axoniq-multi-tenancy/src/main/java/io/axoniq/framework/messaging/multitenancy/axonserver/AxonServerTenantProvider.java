@@ -69,7 +69,7 @@ import static java.util.Objects.requireNonNull;
  * @see TenantProvider
  * @see TenantConnectPredicate
  * @see MessagingConfigurationDefaults
- * @since 5.3.0
+ * @since 4.6.0
  */
 @Internal
 public class AxonServerTenantProvider implements TenantProvider {

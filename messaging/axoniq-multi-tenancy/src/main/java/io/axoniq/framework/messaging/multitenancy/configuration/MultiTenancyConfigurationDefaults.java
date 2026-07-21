@@ -53,6 +53,7 @@ import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTena
  * @author Theo Emanuelsson
  * @author Jan Galinski
  * @author Laura Devriendt
+ * @author Jakob Hatzl
  * @since 5.3.0
  */
 @Internal

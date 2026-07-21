@@ -26,8 +26,8 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
 
 /**
- * A TenantConnectPredicate that always receives contexts from the axonServer and returns {@code true} unless it is the
- * {@link AxonServerConfiguration#ADMIN_CONTEXT}.
+ * A {@link TenantConnectPredicate} that always receives contexts from the Axon Server and returns {@code true}, unless
+ * it is the {@link AxonServerConfiguration#ADMIN_CONTEXT}.
  *
  * @author Jan Galinski
  * @since 5.3.0
