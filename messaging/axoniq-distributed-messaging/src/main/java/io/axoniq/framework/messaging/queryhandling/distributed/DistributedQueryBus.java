@@ -132,29 +132,56 @@ public class DistributedQueryBus implements QueryBus {
     public CompletableFuture<Void> emitUpdate(Predicate<QueryMessage> filter,
                                               Supplier<SubscriptionQueryUpdateMessage> updateSupplier,
                                               @Nullable ProcessingContext context) {
+        return emitUpdateAndCount(filter, updateSupplier, context)
+                .thenApply(FutureUtils::ignoreResult);
+    }
+
+    @Override
+    public CompletableFuture<Integer> emitUpdateAndCount(Predicate<QueryMessage> filter,
+                                                         Supplier<SubscriptionQueryUpdateMessage> updateSupplier,
+                                                         @Nullable ProcessingContext context) {
         List<CompletableFuture<Void>> tasks = new ArrayList<>();
         updateRegistry.forEach((message, sender) -> {
             if (filter.test((message))) {
                 tasks.add(sender.sendUpdate(updateSupplier.get()));
             }
         });
-        return CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0]));
+        return CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0]))
+                                .thenApply(v -> tasks.size());
     }
 
     @Override
     public CompletableFuture<Void> completeSubscriptions(Predicate<QueryMessage> filter,
                                                          @Nullable ProcessingContext context) {
+        return completeSubscriptionsAndCount(filter, context)
+                .thenApply(FutureUtils::ignoreResult);
+    }
+
+    @Override
+    public CompletableFuture<Integer> completeSubscriptionsAndCount(Predicate<QueryMessage> filter,
+                                                                     @Nullable ProcessingContext context) {
         List<CompletableFuture<Void>> tasks = new ArrayList<>();
         updateRegistry.forEach((message, sender) -> {
             if (filter.test((message))) {
                 tasks.add(sender.complete());
             }
         });
-        return CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0]));
+        return CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0]))
+                                .thenApply(v -> tasks.size());
     }
 
     @Override
     public CompletableFuture<Void> completeSubscriptionsExceptionally(
+            Predicate<QueryMessage> filter,
+            Throwable cause,
+            @Nullable ProcessingContext context
+    ) {
+        return completeSubscriptionsExceptionallyAndCount(filter, cause, context)
+                .thenApply(FutureUtils::ignoreResult);
+    }
+
+    @Override
+    public CompletableFuture<Integer> completeSubscriptionsExceptionallyAndCount(
             Predicate<QueryMessage> filter,
             Throwable cause,
             @Nullable ProcessingContext context
@@ -165,7 +192,8 @@ public class DistributedQueryBus implements QueryBus {
                 tasks.add(sender.completeExceptionally(cause));
             }
         });
-        return CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0]));
+        return CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0]))
+                                .thenApply(v -> tasks.size());
     }
 
     @Override
