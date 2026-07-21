@@ -90,6 +90,7 @@
         <module>messaging/axoniq-message-transformation</module>
         <module>messaging/axoniq-multi-tenancy</module>
 
+        <module>testing/axoniq-test-logging</module>
         <module>testing/axoniq-testcontainer</module>
 
         <module>docs/_samples</module>
