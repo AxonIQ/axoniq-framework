@@ -21,17 +21,7 @@ The `AxonServerEventStorageEngineFactory` is provided out of the box, which give
 
 [source,java]
 ----
-import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
-import org.axonframework.common.configuration.Configuration;
-import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
-
-public class AxonConfig {
-
-    public EventStorageEngine contextSpecificStorageEngine(Configuration configuration,
-                                                           String context) {
-        return configuration.getComponent(AxonServerEventStorageEngine.class, "storageEngine@" + context);
-    }
-}
+include::example$connector/distributingevents/AxonConfig.java[tag=context-specific-storage-engine,indent=0]
 ----
 
 The context-specific engine can, for example, be configured as the message source for a xref:event-processors/streaming.adoc[Streaming Processor] to start reading from.
