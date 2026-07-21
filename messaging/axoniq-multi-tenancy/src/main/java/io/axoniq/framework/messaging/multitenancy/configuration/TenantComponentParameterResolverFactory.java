@@ -128,7 +128,23 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
     // Providers are heterogeneous in their component type, so they are looked up through their raw type.
     @SuppressWarnings("rawtypes")
     private Iterable<TenantComponentProvider> providers() {
-        return configuration.getComponents(TenantComponentProvider.class).values();
+        return rootConfiguration().getComponents(TenantComponentProvider.class).values();
+    }
+
+    /**
+     * We want to look up {@link TenantComponentProvider}s from ancestors as well in case this factory is registered in
+     * a module's configuration. So we resolve through the root to find providers registered anywhere in the hierarchy,
+     * regardless of which scope this instance runs in.
+     *
+     * @return the root configuration
+     */
+    private Configuration rootConfiguration() {
+        Configuration root = configuration;
+        Configuration parent;
+        while ((parent = root.getParent()) != null) {
+            root = parent;
+        }
+        return root;
     }
 
 

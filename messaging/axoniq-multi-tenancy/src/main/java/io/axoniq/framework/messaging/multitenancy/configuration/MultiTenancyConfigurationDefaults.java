@@ -120,9 +120,6 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
         // Register the Axon Server TenantProvider, which is the default implementation for multi-tenancy in Axon Server.
         componentRegistry.registerIfNotPresent(axonServerTenantProvider(), SearchScope.ALL);
 
-        // Inject the correct tenant's instance of any registered TenantComponentProvider into message handlers.
-        registerTenantComponentParameterResolverFactory(componentRegistry);
-
         // Keep every TenantComponentProvider in sync with the tenants known to the TenantProvider.
         registerTenantComponentProviderSubscription(componentRegistry);
 
@@ -131,19 +128,6 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
 
         // Register the MultiTenantAxonServerCommandBusConnector
         componentRegistry.registerIfNotPresent(multiTenantCommandBusConnector(), SearchScope.ALL);
-    }
-
-    /**
-     * Registers the {@link TenantComponentParameterResolverFactory}, so message handlers can declare tenant-scoped
-     * component parameters resolved through the registered {@link TenantComponentProvider TenantComponentProviders}.
-     *
-     * @param componentRegistry the registry to register the parameter resolver factory with
-     */
-    static void registerTenantComponentParameterResolverFactory(ComponentRegistry componentRegistry) {
-        ParameterResolverFactoryUtils.registerToComponentRegistry(
-                componentRegistry,
-                TenantComponentParameterResolverFactory::new
-        );
     }
 
     /**
