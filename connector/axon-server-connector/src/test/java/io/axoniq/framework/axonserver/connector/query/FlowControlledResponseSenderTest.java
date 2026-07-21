@@ -157,6 +157,20 @@ class FlowControlledResponseSenderTest {
     }
 
     @Test
+    void shouldSendEmptySentinelResponseWhenUpstreamCompletesWithoutAnyMessage() {
+        upstream.seal();
+        testSubject.request(Long.MAX_VALUE);
+
+        verify(stubDownstream, never()).send(any());
+        verify(stubDownstream, never()).complete();
+        verify(stubDownstream).sendLast(assertArg(response -> {
+            assertThat(response.getRequestIdentifier()).isEqualTo("test");
+            assertThat(response.getPayload().getType()).isEqualTo("empty");
+            assertThat(response.getPayload().getData().isEmpty()).isTrue();
+        }));
+    }
+
+    @Test
     void cancellingConsumerCompletesUpstream() {
         upstream.offer(newMessage(), Context.empty());
         upstream.offer(newMessage(), Context.empty());

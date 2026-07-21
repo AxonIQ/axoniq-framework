@@ -150,6 +150,33 @@ class AxonServerQueryBusConnectorTest {
         }
 
         @Test
+        void queryWithEmptySentinelResponseCollapsesToStreamWithNoAvailableMessage() {
+            // given a response marked with the "empty" sentinel type, as sent for a null/Optional.empty() result
+            QueryResponse emptyResponse = QueryResponse.newBuilder()
+                                                       .setMessageIdentifier(UUID.randomUUID().toString())
+                                                       .setPayload(SerializedObject.newBuilder()
+                                                                                   .setType("empty")
+                                                                                   .build())
+                                                       .build();
+            ResultStream<QueryResponse> resultStream = new StubResultStream<>(emptyResponse);
+            when(mockQueryChannel.query(any())).thenReturn(resultStream);
+
+            QueryMessage query = new GenericQueryMessage(
+                    new GenericMessage(new MessageType("QueryType", "1"),
+                                       "payload".getBytes(),
+                                       Metadata.emptyInstance())
+            );
+
+            // when
+            MessageStream<QueryResponseMessage> stream = testSubject.query(query, null);
+
+            // then the sentinel is not surfaced as an entry, the stream simply completes without a result
+            assertThat(stream.hasNextAvailable()).isFalse();
+            assertThat(stream.error()).isNotPresent();
+            assertThat(stream.isCompleted()).isTrue();
+        }
+
+        @Test
         void queryDelegatesToQueryChannelAndConvertsResponseAndClosesOnClose() {
             // Prepare a simple response stream with one response
             QueryResponse response = QueryResponse.newBuilder()
