@@ -29,7 +29,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class AxonServerMultiTenancyUtilsTest {
+class AxonServerTenantUtilsTest {
 
     @Nested
     class TenantDescriptorExtraction {
@@ -40,7 +40,7 @@ class AxonServerMultiTenancyUtilsTest {
             ContextOverview contextOverview = contextOverview("tenant-a", "default-rg");
 
             // when
-            TenantDescriptor result = AxonServerMultiTenancyUtils.tenantDescriptor(contextOverview);
+            TenantDescriptor result = AxonServerTenantUtils.tenantDescriptor(contextOverview);
 
             // then
             assertThat(result.tenantId()).isEqualTo("tenant-a");
@@ -59,7 +59,7 @@ class AxonServerMultiTenancyUtilsTest {
             );
 
             // when
-            TenantDescriptor result = AxonServerMultiTenancyUtils.tenantDescriptor(contextOverview);
+            TenantDescriptor result = AxonServerTenantUtils.tenantDescriptor(contextOverview);
 
             // then
             assertThat(result.properties()).containsEntry("region", "eu-west")
@@ -76,7 +76,7 @@ class AxonServerMultiTenancyUtilsTest {
             );
 
             // when
-            TenantDescriptor result = AxonServerMultiTenancyUtils.tenantDescriptor(contextOverview);
+            TenantDescriptor result = AxonServerTenantUtils.tenantDescriptor(contextOverview);
 
             // then
             assertThat(result.properties()).containsEntry("replicationGroup", "default-rg")
@@ -93,7 +93,7 @@ class AxonServerMultiTenancyUtilsTest {
             );
 
             // when
-            TenantDescriptor result = AxonServerMultiTenancyUtils.tenantDescriptor(contextOverview);
+            TenantDescriptor result = AxonServerTenantUtils.tenantDescriptor(contextOverview);
 
             // then
             assertThat(result.properties()).containsEntry("replicationGroup", "metadata-rg");
