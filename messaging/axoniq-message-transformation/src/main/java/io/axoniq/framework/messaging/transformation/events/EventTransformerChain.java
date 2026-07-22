@@ -26,7 +26,6 @@ import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.BuilderUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
-import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
@@ -48,8 +47,9 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * An immutable, thread-safe chain of {@link EventTransformation} instances that transforms events at read time.
- * Events that match no transformation pass through unchanged; an event a transformation drops is removed. Use
- * {@link Builder} to construct and register transformations.
+ * Events that match no transformation pass through unchanged. An event a transformation drops is removed. An event a
+ * transformation splits is replaced by the events it produces. Use {@link Builder} to construct and register
+ * transformations.
  * <p>
  * An exact identity match always takes precedence over a predicate match, independent of registration order; a
  * predicate {@code from} is consulted only when no exact match applies, and among predicates the first registered
@@ -73,13 +73,6 @@ public final class EventTransformerChain implements DescribableComponent {
      */
     public static final int DEFAULT_MAX_ITERATIONS_PER_EVENT = 100;
 
-    /**
-     * Marks a read-stream entry whose event was dropped, so it is filtered out while surviving entries keep their
-     * stream position.
-     */
-    private static final Context.ResourceKey<Boolean> DROPPED =
-            Context.ResourceKey.withLabel("eventTransformationDropped");
-
     /** Two-tier lookup of the transformation applying to an event: exact match first, predicate fallback. */
     private final TransformationIndex index;
 
@@ -102,9 +95,7 @@ public final class EventTransformerChain implements DescribableComponent {
     }
 
     /**
-     * Transforms every event in the given stream by applying the chain at read time. Events matching no
-     * transformation pass through unchanged; an event a transformation drops is removed, and surviving events keep
-     * their stream position.
+     * Applies the chain to every event in the given stream at read time.
      *
      * @param stream              the input stream of events
      * @param context             the active processing context, or {@code null} when the read path supplies none
@@ -118,26 +109,16 @@ public final class EventTransformerChain implements DescribableComponent {
                                                  MessageTypeResolver messageTypeResolver) {
         requireNonNull(converter, "converter may not be null");
         requireNonNull(messageTypeResolver, "messageTypeResolver may not be null");
-        // The map replaces or tags each entry; the filter then removes the dropped ones. Entry-level map (not
-        // mapMessage) keeps the engine-attached Context in scope, so diagnostics can include the stream position
-        // and surviving entries keep their tracking token.
-        return stream.map(entry -> transformEntry(entry, context, converter, messageTypeResolver))
-                     .filter(entry -> !entry.containsResource(DROPPED));
-    }
-
-    /**
-     * Runs the chain over one read-stream entry, replacing its message with the transformed event, or tagging it
-     * with {@link #DROPPED} when a transformation dropped the event so the filter step removes it.
-     */
-    private MessageStream.Entry<EventMessage> transformEntry(MessageStream.Entry<? extends EventMessage> entry,
-                                                             @Nullable ProcessingContext context,
-                                                             MessageConverter converter,
-                                                             MessageTypeResolver messageTypeResolver) {
-        TransformationContext transformationContext =
-                new TransformationContext(entry, context, converter, messageTypeResolver);
-        return applyChainToOneEvent(entry.message(), transformationContext)
-                .map(result -> entry.map(original -> result))
-                .orElseGet(() -> entry.<EventMessage>map(dropped -> dropped).withResource(DROPPED, Boolean.TRUE));
+        // One input entry maps to zero or more output entries (drop, 1:1, or split). Each output reuses the input
+        // entry's Context via entry.map, so a split's outputs keep the input's tracking token and stream position.
+        return stream.mapMulti((entry, downstream) -> {
+            TransformationContext transformationContext =
+                    new TransformationContext(entry, context, converter, messageTypeResolver);
+            List<EventMessage> eventMessages = applyChainToOneEvent(entry.message(), transformationContext, 0);
+            for (EventMessage output : eventMessages) {
+                downstream.accept(entry.map(original -> output));
+            }
+        });
     }
 
     /**
@@ -153,32 +134,56 @@ public final class EventTransformerChain implements DescribableComponent {
     }
 
     /**
-     * Applies the chain to a single event until no transformation matches.
-     *
-     * @return the transformed event, or {@link Optional#empty()} when a transformation dropped it
+     * Applies the chain to a single event and returns every event it produces, re-applying the chain to each output
+     * so a transformation registered later still fires. {@code depth} bounds the recursion against
+     * {@link #maxIterationsPerEvent} to stop a cyclic or self-matching configuration.
+     * <p>
+     * This returns a materialized {@link List} rather than a {@link MessageStream}, even though a split conceptually
+     * yields a stream of events. The streaming boundary is the public {@link #transform} method: it expands this list
+     * into the output stream and grafts each produced event back onto the input entry's
+     * {@link org.axonframework.messaging.core.Context}, keeping the input's tracking token and stream position. The
+     * expansion done here is synchronous and bounded by {@link #maxIterationsPerEvent}, with each output re-entering
+     * the chain depth-first, so a short-lived list per input event is enough and avoids nesting a stream per
+     * recursion level.
      */
-    private Optional<EventMessage> applyChainToOneEvent(EventMessage event, TransformationContext context) {
-        EventMessage current = event;
-        for (int iteration = 0; iteration < maxIterationsPerEvent; iteration++) {
-            EventTransformation match = index.findMatch(current.type());
-            if (match == null) {
-                return Optional.of(current);
-            }
-            switch (match) {
-                // A 1:0 drop is terminal: stop with no output so the entry is removed from the stream.
-                case DropEventTransformation ignored -> {
-                    return Optional.empty();
-                }
-                // A rename may change the qualified name, so the name-change guard does not apply.
-                case RenameEventTransformation ignored -> {
-                }
-                // A payload mapping may only change the version, never the qualified name.
-                case MappingEventTransformation<?, ?> mapping ->
-                        assertMappingVersionChangeOnly(current.type(), mapping.toType());
-            }
-            current = singleResult(match.transform(current, context), current, context);
+    private List<EventMessage> applyChainToOneEvent(EventMessage event, TransformationContext context, int depth) {
+        EventTransformation match = index.findMatch(event.type());
+        if (match == null) {
+            return List.of(event);
         }
-        throw new ChainConfigurationException("""
+        if (depth >= maxIterationsPerEvent) {
+            throw iterationBoundExceeded(event, context);
+        }
+        List<EventMessage> results = new ArrayList<>();
+        List<EventMessage> transformedEvents = applyTransformation(match, event, context);
+        for (EventMessage transformedEvent : transformedEvents) {
+            results.addAll(applyChainToOneEvent(transformedEvent, context, depth + 1));
+        }
+        return results;
+    }
+
+    /**
+     * The events one matched transformation produces: none for a drop, one for a mapping or rename, several for a
+     * split.
+     */
+    private List<EventMessage> applyTransformation(EventTransformation match,
+                                                   EventMessage event,
+                                                   TransformationContext context) {
+        return switch (match) {
+            case DropEventTransformation ignored -> List.of();
+            case SplitEventTransformation<?> split -> collectEvents(split.transform(event, context));
+            case RenameEventTransformation rename ->
+                    List.of(singleResult(rename.transform(event, context), event, context));
+            case MappingEventTransformation<?, ?> mapping -> {
+                // A mapping may change only the version, never the name. Use a rename to change the name.
+                assertMappingVersionChangeOnly(event.type(), mapping.toType());
+                yield List.of(singleResult(mapping.transform(event, context), event, context));
+            }
+        };
+    }
+
+    private ChainConfigurationException iterationBoundExceeded(EventMessage current, TransformationContext context) {
+        return new ChainConfigurationException("""
                 Chain exceeded %d iterations on a single event; \
                 likely a cyclic or self-matching transformation (raise the bound via \
                 Builder.maxIterationsPerEvent(int) if your domain genuinely has more hops). \
@@ -188,7 +193,19 @@ public final class EventTransformerChain implements DescribableComponent {
     }
 
     /**
-     * Extracts the single transformed event from a transformation's result stream, rejecting an empty result.
+     * Collects all events from the given stream into a list, preserving their order.
+     */
+    private static List<EventMessage> collectEvents(MessageStream<? extends EventMessage> stream) {
+        List<EventMessage> events = new ArrayList<>();
+        Optional<? extends MessageStream.Entry<? extends EventMessage>> next;
+        while ((next = stream.next()).isPresent()) {
+            events.add(next.get().message());
+        }
+        return events;
+    }
+
+    /**
+     * Extracts the single transformed event from a 1:1 transformation's result stream, rejecting an empty result.
      */
     private static EventMessage singleResult(MessageStream<? extends EventMessage> result,
                                              EventMessage input,

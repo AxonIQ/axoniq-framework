@@ -2,15 +2,15 @@
 = Multi Tenancy Migration
 :navtitle: Multi Tenancy Migration
 
-== Context/Tenant configuration
+== Tenant configuration
 
 === Removal of `axon.axonserver.contexts`
 
-The AF4 property `axon.axonserver.contexts` — a static CSV list of context names used as the base for tenants — has been removed.
+The AF4 property `axon.axonserver.contexts`, a static CSV list of context names used as the base for tenants, has been removed.
 Remove it from your configuration; it is ignored.
 
 Instead, register a `TenantConnectPredicate` that returns `true` for the contexts you want to treat as tenants.
-Those contexts will be picked up as tenants whenever Axon Server reports them — either at startup (if they already exist) or at runtime when they are added later.
+Those contexts will be picked up as tenants whenever Axon Server reports them, either at startup (if they already exist) or at runtime when they are added later.
 
 [source,java]
 ----

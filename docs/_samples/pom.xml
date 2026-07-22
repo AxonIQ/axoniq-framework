@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (c) 2010-2026. AxonIQ B.V.
+  ~
+  ~ Licensed under the AXONIQ TERMS OF SERVICE,
+  ~ Version 29 April 2026 (the "License");
+  ~
+  ~ The software is available for evaluation use without registration.
+  ~ Continued use beyond the evaluation period requires registration
+  ~ and a commercial license. See the License for the specific language
+  ~ governing permissions and limitations under the License.
+  ~ You may not use this file except in compliance with the License.
+  ~
+  ~ You may obtain a copy of the License at:
+  ~  https://www.axoniq.io/legal/terms-of-service
+  ~
+  ~ For licensing information and to register, visit:
+  ~  https://www.axoniq.io/pricing
+  -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>io.axoniq.framework</groupId>
+        <artifactId>axoniq-framework-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../build/parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>axoniq-docs-samples</artifactId>
+
+    <name>Axoniq Framework - Documentation Code Samples</name>
+    <description>
+        Compiles the code samples that are included in the documentation. The Java sources live in the Antora
+        "examples" directories of each documentation component (docs/*/modules/*/examples) and are included in the
+        documentation pages through tagged regions. This module exists solely to guarantee that every documented
+        code sample compiles against the current framework APIs. It is never deployed. The main Antora documentation
+        build lives in a separate project; this module only covers the pages contributed from this repository.
+    </description>
+
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
+        <maven.source.skip>true</maven.source.skip>
+        <!-- Samples are illustrative fragments compiled for API validation only; they are never executed. -->
+        <skipTests>true</skipTests>
+        <!-- Several samples demonstrate Spring (Boot) configuration in compile scope; the root enforcer bans
+             Spring outside test scope, so this compile-only, never-deployed module opts out of that rule. -->
+        <maven-enforcer.allow-spring-dependencies>true</maven-enforcer.allow-spring-dependencies>
+        <build-helper-maven-plugin.version>3.6.0</build-helper-maven-plugin.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Manages the in-repo io.axoniq.framework artifacts (and imports the upstream Axon Framework BOM). -->
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-framework-bom</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- Axoniq Framework modules whose APIs the samples reference -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-dead-letter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axon-server-connector</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-distributed-messaging</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-message-transformation</artifactId>
+        </dependency>
+        <!-- Spring Boot auto-configuration types (EventProcessorDefinition, etc.) used by Spring samples -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-spring-boot-autoconfigure</artifactId>
+        </dependency>
+
+        <!-- Upstream Axon Framework building blocks -->
+        <dependency>
+            <groupId>org.axonframework</groupId>
+            <artifactId>axon-eventsourcing</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.axonframework.extensions.spring</groupId>
+            <artifactId>axon-spring-boot-autoconfigure</artifactId>
+        </dependency>
+
+        <!-- Spring, for samples demonstrating Spring (Boot) configuration -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- Jackson 3, for message-transformation samples operating on JsonNode payloads -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!-- JPA, for the JpaSequencedDeadLetterQueue factory sample -->
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>${build-helper-maven-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>add-documentation-sample-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.basedir}/../reference-guide/modules/dead-letter-queue/examples</source>
+                                <source>${project.basedir}/../reference-guide/modules/message-transformation/examples</source>
+                                <source>${project.basedir}/../reference-guide/modules/distributed-messaging/examples</source>
+                                <source>${project.basedir}/../reference-guide/modules/connector/examples</source>
+                                <source>${project.basedir}/../reference-guide/modules/snapshotting/examples</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

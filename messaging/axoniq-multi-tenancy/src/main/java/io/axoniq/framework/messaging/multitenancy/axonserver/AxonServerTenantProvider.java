@@ -74,11 +74,6 @@ import static java.util.Objects.requireNonNull;
 @Internal
 public class AxonServerTenantProvider implements TenantProvider {
 
-    /**
-     * The configuration property that can be used to provide a comma-separated list of predefined context names.
-     */
-    public static final String AXONSERVER_PREDEFINED_CONTEXTS = "axon.axonserver.contexts";
-
     private static final Logger logger = LoggerFactory.getLogger(AxonServerTenantProvider.class);
 
     private final Set<TenantDescriptor> tenantDescriptors = ConcurrentHashMap.newKeySet();
@@ -337,10 +332,12 @@ public class AxonServerTenantProvider implements TenantProvider {
 
         @Override
         public void onAvailable(Runnable callback) {
+            // this sentinel never has any updates, so the callback is never invoked
         }
 
         @Override
         public void close() {
+            // this sentinel is already closed
         }
 
         @Override

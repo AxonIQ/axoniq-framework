@@ -1,6 +1,18 @@
 # Documentation For Axoniq Framework.
 
-This folder contains the docs related to the advanced Axon Framework features. The docs in this folder are written as part of the [AxonIQ Documentation](https://docs.axoniq.io), and are [written in AsciiDoc and built with Antora.](https://docs.axoniq.io/contribution_guide/overview/platform.html)
+This folder contains the docs related to the Axon Framework project. The docs in this folder are written as part of
+the [AxonIQ Docs](https://docs.axoniq.io), and are written in AsciiDoc and built with Antora.
+
+This repository holds the sources for the
+following [Antora Components](https://docs.antora.org/antora/latest/component-name-and-version/) in the corresponding
+folders:
+
+- [
+  `./deadlines-guide/`](deadlines-guide): Legacy Deadlines Guide, currently not actively linked in the reference
+- [
+  `./reference-guide/`](reference-guide) : [The Axon Framework reference guide](https://docs.axoniq.io/axon-framework-reference/latest)
+
+## Distributed content
 
 The Axon Framework reference guide is implemented as an [Antora distributed component version](https://docs.antora.org/antora/latest/distributed-component-version/). 
 This means the reference-guide documentation sources in this repository are merged together with the reference-guide documentation sources in the [Axon Framework repository](https://github.com/AxonIQ/AxonFramework). 
@@ -37,22 +49,36 @@ and then editing and commiting the Axon Framework documentation files from
 aware editors. When building the docs be sure to use the `playbook-dev.yaml` instead of `playbook.yaml` (which defaults
 to the current main branch of the Axon Framework reference).
 
-## Contributing to the docs.
+## Contributing to the docs
 
-You are welcome to contribute to these docs. Whether you want to fix a typo, or you find something missing, something that it's not clear or can be improved, or even if you want to write an entire piece of docs to illustrate something that could help others to understand the use of the Bike Rental App, you are more than welcome to send a Pull Request to this github repository. Just make sure you follow the guidelines explained in [AxonIQ Library Contribution Guide](https://docs.axoniq.io/contribution_guide/index.html)
+You are welcome to contribute to these docs. Whether you want to fix a typo, or you find something missing, something
+that it's not clear or can be improved, or even if you want to write an entire piece of docs to illustrate something
+that could help others to understand the use of Axon Framework, you are more than welcome to send a Pull Request to this
+github repository.
 
-## Building and testing these docs locally.
+## Building and previewing these docs locally
 
-If you want to build and explore the docs locally (because you have made changes or before contributing), you can use the Antora's build file in `docs/_playbook` folder.
+If you want to build and explore the docs locally (because you have made changes or before contributing), you can use
+the Antora build file in the [`./_playbook`](_playbook) folder following these steps:
 
-You can check the [detailed information on how the process to build the docs works](https://docs.axoniq.io/contribution_guide/overview/build.html), but in short, all you have to do is: 
+### Install dependencies
 
-1. Make sure you have Node (a LTS version is preferred), Antora and Vale installed in your system.
-2. CD to the `docs/_playbook` folder.
-3. Run `npm install.`
-4. Run `npx antora playbook-dev.yaml`. Antora will generate the set of static html files under `docs/_playbook/build/site`
-5. Move to `docs/_playbook/build/site` and execute some local http server to serve files in that directory. For example by executing `python3 -m http.server 8070`
-6. Open your browser and go to `http://localhost:8070`. You should be able to navigate the local version of the docs.
+1. Make sure you have [Node](https://nodejs.org/en/download) (a LTS version is preferred)
+   and [Vale](https://vale.sh/docs/install) installed in your system.
+2. CD to the [`./_playbook`](_playbook) folder.
+3. Run `npm install.` to install Antora
+
+### Build and preview
+
+1. Run `node watch.js`. Antora will generate the set of static html files under [
+   `./_playbook/build/site`](_playbook/build/site), which will be served using [Express.js}(https://expressjs.com/) via http://localhost:3000
+2. Each of the existing Antora Components will be available under a different folder in the webserver's root (named
+   after the component name in the corresponding `antora.yml`).
+3. Antora determines the component
+   version [based on the git refname](https://docs.antora.org/antora/latest/component-version-key/#refname) according to
+   the configuration in the `antory.yml`. The rendered pages are available inside a subdirectory of the component's
+   version directory, named after the component's version (depending on the git branch you have checked out).
+4. rebuilds will trigger automatically when changing documentation files
 
 ## Publishing documentation
 
