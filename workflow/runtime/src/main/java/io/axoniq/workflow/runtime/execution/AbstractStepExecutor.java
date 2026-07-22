@@ -54,7 +54,7 @@ import static io.axoniq.workflow.runtime.util.EventMessageUtils.*;
  * Abstract class for step executor implementations.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.3.0
  */
 @Internal
 public abstract class AbstractStepExecutor {

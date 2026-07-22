@@ -48,7 +48,7 @@ import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.of
  * terminal + compensation — see {@code CancelStepWorkflowTest}.)
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.3.0
  */
 class CompleteWithRunningStepWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 

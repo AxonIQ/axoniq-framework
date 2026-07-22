@@ -27,11 +27,11 @@ import java.util.Objects;
 /**
  * Primitive for programmatically terminating a workflow (cancellation or failure) or cancelling a single running step.
  * <p>
- * Each intent is carried by its own typed command record rather than a single field-sniffed command, so callers and
- * implementations never have to inspect flags to discover what is being terminated.
+ * Each intent is carried by its own typed command record, so callers and implementations always know what is being
+ * terminated from the type alone.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.3.0
  */
 public interface TerminatePrimitive {
 
@@ -68,7 +68,7 @@ public interface TerminatePrimitive {
      * @param workflowNameOverride optional override for the workflow name used on the published event, or {@code null}
      *                             to use the execution's own name.
      * @author Stefan Dragisic
-     * @since 1.0.0
+     * @since 0.3.0
      */
     @Internal
     record CancelWorkflow(
@@ -93,7 +93,7 @@ public interface TerminatePrimitive {
      * @param workflowNameOverride optional override for the workflow name used on the published event, or {@code null}
      *                             to use the execution's own name.
      * @author Stefan Dragisic
-     * @since 1.0.0
+     * @since 0.3.0
      */
     @Internal
     record FailWorkflow(
@@ -117,7 +117,7 @@ public interface TerminatePrimitive {
      * @param cause               optional cancellation cause, or {@code null} if none.
      * @param eventNameCustomizer customizer for the published event names.
      * @author Stefan Dragisic
-     * @since 1.0.0
+     * @since 0.3.0
      */
     @Internal
     record CancelStep(

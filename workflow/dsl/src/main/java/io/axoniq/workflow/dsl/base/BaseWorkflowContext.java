@@ -71,7 +71,7 @@ import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Bu
  * @author Stefan Dragisic
  * @author Allrad Buijze
  * @author Steven van Beelen
- * @since 1.0.0
+ * @since 0.3.0
  */
 public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
 

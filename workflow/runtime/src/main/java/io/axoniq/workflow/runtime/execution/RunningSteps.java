@@ -34,7 +34,7 @@ import java.util.function.Consumer;
  * Tracks running {@link CompletableFuture}s for workflow steps, keyed by step name.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.3.0
  */
 public class RunningSteps implements DescribableComponent {
 

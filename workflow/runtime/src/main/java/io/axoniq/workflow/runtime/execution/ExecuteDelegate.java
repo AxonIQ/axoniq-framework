@@ -51,7 +51,7 @@ import java.util.concurrent.TimeoutException;
  * @author Simon Zambrovski
  * @author Stefan Dragisic
  * @author Steven van Beelen
- * @since 1.0.0
+ * @since 0.3.0
  */
 @Internal
 public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrimitive {
