@@ -41,9 +41,14 @@ body catch `StepCancellationException` and compensate. The record is authored **
 work onto the control thread and never drive workflow logic from the caller thread. The not-terminal check and
 the publish are therefore atomic with respect to concurrent step completion — first-writer-wins, no race.
 
-External management is exposed only through `WorkflowManager` (`cancel`, `cancelStep`, `cancelAllRunningSteps`),
-never by mutating a live execution from outside. External operations are cooperative and asynchronous: they
-return a result describing what was requested without blocking on the terminal state, and an uncaught
+External management is exposed only through `WorkflowManager`, and only as a fluent selection-then-action API,
+never by mutating a live execution from outside. A caller first selects — `workflow(id)` returns a safe
+`WorkflowHandle` for one instance, `workflows(predicate)` returns a point-in-time snapshot `WorkflowSelection` of
+matching non-terminal instances — then invokes a cooperative command (`cancel`, `cancelStep`,
+`cancelAllRunningSteps`) on it. A handle exposes only the id, a read-only state snapshot, and those commands; it
+never leaks the execution or its task queue. Per-handle commands return a boolean/count; bulk selection commands
+return a `CancellationResult` (`matched`, `affected`, affected ids). External operations are cooperative and
+asynchronous: they report what was requested without blocking on the terminal state, and an uncaught
 `StepCancellationException` propagates and wedges the instance non-terminally exactly like any other uncaught
 exception (the caller's body is responsible for catching it).
 

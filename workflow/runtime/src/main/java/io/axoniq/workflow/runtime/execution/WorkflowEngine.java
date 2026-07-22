@@ -280,7 +280,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
      */
     @Nonnull
     public WorkflowManager.CancellationResult cancel(@Nonnull Predicate<WorkflowState> selector) {
-        return workflowManager.cancel(selector, WorkflowManager.CancellationReason.none());
+        return workflowManager.workflows(selector).cancel(WorkflowManager.CancellationReason.none());
     }
 
     /**

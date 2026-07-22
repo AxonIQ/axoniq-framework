@@ -27,7 +27,6 @@ import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.management.WorkflowManager;
 import io.axoniq.workflow.runtime.api.management.WorkflowManager.CancellationReason;
-import io.axoniq.workflow.runtime.api.management.WorkflowManager.WorkflowQuery;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
 import jakarta.annotation.Nonnull;
@@ -77,12 +76,10 @@ class ExternalWorkflowCancellationTest extends AbstractWorkflowTestBase<SimpleWo
         awaitParked("cancel-1");
 
         var manager = configuration.getComponent(WorkflowManager.class);
-        var result = manager.cancel(new WorkflowQuery.ById("cancel-1"),
-                                    CancellationReason.of("operator cancelled by id"));
+        boolean cancelled = manager.workflow("cancel-1")
+                                   .cancel(CancellationReason.of("operator cancelled by id"));
 
-        assertThat(result.matched()).isEqualTo(1);
-        assertThat(result.cancelled()).isEqualTo(1);
-        assertThat(result.workflowIds()).containsExactly("cancel-1");
+        assertThat(cancelled).isTrue();
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var history = workflowHistoryRepository.findById("cancel-1");
@@ -103,13 +100,11 @@ class ExternalWorkflowCancellationTest extends AbstractWorkflowTestBase<SimpleWo
         awaitParked("region-us");
 
         var manager = configuration.getComponent(WorkflowManager.class);
-        var result = manager.cancel(
-                new WorkflowQuery.ByPredicate(state -> "EU".equals(state.payload().get("region"))),
-                CancellationReason.of("cancel EU region")
-        );
+        var result = manager.workflows(state -> "EU".equals(state.payload().get("region")))
+                            .cancel(CancellationReason.of("cancel EU region"));
 
         assertThat(result.matched()).isEqualTo(1);
-        assertThat(result.cancelled()).isEqualTo(1);
+        assertThat(result.affected()).isEqualTo(1);
         assertThat(result.workflowIds()).containsExactly("region-eu");
 
         // The EU instance becomes durably CANCELLED; the US instance stays non-terminal and running.

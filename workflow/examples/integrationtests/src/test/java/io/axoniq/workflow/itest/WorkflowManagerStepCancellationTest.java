@@ -49,10 +49,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Verifies the external single-step cancellation surface of the {@link WorkflowManager} (issue #224):
- * {@code cancelStep(workflowId, stepName, reason)} authors a durable {@code <step>:CANCELLED} record for a running,
+ * Verifies the external single-step cancellation surface of the {@link WorkflowManager}:
+ * {@code workflow(id).cancelStep(stepName, reason)} authors a durable {@code <step>:CANCELLED} record for a running,
  * non-terminal step while the workflow stays alive (so the body can catch and compensate), and returns whether the
- * step was non-terminal; {@code cancelAllRunningSteps(workflowId, reason)} does the same for every currently-running
+ * step was non-terminal; {@code workflow(id).cancelAllRunningSteps(reason)} does the same for every currently-running
  * step and returns the count. Single-step cancel is separate from whole-workflow cancel: it always publishes the
  * per-step terminal event.
  *
@@ -76,12 +76,10 @@ class WorkflowManagerStepCancellationTest extends AbstractWorkflowTestBase<Simpl
         awaitParked("step-ok");
 
         var manager = configuration.getComponent(WorkflowManager.class);
-        var result = manager.cancelStep("step-ok", "awaitApproval",
-                                        CancellationReason.of("operator cancelled the wait"));
+        boolean cancelled = manager.workflow("step-ok")
+                                   .cancelStep("awaitApproval", CancellationReason.of("operator cancelled the wait"));
 
-        assertThat(result.cancelled()).isTrue();
-        assertThat(result.workflowId()).isEqualTo("step-ok");
-        assertThat(result.stepName()).isEqualTo("awaitApproval");
+        assertThat(cancelled).isTrue();
 
         // Body catches the StepCancellationException, compensates, and the workflow completes normally.
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
@@ -101,9 +99,10 @@ class WorkflowManagerStepCancellationTest extends AbstractWorkflowTestBase<Simpl
 
         // "prepared" already COMPLETED before the workflow parked.
         var manager = configuration.getComponent(WorkflowManager.class);
-        var result = manager.cancelStep("step-terminal", "prepared", CancellationReason.of("too late"));
+        boolean cancelled = manager.workflow("step-terminal")
+                                   .cancelStep("prepared", CancellationReason.of("too late"));
 
-        assertThat(result.cancelled()).isFalse();
+        assertThat(cancelled).isFalse();
 
         // The workflow is untouched: still parked, still non-terminal.
         var executionRepository = configuration.getComponent(WorkflowExecutionRepository.class);
@@ -115,9 +114,10 @@ class WorkflowManagerStepCancellationTest extends AbstractWorkflowTestBase<Simpl
     @Test
     void cancelStep_onUnknownWorkflow_returnsFalse() {
         var manager = configuration.getComponent(WorkflowManager.class);
-        var result = manager.cancelStep("no-such-workflow", "awaitApproval", CancellationReason.none());
+        boolean cancelled = manager.workflow("no-such-workflow")
+                                   .cancelStep("awaitApproval", CancellationReason.none());
 
-        assertThat(result.cancelled()).isFalse();
+        assertThat(cancelled).isFalse();
     }
 
     @Test
@@ -127,10 +127,10 @@ class WorkflowManagerStepCancellationTest extends AbstractWorkflowTestBase<Simpl
 
         var manager = configuration.getComponent(WorkflowManager.class);
         // At this point two steps are running: the async "background" execute and the parked "awaitApproval" wait.
-        var result = manager.cancelAllRunningSteps("step-all", CancellationReason.of("cancel all steps"));
+        int cancelled = manager.workflow("step-all")
+                               .cancelAllRunningSteps(CancellationReason.of("cancel all steps"));
 
-        assertThat(result.cancelled()).isEqualTo(2);
-        assertThat(result.workflowId()).isEqualTo("step-all");
+        assertThat(cancelled).isEqualTo(2);
 
         // The awaited step's cancellation is caught by the body, which compensates and completes; both running steps
         // record CANCELLED.

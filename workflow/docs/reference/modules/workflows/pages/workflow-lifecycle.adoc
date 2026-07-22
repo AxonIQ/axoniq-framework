@@ -98,7 +98,7 @@ Both terminate the workflow, but they signal different intent and are called fro
 |Inside the workflow
 |The workflow detected an error and cannot continue. Called from your workflow code.
 
-|`ctx.cancel()` / `ctx.cancel("reason")` (inside) or `workflowManager.cancel(query, reason)` (outside)
+|`ctx.cancel()` / `ctx.cancel("reason")` (inside) or `workflowManager.workflow(id).cancel(reason)` (outside)
 |`CANCELLED`
 |Inside or outside the workflow
 |The workflow should stop gracefully, either by workflow logic or by an external action (user, admin, API).
@@ -146,7 +146,7 @@ if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
 <!-- vale on -->
 ++++
 
-The last event recorded for `shipOrder` and `notifyCustomer` is their `Started`; the workflow's `Failed` is the terminal event, and no further events are published for the workflow. The `Failed` event records the original exception's class and message (`RuntimeException` here), not the wrapper. To record a terminal outcome and run compensation for a running step, cancel it individually with `ctx.cancelStep(...)` or `WorkflowManager.cancelStep(...)` before failing the workflow.
+The last event recorded for `shipOrder` and `notifyCustomer` is their `Started`; the workflow's `Failed` is the terminal event, and no further events are published for the workflow. The `Failed` event records the original exception's class and message (`RuntimeException` here), not the wrapper. To record a terminal outcome and run compensation for a running step, cancel it individually with `ctx.cancelStep(...)` or `workflowManager.workflow(id).cancelStep(...)` before failing the workflow.
 
 === `cancel`—external termination
 
@@ -170,14 +170,34 @@ var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
 
 An external caller cancels the workflow while those steps are still running, using the `WorkflowManager` API (resolve it from the configuration as a registered component):
 
+The `WorkflowManager` API is fluent: first *select* what to act on, then invoke a command on the selection.
+
 [source,java]
 ----
 WorkflowManager workflowManager = configuration.getComponent(WorkflowManager.class);
-workflowManager.cancel(new WorkflowQuery.ById(workflowId),
-                       CancellationReason.of("Cancelled by user"));
+
+// Select a single instance by id, then cancel it.
+boolean cancelled = workflowManager.workflow("order-123")
+                                   .cancel(CancellationReason.of("Cancelled by user"));
+
+// Select every non-terminal instance matching a state predicate, then cancel them.
+CancellationResult result = workflowManager.workflows(state -> "EU".equals(state.payload().get("region")))
+                                           .cancel(CancellationReason.of("Region shut down"));
 ----
 
-`WorkflowManager.cancel` also accepts a `WorkflowQuery.ByPredicate(Predicate<WorkflowState>)` to cancel every non-terminal instance whose state matches a predicate, and returns a `CancellationResult` with the matched/cancelled counts and the cancelled workflow ids.
+`workflow(id)` returns a `WorkflowHandle`; its `cancel(reason)` returns `true` when the instance existed and was non-terminal (a cancellation was enqueued) and `false` otherwise.
+`workflows(predicate)` returns a point-in-time snapshot of every non-terminal instance whose state matches, and its `cancel(reason)` returns a `CancellationResult` carrying `matched` (handles acted on), `affected` (instances a cancellation was enqueued for), and the affected workflow ids.
+
+A selection is iterable, so you can inspect each instance and decide per instance:
+
+[source,java]
+----
+for (WorkflowHandle handle : workflowManager.workflows(state -> state.payload().containsKey("stuck"))) {
+    if (handle.state().workflowStepNames().contains("awaitApproval")) {
+        handle.cancel(CancellationReason.of("Manual review timed out"));
+    }
+}
+----
 
 ++++
 <!-- vale off -->
@@ -192,7 +212,7 @@ workflowManager.cancel(new WorkflowQuery.ById(workflowId),
 <!-- vale on -->
 ++++
 
-As the log shows, the last event recorded for `shipOrder` and `notifyCustomer` is their `Started`; the workflow's `Cancelled` is the terminal event. To record a terminal outcome and run compensation for a specific step, cancel it individually with `WorkflowManager.cancelStep(...)` (see xref:step-orchestration.adoc[]).
+As the log shows, the last event recorded for `shipOrder` and `notifyCustomer` is their `Started`; the workflow's `Cancelled` is the terminal event. To record a terminal outcome and run compensation for a specific step, cancel it individually with `workflowManager.workflow(id).cancelStep(...)` (see xref:step-orchestration.adoc[]).
 
 [[complete-with-running-steps]]
 === Normal completion with running steps
