@@ -28,10 +28,14 @@ import java.util.StringJoiner;
 import static java.util.Objects.requireNonNull;
 
 /**
- * A descriptor for tenants.
+ * A descriptor for tenants holding the {@code tenantId} and a {@link Map} of provider specific properties that
+ * can be used for tenant resolution.
+ * <p>
+ * The identity of this class does on purpose only include the {@code #tenantId} to allow using it as map key.
  *
+ * @author Stefan Dragisic
  * @author Jan Galinski
- * @since 5.3.0
+ * @since 4.6.0
  */
 public class TenantDescriptor {
 
@@ -39,10 +43,11 @@ public class TenantDescriptor {
     private final Map<String, String> properties;
 
     /**
-     * Creates a new TenantDescriptor with the given {@code tenantId} and {@code properties}.
+     * Creates a new {@code TenantDescriptor} with the given {@code tenantId} and {@code properties}.
      *
-     * @param tenantId   the identifier of this TenantDescriptor.
-     * @param properties the (empty) properties of this tenant - usually context properties of an Axon Server context
+     * @param tenantId   the identifier of this {@code TenantDescriptor}
+     * @param properties the (empty) properties of this tenant, usually provider specific properties that can be used
+     *                   for tenant resolution
      */
     public TenantDescriptor(String tenantId, Map<String, String> properties) {
         this.tenantId = requireNonNull(tenantId, "tenantId must not be null");
@@ -50,37 +55,37 @@ public class TenantDescriptor {
     }
 
     /**
-     * Constructs a TenantDescriptor with the given {@code tenantId}.
+     * Constructs a {@code TenantDescriptor} with the given {@code tenantId}.
      *
-     * @param tenantId the identifier of this TenantDescriptor.
+     * @param tenantId the identifier of this {@code TenantDescriptor}
      */
     public TenantDescriptor(String tenantId) {
         this(tenantId, Collections.emptyMap());
     }
 
     /**
-     * Constructs a TenantDescriptor with the given {@code tenantId}.
+     * Constructs a {@code TenantDescriptor} with the given {@code tenantId}.
      *
-     * @param tenantId the identifier of this TenantDescriptor
-     * @return a TenantDescriptor with the given {@code tenantId}.
+     * @param tenantId the identifier of this {@code TenantDescriptor}
+     * @return a {@code TenantDescriptor} with the given {@code tenantId}
      */
     public static TenantDescriptor tenantWithId(String tenantId) {
         return new TenantDescriptor(tenantId);
     }
 
     /**
-     * Returns the identifier of this tenant.
+     * Returns the identifier of this {@code TenantDescriptor}.
      *
-     * @return the identifier of this TenantDescriptor
+     * @return the identifier of this {@code TenantDescriptor}
      */
     public String tenantId() {
         return tenantId;
     }
 
     /**
-     * Returns the properties of this tenant.
+     * Returns the properties of this {@code TenantDescriptor}.
      *
-     * @return the properties of this tenant
+     * @return the properties of this {@code TenantDescriptor}
      */
     public Map<String, String> properties() {
         return Map.copyOf(properties);

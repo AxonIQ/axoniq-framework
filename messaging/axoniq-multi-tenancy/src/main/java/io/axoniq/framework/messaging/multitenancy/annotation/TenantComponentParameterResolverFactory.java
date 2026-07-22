@@ -17,12 +17,14 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.configuration;
+package io.axoniq.framework.messaging.multitenancy.annotation;
 
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.common.Priority;
+import org.axonframework.common.annotation.AnnotationUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.Message;
@@ -39,7 +41,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.tenantDescriptorFrom;
+import static io.axoniq.framework.messaging.multitenancy.api.TenantUtils.tenantDescriptorFrom;
 
 /**
  * {@link ParameterResolverFactory} injecting tenant-scoped components into message-handling methods.
@@ -57,10 +59,12 @@ import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtil
  * @author Theo Emanuelsson
  * @author Jan Galinski
  * @author Laura Devriendt
+ * @author Jakob Hatzl
  * @see TenantComponentProvider
  * @since 5.3.0
  */
 @Internal
+@Priority(Priority.HIGH)
 public class TenantComponentParameterResolverFactory implements ParameterResolverFactory {
 
     private final Configuration configuration;
@@ -82,6 +86,9 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
     public @Nullable ParameterResolver<?> createInstance(Executable executable,
                                                          Parameter[] parameters,
                                                          int parameterIndex) {
+        if (!AnnotationUtils.isAnnotationPresent(parameters[parameterIndex], TenantScoped.class)) {
+            return null;
+        }
         Class<?> parameterType = parameters[parameterIndex].getType();
         TenantComponentProvider<?> provider = findProviderFor(parameterType);
         if (provider == null) {
@@ -128,7 +135,23 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
     // Providers are heterogeneous in their component type, so they are looked up through their raw type.
     @SuppressWarnings("rawtypes")
     private Iterable<TenantComponentProvider> providers() {
-        return configuration.getComponents(TenantComponentProvider.class).values();
+        return rootConfiguration().getComponents(TenantComponentProvider.class).values();
+    }
+
+    /**
+     * We want to look up {@link TenantComponentProvider}s from ancestors as well in case this factory is registered in
+     * a module's configuration. So we resolve through the root to find providers registered anywhere in the hierarchy,
+     * regardless of which scope this instance runs in.
+     *
+     * @return the root configuration
+     */
+    private Configuration rootConfiguration() {
+        Configuration root = configuration;
+        Configuration parent;
+        while ((parent = root.getParent()) != null) {
+            root = parent;
+        }
+        return root;
     }
 
 

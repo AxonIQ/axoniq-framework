@@ -46,7 +46,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
-import static io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerMultiTenancyUtils.tenantDescriptor;
+import static io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerTenantUtils.tenantDescriptor;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -69,7 +69,7 @@ import static java.util.Objects.requireNonNull;
  * @see TenantProvider
  * @see TenantConnectPredicate
  * @see MessagingConfigurationDefaults
- * @since 5.3.0
+ * @since 4.6.0
  */
 @Internal
 public class AxonServerTenantProvider implements TenantProvider {
@@ -130,7 +130,7 @@ public class AxonServerTenantProvider implements TenantProvider {
                     .join();
 
             initialTenants = contexts.stream()
-                                     .map(AxonServerMultiTenancyUtils::tenantDescriptor)
+                                     .map(AxonServerTenantUtils::tenantDescriptor)
                                      .filter(tenantConnectPredicate)
                                      .toList();
         } catch (Exception e) {

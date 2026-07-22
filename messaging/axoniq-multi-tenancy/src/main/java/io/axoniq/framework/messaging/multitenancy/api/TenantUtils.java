@@ -22,7 +22,6 @@ package io.axoniq.framework.messaging.multitenancy.api;
 import org.axonframework.messaging.core.Context.ResourceKey;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
 
@@ -34,7 +33,7 @@ import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedEx
  * @author Jan Galinski
  * @since 5.3.0
  */
-public final class MultiTenancyApiUtils {
+public final class TenantUtils {
 
     /**
      * The key used to store the {@link TenantDescriptor} in a {@link ProcessingContext} or {@link Metadata}.
@@ -60,7 +59,7 @@ public final class MultiTenancyApiUtils {
                 .orElseThrow(tenantNotResolved("No tenant descriptor found in processing context"));
     }
 
-    private MultiTenancyApiUtils() {
+    private TenantUtils() {
         // utility class
     }
 }

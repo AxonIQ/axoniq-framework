@@ -25,7 +25,7 @@ import java.util.concurrent.CompletableFuture;
  * Interface for managing the lifecycle of a connector.
  *
  * @author Jan Galinski
- * @since 5.2.0
+ * @since 5.3.0
  */
 public interface ConnectorLifecycle {
 

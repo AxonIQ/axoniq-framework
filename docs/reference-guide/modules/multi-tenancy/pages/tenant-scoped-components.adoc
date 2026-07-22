@@ -41,17 +41,19 @@ Message handlers can then declare the component type as a parameter.
 
 == Injecting the tenant's instance into a handler
 
-Declare a parameter of the component type on a message handling method.
+Declare an `@TenantScoped`-annotated parameter of the component type on a message handling method.
 During handling, the parameter is resolved to the instance belonging to the tenant of the message being handled.
 
 [source,java]
 ----
 @EventHandler
-public void on(CourseCreated event, CourseStatsRepository repository) { // <1>
+public void on(CourseCreated event, @TenantScoped CourseStatsRepository repository) { // <1>
     repository.save(new CourseStatistics(event.courseId()));
 }
 ----
+
 <1> `repository` is the `CourseStatsRepository` instance of the current tenant.
+The `@TenantScoped` annotation marks it as tenant scoped.
 
 The tenant whose instance is injected is the tenant resolved for the message being handled.
 See xref:multi-tenancy:tenant-management.adoc#tenant-resolution[Tenant resolution] for how the tenant of a message is resolved and how to customize that resolution.

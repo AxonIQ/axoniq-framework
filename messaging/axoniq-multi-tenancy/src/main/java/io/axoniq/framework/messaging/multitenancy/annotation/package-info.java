@@ -16,17 +16,12 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.messaging.multitenancy.api;
 
-import java.util.function.Predicate;
 
 /**
- * Predicate that during runtime determines whether a newly registered {@link TenantDescriptor tenant} should be added
- * to the tenant-aware infrastructure components. Used for dynamic registration of tenant-specific components.
- *
- * @author Stefan Dragisic
- * @since 4.6.0
+ * Contains classes related to multitenancy-specific annotation logic.
  */
-@FunctionalInterface
-public interface TenantConnectPredicate extends Predicate<TenantDescriptor> {
-}
+@NullMarked
+package io.axoniq.framework.messaging.multitenancy.annotation;
+
+import org.jspecify.annotations.NullMarked;
