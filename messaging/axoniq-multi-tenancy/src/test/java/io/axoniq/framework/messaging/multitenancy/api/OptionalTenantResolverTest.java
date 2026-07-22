@@ -19,7 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.api;
 
-import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.OptionalTenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantUtils.OptionalTenantResolver;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.TENANT_ID_KEY;
+import static io.axoniq.framework.messaging.multitenancy.api.TenantUtils.TENANT_ID_KEY;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

@@ -18,7 +18,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
-import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.OptionalTenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantUtils.OptionalTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
@@ -46,7 +46,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiFunction;
 
-import static io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils.tenantDescriptorOptional;
+import static io.axoniq.framework.messaging.multitenancy.api.TenantUtils.tenantDescriptorOptional;
 import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException.tenantNotResolved;
 import static java.util.Objects.requireNonNull;
 

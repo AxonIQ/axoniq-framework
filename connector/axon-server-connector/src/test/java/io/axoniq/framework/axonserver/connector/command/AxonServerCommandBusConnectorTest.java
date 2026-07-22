@@ -333,6 +333,16 @@ class AxonServerCommandBusConnectorTest {
     }
 
     @Test
+    void disconnectAlsoDisconnectsTheConnectionOnceCommandChannelPreparationCompletes() {
+        when(commandChannel.prepareDisconnect()).thenReturn(CompletableFuture.completedFuture(null));
+        when(connection.isConnected()).thenReturn(true);
+
+        testSubject.disconnect().join();
+
+        verify(connection).disconnect();
+    }
+
+    @Test
     void afterShutdownDispatchingAnShutdownInProgressExceptionIsThrownOnDispatchInvocation() {
         CommandMessage testCommand = new GenericCommandMessage(ANY_TEST_TYPE, ANY_TEST_PAYLOAD);
 
@@ -456,7 +466,7 @@ class AxonServerCommandBusConnectorTest {
 
     private CommandBusConnector.Handler getIncomingHandler(AxonServerCommandBusConnector instance) {
         try {
-            Field field = instance.getClass().getDeclaredField("incomingHandler");
+            Field field = AxonServerCommandBusConnector.class.getDeclaredField("incomingHandler");
             field.setAccessible(true);
             return (CommandBusConnector.Handler) field.get(instance);
         } catch (NoSuchFieldException | IllegalAccessException e) {

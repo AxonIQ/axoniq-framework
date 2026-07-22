@@ -38,7 +38,7 @@ import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedEx
  * @author Jan Galinski
  * @since 5.3.0
  */
-public final class MultiTenancyApiUtils {
+public final class TenantUtils {
 
     /**
      * The key used to store the {@link TenantDescriptor} in a {@link ProcessingContext} or {@link Metadata}.
@@ -58,7 +58,7 @@ public final class MultiTenancyApiUtils {
      * @throws TenantNotResolvedException if no {@link TenantDescriptor} is found in the {@link ProcessingContext}
      * @see #tenantDescriptorOptional(ProcessingContext)
      */
-    public static TenantDescriptor tenantDescriptor(ProcessingContext processingContext)
+    public static TenantDescriptor tenantDescriptorFrom(ProcessingContext processingContext)
             throws TenantNotResolvedException {
         return tenantDescriptorOptional(processingContext)
                 .orElseThrow(tenantNotResolved("No tenant descriptor found in processing context"));
@@ -153,47 +153,7 @@ public final class MultiTenancyApiUtils {
         }
     }
 
-    /**
-     * Resolves the tenant from the current {@link ProcessingContext} by extracting the message stored on it and passing
-     * it to the given {@code resolver}.
-     * <p>
-     * This is a convenience method for components that operate within an existing processing context (such as the event
-     * store or snapshot store) and need to resolve the tenant from the context's message rather than from a directly
-     * available message parameter.
-     *
-     * @param context the processing context containing the message
-     * @param tenants the collection of known tenants
-     * @return the resolved {@link TenantDescriptor}
-     * @throws IllegalStateException if no message is found in the processing context
-     */
-    TenantDescriptor resolveTenant(ProcessingContext context, Collection<TenantDescriptor> tenants) {
-        Message message = Optional.ofNullable(Message.fromContext(context))
-                                  .orElseThrow(() -> new IllegalStateException(
-                                          "Cannot resolve tenant: no message found in ProcessingContext"));
-
-        return null; // resolveTenant(message, tenants);
-    }
-//
-//    static Optional<TenantDescriptor> resolveTenant(TenantResolver tenantResolver,
-//                                                    Te
-//                                                    Collection<? extends Message> messages) {
-//        return messages.stream()
-//
-//            .map(tenantResolver)
-//                     .reduce((a, b) -> {
-//        if (a.equals(b)) {
-//            return a;
-//        }
-//        throw new TenantNotResolvedException(
-//                "Events in a single publish batch must all belong to the same tenant, but found mixed tenants: %s vs %s",
-//                a.map(TenantDescriptor::tenantId).orElse("<unresolved>"),
-//                b.map(TenantDescriptor::tenantId).orElse("<unresolved>")
-//        );
-//    })
-//            .flatMap(opt -> opt);
-//}
-
-    private MultiTenancyApiUtils() {
+    private TenantUtils() {
         // utility class
     }
 }

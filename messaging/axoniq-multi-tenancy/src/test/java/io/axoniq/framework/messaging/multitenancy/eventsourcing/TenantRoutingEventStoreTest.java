@@ -18,7 +18,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
-import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyApiUtils;
+import io.axoniq.framework.messaging.multitenancy.api.TenantUtils;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
 import org.axonframework.common.Registration;
@@ -151,7 +151,7 @@ class TenantRoutingEventStoreTest {
 
         // context carries TENANT_A as resource — should override the resolver (which always returns TENANT_B)
         StubProcessingContext context = new StubProcessingContext();
-        context.withResource(MultiTenancyApiUtils.TENANT_RESOURCE_KEY, TENANT_A);
+        context.withResource(TenantUtils.TENANT_RESOURCE_KEY, TENANT_A);
 
         EventMessage event = new GenericEventMessage(new MessageType("TestEvent"), "payload");
         testSubject.publish(context, List.of(event)).join();

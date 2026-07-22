@@ -27,7 +27,7 @@ import java.util.function.Supplier;
  *
  * @author Stefan Dragisic
  * @author Jan Galinski
- * @since 5.3.0
+ * @since 4.6.0
  */
 @SuppressWarnings("java:S110") // S110: "TenantNotResolvedException" has 5 parent classes.
 public class TenantNotResolvedException extends AxonNonTransientException {
