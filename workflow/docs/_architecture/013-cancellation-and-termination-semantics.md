@@ -65,14 +65,3 @@ So the two paths pick different causes on purpose:
   result is simply discarded.
 - **Single-step cancellation** completes with a `StepCancellationException` → a `<step>:CANCELLED` record is
   written, which the body observes and can catch to compensate.
-
-## Consequences
-
-- The termination path loses the `terminating` flag, the ordering drain, and per-step cancellation on
-  whole-workflow terminal — a smaller, single-threaded, deterministic teardown.
-- Cancelled/failed/timed-out/completed workflows no longer carry per-step `CANCELLED` records; consumers that
-  need a step-level terminal must use single-step cancellation. Running steps remain `STARTED` in the log; no
-  invariant requires "workflow terminal implies every step terminal" (see `formal/INVARIANTS.md` INV-2, INV-7).
-- One external entry point (`WorkflowManager`) with typed, result-returning operations; the previous
-  overloaded `WorkflowExecution.cancel(...)` methods are removed.
-- Compensation (catch `StepCancellationException`) is unaffected and remains driven on the control thread.
