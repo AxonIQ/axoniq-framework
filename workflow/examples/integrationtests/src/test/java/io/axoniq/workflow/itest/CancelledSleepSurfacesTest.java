@@ -51,7 +51,7 @@ import static org.awaitility.Awaitility.await;
  * compensates instead, and the post-sleep step never runs.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.3.0
  */
 class CancelledSleepSurfacesTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 

@@ -45,7 +45,7 @@ import static org.awaitility.Awaitility.await;
  * {@code STARTED} forever; after the fix the null result sanitizes to an empty map and the step {@code COMPLETED}.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.3.0
  */
 class NullResultCompletesTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 

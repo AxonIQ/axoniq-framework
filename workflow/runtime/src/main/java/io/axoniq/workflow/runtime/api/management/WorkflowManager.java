@@ -35,7 +35,7 @@ import java.util.function.Predicate;
  * durable {@code <workflow>:CANCELLED} event is the record of intent.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.3.0
  */
 public interface WorkflowManager {
 
@@ -100,7 +100,7 @@ public interface WorkflowManager {
      * Selector describing which workflow instances a management operation targets.
      *
      * @author Stefan Dragisic
-     * @since 1.0.0
+     * @since 0.3.0
      */
     sealed interface WorkflowQuery permits WorkflowQuery.ById, WorkflowQuery.ByPredicate {
 
@@ -109,7 +109,7 @@ public interface WorkflowManager {
          *
          * @param workflowId the workflow identifier to target.
          * @author Stefan Dragisic
-         * @since 1.0.0
+         * @since 0.3.0
          */
         record ById(@Nonnull String workflowId) implements WorkflowQuery {
 
@@ -120,7 +120,7 @@ public interface WorkflowManager {
          *
          * @param predicate predicate evaluated against each instance's current state.
          * @author Stefan Dragisic
-         * @since 1.0.0
+         * @since 0.3.0
          */
         record ByPredicate(@Nonnull Predicate<WorkflowState> predicate) implements WorkflowQuery {
 
@@ -134,7 +134,7 @@ public interface WorkflowManager {
      * @param reason optional human-readable reason, or {@code null} if none.
      * @param cause  optional explicit cause, or {@code null} if none.
      * @author Stefan Dragisic
-     * @since 1.0.0
+     * @since 0.3.0
      */
     record CancellationReason(@Nullable String reason, @Nullable Throwable cause) {
 
@@ -178,7 +178,7 @@ public interface WorkflowManager {
      * @param cancelled   number of matched instances that were non-terminal and therefore requested to cancel.
      * @param workflowIds identifiers of the instances that were requested to cancel.
      * @author Stefan Dragisic
-     * @since 1.0.0
+     * @since 0.3.0
      */
     record CancellationResult(int matched, int cancelled, @Nonnull List<String> workflowIds) {
 
@@ -192,7 +192,7 @@ public interface WorkflowManager {
      * @param workflowId identifier of the targeted workflow instance.
      * @param stepName   name of the targeted step.
      * @author Stefan Dragisic
-     * @since 1.0.0
+     * @since 0.3.0
      */
     record StepCancellationResult(boolean cancelled, @Nonnull String workflowId, @Nonnull String stepName) {
 
@@ -204,7 +204,7 @@ public interface WorkflowManager {
      * @param cancelled  number of currently-running steps for which a cancellation was enqueued.
      * @param workflowId identifier of the targeted workflow instance.
      * @author Stefan Dragisic
-     * @since 1.0.0
+     * @since 0.3.0
      */
     record RunningStepsCancellationResult(int cancelled, @Nonnull String workflowId) {
 

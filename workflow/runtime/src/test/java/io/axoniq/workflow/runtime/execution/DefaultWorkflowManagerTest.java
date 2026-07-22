@@ -39,7 +39,7 @@ import static org.mockito.Mockito.when;
  * matched-but-not-cancelled and no-match cases that the whole-workflow (as opposed to per-step) API exposes.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.3.0
  */
 class DefaultWorkflowManagerTest {
 

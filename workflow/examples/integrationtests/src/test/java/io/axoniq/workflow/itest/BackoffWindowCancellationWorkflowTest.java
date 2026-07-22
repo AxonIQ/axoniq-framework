@@ -53,7 +53,7 @@ import static org.awaitility.Awaitility.await;
  * must be able to compensate and complete.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.3.0
  */
 class BackoffWindowCancellationWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 

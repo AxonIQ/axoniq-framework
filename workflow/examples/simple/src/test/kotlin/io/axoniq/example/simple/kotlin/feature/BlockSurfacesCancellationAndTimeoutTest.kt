@@ -49,7 +49,7 @@ import kotlin.time.Duration.Companion.minutes
  * surface) so the test proves the exception was actually thrown.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.3.0
  */
 class BlockSurfacesCancellationAndTimeoutTest : AbstractWorkflowTestBase<WorkflowKontext>(
     WorkflowKontext::class.java,

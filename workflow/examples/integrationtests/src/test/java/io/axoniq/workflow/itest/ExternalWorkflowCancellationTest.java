@@ -54,7 +54,7 @@ import static org.awaitility.Awaitility.await;
  * is driven to a durable {@link WorkflowStatus#CANCELLED} terminal state. Non-matching instances are left untouched.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.3.0
  */
 class ExternalWorkflowCancellationTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 

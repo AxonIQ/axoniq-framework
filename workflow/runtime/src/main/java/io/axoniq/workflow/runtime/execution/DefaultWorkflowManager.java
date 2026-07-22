@@ -41,7 +41,7 @@ import java.util.function.Predicate;
  * the instances reaching their terminal state.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.3.0
  */
 @Internal
 public class DefaultWorkflowManager implements WorkflowManager {
