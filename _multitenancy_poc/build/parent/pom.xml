@@ -55,7 +55,7 @@
         <hsqldb.version>2.7.4</hsqldb.version>
         <hibernate-core.version>7.4.3.Final</hibernate-core.version>
         <mysql-connector-java.version>9.7.0</mysql-connector-java.version>
-        <postgresql.version>42.7.11</postgresql.version>
+        <postgresql.version>42.7.12</postgresql.version>
         <ojdbc.version>23.26.1.0.0</ojdbc.version>
         <!-- Jakarta -->
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
