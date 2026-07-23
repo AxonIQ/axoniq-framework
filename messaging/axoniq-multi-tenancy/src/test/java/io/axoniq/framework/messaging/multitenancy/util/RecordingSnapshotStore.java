@@ -1,0 +1,60 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+
+package io.axoniq.framework.messaging.multitenancy.util;
+
+import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.Nullable;
+
+import java.util.concurrent.CompletableFuture;
+
+/**
+ * A {@link SnapshotStore} test double that records how often it was loaded from and stored to, so tests can assert
+ * which tenant's store a routing snapshot store delegated to.
+ */
+public class RecordingSnapshotStore implements SnapshotStore {
+
+    private int loadCount;
+    private int storeCount;
+
+    public int loadCount() {
+        return loadCount;
+    }
+
+    public int storeCount() {
+        return storeCount;
+    }
+
+    @Override
+    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
+                                         @Nullable ProcessingContext context) {
+        storeCount++;
+        return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
+    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
+                                                      @Nullable ProcessingContext context) {
+        loadCount++;
+        return CompletableFuture.completedFuture(null);
+    }
+}

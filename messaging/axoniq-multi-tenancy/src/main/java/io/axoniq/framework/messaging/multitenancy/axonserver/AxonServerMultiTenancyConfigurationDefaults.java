@@ -22,11 +22,15 @@ package io.axoniq.framework.messaging.multitenancy.axonserver;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
+import io.axoniq.framework.messaging.multitenancy.api.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
-import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantRoutingEventStore;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
@@ -38,10 +42,13 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.SearchScope;
 import org.axonframework.common.lifecycle.Phase;
+import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled.isEnabled;
 
@@ -88,9 +95,11 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
         // Register the MultiTenantAxonServerCommandBusConnector
         componentRegistry.registerIfNotPresent(multiTenantCommandBusConnector(), SearchScope.ALL);
 
-        // Register the TenantRoutingEventStore, which routes event store operations to the correct tenant's
-        // event store segment using the Axon Server TenantEventSegmentFactory.
-        registerTenantRoutingEventStore(componentRegistry);
+        // Register the multi-tenant EventStorageEngine, routing writes and sourcing to each tenant's engine.
+        registerMultiTenantEventStorageEngine(componentRegistry);
+
+        // Register the multi-tenant SnapshotStore, routing snapshot load and store to each tenant's snapshot store.
+        registerMultiTenantSnapshotStore(componentRegistry);
     }
 
     /**
@@ -164,18 +173,79 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
     }
 
     /**
-     * Registers the {@link TenantRoutingEventStore}, routing event store operations to the correct tenant's
-     * {@link org.axonframework.eventsourcing.eventstore.EventStore} segment, built per tenant by the
-     * {@link AxonServerTenantEventSegmentFactory}.
+     * Registers the {@link MultiTenantEventStorageEngine} as the {@link EventStorageEngine}, backed by a
+     * {@link TenantEventStorageEngineFactory} that is subscribed to the {@link TenantProvider} so per-tenant engines
+     * are evicted when a tenant is removed. Registered before the Axon Server enhancer, whose
+     * {@code registerIfNotPresent} for {@link EventStorageEngine} then backs off.
      *
-     * @param componentRegistry the registry to register the routing event store with
+     * @param componentRegistry the registry to register the routing engine and its factory with
      */
-    static void registerTenantRoutingEventStore(ComponentRegistry componentRegistry) {
-        componentRegistry.registerComponent(
-                TenantRoutingEventStore.class,
-                config -> new TenantRoutingEventStore(
-                        AxonServerTenantEventSegmentFactory.buildComponent(config),
-                        config.getComponent(TenantResolver.class)
-                ));
+    static void registerMultiTenantEventStorageEngine(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(
+                subscribedFactory(TenantEventStorageEngineFactory.class,
+                                  AxonServerTenantEventStorageEngineFactory::new),
+                SearchScope.ALL);
+        componentRegistry.registerIfNotPresent(
+                ComponentDefinition.ofType(EventStorageEngine.class)
+                                   .withBuilder(config -> new MultiTenantEventStorageEngine(
+                                           config.getComponent(TenantEventStorageEngineFactory.class),
+                                           config.getComponent(TenantResolver.class),
+                                           config.getComponent(TenantProvider.class))),
+                SearchScope.ALL);
+    }
+
+    /**
+     * Registers the {@link MultiTenantSnapshotStore} as the {@link SnapshotStore}, backed by a
+     * {@link TenantSnapshotStoreFactory} that is subscribed to the {@link TenantProvider} so per-tenant snapshot
+     * stores are evicted when a tenant is removed. Registered before the Axon Server enhancer, whose
+     * {@code registerIfNotPresent} for {@link SnapshotStore} then backs off.
+     *
+     * @param componentRegistry the registry to register the routing snapshot store and its factory with
+     */
+    static void registerMultiTenantSnapshotStore(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(
+                subscribedFactory(TenantSnapshotStoreFactory.class,
+                                  AxonServerTenantSnapshotStoreFactory::new),
+                SearchScope.ALL);
+        componentRegistry.registerIfNotPresent(
+                ComponentDefinition.ofType(SnapshotStore.class)
+                                   .withBuilder(config -> new MultiTenantSnapshotStore(
+                                           config.getComponent(TenantSnapshotStoreFactory.class),
+                                           config.getComponent(TenantResolver.class),
+                                           config.getComponent(TenantProvider.class))),
+                SearchScope.ALL);
+    }
+
+    /**
+     * Builds a {@link ComponentDefinition} for a per-tenant component factory. When the built factory is a
+     * {@link MultiTenantAwareComponent}, it is subscribed to the {@link TenantProvider} at startup and unsubscribed at
+     * shutdown, so tenant additions and removals reach the factory's cache.
+     *
+     * @param factoryType the component type of the factory
+     * @param builder     the builder constructing the factory from the {@link Configuration}
+     * @param <F>         the factory type
+     * @return a {@link ComponentDefinition} for the subscribed factory
+     */
+    private static <F> ComponentDefinition<F> subscribedFactory(Class<F> factoryType,
+                                                                Function<Configuration, F> builder) {
+        AtomicReference<@Nullable Registration> subscription = new AtomicReference<>();
+        return ComponentDefinition.ofType(factoryType)
+                                  .withBuilder(builder::apply)
+                                  .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
+                                           (config, factory) -> {
+                                               if (factory instanceof MultiTenantAwareComponent aware) {
+                                                   subscription.set(config.getComponent(TenantProvider.class)
+                                                                           .subscribe(aware));
+                                               }
+                                               return FutureUtils.emptyCompletedFuture();
+                                           })
+                                  .onShutdown(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
+                                              (config, factory) -> {
+                                                  Registration registration = subscription.get();
+                                                  if (registration != null) {
+                                                      registration.cancel();
+                                                  }
+                                                  return FutureUtils.emptyCompletedFuture();
+                                              });
     }
 }

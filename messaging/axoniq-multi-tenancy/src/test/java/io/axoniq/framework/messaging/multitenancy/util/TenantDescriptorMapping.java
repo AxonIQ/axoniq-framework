@@ -27,6 +27,11 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
+/**
+ * A test double mapping each tenant to its per-tenant component and exposing the mapped tenants as
+ * {@link TenantDescriptors}, so a routing component can be given both a factory ({@code this::apply}) and the set of
+ * known tenants in one object.
+ */
 public class TenantDescriptorMapping<T> implements Function<TenantDescriptor, T>, TenantDescriptors {
 
     private final Map<TenantDescriptor, T> delegate = new ConcurrentHashMap<>();

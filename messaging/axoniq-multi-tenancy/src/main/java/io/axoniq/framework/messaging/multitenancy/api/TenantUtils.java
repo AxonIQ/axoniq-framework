@@ -20,15 +20,10 @@
 package io.axoniq.framework.messaging.multitenancy.api;
 
 import org.axonframework.messaging.core.Context.ResourceKey;
-import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.jspecify.annotations.Nullable;
 
-import java.util.Collection;
-import java.util.Collections;
 import java.util.Optional;
-import java.util.function.Function;
 
 import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException.tenantNotResolved;
 
@@ -65,92 +60,13 @@ public final class TenantUtils {
     }
 
     /**
-     * A {@link Function} that tries to retrive the {@link TenantDescriptor} from a {@link ProcessingContext}.
+     * Retrieves the {@link TenantDescriptor} from the given {@link ProcessingContext}, if present.
      *
      * @param processingContext the {@link ProcessingContext} to retrieve the {@link TenantDescriptor} from
      * @return the {@link TenantDescriptor} from the {@link ProcessingContext}, wrapped in an {@link Optional}
      */
     public static Optional<TenantDescriptor> tenantDescriptorOptional(ProcessingContext processingContext) {
         return Optional.ofNullable(processingContext.getResource(TENANT_RESOURCE_KEY));
-    }
-
-    /**
-     * A wrapper around a {@link TenantResolver} that returns an {@link Optional} instead of throwing an exception when
-     * no tenant could be resolved. Also provides additional convenience methods for resolving a tenant from a
-     * collection of {@link Message messages}.
-     *
-     * We need this in scenarios where we just can't be sure if we get the tenant from the ProcessingContext or the
-     * message, depending on how it was dispatched and where in the chain we are.
-     *
-     * @author Jan Galinski
-     * @since 5.3.0
-     */
-    public static class OptionalTenantResolver implements Function<@Nullable Message, Optional<TenantDescriptor>> {
-
-        private final TenantResolver tenantResolver;
-        private final TenantDescriptors tenantDescriptors;
-
-        /**
-         * Creates a new {@code OptionalTenantResolver} that wraps the given {@code tenantResolver} and uses an empty
-         * collection of {@link TenantDescriptor tenants} for resolution.
-         *
-         * @param tenantResolver the {@link TenantResolver} to wrap
-         * @see #OptionalTenantResolver(TenantResolver, TenantDescriptors)
-         */
-        public OptionalTenantResolver(TenantResolver tenantResolver) {
-            this(tenantResolver, Collections::emptyList);
-        }
-
-        /**
-         * Creates a new {@code OptionalTenantResolver} that wraps the given {@code tenantResolver} and uses the given
-         * {@code tenantDescriptors} for resolution.
-         *
-         * @param tenantResolver    the {@link TenantResolver} to wrap
-         * @param tenantDescriptors the {@link TenantDescriptors} to use for resolution
-         */
-        public OptionalTenantResolver(TenantResolver tenantResolver, TenantDescriptors tenantDescriptors) {
-            this.tenantResolver = tenantResolver;
-            this.tenantDescriptors = tenantDescriptors;
-        }
-
-        @Override
-        public Optional<TenantDescriptor> apply(@Nullable Message message) {
-            if (message == null) {
-                return Optional.empty();
-            }
-            try {
-                return Optional.of(tenantResolver.resolveTenant(message, tenantDescriptors.tenants()));
-            } catch (TenantNotResolvedException e) {
-                return Optional.empty();
-            }
-        }
-
-        /**
-         * Resolves the tenant from a collection of {@link Message messages}. If all messages resolve to the same
-         * tenant, that tenant is returned. If any message resolves to a different tenant, a
-         * {@link TenantNotResolvedException} is thrown.
-         *
-         * @param messages the collection of messages to resolve the tenant from
-         * @return the resolved tenant, or {@link Optional#empty()} if no tenant could be resolved
-         * @throws TenantNotResolvedException if any message resolves to a different tenant than the others
-         */
-        public Optional<TenantDescriptor> apply(Collection<? extends @Nullable Message> messages)
-                throws TenantNotResolvedException {
-            return messages.stream()
-                           .map(this)
-                           .filter(Optional::isPresent)
-                           .reduce((a, b) -> {
-                               if (a.equals(b)) {
-                                   return a;
-                               }
-                               throw new TenantNotResolvedException(
-                                       "Events in a single publish batch must all belong to the same tenant, but found mixed tenants: %s vs %s",
-                                       a.map(TenantDescriptor::tenantId).orElse("<unresolved>"),
-                                       b.map(TenantDescriptor::tenantId).orElse("<unresolved>")
-                               );
-                           })
-                           .flatMap(opt -> opt);
-        }
     }
 
     private TenantUtils() {
