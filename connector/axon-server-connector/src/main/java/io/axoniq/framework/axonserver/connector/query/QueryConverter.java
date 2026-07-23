@@ -33,6 +33,7 @@ import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
 import io.axoniq.framework.axonserver.connector.shared.ExceptionConverter;
 import io.axoniq.framework.axonserver.connector.shared.MetadataConverter;
 import io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils;
+import org.axonframework.common.IdentifierFactory;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
@@ -66,6 +67,18 @@ import static io.axoniq.framework.axonserver.connector.util.ProcessingInstructio
  */
 @Internal
 public final class QueryConverter {
+
+    /**
+     * The {@link SerializedObject#getType()} used to mark a {@link QueryResponse} as carrying no payload.
+     * <p>
+     * This mirrors the {@code "empty"} sentinel type Axon Framework 4 has always used for a {@code null} query result,
+     * so that an Axon Framework 4 client dispatching a direct query recognizes the response as "no result" instead of
+     * failing on a payload it cannot deserialize.
+     *
+     * @deprecated as this constant purely exists for interoperability between Axon Framework 4 and Axon Framework 5
+     */
+    @Deprecated(forRemoval = true, since = "5.2.1")
+    static final String EMPTY_PAYLOAD_TYPE = "empty";
 
     /**
      * Converts a {@link QueryRequest} into a {@link QueryMessage}.
@@ -205,6 +218,30 @@ public final class QueryConverter {
                                                         .build()
                             )
                             .putAllMetaData(MetadataConverter.convertGrpcToMetadataValues(queryResponseMessage.metadata()))
+                            .build();
+    }
+
+    /**
+     * Constructs a {@link QueryResponse} carrying no payload, marked with the {@link #EMPTY_PAYLOAD_TYPE} sentinel.
+     * <p>
+     * Used when a direct query is handled without producing a single result (e.g. a {@code @QueryHandler} returning
+     * {@code null} or {@link java.util.Optional#empty()}), so that exactly one response is still sent for the query, as
+     * required by the Axon Framework 4 wire protocol.
+     *
+     * @param requestId the {@link QueryMessage#identifier()} that initiated the query. Used to associate the resulting
+     *                  {@link QueryResponse} with the original request. Must not be null.
+     * @return a {@link QueryResponse} with an empty payload, marked with the {@link #EMPTY_PAYLOAD_TYPE} sentinel
+     * @deprecated as this method purely exists for interoperability between Axon Framework 4 and Axon Framework 5
+     */
+    @Deprecated(forRemoval = true, since = "5.2.1")
+    static QueryResponse emptyQueryResponse(String requestId) {
+        return QueryResponse.newBuilder()
+                            .setMessageIdentifier(IdentifierFactory.getInstance().generateIdentifier())
+                            .setRequestIdentifier(requestId)
+                            .setPayload(SerializedObject.newBuilder()
+                                                        .setType(EMPTY_PAYLOAD_TYPE)
+                                                        .setData(ByteString.EMPTY)
+                                                        .build())
                             .build();
     }
 
