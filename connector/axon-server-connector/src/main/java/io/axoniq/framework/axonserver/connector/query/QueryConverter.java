@@ -75,8 +75,7 @@ public final class QueryConverter {
      * so that an Axon Framework 4 client dispatching a direct query recognizes the response as "no result" instead of
      * failing on a payload it cannot deserialize.
      *
-     * @deprecated as this constant purely exists for interoperability between Axon Framework 4 and Axon Framework 5.
-     * This method will be removed as of
+     * @deprecated as this constant purely exists for interoperability between Axon Framework 4 and Axon Framework 5
      */
     @Deprecated(forRemoval = true, since = "5.2.1")
     static final String EMPTY_PAYLOAD_TYPE = "empty";
@@ -232,8 +231,7 @@ public final class QueryConverter {
      * @param requestId the {@link QueryMessage#identifier()} that initiated the query. Used to associate the resulting
      *                  {@link QueryResponse} with the original request. Must not be null.
      * @return a {@link QueryResponse} with an empty payload, marked with the {@link #EMPTY_PAYLOAD_TYPE} sentinel
-     * @deprecated as this method purely exists for interoperability between Axon Framework 4 and Axon Framework 5. This
-     * method will be removed as of
+     * @deprecated as this method purely exists for interoperability between Axon Framework 4 and Axon Framework 5
      */
     @Deprecated(forRemoval = true, since = "5.2.1")
     static QueryResponse emptyQueryResponse(String requestId) {

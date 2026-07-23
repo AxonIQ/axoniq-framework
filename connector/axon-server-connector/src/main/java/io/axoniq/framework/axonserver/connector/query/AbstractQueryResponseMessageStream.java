@@ -102,8 +102,7 @@ public abstract class AbstractQueryResponseMessageStream<T> extends AbstractMess
      *
      * @param t the entry to check
      * @return {@code true} if {@code t} carries no payload, {@code false} otherwise
-     * @deprecated as this method purely exists for interoperability between Axon Framework 4 and Axon Framework 5. This
-     * method will be removed as of
+     * @deprecated as this method purely exists for interoperability between Axon Framework 4 and Axon Framework 5
      */
     @Deprecated(forRemoval = true, since = "5.2.1")
     protected boolean isEmptyResult(T t) {
