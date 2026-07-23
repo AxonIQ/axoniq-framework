@@ -51,7 +51,7 @@ public interface WorkflowManager {
     /**
      * Selects the workflow instance with the given id, resolving it against the repository now, and returns a handle
      * for acting on it. A handle is returned even when the id is unknown; in that case its command methods report no
-     * effect ({@code false} / {@code 0}) and {@link WorkflowHandle#state()} throws.
+     * effect ({@code false} / {@code 0}) and {@link WorkflowHandle#state()} returns empty.
      *
      * @param workflowId the identifier of the workflow instance to select.
      * @return a handle for the selected instance, never {@code null}.
