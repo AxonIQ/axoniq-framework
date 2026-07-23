@@ -35,6 +35,9 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Implementation of the {@link FlowControl} interface that sends {@link QueryResponse}s provided by a
  * {@link MessageStream} to a downstream {@link ReplyChannel}.
+ *
+ * @author Allard Buijze
+ * @since 5.0.0
  */
 @Internal
 class FlowControlledResponseSender implements FlowControl {
@@ -46,6 +49,7 @@ class FlowControlledResponseSender implements FlowControl {
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final AtomicLong requests = new AtomicLong();
     private final AtomicBoolean sendingGate = new AtomicBoolean(false);
+    private final AtomicBoolean anySent = new AtomicBoolean(false);
 
     public FlowControlledResponseSender(String clientId,
                                         String queryIdentifier,
@@ -91,24 +95,35 @@ class FlowControlledResponseSender implements FlowControl {
                 if (next.isPresent()) {
                     requests.decrementAndGet();
                 }
-                next.ifPresent(i -> downstream.send(QueryConverter.convertQueryResponseMessage(queryIdentifier,
-                                                                                               i.message())));
+                next.ifPresent(i -> {
+                    anySent.set(true);
+                    downstream.send(QueryConverter.convertQueryResponseMessage(queryIdentifier, i.message()));
+                });
             }
             if (!upstream.hasNextAvailable() && upstream.isCompleted()) {
                 closed.set(true);
-                upstream.error()
-                        .ifPresentOrElse(error -> {
-                                             ErrorCode errorCode = ErrorCode.getQueryExecutionErrorCode(error);
-                                             ErrorMessage ex = ExceptionConverter.convertToErrorMessage(clientId, errorCode, error);
-                                             QueryResponse errorResponse =
-                                                     QueryResponse.newBuilder()
-                                                                  .setErrorCode(errorCode.errorCode())
-                                                                  .setErrorMessage(ex)
-                                                                  .setRequestIdentifier(queryIdentifier)
-                                                                  .build();
-                                             downstream.sendLast(errorResponse);
-                                         },
-                                         downstream::complete);
+                upstream.error().ifPresentOrElse(
+                        error -> {
+                            ErrorCode errorCode = ErrorCode.getQueryExecutionErrorCode(error);
+                            ErrorMessage ex = ExceptionConverter.convertToErrorMessage(clientId, errorCode, error);
+                            QueryResponse errorResponse =
+                                    QueryResponse.newBuilder()
+                                                 .setErrorCode(errorCode.errorCode())
+                                                 .setErrorMessage(ex)
+                                                 .setRequestIdentifier(queryIdentifier)
+                                                 .build();
+                            downstream.sendLast(errorResponse);
+                        },
+                        () -> {
+                            if (anySent.get()) {
+                                downstream.complete();
+                            } else {
+                                // A direct query must yield at least one response on the wire, to
+                                // remain compatible with the Axon Framework 4 wire protocol.
+                                downstream.sendLast(QueryConverter.emptyQueryResponse(queryIdentifier));
+                            }
+                        }
+                );
             }
         } finally {
             sendingGate.set(false);
