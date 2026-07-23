@@ -34,10 +34,6 @@ Covers per-tenant event stores: appending to and sourcing from the event store o
 
 Covers per-tenant streaming, pooled, and persistent-stream-based event processors, including per-tenant token stores and transaction management.
 
-== Spring Boot auto-configuration
-
-Covers the auto-configuration that wires multi-tenancy support into Spring Boot applications, how to disable it, and how to configure application-specific tenant-scoped components.
-
 == Adding the module
 
 Multi-tenancy support ships in the `axoniq-multi-tenancy` module:
