@@ -60,6 +60,11 @@
         <!-- Testing -->
         <dependency>
             <groupId>org.axonframework</groupId>
+            <artifactId>axon-eventsourcing</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.axonframework</groupId>
             <artifactId>axon-common</artifactId>
             <type>test-jar</type>
             <scope>test</scope>

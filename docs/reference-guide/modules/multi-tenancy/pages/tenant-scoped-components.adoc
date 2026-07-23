@@ -18,6 +18,11 @@ Each provider is generic over a single component type. To expose several tenant-
 
 Implement a `TenantComponentFactory` describing how the component is built for a tenant, and register the provider obtained through `TenantComponentProvider.withFactory`.
 
+[tabs]
+====
+Declarative - Configuration API::
++
+--
 Register the provider as a component on your `MessagingConfigurer`, passed in from the place it is created:
 
 [source,java]
@@ -36,22 +41,44 @@ public void registerTenantComponents(MessagingConfigurer configurer) {
 ----
 <1> Register the provider under the `TenantComponentProvider` type so it is discovered during parameter resolution.
 <2> The component type, used to match the provider against handler parameters. The lambda is the `TenantComponentFactory` building the tenant's instance.
+--
+Autodetected - Spring Boot::
++
+--
+Expose the provider as a bean of type `TenantComponentProvider`:
+
+[source,java]
+----
+@Bean
+public TenantComponentProvider<CourseStatsRepository> courseStatsRepositoryProvider() { // <1>
+    return TenantComponentProvider.withFactory(
+            CourseStatsRepository.class,                                                 // <2>
+            tenant -> new InMemoryCourseStatsRepository(tenant.tenantId())
+    );
+}
+----
+<1> The bean type is `TenantComponentProvider`, which is how it is discovered during parameter resolution.
+<2> The component type, used to match the provider against handler parameters. The lambda is the `TenantComponentFactory` building the tenant's instance.
+--
+====
 
 Message handlers can then declare the component type as a parameter.
 
 == Injecting the tenant's instance into a handler
 
-Declare a parameter of the component type on a message handling method.
+Declare an `@TenantScoped`-annotated parameter of the component type on a message handling method.
 During handling, the parameter is resolved to the instance belonging to the tenant of the message being handled.
 
 [source,java]
 ----
 @EventHandler
-public void on(CourseCreated event, CourseStatsRepository repository) { // <1>
+public void on(CourseCreated event, @TenantScoped CourseStatsRepository repository) { // <1>
     repository.save(new CourseStatistics(event.courseId()));
 }
 ----
+
 <1> `repository` is the `CourseStatsRepository` instance of the current tenant.
+The `@TenantScoped` annotation marks it as tenant scoped.
 
 The tenant whose instance is injected is the tenant resolved for the message being handled.
 See xref:multi-tenancy:tenant-management.adoc#tenant-resolution[Tenant resolution] for how the tenant of a message is resolved and how to customize that resolution.
@@ -63,6 +90,11 @@ An application can register several tenant-scoped components, one provider per t
 Each provider is matched to a handler parameter by its component type.
 Register a single provider per component type: registering two providers for the same type, or a parameter type that matches several providers, results in an `AxonConfigurationException`.
 
+[tabs]
+====
+Declarative - Configuration API::
++
+--
 Register each provider under its own name:
 
 [source,java]
@@ -80,6 +112,32 @@ configurer.componentRegistry(registry -> registry
 ----
 <1> A provider for the `CourseStatsRepository` read model.
 <2> A second provider, for a per-tenant reporting `DataSource`, registered under a different name.
+--
+Autodetected - Spring Boot::
++
+--
+Declare one bean per component type. The bean name distinguishes them:
+
+[source,java]
+----
+@Bean
+public TenantComponentProvider<CourseStatsRepository> courseStatsRepository() {  // <1>
+    return TenantComponentProvider.withFactory(
+            CourseStatsRepository.class,
+            tenant -> new InMemoryCourseStatsRepository(tenant.tenantId()));
+}
+
+@Bean
+public TenantComponentProvider<DataSource> reportingDataSource() {              // <2>
+    return TenantComponentProvider.withFactory(
+            DataSource.class,
+            tenant -> buildDataSource(tenant));
+}
+----
+<1> A provider for the `CourseStatsRepository` read model.
+<2> A second provider, for a per-tenant reporting `DataSource`.
+--
+====
 
 == Lifecycle and cleanup
 

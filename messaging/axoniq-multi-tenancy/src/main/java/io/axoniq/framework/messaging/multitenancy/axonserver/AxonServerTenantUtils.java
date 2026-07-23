@@ -31,7 +31,7 @@ import java.util.Map;
  * @author Jan Galinski
  * @since 5.3.0
  */
-public final class AxonServerMultiTenancyUtils {
+public final class AxonServerTenantUtils {
 
     /**
      * Extract {@link TenantDescriptor} information from the given {@link ContextOverview}.
@@ -49,7 +49,7 @@ public final class AxonServerMultiTenancyUtils {
         );
     }
 
-    private AxonServerMultiTenancyUtils() {
+    private AxonServerTenantUtils() {
         // utility class
     }
 }

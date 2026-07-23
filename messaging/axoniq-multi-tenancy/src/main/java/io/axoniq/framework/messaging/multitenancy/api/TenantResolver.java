@@ -30,7 +30,7 @@ import java.util.Optional;
  *
  * @author Stefan Dragisic
  * @author Jan Galinski
- * @since 5.3.0
+ * @since 4.6.0
  */
 @FunctionalInterface
 public interface TenantResolver {
