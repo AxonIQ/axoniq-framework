@@ -193,9 +193,9 @@ A selection is iterable, so you can inspect each instance and decide per instanc
 [source,java]
 ----
 for (WorkflowHandle handle : workflowManager.workflows(state -> state.payload().containsKey("stuck"))) {
-    if (handle.state().workflowStepNames().contains("awaitApproval")) {
-        handle.cancel(CancellationReason.of("Manual review timed out"));
-    }
+    handle.state()
+          .filter(state -> state.workflowStepNames().contains("awaitApproval"))
+          .ifPresent(state -> handle.cancel(CancellationReason.of("Manual review timed out")));
 }
 ----
 

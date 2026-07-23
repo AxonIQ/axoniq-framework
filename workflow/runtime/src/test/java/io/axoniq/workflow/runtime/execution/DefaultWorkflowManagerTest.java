@@ -29,11 +29,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -102,20 +100,18 @@ class DefaultWorkflowManagerTest {
 
         var manager = new DefaultWorkflowManager(repository);
 
-        assertThat(manager.workflow("wf").state()).isSameAs(execution.state());
+        assertThat(manager.workflow("wf").state()).contains(execution.state());
         assertThat(manager.workflow("wf").id()).isEqualTo("wf");
     }
 
     @Test
-    void workflowState_onUnknownId_throwsNoSuchElement() {
+    void workflowState_onUnknownId_returnsEmpty() {
         var repository = mock(WorkflowExecutionRepository.class);
         when(repository.findById("no-such")).thenReturn(Optional.empty());
 
         var manager = new DefaultWorkflowManager(repository);
 
-        assertThatThrownBy(() -> manager.workflow("no-such").state())
-                .isInstanceOf(NoSuchElementException.class)
-                .hasMessageContaining("no-such");
+        assertThat(manager.workflow("no-such").state()).isEmpty();
     }
 
     // --- workflow(id).cancelStep ---
@@ -254,7 +250,7 @@ class DefaultWorkflowManagerTest {
         var seen = new ArrayList<String>();
         for (WorkflowHandle handle : selection) {
             seen.add(handle.id());
-            assertThat(handle.state()).isNotNull();
+            assertThat(handle.state()).isPresent();
             handle.cancel(CancellationReason.of("per-handle"));
         }
 

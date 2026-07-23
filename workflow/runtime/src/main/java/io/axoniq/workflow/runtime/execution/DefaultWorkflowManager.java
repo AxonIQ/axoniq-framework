@@ -30,8 +30,8 @@ import org.axonframework.common.annotation.Internal;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -123,12 +123,9 @@ public class DefaultWorkflowManager implements WorkflowManager {
 
         @Nonnull
         @Override
-        public WorkflowState state() {
+        public Optional<WorkflowState> state() {
             var execution = resolver.get();
-            if (execution == null) {
-                throw new NoSuchElementException("No workflow instance found for id '" + workflowId + "'");
-            }
-            return execution.state();
+            return execution == null ? Optional.empty() : Optional.of(execution.state());
         }
 
         @Override

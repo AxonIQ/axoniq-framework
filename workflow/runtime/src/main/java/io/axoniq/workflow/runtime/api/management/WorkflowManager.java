@@ -23,7 +23,7 @@ import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
 import java.util.List;
-import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -94,14 +94,13 @@ public interface WorkflowManager {
         String id();
 
         /**
-         * Returns a read-only snapshot of the instance's current {@link WorkflowState}.
+         * Returns a read-only snapshot of the instance's current {@link WorkflowState}, or empty if no workflow
+         * instance exists for this handle's id (it is unknown, or has terminated and been evicted from the engine).
          *
-         * @return the current workflow state.
-         * @throws NoSuchElementException if no workflow instance exists for this handle's id (it is unknown, or has
-         *                                terminated and been evicted from the engine).
+         * @return the current workflow state, or empty if the instance does not exist.
          */
         @Nonnull
-        WorkflowState state();
+        Optional<WorkflowState> state();
 
         /**
          * Cooperatively cancels this workflow instance, driving it towards a durable {@code CANCELLED} terminal state on

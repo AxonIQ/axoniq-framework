@@ -19,6 +19,8 @@
 package io.axoniq.workflow.springboot;
 
 import io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
+import io.axoniq.workflow.runtime.api.management.WorkflowManager;
+import org.axonframework.common.configuration.AxonConfiguration;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -58,5 +60,18 @@ public class WorkflowAutoConfiguration {
         return new WorkflowEventProcessingRegistrationEnhancer(
                 DEFAULT_MODULE_NAME, null, null, true
         );
+    }
+
+    /**
+     * Exposes the engine's {@link WorkflowManager} as a Spring bean, so it can be injected directly into Spring
+     * components (for example a REST controller) instead of resolving it from the {@link AxonConfiguration}.
+     *
+     * @param configuration the Axon configuration the workflow engine is registered in.
+     * @return the workflow manager.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public WorkflowManager workflowManager(AxonConfiguration configuration) {
+        return configuration.getComponent(WorkflowManager.class);
     }
 }
