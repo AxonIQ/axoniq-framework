@@ -31,7 +31,7 @@ import java.util.Objects;
  * terminated from the type alone.
  *
  * @author Stefan Dragisic
- * @since 0.3.0
+ * @since 1.0.0
  */
 public interface TerminatePrimitive {
 

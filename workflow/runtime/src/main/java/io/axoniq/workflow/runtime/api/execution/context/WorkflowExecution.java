@@ -42,7 +42,7 @@ import java.util.function.Predicate;
  * @author Stefan Dragisic
  * @author Steven van Beelen
  * @author Allard Buijze
- * @since 0.3.0
+ * @since 1.0.0
  */
 @Internal
 public interface WorkflowExecution extends DescribableComponent {

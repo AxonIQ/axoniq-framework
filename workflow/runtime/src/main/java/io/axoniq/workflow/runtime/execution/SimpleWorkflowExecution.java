@@ -69,7 +69,7 @@ import static java.lang.Thread.currentThread;
  * @author Simon Zambrovski
  * @author Stefan Dragisic
  * @author Steven van Beelen
- * @since 0.3.0
+ * @since 1.0.0
  */
 public final class SimpleWorkflowExecution implements WorkflowExecution {
 

@@ -59,7 +59,7 @@ import java.util.concurrent.Executors;
  * Defaults for workflow configuration.
  *
  * @author Simon Zambrovski
- * @since 0.3.0
+ * @since 1.0.0
  */
 @Internal
 @RegistrationScope(scope = RegistrationScope.Scope.CURRENT)

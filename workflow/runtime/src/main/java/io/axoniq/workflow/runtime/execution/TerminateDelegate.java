@@ -51,7 +51,7 @@ import static io.axoniq.workflow.runtime.util.EventMessageUtils.failedWorkflow;
  * event forced onto a history the new body no longer reaches.
  *
  * @author Stefan Dragisic
- * @since 0.3.0
+ * @since 1.0.0
  */
 @Internal
 public class TerminateDelegate implements TerminatePrimitive {

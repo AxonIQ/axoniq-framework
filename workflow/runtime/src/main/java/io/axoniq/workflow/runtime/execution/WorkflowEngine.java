@@ -56,7 +56,7 @@ import static io.axoniq.workflow.runtime.util.ProcessingContextUtils.RESTART_TOK
  * @author Simon Zambrovski
  * @author Stefan Dragisic
  * @author Steven van Beelen
- * @since 0.3.0
+ * @since 1.0.0
  */
 @Internal
 public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler {

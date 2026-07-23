@@ -49,7 +49,7 @@ import static org.mockito.Mockito.isA;
 
 /**
  * @author Stefan Dragisic
- * @since 0.3.0
+ * @since 1.0.0
  */
 class TerminateDelegateCancelTest {
 

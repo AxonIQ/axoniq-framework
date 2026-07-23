@@ -42,7 +42,7 @@ import java.util.concurrent.Executor;
  *
  * @author Stefan Dragisic
  * @author Simon Zambrovski
- * @since 0.3.0
+ * @since 1.0.0
  */
 @Internal
 public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrimitive {

@@ -47,7 +47,7 @@ import kotlin.time.toJavaDuration
  * This type exposes the workflow primitives that Kotlin DSL authors use inside
  * a workflow definition block.
  *
- * @since 0.3.0
+ * @since 1.0.0
  * @author Simon Zambrovski
  */
 class Kontext(

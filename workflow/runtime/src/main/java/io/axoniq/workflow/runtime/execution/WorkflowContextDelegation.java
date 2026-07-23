@@ -55,7 +55,7 @@ import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Bu
  * and primitive implementations.
  *
  * @author Simon Zambrovski
- * @since 0.3.0
+ * @since 1.0.0
  */
 public class WorkflowContextDelegation implements WorkflowContext {
 
