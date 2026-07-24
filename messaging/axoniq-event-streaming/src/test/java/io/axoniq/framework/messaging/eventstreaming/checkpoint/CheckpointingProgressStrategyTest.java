@@ -19,7 +19,7 @@
 
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 
-import org.axonframework.messaging.eventhandling.processing.streaming.pooled.progress.SegmentProgressStrategyFactory;
+import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategyFactory;
 
 import java.util.List;
 

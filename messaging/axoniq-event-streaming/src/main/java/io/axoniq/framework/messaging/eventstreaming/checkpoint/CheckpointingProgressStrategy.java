@@ -21,8 +21,8 @@ package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.eventhandling.processing.streaming.pooled.progress.SegmentProgressContext;
-import org.axonframework.messaging.eventhandling.processing.streaming.pooled.progress.SegmentProgressStrategy;
+import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressContext;
+import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategy;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingTokenUtils;

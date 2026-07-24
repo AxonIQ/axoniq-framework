@@ -20,7 +20,7 @@
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.SegmentProgressStrategyTestSupport;
-import org.axonframework.messaging.eventhandling.processing.streaming.pooled.progress.SegmentProgressStrategyFactory;
+import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategyFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;

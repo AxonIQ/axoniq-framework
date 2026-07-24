@@ -22,9 +22,9 @@ package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
-import org.axonframework.messaging.eventhandling.processing.streaming.pooled.progress.SegmentProgressContext;
-import org.axonframework.messaging.eventhandling.processing.streaming.pooled.progress.SegmentProgressStrategy;
-import org.axonframework.messaging.eventhandling.processing.streaming.pooled.progress.SegmentProgressStrategyFactory;
+import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressContext;
+import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategy;
+import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressStrategyFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
