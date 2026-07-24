@@ -87,7 +87,7 @@ public record RegisterTenantDescriptorHandlerInterceptor(
             try {
                 TenantDescriptor tenantDescriptor = tenantResolver.resolveTenant(message, tenantDescriptors.tenants());
                 return interceptorChain.proceed(message, context.withResource(
-                        TenantUtils.TENANT_RESOURCE_KEY,
+                        TenantDescriptor.RESOURCE_KEY,
                         tenantDescriptor
                 ));
             } catch (TenantNotResolvedException e) {

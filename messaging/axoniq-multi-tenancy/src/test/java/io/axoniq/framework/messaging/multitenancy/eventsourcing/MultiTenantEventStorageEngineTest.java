@@ -22,7 +22,6 @@ package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
-import io.axoniq.framework.messaging.multitenancy.api.TenantUtils;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
 import org.axonframework.common.infra.MockComponentDescriptor;
@@ -60,7 +59,7 @@ class MultiTenantEventStorageEngineTest {
     private final RecordingEventStorageEngine tenantB = engines.entry(TENANT_B, new RecordingEventStorageEngine());
 
     private static EventMessage event(@Nullable TenantDescriptor tenant) {
-        Map<String, String> metadata = tenant == null ? Map.of() : Map.of(TenantUtils.TENANT_ID_KEY, tenant.tenantId());
+        Map<String, String> metadata = tenant == null ? Map.of() : Map.of(TenantDescriptor.TENANT_ID_KEY, tenant.tenantId());
         return new GenericEventMessage(new MessageType("TestEvent"), "payload", metadata);
     }
 
@@ -77,7 +76,7 @@ class MultiTenantEventStorageEngineTest {
             MultiTenantEventStorageEngine testSubject =
                     new MultiTenantEventStorageEngine(engines::apply, alwaysTenant(TENANT_B), engines);
             StubProcessingContext context = new StubProcessingContext();
-            context.withResource(TenantUtils.TENANT_RESOURCE_KEY, TENANT_A);
+            context.withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
             testSubject.appendEvents(AppendCondition.none(), context, tagged(event(null)));
 
@@ -131,7 +130,7 @@ class MultiTenantEventStorageEngineTest {
             MultiTenantEventStorageEngine testSubject =
                     new MultiTenantEventStorageEngine(engines::apply, alwaysTenant(TENANT_B), engines);
             StubProcessingContext context = new StubProcessingContext();
-            context.withResource(TenantUtils.TENANT_RESOURCE_KEY, TENANT_A);
+            context.withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
             testSubject.source(ANY, context);
 

@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.api;
 
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 
 /**
@@ -27,11 +28,13 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
  * The multi-tenant event storage engine calls this factory to obtain the engine to route a tenant's writes and
  * sourcing to. Implementations are expected to create the per-tenant engine lazily and cache it.
  *
+ * @author Stefan Dragisic
  * @author Jakob Hatzl
  * @author Laura Devriendt
- * @since 5.3.0
+ * @since 4.6.0
  */
 @FunctionalInterface
+@Internal
 public interface TenantEventStorageEngineFactory {
 
     /**

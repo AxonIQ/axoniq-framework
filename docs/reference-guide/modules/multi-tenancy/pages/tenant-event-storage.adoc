@@ -6,13 +6,13 @@
 Tenant-aware event storage covers how events and snapshots are stored per tenant.
 Each tenant keeps its events in its own Axon Server context, so no tenant can read or write another tenant's events.
 
-== Appending and sourcing events
+== Sourcing and appending events
 
 With multi-tenancy enabled, the event store is automatically tenant-aware.
-No changes to how you append events or how an event-sourced entity is loaded are required.
+No changes to how an event-sourced entity is loaded or how you append events are required.
 
-When events are appended or an entity is sourced, the tenant is resolved as described in the xref:tenant-management.adoc#tenant-resolution[tenant resolution] section, and the operation is routed to the event store of that tenant.
-During command and event handling the tenant has already been established for the message, so appends made from a handler go to the correct tenant's store without any extra configuration.
+When an entity used in the context of a message handler, the tenant information is already available in the `ProcessingContext`. Source and append operations are automatically routed to the event store of the related tenant.
+Publishing events without a context in contrast requires resolution of the tenant as described in the as described in the xref:tenant-management.adoc#tenant-resolution[tenant resolution] section.
 
 [NOTE]
 ====
@@ -29,6 +29,6 @@ This happens automatically whenever snapshotting is configured, with no tenant-s
 
 == Reading across tenants
 
-Appending and sourcing act on a single tenant, resolved from the message being handled.
+Sourcing and appending act on a single tenant, resolved from the message being handled.
 Reading events across tenants, for example to build read models, is provided by the multi-tenant pooled-streaming support rather than by a single-tenant sourcing call.
 See xref:multi-tenancy:index.adoc[event processing] for details.

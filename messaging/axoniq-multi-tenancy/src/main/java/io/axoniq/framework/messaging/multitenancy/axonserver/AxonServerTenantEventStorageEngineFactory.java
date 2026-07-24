@@ -20,11 +20,14 @@
 package io.axoniq.framework.messaging.multitenancy.axonserver;
 
 import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngineFactory;
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
+import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 
 import java.util.Objects;
@@ -34,9 +37,10 @@ import java.util.function.Function;
  * Axon Server implementation of the {@link TenantEventStorageEngineFactory}, building one {@link EventStorageEngine}
  * per tenant against that tenant's Axon Server context.
  * <p>
- * Engines are created lazily and cached, and evicted on tenant removal, through the inherited
- * {@link TenantScopedCache} behavior. The underlying connection is owned by the connection manager, which
- * disconnects it on tenant removal, so eviction only drops the stale engine and a re-added tenant rebuilds a fresh one.
+ * Engines are created lazily and cached, and evicted on tenant removal, by a {@link TenantScopedCache} this factory
+ * holds. Following the tenant lifecycle is delegated to that cache through {@link MultiTenantAwareComponent}. The
+ * underlying connection is owned by the connection manager, which disconnects it on tenant removal, so eviction only
+ * drops the stale engine and a re-added tenant rebuilds a fresh one.
  *
  * @author Jakob Hatzl
  * @author Laura Devriendt
@@ -44,8 +48,9 @@ import java.util.function.Function;
  */
 @Internal
 public class AxonServerTenantEventStorageEngineFactory
-        extends TenantScopedCache<EventStorageEngine>
-        implements TenantEventStorageEngineFactory {
+        implements TenantEventStorageEngineFactory, MultiTenantAwareComponent {
+
+    private final TenantScopedCache<EventStorageEngine> engineCache;
 
     /**
      * Constructs an {@code AxonServerTenantEventStorageEngineFactory} building per-tenant engines from the given
@@ -54,12 +59,27 @@ public class AxonServerTenantEventStorageEngineFactory
      * @param configuration the configuration used to construct each tenant's Axon Server event storage engine
      */
     public AxonServerTenantEventStorageEngineFactory(Configuration configuration) {
-        super(perTenantEngine(configuration));
+        this.engineCache = new TenantScopedCache<>(perTenantEngine(configuration));
     }
 
     @Override
     public EventStorageEngine engineFor(TenantDescriptor tenant) {
-        return componentFor(tenant);
+        return engineCache.componentFor(tenant);
+    }
+
+    @Override
+    public Registration registerTenant(TenantDescriptor tenantDescriptor) {
+        return engineCache.registerTenant(tenantDescriptor);
+    }
+
+    @Override
+    public Registration registerAndStartTenant(TenantDescriptor tenantDescriptor) {
+        return engineCache.registerAndStartTenant(tenantDescriptor);
+    }
+
+    @Override
+    public void describeTo(ComponentDescriptor descriptor) {
+        descriptor.describeProperty("engineCache", engineCache);
     }
 
     private static Function<TenantDescriptor, EventStorageEngine> perTenantEngine(Configuration configuration) {

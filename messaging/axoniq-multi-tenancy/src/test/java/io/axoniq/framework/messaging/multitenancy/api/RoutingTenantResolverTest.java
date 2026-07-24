@@ -32,7 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static io.axoniq.framework.messaging.multitenancy.api.TenantUtils.TENANT_ID_KEY;
+import static io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor.TENANT_ID_KEY;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -56,7 +56,7 @@ class RoutingTenantResolverTest {
         void resolvesTheKnownTenantFromTheContextResource() {
             RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, TENANT_DESCRIPTORS);
             ProcessingContext context = new StubProcessingContext()
-                    .withResource(TenantUtils.TENANT_RESOURCE_KEY, TENANT_A);
+                    .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
             assertThat(resolver.resolveFromContext(context)).hasValue(TENANT_A);
         }
@@ -66,7 +66,7 @@ class RoutingTenantResolverTest {
             // the resource names foo-b, which is not a known tenant, so the known foo-a from the message wins
             RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, () -> List.of(TENANT_A));
             ProcessingContext context = StubProcessingContext.forMessage(eventWithTenant(TENANT_A))
-                    .withResource(TenantUtils.TENANT_RESOURCE_KEY, TENANT_B);
+                    .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_B);
 
             assertThat(resolver.resolveFromContext(context)).hasValue(TENANT_A);
         }

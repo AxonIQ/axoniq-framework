@@ -22,7 +22,6 @@ package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
-import io.axoniq.framework.messaging.multitenancy.api.TenantUtils;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
 import org.axonframework.common.infra.MockComponentDescriptor;
@@ -52,7 +51,7 @@ class MultiTenantSnapshotStoreTest {
     private static EventMessage messageForTenant(TenantDescriptor tenant) {
         return new GenericEventMessage(new MessageType("TestEvent"),
                                        "payload",
-                                       Map.of(TenantUtils.TENANT_ID_KEY, tenant.tenantId()));
+                                       Map.of(TenantDescriptor.TENANT_ID_KEY, tenant.tenantId()));
     }
 
     private final TenantDescriptorMapping<SnapshotStore> stores = new TenantDescriptorMapping<>();
@@ -67,7 +66,7 @@ class MultiTenantSnapshotStoreTest {
             MultiTenantSnapshotStore testSubject =
                     new MultiTenantSnapshotStore(stores::apply, alwaysTenant(TENANT_B), stores);
             StubProcessingContext context = new StubProcessingContext();
-            context.withResource(TenantUtils.TENANT_RESOURCE_KEY, TENANT_A);
+            context.withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
             testSubject.load(SNAPSHOT_NAME, IDENTIFIER, context);
 
@@ -97,7 +96,7 @@ class MultiTenantSnapshotStoreTest {
             MultiTenantSnapshotStore testSubject =
                     new MultiTenantSnapshotStore(stores::apply, alwaysTenant(TENANT_B), stores);
             StubProcessingContext context = new StubProcessingContext();
-            context.withResource(TenantUtils.TENANT_RESOURCE_KEY, TENANT_A);
+            context.withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
             Snapshot snapshot = new Snapshot(new GlobalIndexPosition(0L), "0", "payload", Instant.EPOCH, Map.of());
 
             testSubject.store(SNAPSHOT_NAME, IDENTIFIER, snapshot, context);

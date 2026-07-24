@@ -48,10 +48,10 @@ import static java.util.Objects.requireNonNull;
  * Tenant-routing {@link EventStorageEngine}. Writes and sourcing are routed to the engine of the one tenant resolved
  * from the {@link ProcessingContext}, so each tenant's events live in its own store.
  * <p>
- * The read-side methods ({@link #stream}, {@link #firstToken}, {@link #latestToken}, {@link #tokenAt}) span all
- * tenants rather than a single one, so they cannot be routed from the tenant of a message. They currently throw an
- * {@link UnsupportedOperationException}. Reading across all tenants is added together with the multi-tenant
+ * The read-side methods ({@link #stream}, {@link #firstToken}, {@link #latestToken}, {@link #tokenAt}) currently
+ * throw an {@link UnsupportedOperationException}. Reading across all tenants is added together with the multi-tenant
  * pooled-streaming support, which merges the per-tenant streams behind these same methods.
+ * TODO read-side methods will be resolved with #210
  *
  * @author Jakob Hatzl
  * @author Laura Devriendt
@@ -99,6 +99,9 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine {
     }
 
     private TenantDescriptor tenantForAppend(@Nullable ProcessingContext context, List<TaggedEventMessage<?>> events) {
+        // Appends made inside a transaction (from a command or event handler) carry a processing context that already
+        // holds the tenant, so it is routed like sourcing. A plain publish happens without a context, so the tenant is
+        // instead resolved from the events themselves, which must all belong to the same tenant.
         if (context != null) {
             return tenantFor(context);
         }

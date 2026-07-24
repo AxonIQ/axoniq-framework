@@ -21,11 +21,14 @@ package io.axoniq.framework.messaging.multitenancy.axonserver;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
 import io.axoniq.framework.messaging.multitenancy.api.TenantSnapshotStoreFactory;
+import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
@@ -37,9 +40,10 @@ import java.util.function.Function;
  * Axon Server implementation of the {@link TenantSnapshotStoreFactory}, building one {@link SnapshotStore} per
  * tenant against that tenant's Axon Server context.
  * <p>
- * Stores are created lazily and cached, and evicted on tenant removal, through the inherited {@link TenantScopedCache}
- * behavior. The underlying connection is owned by the connection manager, which disconnects it on tenant removal, so
- * eviction only drops the stale store and a re-added tenant rebuilds a fresh one.
+ * Stores are created lazily and cached, and evicted on tenant removal, by a {@link TenantScopedCache} this factory
+ * holds. Following the tenant lifecycle is delegated to that cache through {@link MultiTenantAwareComponent}. The
+ * underlying connection is owned by the connection manager, which disconnects it on tenant removal, so eviction only
+ * drops the stale store and a re-added tenant rebuilds a fresh one.
  *
  * @author Jakob Hatzl
  * @author Laura Devriendt
@@ -47,8 +51,9 @@ import java.util.function.Function;
  */
 @Internal
 public class AxonServerTenantSnapshotStoreFactory
-        extends TenantScopedCache<SnapshotStore>
-        implements TenantSnapshotStoreFactory {
+        implements TenantSnapshotStoreFactory, MultiTenantAwareComponent {
+
+    private final TenantScopedCache<SnapshotStore> storeCache;
 
     /**
      * Constructs an {@code AxonServerTenantSnapshotStoreFactory}, resolving the connection manager and converter from
@@ -68,12 +73,27 @@ public class AxonServerTenantSnapshotStoreFactory
      * @param converter         the converter used to (de)serialize snapshot payloads
      */
     public AxonServerTenantSnapshotStoreFactory(AxonServerConnectionManager connectionManager, Converter converter) {
-        super(perTenantStore(connectionManager, converter));
+        this.storeCache = new TenantScopedCache<>(perTenantStore(connectionManager, converter));
     }
 
     @Override
     public SnapshotStore storeFor(TenantDescriptor tenant) {
-        return componentFor(tenant);
+        return storeCache.componentFor(tenant);
+    }
+
+    @Override
+    public Registration registerTenant(TenantDescriptor tenantDescriptor) {
+        return storeCache.registerTenant(tenantDescriptor);
+    }
+
+    @Override
+    public Registration registerAndStartTenant(TenantDescriptor tenantDescriptor) {
+        return storeCache.registerAndStartTenant(tenantDescriptor);
+    }
+
+    @Override
+    public void describeTo(ComponentDescriptor descriptor) {
+        descriptor.describeProperty("storeCache", storeCache);
     }
 
     private static Function<TenantDescriptor, SnapshotStore> perTenantStore(

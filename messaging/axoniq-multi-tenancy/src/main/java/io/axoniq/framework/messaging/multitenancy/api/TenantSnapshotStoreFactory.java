@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.api;
 
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 
 /**
@@ -32,6 +33,7 @@ import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
  * @since 5.3.0
  */
 @FunctionalInterface
+@Internal
 public interface TenantSnapshotStoreFactory {
 
     /**

@@ -32,10 +32,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.Map;
 
-import static io.axoniq.framework.messaging.multitenancy.api.TenantUtils.TENANT_RESOURCE_KEY;
-import static io.axoniq.framework.messaging.multitenancy.api.TenantUtils.tenantDescriptorFrom;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class RegisterTenantDescriptorHandlerInterceptorTest {
@@ -66,9 +63,8 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
 
             // then
             assertThat(result).isSameAs(interceptorChain.result);
-            assertThat(tenantDescriptorFrom(interceptorChain.context)).isEqualTo(TenantDescriptor.tenantWithId(
-                    TENANT_A.tenantId()
-            ));
+            assertThat(TenantDescriptor.fromContext(interceptorChain.context))
+                    .contains(TenantDescriptor.tenantWithId(TENANT_A.tenantId()));
         }
 
         @Test
@@ -83,7 +79,7 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
             );
             TenantDescriptor tenantDescriptor = new MetadataBasedTenantResolver("lateTenantKey").resolveTenant(message);
             ProcessingContext context = StubProcessingContext.forMessage(message)
-                    .withResource(TENANT_RESOURCE_KEY, tenantDescriptor);
+                    .withResource(TenantDescriptor.RESOURCE_KEY, tenantDescriptor);
             CapturingChain interceptorChain = new CapturingChain();
 
             // when
@@ -91,9 +87,8 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
 
             // then
             assertThat(testSubject.tenantDescriptors().tenants()).isEmpty();
-            assertThat(tenantDescriptorFrom(interceptorChain.context)).isEqualTo(TenantDescriptor.tenantWithId(
-                    TENANT_A.tenantId()
-            ));
+            assertThat(TenantDescriptor.fromContext(interceptorChain.context))
+                    .contains(TenantDescriptor.tenantWithId(TENANT_A.tenantId()));
         }
 
         @Test
@@ -110,9 +105,7 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
 
             // then
             assertThat(result).isSameAs(interceptorChain.result);
-            assertThatThrownBy(() -> TenantUtils.tenantDescriptorFrom(interceptorChain.context))
-                    .isInstanceOf(TenantNotResolvedException.class)
-                    .hasMessageContaining("No tenant descriptor found in processing context");
+            assertThat(TenantDescriptor.fromContext(interceptorChain.context)).isEmpty();
         }
 
         @Test
@@ -138,9 +131,7 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
             verify(tenantResolver, never()).resolveTenant(any(Message.class), any());
             assertThat(interceptorChain.context).isSameAs(context);
 
-            assertThatThrownBy(() -> TenantUtils.tenantDescriptorFrom(interceptorChain.context))
-                    .isInstanceOf(TenantNotResolvedException.class)
-                    .hasMessageContaining("No tenant descriptor found in processing context");
+            assertThat(TenantDescriptor.fromContext(interceptorChain.context)).isEmpty();
         }
     }
 

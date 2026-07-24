@@ -64,7 +64,7 @@ public class RoutingTenantResolver implements DescribableComponent {
     }
 
     /**
-     * Resolves the tenant carried by the given {@code context}, taken from its {@link TenantUtils#TENANT_RESOURCE_KEY
+     * Resolves the tenant carried by the given {@code context}, taken from its {@link TenantDescriptor#RESOURCE_KEY
      * tenant resource} when present, otherwise from the message the context carries.
      *
      * @param context the processing context to resolve the tenant from
@@ -75,9 +75,9 @@ public class RoutingTenantResolver implements DescribableComponent {
             return Optional.empty();
         }
         List<TenantDescriptor> knownTenants = tenantDescriptors.tenants();
-        return TenantUtils.tenantDescriptorOptional(context)
-                          .filter(knownTenants::contains)
-                          .or(() -> resolve(Message.fromContext(context), knownTenants));
+        return TenantDescriptor.fromContext(context)
+                               .filter(knownTenants::contains)
+                               .or(() -> resolve(Message.fromContext(context), knownTenants));
     }
 
     /**
