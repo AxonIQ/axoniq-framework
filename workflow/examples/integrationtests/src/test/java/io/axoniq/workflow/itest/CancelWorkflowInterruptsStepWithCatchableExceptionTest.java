@@ -90,7 +90,9 @@ class CancelWorkflowInterruptsStepWithCatchableExceptionTest extends AbstractWor
         awaitParked(id);
 
         var manager = configuration.getComponent(WorkflowManager.class);
-        boolean cancelled = manager.workflow(id).cancel(CancellationReason.of("operator cancelled while step running"));
+        boolean cancelled = manager.workflow(id)
+                                   .cancel(CancellationReason.of("operator cancelled while step running"))
+                                   .join();
 
         assertThat(cancelled).isTrue();
 

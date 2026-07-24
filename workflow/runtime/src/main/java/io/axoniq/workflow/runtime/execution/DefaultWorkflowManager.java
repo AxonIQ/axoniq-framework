@@ -32,6 +32,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -42,8 +44,9 @@ import java.util.stream.Stream;
  * Selections are resolved against the live executions held by the repository: {@link #workflow(String)} re-resolves the
  * targeted instance on each access (so a handle reflects a present, unknown, or since-terminated instance), and
  * {@link #workflows(Predicate)} materializes a point-in-time snapshot of matching non-terminal instances. Every command
- * is enqueued onto the instance's own control thread via {@link WorkflowExecution}, so calls are asynchronous and do not
- * block on the instances reaching their terminal state.
+ * is enqueued onto the instance's own control thread via {@link WorkflowExecution} and returns a future that
+ * completes, bounded by a timeout, once that enqueued work has fully finished there; the caller never pumps the
+ * instance's task queue itself and decides whether to block on the result or compose it asynchronously.
  *
  * @author Stefan Dragisic
  * @since 0.3.0
@@ -129,29 +132,28 @@ public class DefaultWorkflowManager implements WorkflowManager {
         }
 
         @Override
-        public boolean cancel(@Nonnull CancellationReason reason) {
+        public CompletableFuture<Boolean> cancel(@Nonnull CancellationReason reason) {
             var execution = resolver.get();
             if (execution == null || execution.state().workflowStatus().isTerminal()) {
-                return false;
+                return CompletableFuture.completedFuture(false);
             }
-            execution.requestWorkflowCancellation(effectiveCause(reason));
-            return true;
+            return execution.requestWorkflowCancellation(effectiveCause(reason)).thenApply(v -> true);
         }
 
         @Override
-        public boolean cancelStep(@Nonnull String stepName, @Nonnull CancellationReason reason) {
+        public CompletableFuture<Boolean> cancelStep(@Nonnull String stepName, @Nonnull CancellationReason reason) {
             var execution = resolver.get();
             if (execution == null) {
-                return false;
+                return CompletableFuture.completedFuture(false);
             }
             return execution.requestStepCancellation(stepName, effectiveStepCause(reason));
         }
 
         @Override
-        public int cancelAllRunningSteps(@Nonnull CancellationReason reason) {
+        public CompletableFuture<Integer> cancelAllRunningSteps(@Nonnull CancellationReason reason) {
             var execution = resolver.get();
             if (execution == null) {
-                return 0;
+                return CompletableFuture.completedFuture(0);
             }
             return execution.requestAllRunningStepsCancellation(effectiveStepCause(reason));
         }
@@ -176,30 +178,52 @@ public class DefaultWorkflowManager implements WorkflowManager {
 
         @Nonnull
         @Override
-        public CancellationResult cancel(@Nonnull CancellationReason reason) {
+        public CompletableFuture<CancellationResult> cancel(@Nonnull CancellationReason reason) {
             return aggregate(handle -> handle.cancel(reason));
         }
 
         @Nonnull
         @Override
-        public CancellationResult cancelStep(@Nonnull String stepName, @Nonnull CancellationReason reason) {
+        public CompletableFuture<CancellationResult> cancelStep(@Nonnull String stepName,
+                                                                 @Nonnull CancellationReason reason) {
             return aggregate(handle -> handle.cancelStep(stepName, reason));
         }
 
         @Nonnull
         @Override
-        public CancellationResult cancelAllRunningSteps(@Nonnull CancellationReason reason) {
-            return aggregate(handle -> handle.cancelAllRunningSteps(reason) > 0);
+        public CompletableFuture<CancellationResult> cancelAllRunningSteps(@Nonnull CancellationReason reason) {
+            return aggregate(handle -> handle.cancelAllRunningSteps(reason).thenApply(count -> count > 0));
         }
 
-        private CancellationResult aggregate(@Nonnull Predicate<WorkflowHandle> action) {
-            var affectedIds = new ArrayList<String>(handles.size());
-            for (var handle : handles) {
-                if (action.test(handle)) {
-                    affectedIds.add(handle.id());
-                }
-            }
-            return new CancellationResult(handles.size(), affectedIds.size(), List.copyOf(affectedIds));
+        /**
+         * Launches the given per-handle action concurrently across every handle in the selection instead of looping
+         * sequentially: each workflow instance owns an independent control thread and task queue, so there is no
+         * reason to serialize across instances. Waits for every action to settle with {@link CompletableFuture#allOf}
+         * before building the {@link CancellationResult}. A handle whose action completes exceptionally (for example
+         * a control thread that did not finish the command within its timeout) counts as matched but not affected,
+         * rather than failing the whole aggregate for one stuck instance.
+         *
+         * @param action per-handle command; {@code true} means the handle was affected.
+         * @return a future completing with the aggregate outcome once every handle's action has settled.
+         */
+        @Nonnull
+        private CompletableFuture<CancellationResult> aggregate(
+                @Nonnull Function<WorkflowHandle, CompletableFuture<Boolean>> action) {
+            var results = handles.stream()
+                                 .map(action)
+                                 .map(future -> future.exceptionally(t -> false))
+                                 .toList();
+            return CompletableFuture.allOf(results.toArray(CompletableFuture[]::new))
+                                    .thenApply(v -> {
+                                        var affectedIds = new ArrayList<String>(handles.size());
+                                        for (int i = 0; i < handles.size(); i++) {
+                                            if (results.get(i).join()) {
+                                                affectedIds.add(handles.get(i).id());
+                                            }
+                                        }
+                                        return new CancellationResult(handles.size(), affectedIds.size(),
+                                                                      List.copyOf(affectedIds));
+                                    });
         }
     }
 }

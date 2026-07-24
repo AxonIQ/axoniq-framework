@@ -175,37 +175,49 @@ public interface WorkflowExecution extends DescribableComponent {
      * Requests cooperative cancellation of a single running step from any thread.
      * <p>
      * Mirrors {@link #requestWorkflowCancellation(Throwable)}: the cancellation is enqueued as a task onto the
-     * workflow's control thread — the single consumer of the task queue — so the caller never drives workflow logic
+     * workflow's control thread, the single consumer of the task queue, so the caller never drives workflow logic
      * directly. When the task runs it tears the step's future down; the owning step executor's completion handler
      * then records the step {@code <step>:CANCELLED} through its guarded publish path (a step already terminal is
      * skipped). The workflow itself stays alive so its body can catch the resulting
      * {@link io.axoniq.workflow.runtime.api.execution.state.StepCancellationException} and compensate.
      * <p>
-     * The returned boolean reflects the step's status at request time: {@code true} when the step exists and is
-     * non-terminal (a cancellation was enqueued), {@code false} when the step is unknown or already terminal (nothing
-     * enqueued).
+     * A step unknown or already terminal at request time returns an already-completed future carrying {@code false}
+     * without enqueueing anything. Otherwise the returned future completes with the outcome the control thread's
+     * task actually computed once that task has fully run (the durable {@code <step>:CANCELLED} record included), or
+     * completes exceptionally with a timeout if the control thread has not finished within a bound. The caller
+     * decides whether to block on the result (for example via {@code join()}) or compose it asynchronously. Tasks are
+     * enqueued onto a single FIFO queue with one consumer, so back-to-back requests from the same caller are still
+     * processed by the control thread in the order they were made.
      *
      * @param stepName name of the step to cancel.
      * @param cause    optional cause of the cancellation, or {@code null} if none.
-     * @return {@code true} if the step was non-terminal and a cancellation was enqueued; {@code false} otherwise.
+     * @return a future completing with {@code true} if the step was non-terminal and a durable
+     * {@code <step>:CANCELLED} record was published, or {@code false} if the step was unknown or already terminal;
+     * completing exceptionally if the control thread does not finish the request within its timeout.
      */
-    boolean requestStepCancellation(@Nonnull String stepName, @Nullable Throwable cause);
+    CompletableFuture<Boolean> requestStepCancellation(@Nonnull String stepName, @Nullable Throwable cause);
 
     /**
      * Requests cooperative cancellation of every currently-running step of this workflow from any thread, leaving the
      * workflow itself alive.
      * <p>
      * Mirrors {@link #requestStepCancellation(String, Throwable)} applied to each running step: the work is enqueued
-     * onto the control thread and each non-terminal running step is recorded {@code <step>:CANCELLED}. Cancellation is
-     * cooperative — each cancelled step raises a
+     * onto the control thread as one task and each non-terminal running step is recorded {@code <step>:CANCELLED}.
+     * The returned future completes with the number of steps the task actually cancelled once that task has fully
+     * run (every durable record included), or completes exceptionally with a timeout if the control thread has not
+     * finished within a bound. The caller decides whether to block on the result or compose it asynchronously.
+     * Cancellation is cooperative: each cancelled step raises a
      * {@link io.axoniq.workflow.runtime.api.execution.state.StepCancellationException} into the workflow body; an
      * uncaught exception propagates and leaves the workflow wedged non-terminal (the documented caller
-     * responsibility).
+     * responsibility). Tasks are enqueued onto a single FIFO queue with one consumer, so back-to-back requests from
+     * the same caller are still processed by the control thread in the order they were made.
      *
      * @param cause optional cause of the cancellation, or {@code null} if none.
-     * @return the number of currently-running steps for which a cancellation was enqueued.
+     * @return a future completing with the number of running steps for which a durable {@code <step>:CANCELLED}
+     * record was published; completing exceptionally if the control thread does not finish the request within its
+     * timeout.
      */
-    int requestAllRunningStepsCancellation(@Nullable Throwable cause);
+    CompletableFuture<Integer> requestAllRunningStepsCancellation(@Nullable Throwable cause);
 
     /**
      * Whole-workflow terminal teardown. Interrupts every still-running step future with a
@@ -219,15 +231,21 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Requests cooperative cancellation of this workflow from any thread.
      * <p>
-     * The request is enqueued as a task onto the workflow's control thread — the single consumer of the task queue —
+     * The request is enqueued as a task onto the workflow's control thread, the single consumer of the task queue,
      * so the caller never drives workflow logic directly (this reuses the control-thread-safe cancellation).
-     * Once the task runs it cancels any running steps and drives the workflow to a durable {@code CANCELLED}
-     * terminal state through the same path a workflow-level cancellation takes. It does not block on completion; the
-     * durable {@code <workflow>:CANCELLED} event is committed asynchronously by the control thread.
+     * Once the task runs it interrupts any running steps and drives the workflow to a durable {@code CANCELLED}
+     * terminal state through the same path a workflow-level cancellation takes. The returned future completes once
+     * that task has fully run, so the durable {@code <workflow>:CANCELLED} event is committed by the time it
+     * completes, or completes exceptionally with a timeout if the control thread has not finished within a bound.
+     * The caller decides whether to block on the result (for example via {@code join()}) or compose it
+     * asynchronously. Tasks are enqueued onto a single FIFO queue with one consumer, so back-to-back requests from
+     * the same caller are still processed by the control thread in the order they were made.
      *
      * @param cause optional cause of the cancellation, or {@code null} if none.
+     * @return a future that completes once the cancellation task has fully run, or completes exceptionally if the
+     * control thread does not finish the request within its timeout.
      */
-    void requestWorkflowCancellation(@Nullable Throwable cause);
+    CompletableFuture<Void> requestWorkflowCancellation(@Nullable Throwable cause);
 
     /**
      * Interrupt all running steps without producing any step/workflow cancellation events. Unlike

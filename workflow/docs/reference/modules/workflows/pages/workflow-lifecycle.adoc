@@ -152,7 +152,8 @@ The last event recorded for `shipOrder` and `notifyCustomer` is their `Started`;
 
 Use the `WorkflowManager` API from outside the workflow—for example, when a user or API wants to stop a running workflow.
 Like `fail`, cancellation interrupts running steps and then terminates the workflow with a single workflow-level event.
-External cancellation is *cooperative* and *asynchronous*: the call returns immediately without blocking on the workflow reaching its terminal state.
+External cancellation is *cooperative*: the call returns a `CompletableFuture` that completes once the cancellation has fully finished on the workflow's own control thread (bounded by a timeout), so the durable terminal record is committed by the time it completes.
+The caller decides whether to block on the result (for example with `.join()`) or compose it asynchronously.
 
 Given a workflow with parallel steps running:
 
@@ -176,17 +177,24 @@ The `WorkflowManager` API is fluent: first *select* what to act on, then invoke 
 ----
 WorkflowManager workflowManager = configuration.getComponent(WorkflowManager.class);
 
-// Select a single instance by id, then cancel it.
+// Select a single instance by id, then cancel it. join() blocks until the durable record is committed.
 boolean cancelled = workflowManager.workflow("order-123")
-                                   .cancel(CancellationReason.of("Cancelled by user"));
+                                   .cancel(CancellationReason.of("Cancelled by user"))
+                                   .join();
 
 // Select every non-terminal instance matching a state predicate, then cancel them.
 CancellationResult result = workflowManager.workflows(state -> "EU".equals(state.payload().get("region")))
-                                           .cancel(CancellationReason.of("Region shut down"));
+                                           .cancel(CancellationReason.of("Region shut down"))
+                                           .join();
+
+// Or compose asynchronously instead of blocking the caller thread.
+workflowManager.workflow("order-123")
+               .cancel(CancellationReason.of("Cancelled by user"))
+               .thenAccept(wasCancelled -> log.info("cancelled: {}", wasCancelled));
 ----
 
-`workflow(id)` returns a `WorkflowHandle`; its `cancel(reason)` returns `true` when the instance existed and was non-terminal (a cancellation was enqueued) and `false` otherwise.
-`workflows(predicate)` returns a point-in-time snapshot of every non-terminal instance whose state matches, and its `cancel(reason)` returns a `CancellationResult` carrying `matched` (handles acted on), `affected` (instances a cancellation was enqueued for), and the affected workflow ids.
+`workflow(id)` returns a `WorkflowHandle`; its `cancel(reason)` returns a `CompletableFuture<Boolean>` that completes `true` when the instance existed and was non-terminal (a cancellation was enqueued) and `false` otherwise.
+`workflows(predicate)` returns a point-in-time snapshot of every non-terminal instance whose state matches, and its `cancel(reason)` returns a `CompletableFuture<CancellationResult>` that completes with `matched` (handles acted on), `affected` (instances a cancellation was enqueued for), and the affected workflow ids once every handle's cancellation has settled.
 
 A selection is iterable, so you can inspect each instance and decide per instance:
 
@@ -195,7 +203,7 @@ A selection is iterable, so you can inspect each instance and decide per instanc
 for (WorkflowHandle handle : workflowManager.workflows(state -> state.payload().containsKey("stuck"))) {
     handle.state()
           .filter(state -> state.workflowStepNames().contains("awaitApproval"))
-          .ifPresent(state -> handle.cancel(CancellationReason.of("Manual review timed out")));
+          .ifPresent(state -> handle.cancel(CancellationReason.of("Manual review timed out")).join());
 }
 ----
 

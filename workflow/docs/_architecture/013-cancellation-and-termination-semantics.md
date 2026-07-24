@@ -46,11 +46,18 @@ never by mutating a live execution from outside. A caller first selects — `wor
 `WorkflowHandle` for one instance, `workflows(predicate)` returns a point-in-time snapshot `WorkflowSelection` of
 matching non-terminal instances — then invokes a cooperative command (`cancel`, `cancelStep`,
 `cancelAllRunningSteps`) on it. A handle exposes only the id, a read-only state snapshot, and those commands; it
-never leaks the execution or its task queue. Per-handle commands return a boolean/count; bulk selection commands
-return a `CancellationResult` (`matched`, `affected`, affected ids). External operations are cooperative and
-asynchronous: they report what was requested without blocking on the terminal state, and an uncaught
-`StepCancellationException` propagates and wedges the instance non-terminally exactly like any other uncaught
-exception (the caller's body is responsible for catching it).
+never leaks the execution or its task queue. Per-handle commands return a `CompletableFuture<Boolean>` /
+`CompletableFuture<Integer>`; bulk selection commands return a `CompletableFuture<CancellationResult>` (`matched`,
+`affected`, affected ids). External operations are cooperative: each command's work is enqueued onto the control
+thread, and the returned future completes once the control thread has durably processed the command (the durable
+records included), or completes exceptionally after a bounded timeout if the control thread has not finished by
+then. The caller decides whether to block on the result (`join()` / `get()`) or compose it asynchronously; it
+never pumps the queue itself. A bulk command launches every matched handle's action concurrently — each instance
+owns an independent control thread, so there is no reason to serialize across instances — and waits for all of
+them to settle before aggregating; a handle whose action completes exceptionally counts as matched but not
+affected, so one stuck instance cannot fail the whole aggregate. An uncaught `StepCancellationException`
+propagates and wedges the instance non-terminally exactly like any other uncaught exception (the caller's body is
+responsible for catching it).
 
 ### How a step's fate is decided (one mechanism, two causes)
 

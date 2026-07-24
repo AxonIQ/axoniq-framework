@@ -24,6 +24,7 @@ import jakarta.annotation.Nullable;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -38,10 +39,12 @@ import java.util.stream.Stream;
  *     <li>{@link #workflows(Predicate)} selects a point-in-time snapshot of matching, non-terminal instances and
  *     returns a {@link WorkflowSelection} that is {@link Iterable} over their handles.</li>
  * </ul>
- * Cancellation is <b>cooperative</b> and <b>asynchronous</b>: matching, non-terminal instances are driven towards a
- * durable {@code CANCELLED} terminal state on their own control thread; the call itself does not block on completion.
- * No new persistence is introduced — the durable {@code <workflow>:CANCELLED} / {@code <step>:CANCELLED} events are the
- * record of intent.
+ * Cancellation is <b>cooperative</b>: matching, non-terminal instances are driven towards a durable
+ * {@code CANCELLED} terminal state on their own control thread, and each command returns a {@link CompletableFuture}
+ * that completes once its requested work has fully finished there, bounded by a timeout so it cannot hang forever if
+ * a control thread is stuck. The caller decides whether to block on the result (for example via {@code join()}) or
+ * compose it asynchronously. No new persistence is introduced; the durable {@code <workflow>:CANCELLED} /
+ * {@code <step>:CANCELLED} events are the record of intent.
  *
  * @author Stefan Dragisic
  * @since 0.3.0
@@ -78,7 +81,8 @@ public interface WorkflowManager {
      * <p>
      * A handle exposes only the instance id, a read-only {@link #state()} snapshot, and the cooperative command
      * methods. It never exposes the live execution, its task queue, or any way to mutate engine internals: every
-     * command is enqueued onto the workflow's own control thread and returns without blocking on the terminal state.
+     * command is enqueued onto the workflow's own control thread, and the call blocks (bounded by a timeout) until
+     * that enqueued work has fully finished there; the caller itself never drives workflow logic.
      *
      * @author Stefan Dragisic
      * @since 0.3.0
@@ -103,47 +107,62 @@ public interface WorkflowManager {
         Optional<WorkflowState> state();
 
         /**
-         * Cooperatively cancels this workflow instance, driving it towards a durable {@code CANCELLED} terminal state on
-         * its own control thread. Does not block on completion.
+         * Cooperatively cancels this workflow instance, driving it to a durable {@code CANCELLED} terminal state on
+         * its own control thread. Returns a future that completes once the cancellation has fully finished there,
+         * bounded by a timeout so it cannot hang forever if the control thread is stuck; the caller decides whether
+         * to block on the result (for example via {@code join()}) or compose it asynchronously.
          *
          * @param reason the reason for the cancellation, carried onto the cancellation cause.
-         * @return {@code true} if the instance existed and was non-terminal (a cancellation was enqueued); {@code false}
-         * if it is unknown or already terminal.
+         * @return a future completing with {@code true} if the instance existed, was non-terminal, and the
+         * cancellation ran to completion; {@code false} if it is unknown or already terminal; completing
+         * exceptionally if the control thread does not finish within its timeout.
          */
-        boolean cancel(@Nonnull CancellationReason reason);
+        CompletableFuture<Boolean> cancel(@Nonnull CancellationReason reason);
 
         /**
          * Cooperatively cancels a single running step of this workflow instance while the workflow itself stays alive.
          * The cancellation is enqueued onto the instance's control thread where, if the step is still non-terminal, the
          * {@code <step>:CANCELLED} record is published; the workflow body can catch the resulting
-         * {@link io.axoniq.workflow.runtime.api.execution.state.StepCancellationException} and compensate.
+         * {@link io.axoniq.workflow.runtime.api.execution.state.StepCancellationException} and compensate. Returns a
+         * future that completes once the cancellation has fully finished on the control thread, bounded by a timeout
+         * so it cannot hang forever if the control thread is stuck; the caller decides whether to block on the
+         * result or compose it asynchronously.
          *
          * @param stepName the name of the step to cancel.
          * @param reason   the reason for the cancellation, carried onto the cancellation cause.
-         * @return {@code true} if the step existed and was non-terminal at request time (a cancellation was enqueued);
-         * {@code false} if the instance is unknown or the step is unknown or already terminal.
+         * @return a future completing with {@code true} if the step was non-terminal and its durable
+         * {@code <step>:CANCELLED} record was published, or {@code false} if the instance is unknown or the step is
+         * unknown or already terminal; completing exceptionally if the control thread does not finish within its
+         * timeout.
          */
-        boolean cancelStep(@Nonnull String stepName, @Nonnull CancellationReason reason);
+        CompletableFuture<Boolean> cancelStep(@Nonnull String stepName, @Nonnull CancellationReason reason);
 
         /**
          * Cooperatively cancels every currently-running step of this workflow instance while the workflow itself stays
          * alive. Each still-running step records {@code <step>:CANCELLED}; each cancelled step raises a
          * {@link io.axoniq.workflow.runtime.api.execution.state.StepCancellationException} into the workflow body, which
-         * the body is responsible for catching (an uncaught exception wedges the instance non-terminally).
+         * the body is responsible for catching (an uncaught exception wedges the instance non-terminally). Returns a
+         * future that completes once every cancellation has fully finished on the control thread, bounded by a
+         * timeout so it cannot hang forever if the control thread is stuck; the caller decides whether to block on
+         * the result or compose it asynchronously.
          *
          * @param reason the reason for the cancellation, carried onto the cancellation cause.
-         * @return the number of currently-running steps for which a cancellation was enqueued ({@code 0} if the instance
-         * is unknown or has no running steps).
+         * @return a future completing with the number of running steps whose durable {@code <step>:CANCELLED} record
+         * was published ({@code 0} if the instance is unknown or has no running steps); completing exceptionally if
+         * the control thread does not finish within its timeout.
          */
-        int cancelAllRunningSteps(@Nonnull CancellationReason reason);
+        CompletableFuture<Integer> cancelAllRunningSteps(@Nonnull CancellationReason reason);
     }
 
     /**
      * An iterable, point-in-time selection of {@link WorkflowHandle handles} produced by {@link #workflows(Predicate)}.
      * <p>
-     * Bulk commands apply the corresponding {@link WorkflowHandle} action to every handle in the selection and
-     * aggregate the outcome into a {@link CancellationResult}. Iterating (via {@link Iterable} or {@link #stream()})
-     * yields the handles so callers can inspect state and act per instance.
+     * Bulk commands launch the corresponding {@link WorkflowHandle} action concurrently across every handle in the
+     * selection and return a future that completes, once every handle's action has settled, with the aggregated
+     * {@link CancellationResult}. A handle whose action completes exceptionally (for example a control thread that
+     * did not finish within its timeout) counts towards {@link CancellationResult#matched()} but not
+     * {@link CancellationResult#affected()}, so one stuck instance cannot fail the whole aggregate. Iterating (via
+     * {@link Iterable} or {@link #stream()}) yields the handles so callers can inspect state and act per instance.
      *
      * @author Stefan Dragisic
      * @since 0.3.0
@@ -162,30 +181,32 @@ public interface WorkflowManager {
          * Cooperatively cancels every workflow instance in this selection.
          *
          * @param reason the reason for the cancellation, carried onto the cancellation cause.
-         * @return the aggregate outcome (matched handles, instances a cancellation was enqueued for, and their ids).
+         * @return a future completing with the aggregate outcome (matched handles, instances a cancellation was
+         * enqueued for, and their ids) once every handle's cancellation has settled.
          */
         @Nonnull
-        CancellationResult cancel(@Nonnull CancellationReason reason);
+        CompletableFuture<CancellationResult> cancel(@Nonnull CancellationReason reason);
 
         /**
          * Cooperatively cancels the step with the given name in every workflow instance in this selection.
          *
          * @param stepName the name of the step to cancel in each matched instance.
          * @param reason   the reason for the cancellation, carried onto the cancellation cause.
-         * @return the aggregate outcome (matched handles, instances where the step was non-terminal, and their ids).
+         * @return a future completing with the aggregate outcome (matched handles, instances where the step was
+         * non-terminal, and their ids) once every handle's cancellation has settled.
          */
         @Nonnull
-        CancellationResult cancelStep(@Nonnull String stepName, @Nonnull CancellationReason reason);
+        CompletableFuture<CancellationResult> cancelStep(@Nonnull String stepName, @Nonnull CancellationReason reason);
 
         /**
          * Cooperatively cancels every currently-running step of every workflow instance in this selection.
          *
          * @param reason the reason for the cancellation, carried onto the cancellation cause.
-         * @return the aggregate outcome (matched handles, instances that had at least one running step cancelled, and
-         * their ids).
+         * @return a future completing with the aggregate outcome (matched handles, instances that had at least one
+         * running step cancelled, and their ids) once every handle's cancellation has settled.
          */
         @Nonnull
-        CancellationResult cancelAllRunningSteps(@Nonnull CancellationReason reason);
+        CompletableFuture<CancellationResult> cancelAllRunningSteps(@Nonnull CancellationReason reason);
     }
 
     /**

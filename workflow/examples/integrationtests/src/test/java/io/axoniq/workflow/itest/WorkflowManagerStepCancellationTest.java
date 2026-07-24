@@ -77,7 +77,8 @@ class WorkflowManagerStepCancellationTest extends AbstractWorkflowTestBase<Simpl
 
         var manager = configuration.getComponent(WorkflowManager.class);
         boolean cancelled = manager.workflow("step-ok")
-                                   .cancelStep("awaitApproval", CancellationReason.of("operator cancelled the wait"));
+                                   .cancelStep("awaitApproval", CancellationReason.of("operator cancelled the wait"))
+                                   .join();
 
         assertThat(cancelled).isTrue();
 
@@ -100,7 +101,8 @@ class WorkflowManagerStepCancellationTest extends AbstractWorkflowTestBase<Simpl
         // "prepared" already COMPLETED before the workflow parked.
         var manager = configuration.getComponent(WorkflowManager.class);
         boolean cancelled = manager.workflow("step-terminal")
-                                   .cancelStep("prepared", CancellationReason.of("too late"));
+                                   .cancelStep("prepared", CancellationReason.of("too late"))
+                                   .join();
 
         assertThat(cancelled).isFalse();
 
@@ -115,7 +117,8 @@ class WorkflowManagerStepCancellationTest extends AbstractWorkflowTestBase<Simpl
     void cancelStep_onUnknownWorkflow_returnsFalse() {
         var manager = configuration.getComponent(WorkflowManager.class);
         boolean cancelled = manager.workflow("no-such-workflow")
-                                   .cancelStep("awaitApproval", CancellationReason.none());
+                                   .cancelStep("awaitApproval", CancellationReason.none())
+                                   .join();
 
         assertThat(cancelled).isFalse();
     }
@@ -128,7 +131,8 @@ class WorkflowManagerStepCancellationTest extends AbstractWorkflowTestBase<Simpl
         var manager = configuration.getComponent(WorkflowManager.class);
         // At this point two steps are running: the async "background" execute and the parked "awaitApproval" wait.
         int cancelled = manager.workflow("step-all")
-                               .cancelAllRunningSteps(CancellationReason.of("cancel all steps"));
+                               .cancelAllRunningSteps(CancellationReason.of("cancel all steps"))
+                               .join();
 
         assertThat(cancelled).isEqualTo(2);
 

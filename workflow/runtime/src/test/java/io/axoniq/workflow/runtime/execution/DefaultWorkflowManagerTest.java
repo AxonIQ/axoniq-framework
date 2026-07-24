@@ -30,6 +30,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -59,7 +60,7 @@ class DefaultWorkflowManagerTest {
         when(repository.findById("wf")).thenReturn(Optional.of(execution));
 
         var manager = new DefaultWorkflowManager(repository);
-        boolean cancelled = manager.workflow("wf").cancel(CancellationReason.of("stop"));
+        boolean cancelled = manager.workflow("wf").cancel(CancellationReason.of("stop")).join();
 
         assertThat(cancelled).isTrue();
         verify(execution).requestWorkflowCancellation(any());
@@ -72,7 +73,7 @@ class DefaultWorkflowManagerTest {
 
         var manager = new DefaultWorkflowManager(repository);
 
-        assertThat(manager.workflow("no-such").cancel(CancellationReason.none())).isFalse();
+        assertThat(manager.workflow("no-such").cancel(CancellationReason.none()).join()).isFalse();
     }
 
     @Test
@@ -86,7 +87,7 @@ class DefaultWorkflowManagerTest {
 
         var manager = new DefaultWorkflowManager(repository);
 
-        assertThat(manager.workflow("wf-terminal").cancel(CancellationReason.of("too late"))).isFalse();
+        assertThat(manager.workflow("wf-terminal").cancel(CancellationReason.of("too late")).join()).isFalse();
         verify(execution, never()).requestWorkflowCancellation(any());
     }
 
@@ -120,24 +121,24 @@ class DefaultWorkflowManagerTest {
     void workflowCancelStep_onRunningStep_returnsTrue() {
         var repository = mock(WorkflowExecutionRepository.class);
         var execution = runningExecution("wf", "EU");
-        when(execution.requestStepCancellation(eq("approve"), any())).thenReturn(true);
+        when(execution.requestStepCancellation(eq("approve"), any())).thenReturn(CompletableFuture.completedFuture(true));
         when(repository.findById("wf")).thenReturn(Optional.of(execution));
 
         var manager = new DefaultWorkflowManager(repository);
 
-        assertThat(manager.workflow("wf").cancelStep("approve", CancellationReason.of("op"))).isTrue();
+        assertThat(manager.workflow("wf").cancelStep("approve", CancellationReason.of("op")).join()).isTrue();
     }
 
     @Test
     void workflowCancelStep_onAlreadyTerminalStep_returnsFalse() {
         var repository = mock(WorkflowExecutionRepository.class);
         var execution = runningExecution("wf", "EU");
-        when(execution.requestStepCancellation(eq("prepared"), any())).thenReturn(false);
+        when(execution.requestStepCancellation(eq("prepared"), any())).thenReturn(CompletableFuture.completedFuture(false));
         when(repository.findById("wf")).thenReturn(Optional.of(execution));
 
         var manager = new DefaultWorkflowManager(repository);
 
-        assertThat(manager.workflow("wf").cancelStep("prepared", CancellationReason.of("too late"))).isFalse();
+        assertThat(manager.workflow("wf").cancelStep("prepared", CancellationReason.of("too late")).join()).isFalse();
     }
 
     @Test
@@ -147,7 +148,7 @@ class DefaultWorkflowManagerTest {
 
         var manager = new DefaultWorkflowManager(repository);
 
-        assertThat(manager.workflow("no-such").cancelStep("approve", CancellationReason.none())).isFalse();
+        assertThat(manager.workflow("no-such").cancelStep("approve", CancellationReason.none()).join()).isFalse();
     }
 
     // --- workflow(id).cancelAllRunningSteps ---
@@ -156,12 +157,12 @@ class DefaultWorkflowManagerTest {
     void workflowCancelAllRunningSteps_returnsCount() {
         var repository = mock(WorkflowExecutionRepository.class);
         var execution = runningExecution("wf", "EU");
-        when(execution.requestAllRunningStepsCancellation(any())).thenReturn(2);
+        when(execution.requestAllRunningStepsCancellation(any())).thenReturn(CompletableFuture.completedFuture(2));
         when(repository.findById("wf")).thenReturn(Optional.of(execution));
 
         var manager = new DefaultWorkflowManager(repository);
 
-        assertThat(manager.workflow("wf").cancelAllRunningSteps(CancellationReason.of("all"))).isEqualTo(2);
+        assertThat(manager.workflow("wf").cancelAllRunningSteps(CancellationReason.of("all")).join()).isEqualTo(2);
     }
 
     @Test
@@ -171,7 +172,7 @@ class DefaultWorkflowManagerTest {
 
         var manager = new DefaultWorkflowManager(repository);
 
-        assertThat(manager.workflow("no-such").cancelAllRunningSteps(CancellationReason.none())).isZero();
+        assertThat(manager.workflow("no-such").cancelAllRunningSteps(CancellationReason.none()).join()).isZero();
     }
 
     // --- workflows(pred).cancel ---
@@ -186,7 +187,8 @@ class DefaultWorkflowManagerTest {
 
         var manager = new DefaultWorkflowManager(repository);
         var result = manager.workflows(state -> "EU".equals(state.payload().get("region")))
-                            .cancel(CancellationReason.of("cancel EU"));
+                            .cancel(CancellationReason.of("cancel EU"))
+                            .join();
 
         assertThat(result.matched()).isEqualTo(2);
         assertThat(result.affected()).isEqualTo(2);
@@ -207,7 +209,7 @@ class DefaultWorkflowManagerTest {
         when(repository.findAll()).thenReturn(new LinkedHashSet<>(List.of(running, terminal)));
 
         var manager = new DefaultWorkflowManager(repository);
-        var result = manager.workflows(state -> true).cancel(CancellationReason.none());
+        var result = manager.workflows(state -> true).cancel(CancellationReason.none()).join();
 
         assertThat(result.matched()).isEqualTo(1);
         assertThat(result.affected()).isEqualTo(1);
@@ -227,7 +229,7 @@ class DefaultWorkflowManagerTest {
         when(repository.findAll()).thenReturn(new LinkedHashSet<>(List.of(execution)));
 
         var manager = new DefaultWorkflowManager(repository);
-        var result = manager.workflows(s -> true).cancel(CancellationReason.none());
+        var result = manager.workflows(s -> true).cancel(CancellationReason.none()).join();
 
         assertThat(result.matched()).isEqualTo(1);
         assertThat(result.affected()).isZero();
@@ -283,13 +285,14 @@ class DefaultWorkflowManagerTest {
         var repository = mock(WorkflowExecutionRepository.class);
         var eu1 = runningExecution("eu-1", "EU");
         var eu2 = runningExecution("eu-2", "EU");
-        when(eu1.requestStepCancellation(eq("approve"), any())).thenReturn(true);
-        when(eu2.requestStepCancellation(eq("approve"), any())).thenReturn(true);
+        when(eu1.requestStepCancellation(eq("approve"), any())).thenReturn(CompletableFuture.completedFuture(true));
+        when(eu2.requestStepCancellation(eq("approve"), any())).thenReturn(CompletableFuture.completedFuture(true));
         when(repository.findAll()).thenReturn(new LinkedHashSet<>(List.of(eu1, eu2)));
 
         var manager = new DefaultWorkflowManager(repository);
         var result = manager.workflows(state -> "EU".equals(state.payload().get("region")))
-                            .cancelStep("approve", CancellationReason.of("cancel approve step"));
+                            .cancelStep("approve", CancellationReason.of("cancel approve step"))
+                            .join();
 
         assertThat(result.matched()).isEqualTo(2);
         assertThat(result.affected()).isEqualTo(2);
@@ -305,6 +308,7 @@ class DefaultWorkflowManagerTest {
         when(execution.state()).thenReturn(state);
         when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         when(state.payload()).thenReturn(Map.of("region", region));
+        when(execution.requestWorkflowCancellation(any())).thenReturn(CompletableFuture.completedFuture(null));
         return execution;
     }
 }

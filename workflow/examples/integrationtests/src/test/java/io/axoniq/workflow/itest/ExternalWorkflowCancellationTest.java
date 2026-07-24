@@ -77,7 +77,8 @@ class ExternalWorkflowCancellationTest extends AbstractWorkflowTestBase<SimpleWo
 
         var manager = configuration.getComponent(WorkflowManager.class);
         boolean cancelled = manager.workflow("cancel-1")
-                                   .cancel(CancellationReason.of("operator cancelled by id"));
+                                   .cancel(CancellationReason.of("operator cancelled by id"))
+                                   .join();
 
         assertThat(cancelled).isTrue();
 
@@ -101,7 +102,8 @@ class ExternalWorkflowCancellationTest extends AbstractWorkflowTestBase<SimpleWo
 
         var manager = configuration.getComponent(WorkflowManager.class);
         var result = manager.workflows(state -> "EU".equals(state.payload().get("region")))
-                            .cancel(CancellationReason.of("cancel EU region"));
+                            .cancel(CancellationReason.of("cancel EU region"))
+                            .join();
 
         assertThat(result.matched()).isEqualTo(1);
         assertThat(result.affected()).isEqualTo(1);
@@ -131,7 +133,7 @@ class ExternalWorkflowCancellationTest extends AbstractWorkflowTestBase<SimpleWo
         awaitParked("engine-eu");
         awaitParked("engine-us");
 
-        var result = workflowEngine.cancel(state -> "EU".equals(state.payload().get("region")));
+        var result = workflowEngine.cancel(state -> "EU".equals(state.payload().get("region"))).join();
 
         assertThat(result.matched()).isEqualTo(1);
         assertThat(result.workflowIds()).containsExactly("engine-eu");

@@ -43,6 +43,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
@@ -271,15 +272,17 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     /**
      * Cancels every non-terminal workflow instance whose current {@link WorkflowState} matches the given selector.
      * <p>
-     * Cancellation is cooperative and asynchronous: each match is driven towards a durable {@code CANCELLED} terminal
-     * state on its own control thread and this method does not block on completion. Delegates to the
-     * {@link WorkflowManager}.
+     * Cancellation is cooperative: each match is driven to a durable {@code CANCELLED} terminal state on its own
+     * control thread, and this method returns a future that completes once every match's cancellation has settled
+     * there (each bounded by a timeout). The caller decides whether to block on the result or compose it
+     * asynchronously. Delegates to the {@link WorkflowManager}.
      *
      * @param selector predicate evaluated against each instance's current {@link WorkflowState}.
-     * @return the outcome describing how many instances matched and how many were requested to cancel.
+     * @return a future completing with the outcome describing how many instances matched and how many were
+     * requested to cancel.
      */
     @Nonnull
-    public WorkflowManager.CancellationResult cancel(@Nonnull Predicate<WorkflowState> selector) {
+    public CompletableFuture<WorkflowManager.CancellationResult> cancel(@Nonnull Predicate<WorkflowState> selector) {
         return workflowManager.workflows(selector).cancel(WorkflowManager.CancellationReason.none());
     }
 
