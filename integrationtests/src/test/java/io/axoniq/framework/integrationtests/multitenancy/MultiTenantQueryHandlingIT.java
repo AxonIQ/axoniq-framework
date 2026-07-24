@@ -26,7 +26,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantUtils;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
 import org.axonframework.common.configuration.AxonConfiguration;
@@ -222,21 +221,30 @@ class MultiTenantQueryHandlingIT {
         // and both handlers captured the emitter scoped to their tenant's context
         await().untilAsserted(() -> assertThat(capturedEmitters).containsKeys(TENANT_A, TENANT_B));
 
-        // when emitting an update targeted at each tenant's own subscription query
-        capturedEmitters.get(TENANT_A)
-                        .emit(SubscriptionTenantQuery.class, q -> TENANT_A.equals(q.id()), updatePayload(TENANT_A));
-        capturedEmitters.get(TENANT_B)
-                        .emit(SubscriptionTenantQuery.class, q -> TENANT_B.equals(q.id()), updatePayload(TENANT_B));
+        // when emitting an update with a tenant-BLIND predicate (matches both tenants' payloads) from each tenant's
+        // own captured emitter - isolation must now come from the bus itself, not from a tenant-distinguishing filter
+        capturedEmitters.get(TENANT_A).emit(SubscriptionTenantQuery.class, q -> true, updatePayload(TENANT_A));
+        capturedEmitters.get(TENANT_B).emit(SubscriptionTenantQuery.class, q -> true, updatePayload(TENANT_B));
 
-        // then each subscription stream receives only the update targeted at its own tenant
+        // then each subscription stream receives only the update emitted from its own tenant's context
         assertThat(nextPayload(streamA)).isEqualTo(updatePayload(TENANT_A));
         assertThat(nextPayload(streamB)).isEqualTo(updatePayload(TENANT_B));
 
-        // and completing the subscriptions completes both streams without any cross-tenant leakage
+        // when completing tenant-A's subscription with a tenant-BLIND predicate
         capturedEmitters.get(TENANT_A).complete(SubscriptionTenantQuery.class, q -> true);
+
+        // then only tenant-A's stream completes; tenant-B's subscription is unaffected by a same-process,
+        // tenant-blind completion issued from tenant-A's context
         await().untilAsserted(() -> {
             assertThat(streamA.hasNextAvailable()).isFalse();
             assertThat(streamA.isCompleted()).isTrue();
+        });
+        assertThat(streamB.hasNextAvailable()).isFalse();
+        assertThat(streamB.isCompleted()).isFalse();
+
+        // and completing tenant-B's own subscription completes it too, independently
+        capturedEmitters.get(TENANT_B).complete(SubscriptionTenantQuery.class, q -> true);
+        await().untilAsserted(() -> {
             assertThat(streamB.hasNextAvailable()).isFalse();
             assertThat(streamB.isCompleted()).isTrue();
         });
@@ -249,13 +257,13 @@ class MultiTenantQueryHandlingIT {
     }
 
     private MessageStream<QueryResponseMessage> resolveTenant(QueryMessage query, ProcessingContext context) {
-        String tenantId = TenantUtils.tenantDescriptorFrom(context).tenantId();
+        String tenantId = TenantDescriptor.fromContext(context).get().tenantId();
         return MessageStream.just(new GenericQueryResponseMessage(new MessageType(String.class), tenantId));
     }
 
     private MessageStream<QueryResponseMessage> resolveTenantAndCaptureEmitter(QueryMessage query,
                                                                               ProcessingContext context) {
-        String tenantId = TenantUtils.tenantDescriptorFrom(context).tenantId();
+        String tenantId = TenantDescriptor.fromContext(context).get().tenantId();
         capturedEmitters.put(tenantId, QueryUpdateEmitter.forContext(context));
         return MessageStream.just(new GenericQueryResponseMessage(new MessageType(String.class), tenantId));
     }

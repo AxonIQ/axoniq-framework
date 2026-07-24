@@ -13,6 +13,8 @@ Each known tenant has its own Axon Server connection. When a query handler is su
 
 When a query is dispatched, the tenant is resolved as described in the xref:tenant-management.adoc#tenant-resolution[tenant resolution] section, and the query is routed to the Axon Server context of that tenant. For a subscription query, the tenant is resolved once, from the initial query, and both the initial result and the subsequent updates are routed to that tenant's context.
 
+Emitting updates for a subscription query, for example through the `QueryUpdateEmitter`, is scoped to the tenant resolved for the message being handled when the update is emitted. An update only reaches subscription queries belonging to that same tenant, even if another tenant has an identical subscription active at the same time.
+
 [NOTE]
 ====
 The tenant resolved for a query must be one of the currently known tenants.
