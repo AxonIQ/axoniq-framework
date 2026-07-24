@@ -25,13 +25,18 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A {@link SnapshotStore} test double that records how often it was loaded from and stored to, so tests can assert
- * which tenant's store a routing snapshot store delegated to.
+ * A {@link SnapshotStore} test double that both records how often it was loaded from and stored to, and keeps the
+ * stored snapshots in memory. Tests can assert which tenant's store a routing snapshot store delegated to, and that a
+ * snapshot stored under one tenant is only loaded back from that same tenant's store.
  */
 public class RecordingSnapshotStore implements SnapshotStore {
+
+    private final Map<Object, Snapshot> snapshotsByIdentifier = new ConcurrentHashMap<>();
 
     private int loadCount;
     private int storeCount;
@@ -48,6 +53,7 @@ public class RecordingSnapshotStore implements SnapshotStore {
     public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
                                          @Nullable ProcessingContext context) {
         storeCount++;
+        snapshotsByIdentifier.put(identifier, snapshot);
         return CompletableFuture.completedFuture(null);
     }
 
@@ -55,6 +61,6 @@ public class RecordingSnapshotStore implements SnapshotStore {
     public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
                                                       @Nullable ProcessingContext context) {
         loadCount++;
-        return CompletableFuture.completedFuture(null);
+        return CompletableFuture.completedFuture(snapshotsByIdentifier.get(identifier));
     }
 }

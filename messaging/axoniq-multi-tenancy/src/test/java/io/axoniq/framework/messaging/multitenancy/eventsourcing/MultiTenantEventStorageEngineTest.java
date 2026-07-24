@@ -28,9 +28,15 @@ import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
+import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
+import org.axonframework.eventsourcing.eventstore.SnapshotEventMessage;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
+import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
+import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -53,6 +59,8 @@ class MultiTenantEventStorageEngineTest {
 
     private static final SourcingCondition ANY = SourcingCondition.conditionFor(EventCriteria.havingAnyTag());
     private static final AppendCondition NONE = AppendCondition.none();
+    private static final QualifiedName SNAPSHOT_NAME = new QualifiedName(String.class);
+    private static final String IDENTIFIER = "identifier-1";
 
     private final TenantDescriptorMapping<EventStorageEngine> engines = new TenantDescriptorMapping<>();
     private final RecordingEventStorageEngine tenantA = engines.entry(TENANT_A, new RecordingEventStorageEngine());
@@ -168,6 +176,62 @@ class MultiTenantEventStorageEngineTest {
 
             assertThat(testSubject.source(ANY, context).error())
                     .containsInstanceOf(TenantNotResolvedException.class);
+        }
+
+        // The optimized snapshot route never calls SnapshotStore#load: the snapshot is delivered as a leading
+        // SnapshotEventMessage on the source stream when the SourcingCondition carries SourcingStrategy.Snapshot.
+        // The routing engine forwards that whole condition to the resolved tenant's engine, so each tenant is sourced
+        // from its own snapshot and never another tenant's. The normal SnapshotStore#load route is covered by
+        // MultiTenantSnapshotStoreTest.
+        @Test
+        void optimizedSnapshotSourcingIsRoutedToTheResolvedTenantAndIsolated() {
+            Snapshot snapshotA = snapshot("snapshot-a");
+            Snapshot snapshotB = snapshot("snapshot-b");
+            tenantA.prepareSnapshot(snapshotA);
+            tenantB.prepareSnapshot(snapshotB);
+            MultiTenantEventStorageEngine testSubject =
+                    new MultiTenantEventStorageEngine(engines::apply, new MetadataBasedTenantResolver(), engines);
+            SourcingCondition snapshotCondition = SourcingCondition.conditionFor(
+                    new SourcingStrategy.Snapshot(SNAPSHOT_NAME, IDENTIFIER, null), EventCriteria.havingAnyTag());
+
+            Snapshot sourcedForA = leadingSnapshot(testSubject.source(snapshotCondition, contextFor(TENANT_A)));
+            Snapshot sourcedForB = leadingSnapshot(testSubject.source(snapshotCondition, contextFor(TENANT_B)));
+
+            assertThat(sourcedForA).isEqualTo(snapshotA);
+            assertThat(sourcedForB).isEqualTo(snapshotB);
+        }
+
+        // A tenant without a snapshot falls back to a snapshot-free stream: the optimized route delivers no leading
+        // SnapshotEventMessage. Routing is unaffected, so a snapshot-led tenant and a fallback tenant are sourced side
+        // by side without one leaking into the other.
+        @Test
+        void optimizedSnapshotSourcingFallsBackToASnapshotFreeStreamForATenantWithoutASnapshot() {
+            tenantA.prepareSnapshot(snapshot("snapshot-a"));
+            // tenantB is left unseeded, so its optimized source falls back to a snapshot-free stream
+            MultiTenantEventStorageEngine testSubject =
+                    new MultiTenantEventStorageEngine(engines::apply, new MetadataBasedTenantResolver(), engines);
+            SourcingCondition snapshotCondition = SourcingCondition.conditionFor(
+                    new SourcingStrategy.Snapshot(SNAPSHOT_NAME, IDENTIFIER, null), EventCriteria.havingAnyTag());
+
+            MessageStream<EventMessage> sourcedForA = testSubject.source(snapshotCondition, contextFor(TENANT_A));
+            MessageStream<EventMessage> sourcedForB = testSubject.source(snapshotCondition, contextFor(TENANT_B));
+
+            assertThat(sourcedForA.next().orElseThrow().message()).isInstanceOf(SnapshotEventMessage.class);
+            assertThat(sourcedForB.next()).isEmpty();
+        }
+
+        private static ProcessingContext contextFor(TenantDescriptor tenant) {
+            return StubProcessingContext.forMessage(event(tenant));
+        }
+
+        private static Snapshot snapshot(Object payload) {
+            return new Snapshot(new GlobalIndexPosition(0L), "0", payload, Instant.EPOCH, Map.of());
+        }
+
+        private static Snapshot leadingSnapshot(MessageStream<EventMessage> stream) {
+            EventMessage first = stream.next().orElseThrow().message();
+            assertThat(first).isInstanceOf(SnapshotEventMessage.class);
+            return ((SnapshotEventMessage) first).payload();
         }
     }
 

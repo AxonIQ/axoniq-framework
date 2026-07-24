@@ -107,6 +107,28 @@ class MultiTenantSnapshotStoreTest {
     }
 
     @Nested
+    class Isolation {
+
+        // Proves the normal snapshot route (SnapshotStore#load) is tenant-isolated: a snapshot stored under one tenant
+        // is loaded back only from that tenant's store. The optimized route delivers the snapshot through
+        // EventStorageEngine#source instead, which is routed by MultiTenantEventStorageEngine and proven isolated by
+        // PerTenantEventStorageIsolationTest.
+        @Test
+        void aSnapshotStoredForOneTenantIsNotLoadedForAnother() {
+            MultiTenantSnapshotStore testSubject =
+                    new MultiTenantSnapshotStore(stores::apply, new MetadataBasedTenantResolver(), stores);
+            ProcessingContext tenantAContext = StubProcessingContext.forMessage(messageForTenant(TENANT_A));
+            ProcessingContext tenantBContext = StubProcessingContext.forMessage(messageForTenant(TENANT_B));
+            Snapshot snapshot = new Snapshot(new GlobalIndexPosition(0L), "0", "payload", Instant.EPOCH, Map.of());
+
+            testSubject.store(SNAPSHOT_NAME, IDENTIFIER, snapshot, tenantAContext).join();
+
+            assertThat(testSubject.load(SNAPSHOT_NAME, IDENTIFIER, tenantAContext).join()).isEqualTo(snapshot);
+            assertThat(testSubject.load(SNAPSHOT_NAME, IDENTIFIER, tenantBContext).join()).isNull();
+        }
+    }
+
+    @Nested
     class UnresolvedTenant {
 
         @Test
