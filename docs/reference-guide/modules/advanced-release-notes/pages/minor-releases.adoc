@@ -7,7 +7,7 @@ Any patch release made for an Axon project is tailored towards resolving bugs. T
 == Release 5.2
 === Release 5.2.1
 
-==== Bug Fixes
+==== Bug fixes
 
 - Mirror AF4 behavior by returning `"empty"` for Query Handlers returning empty `Optionals` for interoperability (link:https://github.com/AxonIQ/axoniq-framework/pull/278[#278] by @smcvb)
 - [Port] Mirror AF4 behavior by returning `"empty"` for Query Handlers returning empty `Optionals` for interoperability (link:https://github.com/AxonIQ/axoniq-framework/pull/284[#284] by @smcvb)
