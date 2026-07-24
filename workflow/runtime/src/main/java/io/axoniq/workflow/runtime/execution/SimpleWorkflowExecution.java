@@ -27,6 +27,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
+import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
@@ -487,14 +488,14 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
      */
     @Override
     public void interruptStepsAndDiscardQueue() {
-        runningSteps.cancelAll(new InterruptedException("Workflow reached terminal state"), cancelled -> {
+        runningSteps.cancelAll(new StepInterruptedException("Workflow reached terminal state"), cancelled -> {
         });
         this.taskQueue.clear();
     }
 
     @Override
     public void interrupt() {
-        runningSteps.cancelAll(new InterruptedException("Workflow engine shutdown"), s -> {
+        runningSteps.cancelAll(new StepInterruptedException("Workflow engine shutdown"), s -> {
         });
         // Unblock the workflow driver thread parked on taskQueue.take() inside the current step's await() loop.
         // The task sets the driver thread's interrupt flag; the next taskQueue.take() observes it and throws

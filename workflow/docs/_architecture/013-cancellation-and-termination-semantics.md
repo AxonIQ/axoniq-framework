@@ -64,9 +64,14 @@ Both paths tear a running step down the same way — by completing its `Completa
 
 So the two paths pick different causes on purpose:
 
-- **Whole-workflow termination** completes the futures with an `InterruptedException` → silent teardown, no
+- **Whole-workflow termination** completes the futures with a `StepInterruptedException` → silent teardown, no
   per-step record (only the workflow-level terminal event is written). Completing a step's future is not a
   force-interrupt: a user `execute` action already running on the executor runs to completion and its late
   result is simply discarded.
 - **Single-step cancellation** completes with a `StepCancellationException` → a `<step>:CANCELLED` record is
   written, which the body observes and can catch to compensate.
+
+If the workflow body itself is blocked on the interrupted step (for example inside `ctx.awaitExecute(...)`), the
+same `StepInterruptedException` unblocks it, so the body can catch it (or its parent `StepFailedException`) for
+compensation or cleanup, exactly like it would `StepCancellationException` for a single-step cancel. Catching it
+has no bearing on what is durable: the step's last recorded event-log state stays `STARTED` either way.

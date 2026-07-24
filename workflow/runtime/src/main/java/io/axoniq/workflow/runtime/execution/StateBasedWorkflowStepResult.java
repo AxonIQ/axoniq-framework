@@ -21,6 +21,7 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepFailedException;
+import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
@@ -136,6 +137,9 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
             }
             try {
                 stateChangeTrigger.call();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new StepInterruptedException("Step wait interrupted because the workflow reached a terminal state", e);
             } catch (Exception e) {
                 throw new RuntimeException(e); // FIXME -> replace callable with a better fit.
             }

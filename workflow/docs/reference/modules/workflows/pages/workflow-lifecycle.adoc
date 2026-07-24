@@ -214,6 +214,8 @@ for (WorkflowHandle handle : workflowManager.workflows(state -> state.payload().
 
 As the log shows, the last event recorded for `shipOrder` and `notifyCustomer` is their `Started`; the workflow's `Cancelled` is the terminal event. To record a terminal outcome and run compensation for a specific step, cancel it individually with `workflowManager.workflow(id).cancelStep(...)` (see xref:step-orchestration.adoc[]).
 
+If the workflow body itself is blocked on the interrupted step (for example inside `awaitExecute(...)` or `.await()`), that call unblocks with a `StepInterruptedException`, which the body can catch (or its parent `StepFailedException`) to run compensation or cleanup. This is purely an in-body signal: it does not change what is recorded, the step's last event-log entry still stays `Started`.
+
 [[complete-with-running-steps]]
 === Normal completion with running steps
 
