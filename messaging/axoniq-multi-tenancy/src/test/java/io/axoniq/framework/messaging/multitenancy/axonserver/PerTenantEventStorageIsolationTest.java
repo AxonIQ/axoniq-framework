@@ -17,14 +17,14 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.eventsourcing;
+package io.axoniq.framework.messaging.multitenancy.axonserver;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerMultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
 import org.axonframework.common.configuration.AxonConfiguration;
@@ -60,9 +60,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * entity is sourced through the {@link MultiTenantEventStorageEngine}, and its events are appended back through the same
  * engine, all routed to that one tenant's store.
  * <p>
- * The engine's routing given a resolved tenant is covered by {@link MultiTenantEventStorageEngineTest}, and the Axon
- * Server wiring that registers the engine by
- * {@link io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerMultiTenancyConfigurationDefaultsTest}. This
+ * The engine's routing given a resolved tenant is covered by
+ * {@link io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngineTest}, and the Axon
+ * Server wiring that registers the engine by {@link AxonServerMultiTenancyConfigurationDefaultsTest}. This
  * test closes the gap between them by driving a real {@link CommandGateway} through the whole write path: a course
  * filled in one tenant must not make the same course identifier appear full in another. Each tenant is backed by its
  * own {@link InMemoryEventStorageEngine}, so a routing leak would source another tenant's events and fail the test.

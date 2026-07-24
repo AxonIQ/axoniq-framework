@@ -25,13 +25,17 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerMultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -177,6 +181,38 @@ class MultiTenancyAutoConfigurationTest {
                                               .registerEnhancer(new MultiTenancyConfigurationDefaults()))
 
                                       .build();
+        }
+    }
+
+    /**
+     * Verifies the event storage engine wired into a full Spring application context. With multi-tenancy active by
+     * default, the engine backing the {@link EventStorageEngine} bean is the tenant-routing
+     * {@link MultiTenantEventStorageEngine}, so appends and sources are directed at the store of the message's tenant.
+     */
+    @Nested
+    class StorageEngineWiring {
+
+        private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+                .withUserConfiguration(FullAutoConfigurationContext.class);
+
+        @Test
+        void multiTenantEngineBacksTheEventStorageEngineWhenAxonServerIsEnabled() {
+            // given Axon Server is enabled, so multi-tenancy activates by default
+            contextRunner.withPropertyValues("axon.axonserver.enabled=true")
+                         // when the context starts
+                         .run(context -> {
+                             // then the sole event storage engine is backed by the tenant-routing engine
+                             assertThat(context).hasSingleBean(EventStorageEngine.class);
+                             assertThat(context).getBean(EventStorageEngine.class)
+                                                .extracting("delegate")
+                                                .isInstanceOf(MultiTenantEventStorageEngine.class);
+                         });
+        }
+
+        @Configuration
+        @EnableAutoConfiguration
+        static class FullAutoConfigurationContext {
+
         }
     }
 
