@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.eventstreaming.checkpoint;
 
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressContext;
@@ -105,6 +106,7 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
             throw new IllegalArgumentException("The participants may not be empty.");
         }
         this.autoCheckpointing = autoCheckpointing;
+        EntitlementManager.INSTANCE.registerAddon(CheckpointingAxoniqAddon.class);
     }
 
     @Override

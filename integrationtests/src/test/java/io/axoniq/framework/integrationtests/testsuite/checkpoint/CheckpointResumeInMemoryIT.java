@@ -60,8 +60,8 @@ import static org.awaitility.Awaitility.await;
  * {@code CheckpointTriggerParameterResolverFactory}). Both acquisition paths are public API, so both are exercised
  * end-to-end.
  * <p>
- * This is the end-to-end realisation of the guarantee unit-tested by {@code WorkPackageCheckpointTest}: the stored
- * token never runs past what a component made durable.
+ * This is the end-to-end realisation of the guarantee unit-tested by {@code CheckpointingProgressStrategyTestSuite}:
+ * the stored token never runs past what a component made durable.
  *
  * @author Allard Buijze
  */
