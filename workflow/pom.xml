@@ -36,7 +36,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <kotlin.version>2.4.10</kotlin.version>
         <archunit.version>1.4.2</archunit.version>
-        <axon.version>5.2.0</axon.version>
+        <axon.version>5.2.1</axon.version>
         <junit.version>6.1.2</junit.version>
         <!-- Build / Plugin -->
         <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
@@ -97,7 +97,7 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.5.38</version>
+            <version>1.6.0</version>
         </dependency>
 
         <dependency>
@@ -299,7 +299,7 @@
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>flatten-maven-plugin</artifactId>
-                <version>1.7.3</version>
+                <version>1.8.0</version>
                 <configuration>
                     <updatePomFile>true</updatePomFile>
                     <flattenMode>resolveCiFriendliesOnly</flattenMode>
