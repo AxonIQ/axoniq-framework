@@ -33,7 +33,7 @@
     </description>
 
     <properties>
-        <revision>5.2.2-SNAPSHOT</revision>
+        <revision>5.2.2</revision>
 
         <!-- Global Axoniq version properties -->
         <axon-framework.version>5.2.2</axon-framework.version>
@@ -596,7 +596,7 @@
         <connection>scm:git:git://github.com/AxonIQ/AxoniqFramework.git</connection>
         <developerConnection>scm:git:git@github.com:AxonIQ/AxoniqFramework.git</developerConnection>
         <url>https://github.com/AxonIQ/AxoniqFramework</url>
-        <tag>HEAD</tag>
+        <tag>axoniq-5.2.2</tag>
     </scm>
 
     <developers>
