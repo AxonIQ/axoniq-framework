@@ -20,6 +20,7 @@
 package io.axoniq.framework.messaging.multitenancy.api;
 
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 
 /**
@@ -27,6 +28,11 @@ import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
  * <p>
  * The multi-tenant snapshot store calls this factory to obtain the store to route a tenant's snapshot load and store
  * operations to. Implementations are expected to create the per-tenant store lazily and cache it.
+ * <p>
+ * When a tenant's {@link EventStorageEngine engine} resolves snapshots natively, being its own {@link SnapshotStore},
+ * this factory has to return that very instance for the same tenant. That is what
+ * {@link TenantEventStorageEngineFactory#snapshotCapable(EventStorageEngine, SnapshotStore) snapshotCapable} compares,
+ * so returning a separate store that reads the same snapshots instead costs the engine its single round trip.
  *
  * @author Stefan Dragisic
  * @author Laura Devriendt

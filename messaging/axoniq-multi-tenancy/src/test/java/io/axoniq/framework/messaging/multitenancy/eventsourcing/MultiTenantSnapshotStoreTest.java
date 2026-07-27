@@ -109,10 +109,9 @@ class MultiTenantSnapshotStoreTest {
     @Nested
     class Isolation {
 
-        // Proves the normal snapshot route (SnapshotStore#load) is tenant-isolated: a snapshot stored under one tenant
-        // is loaded back only from that tenant's store. The optimized route delivers the snapshot through
-        // EventStorageEngine#source instead, which is routed by MultiTenantEventStorageEngine and proven isolated by
-        // PerTenantEventStorageIsolationTest.
+        // Proves the snapshot store route is tenant-isolated. A snapshot stored under one tenant is loaded back only
+        // from that tenant's store. Snapshot sourcing takes a different route, resolved inside each tenant's own
+        // snapshot capable engine, and is covered by PerTenantSnapshotSourcingIsolationTest.
         @Test
         void aSnapshotStoredForOneTenantIsNotLoadedForAnother() {
             MultiTenantSnapshotStore testSubject =

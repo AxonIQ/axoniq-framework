@@ -35,9 +35,11 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
-import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
+import io.axoniq.framework.messaging.multitenancy.util.RecordingEventStorageEngine;
+import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
@@ -57,6 +59,7 @@ import static io.axoniq.framework.axonserver.connector.api.AxonServerConfigurati
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
@@ -120,16 +123,61 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
 
         @Test
         void registersTheMultiTenantEventStorageEngineAsTheEventStorageEngine() {
-            // the framework wraps the engine to add snapshotting, so the routing engine is the delegate
+            // the routing engine resolves snapshots itself, so the framework registers it undecorated
             assertThat(configuration.getComponent(EventStorageEngine.class))
-                    .extracting("delegate")
                     .isInstanceOf(MultiTenantEventStorageEngine.class);
         }
 
         @Test
-        void registersTheMultiTenantSnapshotStoreAsTheSnapshotStore() {
+        void registersTheSameRoutingEngineInstanceAsTheSnapshotStore() {
+            // the same instance under both types, so the framework does not complement the routing engine with a
+            // snapshot store above the fan-out
             assertThat(configuration.getComponent(SnapshotStore.class))
-                    .isInstanceOf(MultiTenantSnapshotStore.class);
+                    .isInstanceOf(MultiTenantEventStorageEngine.class)
+                    .isSameAs(configuration.getComponent(EventStorageEngine.class));
+        }
+    }
+
+    @Nested
+    class ForeignSnapshotStoreRejection {
+
+        // A SnapshotStore registered elsewhere would be complemented onto the routing engine above the tenant fan-out,
+        // resolving snapshots before a tenant is known. That has to fail loudly rather than degrade isolation silently.
+        // Verified at startup rather than while enhancing, so it holds whichever order the registrations happen in.
+        @Test
+        void rejectsASnapshotStoreRegisteredByTheApplication() {
+            SnapshotStore singleTenantStore = new RecordingSnapshotStore();
+            AxonConfiguration configuration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry.registerComponent(
+                                               SnapshotStore.class, config -> singleTenantStore))
+                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
+                                       .build();
+
+            assertThatThrownBy(configuration::start)
+                    .hasRootCauseInstanceOf(AxonConfigurationException.class)
+                    .rootCause()
+                    .hasMessageContaining("SnapshotStore")
+                    .hasMessageContaining("TenantSnapshotStoreFactory");
+        }
+
+        // The mirror image: replacing the EventStorageEngine leaves the routing engine as the SnapshotStore only, which
+        // pairs snapshot positions from a tenant's store with a tail sourced from a non-tenant engine.
+        @Test
+        void rejectsAnEventStorageEngineRegisteredByTheApplication() {
+            EventStorageEngine singleTenantEngine = new RecordingEventStorageEngine();
+            AxonConfiguration configuration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry.registerComponent(
+                                               EventStorageEngine.class, config -> singleTenantEngine))
+                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
+                                       .build();
+
+            assertThatThrownBy(configuration::start)
+                    .hasRootCauseInstanceOf(AxonConfigurationException.class)
+                    .rootCause()
+                    .hasMessageContaining("EventStorageEngine")
+                    .hasMessageContaining("TenantEventStorageEngineFactory");
         }
     }
 

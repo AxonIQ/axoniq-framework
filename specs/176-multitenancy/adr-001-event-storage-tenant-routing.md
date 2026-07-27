@@ -17,8 +17,8 @@ Both options give each tenant its own store in its own context. They differ in w
 | | Option A: route at the `EventStore` | Option B: route at the `EventStorageEngine` |
 |---|---|---|
 | **How** | A custom `EventStore` replaces the default and delegates to a full per-tenant store. | A custom `EventStorageEngine` sits under the stock `StorageEngineBackedEventStore` and routes per tenant. |
-| **Pros** | Nothing that lasts (see the decision). | Reuses the stock store, interceptors, tagging, and bus once. Snapshots compose automatically. Smallest custom surface. Storage-agnostic, so [#213](https://github.com/AxonIQ/axoniq-framework/issues/213) is a different per-tenant factory on the same engine. |
-| **Cons** | Re-implements the `EventStore` contract and duplicates the store machinery for every tenant. | The engine is dual-natured. It routes writes and merges reads, which is coherent for a federating engine but worth knowing when reading it. |
+| **Pros** | Nothing that lasts (see the decision). | Reuses the stock store, interceptors, tagging, and bus once. Snapshots route per tenant on the same engine. Smallest custom surface. Storage-agnostic, so [#213](https://github.com/AxonIQ/axoniq-framework/issues/213) is a different per-tenant factory on the same engine. |
+| **Cons** | Re-implements the `EventStore` contract and duplicates the store machinery for every tenant. | The engine is multi-natured. It routes writes, merges reads, and is the `SnapshotStore`, which is coherent for a federating engine but worth knowing when reading it. |
 
 ## Decision: route at the `EventStorageEngine`, and merge reads there too
 
@@ -43,7 +43,13 @@ The token must still be union-tolerant. A source that only one side knows is tre
 
 ## Snapshots
 
-A sibling `MultiTenantSnapshotStore` (a `SnapshotStore`) resolves the tenant from the context and routes `load` and `store` to the tenant's snapshot store, built by a `TenantSnapshotStoreFactory` (the AxonServer default uses the same cached connection as the engine). Because the routing engine and the routing snapshot store are distinct components, the framework's `SnapshotCapableEventStorageEngine` auto-wraps the engine above the fan-out, so per-tenant snapshots need no bespoke wiring. This meets the [#209](https://github.com/AxonIQ/axoniq-framework/issues/209) snapshot requirement.
+A `MultiTenantSnapshotStore` resolves the tenant from the context and routes `load` and `store` to the tenant's snapshot store, built by a `TenantSnapshotStoreFactory` (the AxonServer default uses the same cached connection as the engine). It is an internal collaborator of the routing engine rather than a component of its own. This meets the [#209](https://github.com/AxonIQ/axoniq-framework/issues/209) snapshot requirement.
+
+Snapshot resolution has to stay below the fan-out. There are two ways an entity load reaches a snapshot. The slow route calls `SnapshotStore.load` and then sources the events that follow it. That is two round trips. The fast route passes `SourcingStrategy.Snapshot` to `source` and the engine resolves the snapshot within that one call, which an engine can only do when it is its own `SnapshotStore`, as `PostgresqlEventStorageEngine` is. The event sourcing defaults complement an engine that is not the configured `SnapshotStore` with the slow route, and that complement consumes the snapshot strategy. It resolves the snapshot itself and delegates a plain position-based sourcing inward. Applied above the fan-out it would resolve snapshots before a tenant is known, and no tenant engine could ever use its fast route.
+
+Two things follow. First, the per-tenant engine has to arrive already able to resolve its tenant's snapshots, so `TenantEventStorageEngineFactory` decorates it while it is built, once per tenant, through `snapshotCapable`. The comparison there is by identity rather than a check for whether the engine implements `SnapshotStore`, mirroring the defaults. An engine that resolves snapshots from its own storage while its tenant's snapshots were written to a different store still needs decorating. Second, nothing may decorate the routing engine itself, so `MultiTenantEventStorageEngine` is a `SnapshotStore` as well, delegating `load` and `store` to the routing snapshot store, and both types resolve to one instance. The defaults leave an engine untouched when it is the configured snapshot store, so the strategy reaches the tenant's own engine intact. Should the two come apart, because an application registers an `EventStorageEngine` or a `SnapshotStore` of its own, startup fails rather than silently resolving snapshots above the fan-out.
+
+The routing engine therefore only routes, and [#213](https://github.com/AxonIQ/axoniq-framework/issues/213) can bring a snapshot resolving per-tenant engine that keeps its single round trip.
 
 ## Per-tenant lifecycle: lazy create, evict on removal
 
@@ -83,7 +89,7 @@ Two things predate this plan, and both are scaffolding rather than a baseline. T
 |---|---|---|
 | **Routing layer** | The `EventStore` facade, registered under its own type. | The `EventStorageEngine`, under the stock `StorageEngineBackedEventStore`. |
 | **Per-tenant unit** | A full `StorageEngineBackedEventStore` per tenant. | A per-tenant `EventStorageEngine` plus a per-tenant `SnapshotStore`. |
-| **Snapshots** | Not handled in the committed slice. | Per tenant, composed by the framework. |
+| **Snapshots** | Not handled in the committed slice. | Per tenant, resolved by the same engine. |
 | **Reads** | Not in the committed slice. | Merged inside the engine. |
 | **Lifecycle** | Segments are cached but never follow the tenant lifecycle. | Segments are created lazily and evicted when a tenant is removed. |
 
@@ -91,7 +97,7 @@ Two things predate this plan, and both are scaffolding rather than a baseline. T
 
 New, all `@Internal`: `MultiTenantEventStorageEngine`, `MultiTenantTrackingToken`, `MultiTenantSnapshotStore`, `TenantEventStorageEngineFactory`, `TenantSnapshotStoreFactory`. Deleted: `TenantRoutingEventStore`, `TenantEventSegmentFactory`, `AxonServerTenantEventSegmentFactory`.
 
-The engine and the snapshot store register in `AxonServerMultiTenancyConfigurationDefaults` (order `MIN_VALUE + 7`), before `AxonServerConfigurationEnhancer` (`MIN_VALUE + 10`), whose `registerIfNotPresent` for both types then backs off. Naming uses the `MultiTenant*` prefix, matching `MultiTenantAxonServerCommandBusConnector`. The single-tenant SPI types (`TenantDescriptor`, `TenantProvider`, `TenantResolver`) keep their names.
+The routing engine registers in `AxonServerMultiTenancyConfigurationDefaults` (order `MIN_VALUE + 7`) under both `EventStorageEngine` and `SnapshotStore` as one instance, before `AxonServerConfigurationEnhancer` (`MIN_VALUE + 10`), whose `registerIfNotPresent` for both types then backs off. Naming uses the `MultiTenant*` prefix, matching `MultiTenantAxonServerCommandBusConnector`. The single-tenant SPI types (`TenantDescriptor`, `TenantProvider`, `TenantResolver`) keep their names.
 
 Tests:
 
@@ -108,6 +114,6 @@ Slice 2 (persistent streams) bypasses the `StreamableEventSource` path and needs
 ## Consequences
 
 - One federating engine, the standard `EventStore`, and the standard processor wiring. Reads and writes share one path.
-- Snapshots per tenant by composition.
+- Snapshots per tenant, resolved below the fan-out, so a snapshot resolving per-tenant engine keeps its single round trip.
 - [#213](https://github.com/AxonIQ/axoniq-framework/issues/213) becomes a JPA per-tenant factory on the same engine.
 - A module-owned token means a tenant-set change replays the affected tenant from the start (the specified behaviour), and the class name is a permanent commitment in token stores.

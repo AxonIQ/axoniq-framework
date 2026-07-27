@@ -21,32 +21,63 @@ package io.axoniq.framework.messaging.multitenancy.axonserver;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
+import io.axoniq.framework.messaging.multitenancy.api.TenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingAxonServerConnectionManager;
+import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
+import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
 import org.axonframework.common.configuration.Configuration;
-import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.common.infra.MockComponentDescriptor;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.junit.jupiter.api.*;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
+import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class AxonServerTenantEventStorageEngineFactoryTest {
 
     private final RecordingAxonServerConnectionManager connectionManager = new RecordingAxonServerConnectionManager();
+    private final TenantDescriptorMapping<SnapshotStore> snapshotStores = new TenantDescriptorMapping<>();
+    private final RecordingSnapshotStore snapshotStoreA = snapshotStores.entry(TENANT_A, new RecordingSnapshotStore());
+    private final RecordingSnapshotStore snapshotStoreB = snapshotStores.entry(TENANT_B, new RecordingSnapshotStore());
     private final Configuration configuration =
             MessagingConfigurer.create()
-                               .componentRegistry(registry -> registry.registerComponent(
-                                       AxonServerConnectionManager.class, config -> connectionManager))
+                               .componentRegistry(registry -> registry
+                                       .registerComponent(AxonServerConnectionManager.class,
+                                                          config -> connectionManager)
+                                       .registerComponent(TenantSnapshotStoreFactory.class,
+                                                          config -> snapshotStores::apply))
                                .build();
     private final AxonServerTenantEventStorageEngineFactory testSubject =
             new AxonServerTenantEventStorageEngineFactory(configuration);
 
     @Test
     void buildsAnAxonServerEngineAgainstTheTenantContext() {
-        EventStorageEngine engine = testSubject.engineFor(TENANT_A);
+        MockComponentDescriptor descriptor = new MockComponentDescriptor();
 
-        assertThat(engine).isInstanceOf(AxonServerEventStorageEngine.class);
+        testSubject.engineFor(TENANT_A).describeTo(descriptor);
+
+        Object complementedEngine = descriptor.getProperty("delegate");
+        assertThat(complementedEngine).isInstanceOf(AxonServerEventStorageEngine.class);
         assertThat(connectionManager.requestedContexts()).containsExactly(TENANT_A.tenantId());
+    }
+
+    // Axon Server's engine is not its own snapshot store, so the tenant's engine is made snapshot capable with that
+    // tenant's own store while it is built. Without that, snapshot sourcing would reach an engine that cannot resolve a
+    // snapshot at all. The rule itself is covered by TenantEventStorageEngineFactoryTest.
+    @Test
+    void makesEachTenantEngineSnapshotCapableWithThatTenantsOwnStore() {
+        MockComponentDescriptor tenantA = new MockComponentDescriptor();
+        MockComponentDescriptor tenantB = new MockComponentDescriptor();
+
+        testSubject.engineFor(TENANT_A).describeTo(tenantA);
+        testSubject.engineFor(TENANT_B).describeTo(tenantB);
+
+        Object storeForTenantA = tenantA.getProperty("snapshotStore");
+        Object storeForTenantB = tenantB.getProperty("snapshotStore");
+        assertThat(storeForTenantA).isSameAs(snapshotStoreA);
+        assertThat(storeForTenantB).isSameAs(snapshotStoreB);
     }
 
     @Test

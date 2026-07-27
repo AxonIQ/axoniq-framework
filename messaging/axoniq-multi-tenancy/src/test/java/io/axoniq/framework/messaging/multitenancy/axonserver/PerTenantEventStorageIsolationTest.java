@@ -25,6 +25,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
+import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
 import org.axonframework.common.configuration.AxonConfiguration;
@@ -36,6 +37,7 @@ import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.axonframework.messaging.commandhandling.configuration.CommandHandlingModule;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
@@ -76,6 +78,7 @@ class PerTenantEventStorageIsolationTest {
     private static final int COMMAND_TIMEOUT_SECONDS = 5;
 
     private final TenantDescriptorMapping<EventStorageEngine> tenantEngines = new TenantDescriptorMapping<>();
+    private final TenantDescriptorMapping<SnapshotStore> tenantSnapshotStores = new TenantDescriptorMapping<>();
 
     private AxonConfiguration configuration;
     private CommandGateway commandGateway;
@@ -84,8 +87,11 @@ class PerTenantEventStorageIsolationTest {
     void setUp() {
         tenantEngines.entry(TENANT_A, new InMemoryEventStorageEngine());
         tenantEngines.entry(TENANT_B, new InMemoryEventStorageEngine());
+        tenantSnapshotStores.entry(TENANT_A, new RecordingSnapshotStore());
+        tenantSnapshotStores.entry(TENANT_B, new RecordingSnapshotStore());
+        MetadataBasedTenantResolver tenantResolver = new MetadataBasedTenantResolver();
         EventStorageEngine routingEngine = new MultiTenantEventStorageEngine(
-                tenantEngines::apply, new MetadataBasedTenantResolver(), tenantEngines);
+                tenantEngines::apply, tenantSnapshotStores::apply, tenantResolver, tenantEngines);
 
         StubTenantProvider tenantProvider = new StubTenantProvider();
         tenantProvider.addTenant(TENANT_A);

@@ -45,6 +45,10 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Snapshot operations therefore require a tenant-carrying processing context. When none is available, or the tenant
  * cannot be resolved from it, the operation completes exceptionally.
+ * <p>
+ * Held by {@link MultiTenantEventStorageEngine}, which exposes it as its own {@link SnapshotStore}. It is not
+ * registered as a component of its own, because the event sourcing defaults would then decorate the routing engine
+ * with it above the tenant fan-out, resolving snapshots before a tenant is known.
  *
  * @author Jakob Hatzl
  * @author Laura Devriendt
@@ -66,8 +70,21 @@ public class MultiTenantSnapshotStore implements SnapshotStore, DescribableCompo
     public MultiTenantSnapshotStore(TenantSnapshotStoreFactory snapshotStoreFactory,
                                     TenantResolver tenantResolver,
                                     TenantDescriptors tenants) {
+        this(snapshotStoreFactory, new RoutingTenantResolver(tenantResolver, tenants));
+    }
+
+    /**
+     * Constructs a {@code MultiTenantSnapshotStore} resolving tenants with the given {@code tenantResolver}.
+     * <p>
+     * Used by {@link MultiTenantEventStorageEngine} so events and snapshots resolve their tenant through one and the
+     * same resolver, against one and the same set of known tenants.
+     *
+     * @param snapshotStoreFactory the factory providing each tenant's {@link SnapshotStore}
+     * @param tenantResolver       the resolver determining the known tenant of a message
+     */
+    MultiTenantSnapshotStore(TenantSnapshotStoreFactory snapshotStoreFactory, RoutingTenantResolver tenantResolver) {
         this.snapshotStoreFactory = requireNonNull(snapshotStoreFactory, "The snapshot store factory must not be null");
-        this.tenantResolver = new RoutingTenantResolver(tenantResolver, tenants);
+        this.tenantResolver = requireNonNull(tenantResolver, "The tenant resolver must not be null");
     }
 
     @Override

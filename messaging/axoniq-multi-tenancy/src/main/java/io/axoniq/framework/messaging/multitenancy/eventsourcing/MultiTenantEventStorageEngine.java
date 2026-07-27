@@ -24,13 +24,18 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
 import io.axoniq.framework.messaging.multitenancy.api.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantSnapshotStoreFactory;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
+import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
+import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -45,8 +50,18 @@ import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedEx
 import static java.util.Objects.requireNonNull;
 
 /**
- * Tenant-routing {@link EventStorageEngine}. Writes and sourcing are routed to the engine of the one tenant resolved
- * from the {@link ProcessingContext}, so each tenant's events live in its own store.
+ * Tenant-routing {@link EventStorageEngine} and {@link SnapshotStore}. Writes, sourcing, and snapshot operations are
+ * routed to the components of the one tenant resolved from the {@link ProcessingContext}, so each tenant's events and
+ * snapshots live in its own store.
+ * <p>
+ * Snapshot load and store are routed like the rest, and require a tenant-carrying processing context. When none is
+ * available, or the tenant cannot be resolved from it, the operation completes exceptionally.
+ * <p>
+ * Being the snapshot store as well as the engine is what keeps snapshot resolution below the tenant fan-out. The event
+ * sourcing defaults complement an engine that is not the configured snapshot store, and above this engine such a
+ * complement would resolve snapshots before a tenant is known. Registering this one component under both types leaves
+ * the {@link SourcingStrategy.Snapshot snapshot sourcing strategy} intact, so it reaches the tenant's own engine, which
+ * the {@link TenantEventStorageEngineFactory} already built to resolve that tenant's snapshots.
  * <p>
  * The read-side methods ({@link #stream}, {@link #firstToken}, {@link #latestToken}, {@link #tokenAt}) currently
  * throw an {@link UnsupportedOperationException}. Reading across all tenants is added together with the multi-tenant
@@ -58,23 +73,29 @@ import static java.util.Objects.requireNonNull;
  * @since 5.3.0
  */
 @Internal
-public class MultiTenantEventStorageEngine implements EventStorageEngine {
+public class MultiTenantEventStorageEngine implements EventStorageEngine, SnapshotStore {
 
     private final TenantEventStorageEngineFactory engineFactory;
+    private final MultiTenantSnapshotStore snapshotStore;
     private final RoutingTenantResolver tenantResolver;
 
     /**
      * Constructs a {@code MultiTenantEventStorageEngine}.
      *
-     * @param engineFactory  the factory providing each tenant's {@link EventStorageEngine}
-     * @param tenantResolver the resolver determining the tenant of a message
-     * @param tenants        the known tenants, used to resolve a message against
+     * @param engineFactory        the factory providing each tenant's {@link EventStorageEngine}
+     * @param snapshotStoreFactory the factory providing each tenant's {@link SnapshotStore}
+     * @param tenantResolver       the resolver determining the tenant of a message
+     * @param tenants              the known tenants, used to resolve a message against
      */
     public MultiTenantEventStorageEngine(TenantEventStorageEngineFactory engineFactory,
+                                         TenantSnapshotStoreFactory snapshotStoreFactory,
                                          TenantResolver tenantResolver,
                                          TenantDescriptors tenants) {
         this.engineFactory = requireNonNull(engineFactory, "The tenant event storage engine factory must not be null");
         this.tenantResolver = new RoutingTenantResolver(tenantResolver, tenants);
+        // Sharing this engine's resolver keeps events and snapshots resolving the same tenant from the same context,
+        // against the same set of known tenants.
+        this.snapshotStore = new MultiTenantSnapshotStore(snapshotStoreFactory, this.tenantResolver);
     }
 
     @Override
@@ -96,6 +117,18 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine {
         } catch (RuntimeException failure) {
             return MessageStream.failed(failure);
         }
+    }
+
+    @Override
+    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
+                                         @Nullable ProcessingContext context) {
+        return snapshotStore.store(qualifiedName, identifier, snapshot, context);
+    }
+
+    @Override
+    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
+                                                      @Nullable ProcessingContext context) {
+        return snapshotStore.load(qualifiedName, identifier, context);
     }
 
     private TenantDescriptor tenantForAppend(@Nullable ProcessingContext context, List<TaggedEventMessage<?>> events) {
@@ -144,6 +177,7 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine {
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("engineFactory", engineFactory);
+        descriptor.describeProperty("snapshotStore", snapshotStore);
         descriptor.describeProperty("tenantResolver", tenantResolver);
     }
 }

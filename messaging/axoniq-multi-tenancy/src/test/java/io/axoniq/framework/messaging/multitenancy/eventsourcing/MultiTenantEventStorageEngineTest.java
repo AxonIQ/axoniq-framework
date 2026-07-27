@@ -22,19 +22,20 @@ package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
+import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingEventStorageEngine;
+import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
-import org.axonframework.eventsourcing.eventstore.SnapshotEventMessage;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
-import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -66,9 +67,32 @@ class MultiTenantEventStorageEngineTest {
     private final RecordingEventStorageEngine tenantA = engines.entry(TENANT_A, new RecordingEventStorageEngine());
     private final RecordingEventStorageEngine tenantB = engines.entry(TENANT_B, new RecordingEventStorageEngine());
 
+    private final TenantDescriptorMapping<SnapshotStore> snapshotStores = new TenantDescriptorMapping<>();
+    private final RecordingSnapshotStore snapshotStoreA = snapshotStores.entry(TENANT_A, new RecordingSnapshotStore());
+    private final RecordingSnapshotStore snapshotStoreB = snapshotStores.entry(TENANT_B, new RecordingSnapshotStore());
+
+    private MultiTenantEventStorageEngine engineWith(TenantResolver tenantResolver) {
+        return new MultiTenantEventStorageEngine(engines::apply, snapshotStores::apply, tenantResolver, engines);
+    }
+
     private static EventMessage event(@Nullable TenantDescriptor tenant) {
-        Map<String, String> metadata = tenant == null ? Map.of() : Map.of(TenantDescriptor.TENANT_ID_KEY, tenant.tenantId());
+        Map<String, String> metadata = tenant == null
+                ? Map.of()
+                : Map.of(TenantDescriptor.TENANT_ID_KEY, tenant.tenantId());
         return new GenericEventMessage(new MessageType("TestEvent"), "payload", metadata);
+    }
+
+    private static ProcessingContext contextFor(TenantDescriptor tenant) {
+        return StubProcessingContext.forMessage(event(tenant));
+    }
+
+    private static SourcingCondition snapshotCondition() {
+        return SourcingCondition.conditionFor(new SourcingStrategy.Snapshot(SNAPSHOT_NAME, IDENTIFIER, null),
+                                              EventCriteria.havingAnyTag());
+    }
+
+    private static Snapshot snapshot(Object payload) {
+        return new Snapshot(new GlobalIndexPosition(0L), "0", payload, Instant.EPOCH, Map.of());
     }
 
     private static List<TaggedEventMessage<?>> tagged(EventMessage event) {
@@ -81,8 +105,7 @@ class MultiTenantEventStorageEngineTest {
         @Test
         void appendRoutesToTheTenantOnTheProcessingContext() {
             // resolver would say TENANT_B, but the context resource wins
-            MultiTenantEventStorageEngine testSubject =
-                    new MultiTenantEventStorageEngine(engines::apply, alwaysTenant(TENANT_B), engines);
+            MultiTenantEventStorageEngine testSubject = engineWith(alwaysTenant(TENANT_B));
             StubProcessingContext context = new StubProcessingContext();
             context.withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
@@ -94,8 +117,7 @@ class MultiTenantEventStorageEngineTest {
 
         @Test
         void appendWithoutContextResolvesTheTenantFromTheEventMetadata() {
-            MultiTenantEventStorageEngine testSubject =
-                    new MultiTenantEventStorageEngine(engines::apply, new MetadataBasedTenantResolver(), engines);
+            MultiTenantEventStorageEngine testSubject = engineWith(new MetadataBasedTenantResolver());
 
             testSubject.appendEvents(AppendCondition.none(), null, tagged(event(TENANT_B)));
 
@@ -105,8 +127,7 @@ class MultiTenantEventStorageEngineTest {
 
         @Test
         void appendWithoutAResolvableTenantFails() {
-            MultiTenantEventStorageEngine testSubject =
-                    new MultiTenantEventStorageEngine(engines::apply, new MetadataBasedTenantResolver(), engines);
+            MultiTenantEventStorageEngine testSubject = engineWith(new MetadataBasedTenantResolver());
 
             var result = testSubject.appendEvents(NONE, null, tagged(event(null)));
 
@@ -116,8 +137,7 @@ class MultiTenantEventStorageEngineTest {
 
         @Test
         void appendOfABatchSpanningTenantsFails() {
-            MultiTenantEventStorageEngine testSubject =
-                    new MultiTenantEventStorageEngine(engines::apply, new MetadataBasedTenantResolver(), engines);
+            MultiTenantEventStorageEngine testSubject = engineWith(new MetadataBasedTenantResolver());
             List<TaggedEventMessage<?>> mixed = List.of(
                     new GenericTaggedEventMessage<>(event(TENANT_A), Set.of()),
                     new GenericTaggedEventMessage<>(event(TENANT_B), Set.of())
@@ -135,8 +155,7 @@ class MultiTenantEventStorageEngineTest {
 
         @Test
         void sourceRoutesToTheTenantOnTheProcessingContext() {
-            MultiTenantEventStorageEngine testSubject =
-                    new MultiTenantEventStorageEngine(engines::apply, alwaysTenant(TENANT_B), engines);
+            MultiTenantEventStorageEngine testSubject = engineWith(alwaysTenant(TENANT_B));
             StubProcessingContext context = new StubProcessingContext();
             context.withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
@@ -148,8 +167,7 @@ class MultiTenantEventStorageEngineTest {
 
         @Test
         void sourceWithoutAContextFails() {
-            MultiTenantEventStorageEngine testSubject =
-                    new MultiTenantEventStorageEngine(engines::apply, alwaysTenant(TENANT_A), engines);
+            MultiTenantEventStorageEngine testSubject = engineWith(alwaysTenant(TENANT_A));
 
             assertThat(testSubject.source(ANY, null).error())
                     .containsInstanceOf(TenantNotResolvedException.class);
@@ -158,8 +176,7 @@ class MultiTenantEventStorageEngineTest {
         @Test
         void sourceWithoutATenantResourceResolvesFromTheMessageInTheContext() {
             // no resource on the context, so the tenant is resolved from the message the context carries
-            MultiTenantEventStorageEngine testSubject =
-                    new MultiTenantEventStorageEngine(engines::apply, new MetadataBasedTenantResolver(), engines);
+            MultiTenantEventStorageEngine testSubject = engineWith(new MetadataBasedTenantResolver());
             ProcessingContext context = StubProcessingContext.forMessage(event(TENANT_B));
 
             testSubject.source(ANY, context);
@@ -170,76 +187,98 @@ class MultiTenantEventStorageEngineTest {
 
         @Test
         void sourceWithAContextThatResolvesToNoTenantFails() {
-            MultiTenantEventStorageEngine testSubject =
-                    new MultiTenantEventStorageEngine(engines::apply, new MetadataBasedTenantResolver(), engines);
+            MultiTenantEventStorageEngine testSubject = engineWith(new MetadataBasedTenantResolver());
             ProcessingContext context = StubProcessingContext.forMessage(event(null));
 
             assertThat(testSubject.source(ANY, context).error())
                     .containsInstanceOf(TenantNotResolvedException.class);
         }
 
-        // The optimized snapshot route never calls SnapshotStore#load: the snapshot is delivered as a leading
-        // SnapshotEventMessage on the source stream when the SourcingCondition carries SourcingStrategy.Snapshot.
-        // The routing engine forwards that whole condition to the resolved tenant's engine, so each tenant is sourced
-        // from its own snapshot and never another tenant's. The normal SnapshotStore#load route is covered by
-        // MultiTenantSnapshotStoreTest.
+        // The tenant's engine is built to resolve that tenant's snapshots, so the routing engine forwards the sourcing
+        // condition unchanged. That is what lets a snapshot resolving tenant engine keep its single round trip.
         @Test
-        void optimizedSnapshotSourcingIsRoutedToTheResolvedTenantAndIsolated() {
+        void snapshotSourcingReachesTheTenantEngineWithTheStrategyIntact() {
+            MultiTenantEventStorageEngine testSubject = engineWith(new MetadataBasedTenantResolver());
+
+            testSubject.source(snapshotCondition(), contextFor(TENANT_A));
+
+            assertThat(tenantA.sourcedWithSnapshotStrategy()).isTrue();
+            assertThat(tenantB.sourcedWithSnapshotStrategy()).isFalse();
+        }
+
+        // Routing never resolves a snapshot itself, so a plain sourcing must not touch any tenant's snapshot store.
+        @Test
+        void nonSnapshotSourcingDoesNotConsultAnyTenantSnapshotStore() {
+            MultiTenantEventStorageEngine testSubject = engineWith(new MetadataBasedTenantResolver());
+
+            testSubject.source(ANY, contextFor(TENANT_A));
+
+            assertThat(snapshotStoreA.loadCount()).isZero();
+            assertThat(snapshotStoreB.loadCount()).isZero();
+        }
+    }
+
+    @Nested
+    class SnapshotRouting {
+
+        @Test
+        void storeRoutesToTheTenantOnTheProcessingContext() {
+            MultiTenantEventStorageEngine testSubject = engineWith(new MetadataBasedTenantResolver());
+
+            testSubject.store(SNAPSHOT_NAME, IDENTIFIER, snapshot("payload"), contextFor(TENANT_A)).join();
+
+            assertThat(snapshotStoreA.storeCount()).isEqualTo(1);
+            assertThat(snapshotStoreB.storeCount()).isZero();
+        }
+
+        @Test
+        void loadRoutesToTheTenantOnTheProcessingContext() {
+            MultiTenantEventStorageEngine testSubject = engineWith(new MetadataBasedTenantResolver());
+
+            testSubject.load(SNAPSHOT_NAME, IDENTIFIER, contextFor(TENANT_B)).join();
+
+            assertThat(snapshotStoreB.loadCount()).isEqualTo(1);
+            assertThat(snapshotStoreA.loadCount()).isZero();
+        }
+
+        // Proves both overrides reach the same tenant's store, so a snapshot stored for one tenant is only found again
+        // for that tenant.
+        @Test
+        void aSnapshotStoredForOneTenantIsOnlyLoadedBackForThatTenant() {
+            MultiTenantEventStorageEngine testSubject = engineWith(new MetadataBasedTenantResolver());
             Snapshot snapshotA = snapshot("snapshot-a");
-            Snapshot snapshotB = snapshot("snapshot-b");
-            tenantA.prepareSnapshot(snapshotA);
-            tenantB.prepareSnapshot(snapshotB);
-            MultiTenantEventStorageEngine testSubject =
-                    new MultiTenantEventStorageEngine(engines::apply, new MetadataBasedTenantResolver(), engines);
-            SourcingCondition snapshotCondition = SourcingCondition.conditionFor(
-                    new SourcingStrategy.Snapshot(SNAPSHOT_NAME, IDENTIFIER, null), EventCriteria.havingAnyTag());
 
-            Snapshot sourcedForA = leadingSnapshot(testSubject.source(snapshotCondition, contextFor(TENANT_A)));
-            Snapshot sourcedForB = leadingSnapshot(testSubject.source(snapshotCondition, contextFor(TENANT_B)));
+            testSubject.store(SNAPSHOT_NAME, IDENTIFIER, snapshotA, contextFor(TENANT_A)).join();
 
-            assertThat(sourcedForA).isEqualTo(snapshotA);
-            assertThat(sourcedForB).isEqualTo(snapshotB);
+            assertThat(testSubject.load(SNAPSHOT_NAME, IDENTIFIER, contextFor(TENANT_A)).join()).isEqualTo(snapshotA);
+            assertThat(testSubject.load(SNAPSHOT_NAME, IDENTIFIER, contextFor(TENANT_B)).join()).isNull();
         }
 
-        // A tenant without a snapshot falls back to a snapshot-free stream: the optimized route delivers no leading
-        // SnapshotEventMessage. Routing is unaffected, so a snapshot-led tenant and a fallback tenant are sourced side
-        // by side without one leaking into the other.
         @Test
-        void optimizedSnapshotSourcingFallsBackToASnapshotFreeStreamForATenantWithoutASnapshot() {
-            tenantA.prepareSnapshot(snapshot("snapshot-a"));
-            // tenantB is left unseeded, so its optimized source falls back to a snapshot-free stream
-            MultiTenantEventStorageEngine testSubject =
-                    new MultiTenantEventStorageEngine(engines::apply, new MetadataBasedTenantResolver(), engines);
-            SourcingCondition snapshotCondition = SourcingCondition.conditionFor(
-                    new SourcingStrategy.Snapshot(SNAPSHOT_NAME, IDENTIFIER, null), EventCriteria.havingAnyTag());
+        void storeWithoutAResolvableTenantFails() {
+            MultiTenantEventStorageEngine testSubject = engineWith(new MetadataBasedTenantResolver());
 
-            MessageStream<EventMessage> sourcedForA = testSubject.source(snapshotCondition, contextFor(TENANT_A));
-            MessageStream<EventMessage> sourcedForB = testSubject.source(snapshotCondition, contextFor(TENANT_B));
+            var result = testSubject.store(SNAPSHOT_NAME, IDENTIFIER, snapshot("payload"), null);
 
-            assertThat(sourcedForA.next().orElseThrow().message()).isInstanceOf(SnapshotEventMessage.class);
-            assertThat(sourcedForB.next()).isEmpty();
+            assertThat(result).isCompletedExceptionally();
+            assertThatThrownBy(result::join).hasCauseInstanceOf(TenantNotResolvedException.class);
         }
 
-        private static ProcessingContext contextFor(TenantDescriptor tenant) {
-            return StubProcessingContext.forMessage(event(tenant));
-        }
+        @Test
+        void loadWithoutAResolvableTenantFails() {
+            MultiTenantEventStorageEngine testSubject = engineWith(new MetadataBasedTenantResolver());
 
-        private static Snapshot snapshot(Object payload) {
-            return new Snapshot(new GlobalIndexPosition(0L), "0", payload, Instant.EPOCH, Map.of());
-        }
+            var result = testSubject.load(SNAPSHOT_NAME, IDENTIFIER, null);
 
-        private static Snapshot leadingSnapshot(MessageStream<EventMessage> stream) {
-            EventMessage first = stream.next().orElseThrow().message();
-            assertThat(first).isInstanceOf(SnapshotEventMessage.class);
-            return ((SnapshotEventMessage) first).payload();
+            assertThat(result).isCompletedExceptionally();
+            assertThatThrownBy(result::join).hasCauseInstanceOf(TenantNotResolvedException.class);
         }
     }
 
     @Nested
     class Streaming {
 
-        private final MultiTenantEventStorageEngine testSubject =
-                new MultiTenantEventStorageEngine(engines::apply, alwaysTenant(TENANT_A), engines);
+        private final MultiTenantEventStorageEngine testSubject = engineWith(alwaysTenant(TENANT_A));
 
         @Test
         void streamingSpansAllTenantsAndIsNotSupportedByTheRoutingEngine() {
@@ -254,13 +293,13 @@ class MultiTenantEventStorageEngineTest {
     }
 
     @Test
-    void describesItsEngineFactory() {
-        MultiTenantEventStorageEngine testSubject =
-                new MultiTenantEventStorageEngine(engines::apply, alwaysTenant(TENANT_A), engines);
+    void describesItsEngineFactoryItsSnapshotStoreAndItsTenantResolver() {
+        MultiTenantEventStorageEngine testSubject = engineWith(alwaysTenant(TENANT_A));
         MockComponentDescriptor descriptor = new MockComponentDescriptor();
 
         testSubject.describeTo(descriptor);
 
-        assertThat(descriptor.getDescribedProperties()).containsKeys("engineFactory", "tenantResolver");
+        assertThat(descriptor.getDescribedProperties())
+                .containsKeys("engineFactory", "snapshotStore", "tenantResolver");
     }
 }
