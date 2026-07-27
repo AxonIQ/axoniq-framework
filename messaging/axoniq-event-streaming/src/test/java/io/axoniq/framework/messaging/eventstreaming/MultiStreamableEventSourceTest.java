@@ -232,10 +232,10 @@ class MultiStreamableEventSourceTest {
 
     @Test
     void openWithMultiSourceTokenStartsFromToken() {
-        // Create a token manually representing position after the first event in each source
+        // Create a token manually representing the position of the last event already consumed in each source
         Map<String, TrackingToken> tokenMap = new HashMap<>();
-        tokenMap.put("sourceA", new GlobalSequenceTrackingToken(1));
-        tokenMap.put("sourceB", new GlobalSequenceTrackingToken(1));
+        tokenMap.put("sourceA", new GlobalSequenceTrackingToken(2));
+        tokenMap.put("sourceB", new GlobalSequenceTrackingToken(2));
         MultiSourceTrackingToken token = new MultiSourceTrackingToken(tokenMap);
 
         // Publish events - positions 0, 1, 2
@@ -243,7 +243,7 @@ class MultiStreamableEventSourceTest {
         eventSourceA.publishMessage(EventTestUtils.asEventMessage("Event2")); // position 1
         eventSourceA.publishMessage(EventTestUtils.asEventMessage("Event3")); // position 2
 
-        // Open stream with token at position 1 - should only see Event3 (position 2)
+        // Open stream with token at position 2 - should only see Event3 (position 2)
         MessageStream<EventMessage> stream = testSubject.open(
                 StreamingCondition.startingFrom(token), null
         );
