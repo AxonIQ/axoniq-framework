@@ -61,14 +61,25 @@ class RoutingTenantResolverTest {
             assertThat(resolver.resolveFromContext(context)).hasValue(TENANT_A);
         }
 
+        // A tenant resource that is present decides on its own. Falling back to the message would let its metadata
+        // redirect the operation to another tenant's store whenever the resource names an unknown tenant.
         @Test
-        void fallsBackToTheMessageWhenTheContextResourceTenantIsNotKnown() {
-            // the resource names foo-b, which is not a known tenant, so the known foo-a from the message wins
+        void failsWhenTheContextResourceTenantIsNotKnownEvenIfTheMessageNamesAKnownTenant() {
             RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, () -> List.of(TENANT_A));
             ProcessingContext context = StubProcessingContext.forMessage(eventWithTenant(TENANT_A))
                     .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_B);
 
-            assertThat(resolver.resolveFromContext(context)).hasValue(TENANT_A);
+            assertThatThrownBy(() -> resolver.resolveFromContext(context))
+                    .isInstanceOf(TenantNotResolvedException.class)
+                    .hasMessageContaining(TENANT_B.tenantId());
+        }
+
+        @Test
+        void returnsEmptyWhenNeitherTheResourceNorTheMessageNamesAKnownTenant() {
+            RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, () -> List.of(TENANT_A));
+            ProcessingContext context = StubProcessingContext.forMessage(eventWithTenant(null));
+
+            assertThat(resolver.resolveFromContext(context)).isEmpty();
         }
 
         @Test
@@ -127,7 +138,7 @@ class RoutingTenantResolverTest {
             RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, TENANT_DESCRIPTORS);
             List<EventMessage> mixed = List.of(eventWithTenant(TENANT_A), eventWithTenant(TENANT_B));
             String expectedMessage =
-                    "Events in a single publish batch must all belong to the same tenant, but found: [foo-a, foo-b]";
+                    "The given messages must all belong to the same tenant, but resolved to: [foo-a, foo-b]";
 
             assertThatThrownBy(() -> resolver.resolveSharedTenant(mixed))
                     .isInstanceOf(TenantNotResolvedException.class)

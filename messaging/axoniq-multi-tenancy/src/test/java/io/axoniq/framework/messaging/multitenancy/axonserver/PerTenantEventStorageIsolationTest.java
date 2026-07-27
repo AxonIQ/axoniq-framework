@@ -68,8 +68,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * test closes the gap between them by driving a real {@link CommandGateway} through the whole write path: a course
  * filled in one tenant must not make the same course identifier appear full in another. Each tenant is backed by its
  * own {@link InMemoryEventStorageEngine}, so a routing leak would source another tenant's events and fail the test.
- *
- * @author Laura Devriendt
  */
 class PerTenantEventStorageIsolationTest {
 

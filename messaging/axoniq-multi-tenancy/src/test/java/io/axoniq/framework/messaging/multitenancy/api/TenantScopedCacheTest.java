@@ -63,7 +63,26 @@ class TenantScopedCacheTest {
         @Test
         void rejectsANullFactory() {
             assertThatThrownBy(() -> new TenantScopedCache<>(null))
-                    .isInstanceOf(NullPointerException.class);
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("The component factory must not be null");
+        }
+
+        // A tenant's component is built against its Axon Server connection, so creation can fail transiently. Nothing
+        // may be cached in that case, or the tenant would keep serving the failure after the cause is gone.
+        @Test
+        void aFailedCreationCachesNothingAndIsRetriedOnTheNextAccess() {
+            AtomicInteger attempts = new AtomicInteger();
+            TenantScopedCache<String> failingOnce = new TenantScopedCache<>(tenant -> {
+                if (attempts.incrementAndGet() == 1) {
+                    throw new IllegalStateException("no connection");
+                }
+                return tenant.tenantId();
+            });
+
+            assertThatThrownBy(() -> failingOnce.componentFor(TENANT_A)).isInstanceOf(IllegalStateException.class);
+
+            assertThat(failingOnce.componentFor(TENANT_A)).isEqualTo(TENANT_A.tenantId());
+            assertThat(attempts).hasValue(2);
         }
     }
 

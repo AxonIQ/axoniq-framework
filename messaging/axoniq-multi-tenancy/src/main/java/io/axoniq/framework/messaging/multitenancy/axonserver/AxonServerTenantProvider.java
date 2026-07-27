@@ -190,6 +190,11 @@ public class AxonServerTenantProvider implements TenantProvider {
         return List.copyOf(tenantDescriptors);
     }
 
+    @Override
+    public boolean isKnown(TenantDescriptor tenant) {
+        return tenantDescriptors.contains(tenant);
+    }
+
     /**
      * Adds the given {@code tenantDescriptor} as a known tenant, registering and starting every subscribed
      * {@link MultiTenantAwareComponent} for it. A tenant that is already known is ignored, so its components are never

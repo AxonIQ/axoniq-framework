@@ -43,7 +43,13 @@ public class TenantDescriptorMapping<T> implements Function<TenantDescriptor, T>
 
     @Override
     public T apply(TenantDescriptor tenantDescriptor) {
-        return delegate.get(tenantDescriptor);
+        T component = delegate.get(tenantDescriptor);
+        if (component == null) {
+            // The factory contracts never allow null, so a routing bug names the tenant it asked for rather than
+            // surfacing as a NullPointerException somewhere downstream.
+            throw new IllegalStateException("No component mapped for tenant [" + tenantDescriptor.tenantId() + "]");
+        }
+        return component;
     }
 
     @Override

@@ -66,8 +66,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * above the fan-out. Snapshot resolution therefore happens below the routing engine, in each tenant's own snapshot
  * capable engine. A snapshot stored for one tenant is used only when sourcing that tenant, and a tenant without one
  * falls back to a snapshot-free stream without ever touching another tenant's store.
- *
- * @author Laura Devriendt
  */
 class PerTenantSnapshotSourcingIsolationTest {
 

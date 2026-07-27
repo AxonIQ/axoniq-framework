@@ -67,6 +67,7 @@ public class AxonServerTenantEventStorageEngineFactory
      *                      resolve the {@link TenantSnapshotStoreFactory} providing each tenant's snapshot store
      */
     public AxonServerTenantEventStorageEngineFactory(Configuration configuration) {
+        Objects.requireNonNull(configuration, "The configuration must not be null");
         this.engineCache = new TenantScopedCache<>(perTenantEngine(
                 configuration, configuration.getComponent(TenantSnapshotStoreFactory.class)));
     }
@@ -93,7 +94,6 @@ public class AxonServerTenantEventStorageEngineFactory
 
     private static Function<TenantDescriptor, EventStorageEngine> perTenantEngine(
             Configuration configuration, TenantSnapshotStoreFactory snapshotStoreFactory) {
-        Objects.requireNonNull(configuration, "The configuration must not be null");
         Objects.requireNonNull(snapshotStoreFactory, "The tenant snapshot store factory must not be null");
         return tenant -> TenantEventStorageEngineFactory.snapshotCapable(
                 AxonServerEventStorageEngineFactory.constructForContext(tenant.tenantId(), configuration),

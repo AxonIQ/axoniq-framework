@@ -39,6 +39,7 @@ import org.jspecify.annotations.Nullable;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * An {@link EventStorageEngine} test double that records how often it was written to and sourced from, so tests can
@@ -99,8 +100,10 @@ public class RecordingEventStorageEngine implements EventStorageEngine, Snapshot
         if (condition.strategy() instanceof SourcingStrategy.Snapshot snapshotStrategy) {
             sourcedWithSnapshotStrategy = true;
             Snapshot snapshot = snapshots.load(snapshotStrategy.qualifiedName(),
-                                               snapshotStrategy.identifier(),
-                                               context).join();
+                                              snapshotStrategy.identifier(),
+                                              context)
+                                         .orTimeout(5, TimeUnit.SECONDS)
+                                         .join();
             if (snapshot != null) {
                 return MessageStream.<EventMessage>just(new SnapshotEventMessage(snapshot));
             }

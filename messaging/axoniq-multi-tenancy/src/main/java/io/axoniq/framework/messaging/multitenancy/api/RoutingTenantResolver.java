@@ -66,18 +66,31 @@ public class RoutingTenantResolver implements DescribableComponent {
     /**
      * Resolves the tenant carried by the given {@code context}, taken from its {@link TenantDescriptor#RESOURCE_KEY
      * tenant resource} when present, otherwise from the message the context carries.
+     * <p>
+     * A tenant resource that is present decides on its own. It is never overruled by the tenant named in the message,
+     * because that would let message metadata redirect an operation to another tenant's store whenever the resource
+     * names a tenant this application does not know. Only an absent resource falls back to the message.
      *
      * @param context the processing context to resolve the tenant from
-     * @return the known tenant of the context, or empty when none is available or it is not a known tenant
+     * @return the known tenant of the context, or empty when none is available
+     * @throws TenantNotResolvedException if the context carries a tenant that is not a known tenant
      */
     public Optional<TenantDescriptor> resolveFromContext(@Nullable ProcessingContext context) {
         if (context == null) {
             return Optional.empty();
         }
-        List<TenantDescriptor> knownTenants = tenantDescriptors.tenants();
-        return TenantDescriptor.fromContext(context)
-                               .filter(knownTenants::contains)
-                               .or(() -> resolve(Message.fromContext(context), knownTenants));
+        Optional<TenantDescriptor> tenantOnContext = TenantDescriptor.fromContext(context);
+        if (tenantOnContext.isPresent()) {
+            TenantDescriptor tenant = tenantOnContext.get();
+            if (!tenantDescriptors.isKnown(tenant)) {
+                throw new TenantNotResolvedException(
+                        "The processing context carries tenant [%s], which is not a known tenant",
+                        tenant.tenantId());
+            }
+            return tenantOnContext;
+        }
+        // Only the fallback needs the tenants themselves, since the wrapped resolver is handed them to choose from.
+        return resolve(Message.fromContext(context), tenantDescriptors.tenants());
     }
 
     /**
@@ -103,7 +116,7 @@ public class RoutingTenantResolver implements DescribableComponent {
         }
         if (resolvedTenants.size() > 1) {
             throw new TenantNotResolvedException(
-                    "Events in a single publish batch must all belong to the same tenant, but found: %s",
+                    "The given messages must all belong to the same tenant, but resolved to: %s",
                     resolvedTenants.stream().map(TenantDescriptor::tenantId).toList());
         }
         return resolvedTenants.stream().findFirst();
@@ -115,7 +128,9 @@ public class RoutingTenantResolver implements DescribableComponent {
         }
         try {
             TenantDescriptor resolved = tenantResolver.resolveTenant(message, knownTenants);
-            return knownTenants.contains(resolved) ? Optional.of(resolved) : Optional.empty();
+            // The wrapped resolver is handed the tenants to choose from, but nothing binds it to them, so what it
+            // returns is checked against the known tenants through their own membership test.
+            return tenantDescriptors.isKnown(resolved) ? Optional.of(resolved) : Optional.empty();
         } catch (TenantNotResolvedException unresolved) {
             return Optional.empty();
         }

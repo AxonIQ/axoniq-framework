@@ -49,4 +49,25 @@ class AxonServerTenantSnapshotStoreFactoryTest {
         assertThat(testSubject.storeFor(TENANT_A)).isSameAs(testSubject.storeFor(TENANT_A));
         assertThat(connectionManager.requestedContexts()).containsExactly(TENANT_A.tenantId());
     }
+
+    // The connection manager disconnects a removed tenant's connection, so a cached store bound to it must be dropped.
+    @Test
+    void aReAddedTenantGetsAFreshStoreAgainstANewConnection() {
+        SnapshotStore before = testSubject.storeFor(TENANT_A);
+
+        assertThat(testSubject.registerTenant(TENANT_A).cancel()).isTrue();
+
+        assertThat(testSubject.storeFor(TENANT_A)).isNotSameAs(before);
+        assertThat(connectionManager.requestedContexts())
+                .containsExactly(TENANT_A.tenantId(), TENANT_A.tenantId());
+    }
+
+    @Test
+    void registerAndStartTenantFollowsTheSameLifecycleAsRegisterTenant() {
+        SnapshotStore before = testSubject.storeFor(TENANT_A);
+
+        assertThat(testSubject.registerAndStartTenant(TENANT_A).cancel()).isTrue();
+
+        assertThat(testSubject.storeFor(TENANT_A)).isNotSameAs(before);
+    }
 }

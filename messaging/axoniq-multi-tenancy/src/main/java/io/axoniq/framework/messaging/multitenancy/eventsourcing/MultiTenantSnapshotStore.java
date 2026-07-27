@@ -67,9 +67,9 @@ public class MultiTenantSnapshotStore implements SnapshotStore, DescribableCompo
      * @param tenantResolver       the resolver determining the tenant of a message
      * @param tenants              the known tenants, used to resolve a message against
      */
-    public MultiTenantSnapshotStore(TenantSnapshotStoreFactory snapshotStoreFactory,
-                                    TenantResolver tenantResolver,
-                                    TenantDescriptors tenants) {
+    MultiTenantSnapshotStore(TenantSnapshotStoreFactory snapshotStoreFactory,
+                             TenantResolver tenantResolver,
+                             TenantDescriptors tenants) {
         this(snapshotStoreFactory, new RoutingTenantResolver(tenantResolver, tenants));
     }
 

@@ -42,8 +42,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Verifies the rule every {@link TenantEventStorageEngineFactory} applies so its per-tenant engine can resolve that
  * tenant's snapshots, in both directions: an engine that resolves snapshots itself is handed back untouched, and any
  * other engine is complemented with the tenant's snapshot store.
- *
- * @author Laura Devriendt
  */
 class TenantEventStorageEngineFactoryTest {
 

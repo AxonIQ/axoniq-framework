@@ -27,6 +27,7 @@ import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.MockComponentDescriptor;
+import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.junit.jupiter.api.*;
@@ -84,5 +85,26 @@ class AxonServerTenantEventStorageEngineFactoryTest {
     void cachesTheEnginePerTenant() {
         assertThat(testSubject.engineFor(TENANT_A)).isSameAs(testSubject.engineFor(TENANT_A));
         assertThat(connectionManager.requestedContexts()).containsExactly(TENANT_A.tenantId());
+    }
+
+    // The connection manager disconnects a removed tenant's connection, so a cached engine bound to it must be dropped.
+    @Test
+    void aReAddedTenantGetsAFreshEngineAgainstANewConnection() {
+        EventStorageEngine before = testSubject.engineFor(TENANT_A);
+
+        assertThat(testSubject.registerTenant(TENANT_A).cancel()).isTrue();
+
+        assertThat(testSubject.engineFor(TENANT_A)).isNotSameAs(before);
+        assertThat(connectionManager.requestedContexts())
+                .containsExactly(TENANT_A.tenantId(), TENANT_A.tenantId());
+    }
+
+    @Test
+    void registerAndStartTenantFollowsTheSameLifecycleAsRegisterTenant() {
+        EventStorageEngine before = testSubject.engineFor(TENANT_A);
+
+        assertThat(testSubject.registerAndStartTenant(TENANT_A).cancel()).isTrue();
+
+        assertThat(testSubject.engineFor(TENANT_A)).isNotSameAs(before);
     }
 }
