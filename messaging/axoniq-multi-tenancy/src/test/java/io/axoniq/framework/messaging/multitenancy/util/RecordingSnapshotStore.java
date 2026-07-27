@@ -41,10 +41,16 @@ public class RecordingSnapshotStore implements SnapshotStore {
     private int loadCount;
     private int storeCount;
 
+    /**
+     * @return how often {@link #load(QualifiedName, Object, ProcessingContext)} was called
+     */
     public int loadCount() {
         return loadCount;
     }
 
+    /**
+     * @return how often {@link #store(QualifiedName, Object, Snapshot, ProcessingContext)} was called
+     */
     public int storeCount() {
         return storeCount;
     }

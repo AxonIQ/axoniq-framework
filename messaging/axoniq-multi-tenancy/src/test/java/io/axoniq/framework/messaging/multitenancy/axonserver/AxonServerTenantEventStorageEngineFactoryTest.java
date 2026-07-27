@@ -21,7 +21,7 @@ package io.axoniq.framework.messaging.multitenancy.axonserver;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
-import io.axoniq.framework.messaging.multitenancy.api.TenantSnapshotStoreFactory;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingAxonServerConnectionManager;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;

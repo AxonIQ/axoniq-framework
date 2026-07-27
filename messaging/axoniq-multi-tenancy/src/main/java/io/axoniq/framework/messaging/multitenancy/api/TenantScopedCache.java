@@ -29,7 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 /**
- * A cache of one component per tenant (an event storage engine, a snapshot store, and the like) that creates each
+ * A cache of one infrastructure component per tenant that creates each
  * component lazily on first use and evicts it when its tenant is removed.
  * <p>
  * As a {@link MultiTenantAwareComponent} it follows the tenant provider: {@link #registerTenant(TenantDescriptor)} and

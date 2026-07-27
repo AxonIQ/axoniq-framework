@@ -49,6 +49,10 @@ public class RecordingAxonServerConnectionManager extends AxonServerConnectionMa
     private final List<String> requestedContexts = new CopyOnWriteArrayList<>();
     private final Map<String, AxonServerConnection> connections = new ConcurrentHashMap<>();
 
+    /**
+     * Constructs a {@code RecordingAxonServerConnectionManager} handing out inert connections, so no test reaches a
+     * real Axon Server.
+     */
     public RecordingAxonServerConnectionManager() {
         super(managerBuilder(), new InertConnectionFactory());
     }

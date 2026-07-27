@@ -60,18 +60,31 @@ public class RecordingEventStorageEngine implements EventStorageEngine, Snapshot
     private int sourceCount;
     private boolean sourcedWithSnapshotStrategy;
 
+    /**
+     * @return how often {@link #appendEvents(AppendCondition, ProcessingContext, List)} was called
+     */
     public int appendCount() {
         return appendCount;
     }
 
+    /**
+     * @return how often {@link #source(SourcingCondition, ProcessingContext)} was called
+     */
     public int sourceCount() {
         return sourceCount;
     }
 
+    /**
+     * @return how often a snapshot was read, whether through {@link #load(QualifiedName, Object, ProcessingContext)} or
+     * within a snapshot sourcing
+     */
     public int loadCount() {
         return snapshots.loadCount();
     }
 
+    /**
+     * @return how often {@link #store(QualifiedName, Object, Snapshot, ProcessingContext)} was called
+     */
     public int storeCount() {
         return snapshots.storeCount();
     }

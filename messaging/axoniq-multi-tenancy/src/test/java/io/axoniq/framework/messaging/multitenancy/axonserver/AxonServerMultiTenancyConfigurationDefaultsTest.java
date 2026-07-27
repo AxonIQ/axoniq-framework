@@ -30,11 +30,12 @@ import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConne
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
-import io.axoniq.framework.messaging.multitenancy.api.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantSnapshotStoreFactory;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
@@ -134,6 +135,16 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
             assertThat(configuration.getComponent(SnapshotStore.class))
                     .isInstanceOf(MultiTenantEventStorageEngine.class)
                     .isSameAs(configuration.getComponent(EventStorageEngine.class));
+        }
+
+        @Test
+        void routesWithTheTenantRouterFromTheConfiguration() {
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+
+            configuration.getComponent(EventStorageEngine.class).describeTo(descriptor);
+
+            assertThat(descriptor.getDescribedProperties())
+                    .containsEntry("tenantRouter", configuration.getComponent(TenantRouter.class));
         }
     }
 

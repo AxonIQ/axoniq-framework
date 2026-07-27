@@ -22,10 +22,11 @@ package io.axoniq.framework.messaging.multitenancy.axonserver;
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
-import io.axoniq.framework.messaging.multitenancy.api.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
@@ -91,7 +92,9 @@ class PerTenantSnapshotSourcingIsolationTest {
         tenantEngines.entry(TENANT_B, complementedEngineFor(TENANT_B));
         MetadataBasedTenantResolver tenantResolver = new MetadataBasedTenantResolver();
         routingEngine = new MultiTenantEventStorageEngine(
-                tenantEngines::apply, tenantSnapshotStores::apply, tenantResolver, tenantEngines);
+                tenantEngines::apply,
+                tenantSnapshotStores::apply,
+                new TenantRouter(tenantResolver, tenantEngines));
 
         StubTenantProvider tenantProvider = new StubTenantProvider();
         tenantProvider.addTenant(TENANT_A);

@@ -24,7 +24,7 @@ import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
-import io.axoniq.framework.messaging.multitenancy.api.TenantSnapshotStoreFactory;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;

@@ -17,8 +17,9 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.api;
+package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;

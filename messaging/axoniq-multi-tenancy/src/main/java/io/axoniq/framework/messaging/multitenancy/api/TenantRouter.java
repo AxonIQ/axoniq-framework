@@ -34,8 +34,12 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Wraps a {@link TenantResolver} to resolve a {@link Message} (or the {@link ProcessingContext} carrying it) to one of
- * the known tenants, yielding an {@link Optional} instead of throwing when no known tenant matches.
+ * Decides which tenant an operation is routed to, wrapping a {@link TenantResolver} to resolve a {@link Message} (or
+ * the {@link ProcessingContext} carrying it) to one of the known tenants, and yielding an {@link Optional} instead of
+ * throwing when no known tenant matches.
+ * <p>
+ * Registered as a component, so every tenant-routing component decides the tenant of a message the same way, against
+ * one and the same set of known tenants.
  * <p>
  * The tenant may originate either from the {@link ProcessingContext} resource or from the message itself, depending on
  * how the message was dispatched and where in the handling chain resolution happens. Resolution only ever yields a
@@ -46,19 +50,19 @@ import java.util.Set;
  * @since 5.3.0
  */
 @Internal
-public class RoutingTenantResolver implements DescribableComponent {
+public class TenantRouter implements DescribableComponent {
 
     private final TenantResolver tenantResolver;
     private final TenantDescriptors tenantDescriptors;
 
     /**
-     * Creates a {@code RoutingTenantResolver} wrapping the given {@code tenantResolver} and resolving against the
+     * Creates a {@code TenantRouter} wrapping the given {@code tenantResolver} and resolving against the
      * given {@code tenantDescriptors}.
      *
      * @param tenantResolver    the {@link TenantResolver} to wrap
      * @param tenantDescriptors the known tenants to resolve against
      */
-    public RoutingTenantResolver(TenantResolver tenantResolver, TenantDescriptors tenantDescriptors) {
+    public TenantRouter(TenantResolver tenantResolver, TenantDescriptors tenantDescriptors) {
         this.tenantResolver = Objects.requireNonNull(tenantResolver, "The tenant resolver must not be null");
         this.tenantDescriptors = Objects.requireNonNull(tenantDescriptors, "The tenant descriptors must not be null");
     }

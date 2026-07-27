@@ -24,12 +24,13 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
-import io.axoniq.framework.messaging.multitenancy.api.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
-import io.axoniq.framework.messaging.multitenancy.api.TenantSnapshotStoreFactory;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.Registration;
@@ -220,8 +221,7 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
     private static MultiTenantEventStorageEngine routingEngine(Configuration config) {
         return new MultiTenantEventStorageEngine(config.getComponent(TenantEventStorageEngineFactory.class),
                                                 config.getComponent(TenantSnapshotStoreFactory.class),
-                                                config.getComponent(TenantResolver.class),
-                                                config.getComponent(TenantProvider.class));
+                                                config.getComponent(TenantRouter.class));
     }
 
     /**

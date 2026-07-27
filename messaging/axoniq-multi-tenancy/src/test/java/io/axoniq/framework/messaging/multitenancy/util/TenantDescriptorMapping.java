@@ -36,6 +36,14 @@ public class TenantDescriptorMapping<T> implements Function<TenantDescriptor, T>
 
     private final Map<TenantDescriptor, T> delegate = new ConcurrentHashMap<>();
 
+    /**
+     * Maps the given {@code value} to the given {@code key}, returning it so it can be assigned in one statement.
+     *
+     * @param key   the tenant to map the component to
+     * @param value the component of that tenant
+     * @param <S>   the concrete component type, so a test can keep the recording type it passed in
+     * @return the given {@code value}
+     */
     public <S extends T> S entry(TenantDescriptor key, S value) {
         delegate.put(key, value);
         return value;

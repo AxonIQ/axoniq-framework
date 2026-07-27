@@ -19,12 +19,8 @@
 
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
-import io.axoniq.framework.messaging.multitenancy.api.RoutingTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
-import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
-import io.axoniq.framework.messaging.multitenancy.api.TenantEventStorageEngineFactory;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
-import io.axoniq.framework.messaging.multitenancy.api.TenantSnapshotStoreFactory;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
@@ -77,25 +73,21 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, Snapsh
 
     private final TenantEventStorageEngineFactory engineFactory;
     private final MultiTenantSnapshotStore snapshotStore;
-    private final RoutingTenantResolver tenantResolver;
+    private final TenantRouter tenantRouter;
 
     /**
      * Constructs a {@code MultiTenantEventStorageEngine}.
      *
      * @param engineFactory        the factory providing each tenant's {@link EventStorageEngine}
      * @param snapshotStoreFactory the factory providing each tenant's {@link SnapshotStore}
-     * @param tenantResolver       the resolver determining the tenant of a message
-     * @param tenants              the known tenants, used to resolve a message against
+     * @param tenantRouter         the router deciding which tenant an operation is routed to
      */
     public MultiTenantEventStorageEngine(TenantEventStorageEngineFactory engineFactory,
                                          TenantSnapshotStoreFactory snapshotStoreFactory,
-                                         TenantResolver tenantResolver,
-                                         TenantDescriptors tenants) {
+                                         TenantRouter tenantRouter) {
         this.engineFactory = requireNonNull(engineFactory, "The tenant event storage engine factory must not be null");
-        this.tenantResolver = new RoutingTenantResolver(tenantResolver, tenants);
-        // Sharing this engine's resolver keeps events and snapshots resolving the same tenant from the same context,
-        // against the same set of known tenants.
-        this.snapshotStore = new MultiTenantSnapshotStore(snapshotStoreFactory, this.tenantResolver);
+        this.tenantRouter = requireNonNull(tenantRouter, "The tenant router must not be null");
+        this.snapshotStore = new MultiTenantSnapshotStore(snapshotStoreFactory, tenantRouter);
     }
 
     @Override
@@ -138,12 +130,12 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, Snapsh
         if (context != null) {
             return tenantFor(context);
         }
-        return tenantResolver.resolveSharedTenant(events.stream().map(TaggedEventMessage::event).toList())
+        return tenantRouter.resolveSharedTenant(events.stream().map(TaggedEventMessage::event).toList())
                              .orElseThrow(tenantNotResolved("Tenant could not be resolved from the events to append"));
     }
 
     private TenantDescriptor tenantFor(@Nullable ProcessingContext context) {
-        return tenantResolver.resolveFromContext(context)
+        return tenantRouter.resolveFromContext(context)
                 .orElseThrow(tenantNotResolved("Tenant could not be resolved from the processing context"));
     }
 
@@ -178,6 +170,6 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, Snapsh
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("engineFactory", engineFactory);
         descriptor.describeProperty("snapshotStore", snapshotStore);
-        descriptor.describeProperty("tenantResolver", tenantResolver);
+        descriptor.describeProperty("tenantRouter", tenantRouter);
     }
 }

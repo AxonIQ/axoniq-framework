@@ -23,6 +23,7 @@ import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolve
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
@@ -72,7 +73,9 @@ class MultiTenantEventStorageEngineTest {
     private final RecordingSnapshotStore snapshotStoreB = snapshotStores.entry(TENANT_B, new RecordingSnapshotStore());
 
     private MultiTenantEventStorageEngine engineWith(TenantResolver tenantResolver) {
-        return new MultiTenantEventStorageEngine(engines::apply, snapshotStores::apply, tenantResolver, engines);
+        return new MultiTenantEventStorageEngine(engines::apply,
+                                                 snapshotStores::apply,
+                                                 new TenantRouter(tenantResolver, engines));
     }
 
     private static EventMessage event(@Nullable TenantDescriptor tenant) {
@@ -293,13 +296,13 @@ class MultiTenantEventStorageEngineTest {
     }
 
     @Test
-    void describesItsEngineFactoryItsSnapshotStoreAndItsTenantResolver() {
+    void describesItsEngineFactoryItsSnapshotStoreAndItsTenantRouter() {
         MultiTenantEventStorageEngine testSubject = engineWith(alwaysTenant(TENANT_A));
         MockComponentDescriptor descriptor = new MockComponentDescriptor();
 
         testSubject.describeTo(descriptor);
 
         assertThat(descriptor.getDescribedProperties())
-                .containsKeys("engineFactory", "snapshotStore", "tenantResolver");
+                .containsKeys("engineFactory", "snapshotStore", "tenantRouter");
     }
 }

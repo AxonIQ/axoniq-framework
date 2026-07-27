@@ -37,7 +37,7 @@ import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class RoutingTenantResolverTest {
+class TenantRouterTest {
 
     private static EventMessage eventWithTenant(@Nullable TenantDescriptor tenant) {
         return new GenericEventMessage(
@@ -54,7 +54,7 @@ class RoutingTenantResolverTest {
 
         @Test
         void resolvesTheKnownTenantFromTheContextResource() {
-            RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, TENANT_DESCRIPTORS);
+            TenantRouter resolver = new TenantRouter(metadataResolver, TENANT_DESCRIPTORS);
             ProcessingContext context = new StubProcessingContext()
                     .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
@@ -65,7 +65,7 @@ class RoutingTenantResolverTest {
         // redirect the operation to another tenant's store whenever the resource names an unknown tenant.
         @Test
         void failsWhenTheContextResourceTenantIsNotKnownEvenIfTheMessageNamesAKnownTenant() {
-            RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, () -> List.of(TENANT_A));
+            TenantRouter resolver = new TenantRouter(metadataResolver, () -> List.of(TENANT_A));
             ProcessingContext context = StubProcessingContext.forMessage(eventWithTenant(TENANT_A))
                     .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_B);
 
@@ -76,7 +76,7 @@ class RoutingTenantResolverTest {
 
         @Test
         void returnsEmptyWhenNeitherTheResourceNorTheMessageNamesAKnownTenant() {
-            RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, () -> List.of(TENANT_A));
+            TenantRouter resolver = new TenantRouter(metadataResolver, () -> List.of(TENANT_A));
             ProcessingContext context = StubProcessingContext.forMessage(eventWithTenant(null));
 
             assertThat(resolver.resolveFromContext(context)).isEmpty();
@@ -84,7 +84,7 @@ class RoutingTenantResolverTest {
 
         @Test
         void returnsEmptyForANullContext() {
-            RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, TENANT_DESCRIPTORS);
+            TenantRouter resolver = new TenantRouter(metadataResolver, TENANT_DESCRIPTORS);
 
             assertThat(resolver.resolveFromContext(null)).isEmpty();
         }
@@ -95,7 +95,7 @@ class RoutingTenantResolverTest {
 
         @Test
         void returnsResolvedTenantWhenAllMessagesHaveSameTenant() {
-            RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, TENANT_DESCRIPTORS);
+            TenantRouter resolver = new TenantRouter(metadataResolver, TENANT_DESCRIPTORS);
 
             Optional<TenantDescriptor> result = resolver.resolveSharedTenant(
                     List.of(eventWithTenant(TENANT_A), eventWithTenant(TENANT_A))
@@ -106,7 +106,7 @@ class RoutingTenantResolverTest {
 
         @Test
         void returnsEmptyOptionalForEmptyCollection() {
-            RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, () -> List.of(TENANT_A));
+            TenantRouter resolver = new TenantRouter(metadataResolver, () -> List.of(TENANT_A));
 
             Optional<TenantDescriptor> result = resolver.resolveSharedTenant(List.of());
 
@@ -116,7 +116,7 @@ class RoutingTenantResolverTest {
         @Test
         void returnsEmptyWhenAnyMessageCannotBeResolvedRatherThanDroppingIt() {
             // a batch mixing a resolvable and an unresolvable event must not silently route to the resolvable tenant
-            RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, () -> List.of(TENANT_A));
+            TenantRouter resolver = new TenantRouter(metadataResolver, () -> List.of(TENANT_A));
 
             Optional<TenantDescriptor> result = resolver.resolveSharedTenant(
                     List.of(eventWithTenant(TENANT_A), eventWithTenant(null))
@@ -128,14 +128,14 @@ class RoutingTenantResolverTest {
         @Test
         void returnsEmptyWhenAMessageResolvesToAnUnknownTenant() {
             // the message names foo-b, but only foo-a is a known tenant, so it must not route
-            RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, () -> List.of(TENANT_A));
+            TenantRouter resolver = new TenantRouter(metadataResolver, () -> List.of(TENANT_A));
 
             assertThat(resolver.resolveSharedTenant(List.of(eventWithTenant(TENANT_B)))).isEmpty();
         }
 
         @Test
         void throwsTenantNotResolvedExceptionWhenMessagesHaveMixedTenants() {
-            RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, TENANT_DESCRIPTORS);
+            TenantRouter resolver = new TenantRouter(metadataResolver, TENANT_DESCRIPTORS);
             List<EventMessage> mixed = List.of(eventWithTenant(TENANT_A), eventWithTenant(TENANT_B));
             String expectedMessage =
                     "The given messages must all belong to the same tenant, but resolved to: [foo-a, foo-b]";
@@ -148,7 +148,7 @@ class RoutingTenantResolverTest {
 
     @Test
     void describesItsWrappedResolver() {
-        RoutingTenantResolver resolver = new RoutingTenantResolver(metadataResolver, TENANT_DESCRIPTORS);
+        TenantRouter resolver = new TenantRouter(metadataResolver, TENANT_DESCRIPTORS);
         MockComponentDescriptor descriptor = new MockComponentDescriptor();
 
         resolver.describeTo(descriptor);

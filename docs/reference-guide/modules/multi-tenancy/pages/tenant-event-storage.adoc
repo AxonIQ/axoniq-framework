@@ -11,9 +11,8 @@ Each tenant keeps its events in its own Axon Server context, so no tenant can re
 With multi-tenancy enabled, the event store is automatically tenant-aware.
 No changes to how an event-sourced entity is loaded or how you append events are required.
 
-When an entity is loaded inside a message handler, the tenant is already available on the `ProcessingContext`.
-Sourcing and appending are then routed to the event store of that tenant.
-Publishing events without a context instead requires the tenant to be resolved from the event metadata, as described in the xref:tenant-management.adoc#tenant-resolution[tenant resolution] section.
+When an entity is used in the context of a message handler, the tenant information is already available in the `ProcessingContext`. Source and append operations are automatically routed to the event store of the related tenant.
+Publishing events without a context in contrast requires resolution of the tenant as described in the xref:tenant-management.adoc#tenant-resolution[tenant resolution] section.
 
 [NOTE]
 ====

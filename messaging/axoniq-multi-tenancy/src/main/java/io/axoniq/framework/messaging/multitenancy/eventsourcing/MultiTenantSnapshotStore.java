@@ -19,11 +19,8 @@
 
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
-import io.axoniq.framework.messaging.multitenancy.api.RoutingTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
-import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
-import io.axoniq.framework.messaging.multitenancy.api.TenantSnapshotStoreFactory;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
@@ -58,33 +55,17 @@ import static java.util.Objects.requireNonNull;
 public class MultiTenantSnapshotStore implements SnapshotStore, DescribableComponent {
 
     private final TenantSnapshotStoreFactory snapshotStoreFactory;
-    private final RoutingTenantResolver tenantResolver;
+    private final TenantRouter tenantRouter;
 
     /**
      * Constructs a {@code MultiTenantSnapshotStore}.
      *
      * @param snapshotStoreFactory the factory providing each tenant's {@link SnapshotStore}
-     * @param tenantResolver       the resolver determining the tenant of a message
-     * @param tenants              the known tenants, used to resolve a message against
+     * @param tenantRouter         the router deciding which tenant a snapshot operation is routed to
      */
-    MultiTenantSnapshotStore(TenantSnapshotStoreFactory snapshotStoreFactory,
-                             TenantResolver tenantResolver,
-                             TenantDescriptors tenants) {
-        this(snapshotStoreFactory, new RoutingTenantResolver(tenantResolver, tenants));
-    }
-
-    /**
-     * Constructs a {@code MultiTenantSnapshotStore} resolving tenants with the given {@code tenantResolver}.
-     * <p>
-     * Used by {@link MultiTenantEventStorageEngine} so events and snapshots resolve their tenant through one and the
-     * same resolver, against one and the same set of known tenants.
-     *
-     * @param snapshotStoreFactory the factory providing each tenant's {@link SnapshotStore}
-     * @param tenantResolver       the resolver determining the known tenant of a message
-     */
-    MultiTenantSnapshotStore(TenantSnapshotStoreFactory snapshotStoreFactory, RoutingTenantResolver tenantResolver) {
+    MultiTenantSnapshotStore(TenantSnapshotStoreFactory snapshotStoreFactory, TenantRouter tenantRouter) {
         this.snapshotStoreFactory = requireNonNull(snapshotStoreFactory, "The snapshot store factory must not be null");
-        this.tenantResolver = requireNonNull(tenantResolver, "The tenant resolver must not be null");
+        this.tenantRouter = requireNonNull(tenantRouter, "The tenant router must not be null");
     }
 
     @Override
@@ -110,13 +91,13 @@ public class MultiTenantSnapshotStore implements SnapshotStore, DescribableCompo
     }
 
     private TenantDescriptor tenantFor(@Nullable ProcessingContext context) {
-        return tenantResolver.resolveFromContext(context)
+        return tenantRouter.resolveFromContext(context)
                 .orElseThrow(tenantNotResolved("Snapshot operations require a tenant-carrying processing context"));
     }
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("snapshotStoreFactory", snapshotStoreFactory);
-        descriptor.describeProperty("tenantResolver", tenantResolver);
+        descriptor.describeProperty("tenantRouter", tenantRouter);
     }
 }

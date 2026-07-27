@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
 import org.axonframework.common.infra.MockComponentDescriptor;
@@ -64,7 +65,7 @@ class MultiTenantSnapshotStoreTest {
         @Test
         void loadRoutesToTheTenantOnTheProcessingContext() {
             MultiTenantSnapshotStore testSubject =
-                    new MultiTenantSnapshotStore(stores::apply, alwaysTenant(TENANT_B), stores);
+                    new MultiTenantSnapshotStore(stores::apply, new TenantRouter(alwaysTenant(TENANT_B), stores));
             StubProcessingContext context = new StubProcessingContext();
             context.withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
@@ -78,7 +79,8 @@ class MultiTenantSnapshotStoreTest {
         void loadWithoutATenantResourceResolvesFromTheMessageInTheContext() {
             // no resource on the context, so the tenant is resolved from the message the context carries
             MultiTenantSnapshotStore testSubject =
-                    new MultiTenantSnapshotStore(stores::apply, new MetadataBasedTenantResolver(), stores);
+                    new MultiTenantSnapshotStore(stores::apply,
+                                                 new TenantRouter(new MetadataBasedTenantResolver(), stores));
             ProcessingContext context = StubProcessingContext.forMessage(messageForTenant(TENANT_B));
 
             testSubject.load(SNAPSHOT_NAME, IDENTIFIER, context);
@@ -94,7 +96,7 @@ class MultiTenantSnapshotStoreTest {
         @Test
         void storeRoutesToTheTenantOnTheProcessingContext() {
             MultiTenantSnapshotStore testSubject =
-                    new MultiTenantSnapshotStore(stores::apply, alwaysTenant(TENANT_B), stores);
+                    new MultiTenantSnapshotStore(stores::apply, new TenantRouter(alwaysTenant(TENANT_B), stores));
             StubProcessingContext context = new StubProcessingContext();
             context.withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
             Snapshot snapshot = new Snapshot(new GlobalIndexPosition(0L), "0", "payload", Instant.EPOCH, Map.of());
@@ -115,7 +117,8 @@ class MultiTenantSnapshotStoreTest {
         @Test
         void aSnapshotStoredForOneTenantIsNotLoadedForAnother() {
             MultiTenantSnapshotStore testSubject =
-                    new MultiTenantSnapshotStore(stores::apply, new MetadataBasedTenantResolver(), stores);
+                    new MultiTenantSnapshotStore(stores::apply,
+                                                 new TenantRouter(new MetadataBasedTenantResolver(), stores));
             ProcessingContext tenantAContext = StubProcessingContext.forMessage(messageForTenant(TENANT_A));
             ProcessingContext tenantBContext = StubProcessingContext.forMessage(messageForTenant(TENANT_B));
             Snapshot snapshot = new Snapshot(new GlobalIndexPosition(0L), "0", "payload", Instant.EPOCH, Map.of());
@@ -133,7 +136,7 @@ class MultiTenantSnapshotStoreTest {
         @Test
         void loadWithoutAContextCompletesExceptionally() {
             MultiTenantSnapshotStore testSubject =
-                    new MultiTenantSnapshotStore(stores::apply, alwaysTenant(TENANT_A), stores);
+                    new MultiTenantSnapshotStore(stores::apply, new TenantRouter(alwaysTenant(TENANT_A), stores));
 
             var result = testSubject.load(SNAPSHOT_NAME, IDENTIFIER, null);
 
@@ -144,7 +147,8 @@ class MultiTenantSnapshotStoreTest {
         @Test
         void storeWithoutAResolvableTenantCompletesExceptionally() {
             MultiTenantSnapshotStore testSubject =
-                    new MultiTenantSnapshotStore(stores::apply, new MetadataBasedTenantResolver(), stores);
+                    new MultiTenantSnapshotStore(stores::apply,
+                                                 new TenantRouter(new MetadataBasedTenantResolver(), stores));
             StubProcessingContext contextWithoutTenant = new StubProcessingContext();
             Snapshot snapshot = new Snapshot(new GlobalIndexPosition(0L), "0", "payload", Instant.EPOCH, Map.of());
 
@@ -158,11 +162,11 @@ class MultiTenantSnapshotStoreTest {
     @Test
     void describesItsFactory() {
         MultiTenantSnapshotStore testSubject =
-                new MultiTenantSnapshotStore(stores::apply, alwaysTenant(TENANT_A), stores);
+                new MultiTenantSnapshotStore(stores::apply, new TenantRouter(alwaysTenant(TENANT_A), stores));
         MockComponentDescriptor descriptor = new MockComponentDescriptor();
 
         testSubject.describeTo(descriptor);
 
-        assertThat(descriptor.getDescribedProperties()).containsKeys("snapshotStoreFactory", "tenantResolver");
+        assertThat(descriptor.getDescribedProperties()).containsKeys("snapshotStoreFactory", "tenantRouter");
     }
 }
