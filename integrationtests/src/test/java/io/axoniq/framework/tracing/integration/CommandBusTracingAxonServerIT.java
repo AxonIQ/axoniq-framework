@@ -20,7 +20,6 @@
 package io.axoniq.framework.tracing.integration;
 
 import io.axoniq.framework.messaging.commandhandling.distributed.tracing.TracingCommandBusConnector;
-import org.axonframework.messaging.commandhandling.tracing.TracingCommandBus;
 import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.data.SpanData;
@@ -54,10 +53,10 @@ import static org.awaitility.Awaitility.await;
  * Axon Server <em>is</em> the distributed transport, so {@code axoniq-distributed-messaging} is always on the test
  * classpath. The expected span tree is therefore the full four-span chain:
  * <pre>
- * CommandBus.dispatchCommand <name>     [PRODUCER]   ← TracingCommandBus dispatch
+ * CommandBus.dispatch <name>     [PRODUCER]   ← TracingCommandBus dispatch
  *   └─ CommandBusConnector.dispatch <name>     [PRODUCER]   ← TracingCommandBusConnector send leg (gRPC out)
  *      └─ CommandBusConnector.handle <name>    [CONSUMER]   ← TracingCommandBusConnector receive leg (gRPC in)
- *         └─ CommandBus.handleCommand <name>   [CONSUMER]   ← TracingCommandBus handle
+ *         └─ CommandBus.handle <name>   [CONSUMER]   ← TracingCommandBus handle
  * </pre>
  * Each span is parented on the immediately enclosing span via the W3C trace context propagated on the command's
  * metadata across the gRPC boundary.
@@ -117,10 +116,10 @@ class CommandBusTracingAxonServerIT {
 
         InMemorySpanExporter exporter = INFRASTRUCTURE.spanExporter();
         String commandName = COMMAND_NAME.name();
-        String busDispatch = TracingCommandBus.DISPATCH_SPAN + " " + commandName;
+        String busDispatch = "CommandBus.dispatch" + " " + commandName;
         String connectorDispatch = TracingCommandBusConnector.DISPATCH_SPAN + " " + commandName;
         String connectorHandle = TracingCommandBusConnector.HANDLE_SPAN + " " + commandName;
-        String busHandle = TracingCommandBus.HANDLE_SPAN + " " + commandName;
+        String busHandle = "CommandBus.handle" + " " + commandName;
 
         await().atMost(Duration.ofSeconds(30))
                .untilAsserted(() -> {

@@ -28,7 +28,7 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.tracing.SpanFactory;
-import org.axonframework.messaging.tracing.configuration.SpanAttributesProviderRegistry;
+import org.axonframework.messaging.tracing.attributes.SpanAttributesProviderRegistry;
 import org.axonframework.messaging.tracing.configuration.TracingConfigurationOrder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

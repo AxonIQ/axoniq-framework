@@ -23,7 +23,6 @@ import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigur
 import io.axoniq.framework.tracing.micrometer.MicrometerTracingConfigurationEnhancer;
 import io.axoniq.framework.tracing.micrometer.threadlocal.MicrometerThreadLocalContextPropagationConfigurationEnhancer;
 import org.axonframework.messaging.tracing.SpanFactory;
-import org.axonframework.modelling.tracing.TracingStateManager;
 import io.micrometer.tracing.Tracer;
 import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
@@ -65,7 +64,8 @@ import static org.awaitility.Awaitility.await;
  */
 class RepositoryTracingConfigurationIntegrationTest {
 
-    private static final String STATE_MANAGER_SPAN = TracingStateManager.LOAD_MANAGED_ENTITY_SPAN + " GuestList";
+    // Span name produced by the tracing StateManager decorator (implementation detail, mirrored here for assertions).
+    private static final String STATE_MANAGER_SPAN = "StateManager.loadManagedEntity" + " GuestList";
 
     private MicrometerTracingTestSetup tracing;
     private InMemorySpanExporter spanExporter;
@@ -110,7 +110,7 @@ class RepositoryTracingConfigurationIntegrationTest {
                .untilAsserted(() -> assertThat(spanNames()).contains(STATE_MANAGER_SPAN));
 
         SpanData stateManagerSpan = spanNamed(STATE_MANAGER_SPAN);
-        SpanData dispatchSpan = spanStartingWith("CommandBus.dispatchCommand");
+        SpanData dispatchSpan = spanStartingWith("CommandBus.dispatch");
         assertThat(stateManagerSpan.getKind()).isEqualTo(SpanKind.INTERNAL);
         assertThat(stateManagerSpan.getTraceId()).isEqualTo(dispatchSpan.getTraceId());
 

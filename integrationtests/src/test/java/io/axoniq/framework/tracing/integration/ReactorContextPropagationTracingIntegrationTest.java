@@ -29,7 +29,7 @@ import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.eventhandling.AsyncInMemoryStreamableEventSource;
 import org.axonframework.messaging.eventhandling.EventTestUtils;
 import org.axonframework.messaging.eventhandling.annotation.EventHandler;
-import org.axonframework.messaging.tracing.MessagingTracingSettings;
+import org.axonframework.messaging.tracing.configuration.MessagingTracingSettings;
 import org.axonframework.messaging.tracing.SpanFactory;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;

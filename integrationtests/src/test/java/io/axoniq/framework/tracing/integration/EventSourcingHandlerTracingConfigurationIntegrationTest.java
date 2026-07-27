@@ -21,7 +21,7 @@ package io.axoniq.framework.tracing.integration;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import org.axonframework.messaging.tracing.SpanFactory;
-import org.axonframework.messaging.tracing.MessagingTracingSettings;
+import org.axonframework.messaging.tracing.configuration.MessagingTracingSettings;
 import io.micrometer.tracing.Tracer;
 import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;

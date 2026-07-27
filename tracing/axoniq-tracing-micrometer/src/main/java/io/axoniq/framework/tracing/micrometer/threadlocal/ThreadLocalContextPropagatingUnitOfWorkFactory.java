@@ -91,7 +91,7 @@ final class ThreadLocalContextPropagatingUnitOfWorkFactory implements UnitOfWork
         // Captured on the (synchronous) dispatching thread: caller's TLs are valid here.
         ContextSnapshot snapshot = snapshotFactory.captureAll();
 
-        ProcessingLifecycleInterceptor restore = ProcessingLifecycleInterceptor.uniform((context, action) -> {
+        ProcessingLifecycleInterceptor restore = ProcessingLifecycleInterceptor.intercept((context, action) -> {
             // LIVE per action: whatever is active on the root context for this phase (see class-level documentation).
             Span current = MicrometerSpanFactory.rawSpanFrom(context);
             try (ContextSnapshot.Scope threadLocals = snapshot.setThreadLocals();
@@ -101,6 +101,6 @@ final class ThreadLocalContextPropagatingUnitOfWorkFactory implements UnitOfWork
             }
         });
 
-        return delegate.create(identifier, config -> customization.apply(config).interceptor(restore));
+        return delegate.create(identifier, config -> customization.apply(config).addLifecycleInterceptor(restore));
     }
 }

@@ -19,8 +19,6 @@
 
 package io.axoniq.framework.tracing.integration;
 
-import org.axonframework.eventsourcing.eventstore.tracing.TracingEventStorageEngine;
-import org.axonframework.messaging.eventhandling.tracing.TracingEventSink;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.data.SpanData;
 import org.axonframework.common.configuration.ApplicationConfigurer;
@@ -86,14 +84,14 @@ class EventTracingAxonServerIT {
         // then both publication and the complete storage append transaction are traced when the EventStore is backed
         // by the Axon Server connector
         InMemorySpanExporter exporter = INFRASTRUCTURE.spanExporter();
-        String publishPrefix = TracingEventSink.PUBLISH_SPAN;
+        String publishPrefix = "EventSink.publish";
 
         await().atMost(Duration.ofSeconds(30))
                .untilAsserted(() -> {
                    List<SpanData> spans = exporter.getFinishedSpanItems();
                    assertThat(spans).extracting(SpanData::getName)
                                     .anyMatch(name -> name.startsWith(publishPrefix))
-                                    .contains(TracingEventStorageEngine.APPEND_TRANSACTION_SPAN);
+                                    .contains("EventStorageEngine.appendTransaction");
                });
     }
 }

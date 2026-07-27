@@ -98,15 +98,15 @@ class AF4SpanShapeParityIntegrationTest {
         // an explicit @MessageType) — we match by prefix to stay robust against nested test-class naming.
         Map<String, SpanKind> prefixExpected = Map.of(
                 // §2 row: ${CommandBusClass}.dispatch(${cmd})
-                "CommandBus.dispatchCommand", SpanKind.PRODUCER,
+                "CommandBus.dispatch", SpanKind.PRODUCER,
                 // §2 row: ${CommandBusClass}.handle(${cmd})
-                "CommandBus.handleCommand", SpanKind.CONSUMER,
+                "CommandBus.handle", SpanKind.CONSUMER,
                 // §2 row: ${EventBusClass}.publish(${event}) — AF5 names the owning EventSink abstraction
                 "EventSink.publish", SpanKind.PRODUCER,
                 // §2 row: SimpleQueryBus.query(${q}) — local, non-distributed
                 "QueryBus.query ", SpanKind.PRODUCER,
                 // AF5 addition: explicit handler span on the consuming side of the query
-                "QueryBus.handleQuery", SpanKind.CONSUMER
+                "QueryBus.handle", SpanKind.CONSUMER
         );
 
         prefixExpected.forEach((prefix, kind) -> {

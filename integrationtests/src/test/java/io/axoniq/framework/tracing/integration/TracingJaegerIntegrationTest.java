@@ -66,8 +66,8 @@ import static org.awaitility.Awaitility.await;
  * via {@link GenericContainer}). Runs under the {@code integration-test} Maven profile alongside the other
  * {@code *IT} suites.
  * <p>
- * The trace shape asserted here is the simplest in-scope command flow ({@code CommandBus.dispatchCommand} →
- * {@code CommandBus.handleCommand} → {@code @CommandHandler} enhancer span); the full multi-component trace tree is
+ * The trace shape asserted here is the simplest in-scope command flow ({@code CommandBus.dispatch} →
+ * {@code CommandBus.handle} → {@code @CommandHandler} enhancer span); the full multi-component trace tree is
  * exercised by {@link MicrometerTracingEndToEndIntegrationTest} against the {@code InMemorySpanExporter}.
  */
 @Testcontainers
@@ -161,8 +161,8 @@ class TracingJaegerIntegrationTest {
         await().atMost(Duration.ofSeconds(60)).pollInterval(Duration.ofSeconds(1))
                .untilAsserted(() -> {
                    String body = queryJaeger(http, jaegerHost, jaegerPort);
-                   assertThat(body).contains("CommandBus.dispatchCommand")
-                                   .contains("CommandBus.handleCommand")
+                   assertThat(body).contains("CommandBus.dispatch")
+                                   .contains("CommandBus.handle")
                                    .contains("GreetHandler.handle");
                });
     }

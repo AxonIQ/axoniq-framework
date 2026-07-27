@@ -21,7 +21,6 @@ package io.axoniq.framework.tracing.integration;
 
 import io.axoniq.framework.messaging.queryhandling.distributed.tracing.TracingQueryBusConnector;
 import io.opentelemetry.api.trace.SpanKind;
-import org.axonframework.messaging.queryhandling.tracing.TracingQueryBus;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.data.SpanData;
 import org.axonframework.common.configuration.ApplicationConfigurer;
@@ -120,7 +119,7 @@ class QueryUpdateEmitterTracingAxonServerIT {
 
         // then the connector delivery is a child of its producer and links back to the subscription dispatch
         InMemorySpanExporter exporter = INFRASTRUCTURE.spanExporter();
-        String originatingQuerySpanName = TracingQueryBus.SUBSCRIPTION_QUERY_SPAN + " " + QUERY_NAME.name();
+        String originatingQuerySpanName = "QueryBus.subscriptionQuery" + " " + QUERY_NAME.name();
         String connectorSubscriptionSpanName =
                 TracingQueryBusConnector.SUBSCRIPTION_QUERY_SPAN + " " + QUERY_NAME.name();
         String updateSpanName = TracingQueryBusConnector.QUERY_UPDATE_SPAN + " RoomUpdate";
@@ -128,7 +127,7 @@ class QueryUpdateEmitterTracingAxonServerIT {
                .untilAsserted(() -> {
                    List<SpanData> spans = exporter.getFinishedSpanItems();
                    assertThat(spans).extracting(SpanData::getName)
-                                    .contains(TracingQueryBus.EMIT_UPDATE_SPAN,
+                                    .contains("QueryBus.emitUpdate",
                                               originatingQuerySpanName,
                                               connectorSubscriptionSpanName,
                                               updateSpanName);

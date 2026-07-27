@@ -48,16 +48,16 @@ import static org.awaitility.Awaitility.await;
  * Integration test for command-side tracing through the real configuration: a {@link MessagingConfigurer} registers
  * a Micrometer {@code SpanFactory} as a component, disables the Axon
  * Server connector enhancer so the bus stays local, and registers an annotated {@code @CommandHandler}. Dispatching
- * through the {@link CommandGateway} must produce the full nested span tree {@code CommandBus.dispatchCommand}
- * (PRODUCER) → {@code CommandBus.handleCommand} (CONSUMER) → {@code BookRoomHandler.handle(BookRoom)} (INTERNAL),
+ * through the {@link CommandGateway} must produce the full nested span tree {@code CommandBus.dispatch}
+ * (PRODUCER) → {@code CommandBus.handle} (CONSUMER) → {@code BookRoomHandler.handle(BookRoom)} (INTERNAL),
  * with no manual decorator or handler-definition wiring (per constitution §Testing). With no {@link SpanFactory}
  * registered, the same wiring produces no spans.
  */
 class CommandTracingConfigurationIntegrationTest {
 
     private static final String ENHANCER_SPAN = "BookRoomHandler.handle(BookRoom)";
-    private static final String HANDLE_SPAN_PREFIX = "CommandBus.handleCommand";
-    private static final String DISPATCH_SPAN_PREFIX = "CommandBus.dispatchCommand";
+    private static final String HANDLE_SPAN_PREFIX = "CommandBus.handle";
+    private static final String DISPATCH_SPAN_PREFIX = "CommandBus.dispatch";
 
     private MicrometerTracingTestSetup tracing;
     private InMemorySpanExporter spanExporter;

@@ -21,7 +21,7 @@ package io.axoniq.framework.tracing.integration;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import org.axonframework.messaging.tracing.SpanFactory;
-import org.axonframework.messaging.tracing.configuration.SpanAttributesProviderRegistry;
+import org.axonframework.messaging.tracing.attributes.SpanAttributesProviderRegistry;
 import org.axonframework.messaging.commandhandling.tracing.TracingCommandBus;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
@@ -58,7 +58,7 @@ import static org.awaitility.Awaitility.await;
  */
 class NativeTracingWiringIntegrationTest {
 
-    private static final String DISPATCH_SPAN_PREFIX = "CommandBus.dispatchCommand";
+    private static final String DISPATCH_SPAN_PREFIX = "CommandBus.dispatch";
 
     private MicrometerTracingTestSetup tracing;
     private InMemorySpanExporter spanExporter;

@@ -28,7 +28,7 @@ import io.micrometer.tracing.contextpropagation.ObservationAwareSpanThreadLocalA
 import io.micrometer.tracing.propagation.Propagator;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import org.axonframework.messaging.tracing.NoOpSpanFactory;
+import io.axoniq.framework.tracing.micrometer.NoOpSpanFactory;
 import org.axonframework.messaging.tracing.SpanFactory;
 import org.junit.jupiter.api.Test;
 

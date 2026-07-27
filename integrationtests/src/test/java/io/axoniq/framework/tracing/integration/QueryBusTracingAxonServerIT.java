@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.tracing.integration;
 
-import org.axonframework.messaging.queryhandling.tracing.TracingQueryBus;
 import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.data.SpanData;
@@ -110,8 +109,8 @@ class QueryBusTracingAxonServerIT {
 
         InMemorySpanExporter exporter = INFRASTRUCTURE.spanExporter();
         String queryName = QUERY_NAME.name();
-        String dispatchSpanName = TracingQueryBus.DISPATCH_SPAN + " " + queryName;
-        String handleSpanName = TracingQueryBus.HANDLE_SPAN + " " + queryName;
+        String dispatchSpanName = "QueryBus.query" + " " + queryName;
+        String handleSpanName = "QueryBus.handle" + " " + queryName;
 
         await().atMost(Duration.ofSeconds(30))
                .untilAsserted(() -> {

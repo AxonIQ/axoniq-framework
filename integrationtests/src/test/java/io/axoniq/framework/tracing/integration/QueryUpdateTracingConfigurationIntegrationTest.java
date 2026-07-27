@@ -23,7 +23,6 @@ import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigur
 import io.axoniq.framework.tracing.micrometer.MicrometerTracingConfigurationEnhancer;
 import io.axoniq.framework.tracing.micrometer.threadlocal.MicrometerThreadLocalContextPropagationConfigurationEnhancer;
 import org.axonframework.messaging.tracing.SpanFactory;
-import org.axonframework.messaging.queryhandling.tracing.TracingQueryBus;
 import io.micrometer.tracing.Tracer;
 import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
@@ -63,6 +62,11 @@ import static org.awaitility.Awaitility.await;
  * must each produce their span. With no {@link SpanFactory} registered, the same flow produces no spans.
  */
 class QueryUpdateTracingConfigurationIntegrationTest {
+
+    // Span names produced by the tracing QueryBus decorator (implementation details, mirrored here for assertions).
+    private static final String SUBSCRIPTION_QUERY_SPAN = "QueryBus.subscriptionQuery";
+    private static final String EMIT_UPDATE_SPAN = "QueryBus.emitUpdate";
+    private static final String COMPLETE_SUBSCRIPTIONS_SPAN = "QueryBus.completeSubscriptions";
 
     private MicrometerTracingTestSetup tracing;
     private InMemorySpanExporter spanExporter;
@@ -114,12 +118,12 @@ class QueryUpdateTracingConfigurationIntegrationTest {
 
         // and the dispatch, emit and complete spans are exported
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(spanNames())
-                .anyMatch(name -> name.startsWith(TracingQueryBus.SUBSCRIPTION_QUERY_SPAN))
-                .contains(TracingQueryBus.EMIT_UPDATE_SPAN, TracingQueryBus.COMPLETE_SUBSCRIPTIONS_SPAN));
+                .anyMatch(name -> name.startsWith(SUBSCRIPTION_QUERY_SPAN))
+                .contains(EMIT_UPDATE_SPAN, COMPLETE_SUBSCRIPTIONS_SPAN));
 
-        SpanData subscriptionSpan = spanStartingWith(TracingQueryBus.SUBSCRIPTION_QUERY_SPAN);
-        SpanData emitSpan = spanNamed(TracingQueryBus.EMIT_UPDATE_SPAN);
-        SpanData completeSpan = spanNamed(TracingQueryBus.COMPLETE_SUBSCRIPTIONS_SPAN);
+        SpanData subscriptionSpan = spanStartingWith(SUBSCRIPTION_QUERY_SPAN);
+        SpanData emitSpan = spanNamed(EMIT_UPDATE_SPAN);
+        SpanData completeSpan = spanNamed(COMPLETE_SUBSCRIPTIONS_SPAN);
         assertThat(subscriptionSpan.getKind()).isEqualTo(SpanKind.PRODUCER);
         assertThat(emitSpan.getKind()).isEqualTo(SpanKind.INTERNAL);
         assertThat(completeSpan.getKind()).isEqualTo(SpanKind.INTERNAL);

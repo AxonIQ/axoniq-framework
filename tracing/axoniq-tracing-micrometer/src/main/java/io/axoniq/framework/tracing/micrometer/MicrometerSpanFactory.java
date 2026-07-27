@@ -114,7 +114,7 @@ public final class MicrometerSpanFactory implements SpanFactory {
      * <p>
      * The provider list is the complete set for this factory's lifetime. When the factory is built by the framework
      * configuration, the list is resolved from the
-     * {@link org.axonframework.messaging.tracing.configuration.SpanAttributesProviderRegistry} component.
+     * {@link org.axonframework.messaging.tracing.attributes.SpanAttributesProviderRegistry} component.
      *
      * @param tracer              the Micrometer tracer producing spans
      * @param propagator          the Micrometer propagator injecting/extracting trace context to/from message metadata

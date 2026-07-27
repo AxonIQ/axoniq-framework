@@ -128,12 +128,12 @@ class MicrometerTracingEndToEndIntegrationTest {
         assertThat(commandResult).isEqualTo("booked");
         assertThat(queryResult).isEqualTo("room-42-info");
 
-        SpanData commandDispatch = spanStartingWith("CommandBus.dispatchCommand");
-        SpanData commandHandle = spanStartingWith("CommandBus.handleCommand");
+        SpanData commandDispatch = spanStartingWith("CommandBus.dispatch");
+        SpanData commandHandle = spanStartingWith("CommandBus.handle");
         SpanData commandHandler = spanNamed("BookRoomHandler.handle(BookRoom)");
 
         SpanData queryDispatch = spanStartingWith("QueryBus.query");
-        SpanData queryHandle = spanStartingWith("QueryBus.handleQuery");
+        SpanData queryHandle = spanStartingWith("QueryBus.handle");
         SpanData queryHandler = spanNamed("FindRoomHandler.handle(FindRoom)");
 
         // Command trace is internally connected.
@@ -165,7 +165,7 @@ class MicrometerTracingEndToEndIntegrationTest {
                       .join();
 
         // then a span was current inside the handler and it belongs to the command's trace — the bridge propagated it
-        SpanData commandDispatch = spanStartingWith("CommandBus.dispatchCommand");
+        SpanData commandDispatch = spanStartingWith("CommandBus.dispatch");
         assertThat(CURRENT_TRACE_ID_IN_HANDLER.get())
                 .as("tracer.currentSpan() inside the handler")
                 .isNotNull()

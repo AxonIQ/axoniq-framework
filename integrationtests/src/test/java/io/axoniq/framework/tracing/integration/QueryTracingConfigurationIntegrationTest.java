@@ -48,14 +48,14 @@ import static org.awaitility.Awaitility.await;
  * Integration test for query-side tracing through the real configuration: a {@link MessagingConfigurer} registers an
  * a Micrometer {@code SpanFactory} as a component, disables the Axon Server connector enhancer so the bus stays local,
  * and registers an annotated {@code @QueryHandler}. Dispatching through the {@link QueryGateway} must produce the full
- * nested span tree {@code QueryBus.query} (PRODUCER) → {@code QueryBus.handleQuery} (CONSUMER) →
+ * nested span tree {@code QueryBus.query} (PRODUCER) → {@code QueryBus.handle} (CONSUMER) →
  * {@code FindRoomHandler.handle(FindRoom)} (INTERNAL), with no manual decorator or handler-definition wiring (per
  * constitution §Testing). With no {@link SpanFactory} registered, the same wiring produces no spans.
  */
 class QueryTracingConfigurationIntegrationTest {
 
     private static final String ENHANCER_SPAN = "FindRoomHandler.handle(FindRoom)";
-    private static final String HANDLE_SPAN_PREFIX = "QueryBus.handleQuery";
+    private static final String HANDLE_SPAN_PREFIX = "QueryBus.handle";
     private static final String DISPATCH_SPAN_PREFIX = "QueryBus.query";
 
     private MicrometerTracingTestSetup tracing;

@@ -22,8 +22,7 @@ package io.axoniq.framework.tracing.integration;
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.micrometer.tracing.Tracer;
 import org.axonframework.messaging.tracing.SpanFactory;
-import org.axonframework.messaging.tracing.MessagingTracingSettings;
-import org.axonframework.messaging.eventhandling.tracing.TracingEventHandlingComponent;
+import org.axonframework.messaging.tracing.configuration.MessagingTracingSettings;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.trace.SpanId;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
@@ -71,8 +70,11 @@ import static org.awaitility.Awaitility.await;
  */
 class PooledStreamingEventTracingConfigurationIntegrationTest {
 
-    private static final String BATCH_SPAN = TracingEventHandlingComponent.BATCH_SPAN;
-    private static final String PROCESS_SPAN_PREFIX = TracingEventHandlingComponent.PROCESS_SPAN;
+    // Span names and attribute key produced by the tracing event-handling decorator (implementation details, mirrored
+    // here for assertions).
+    private static final String BATCH_SPAN = "StreamingEventProcessor.batch";
+    private static final String PROCESS_SPAN_PREFIX = "EventProcessor.process";
+    private static final String PROCESSOR_NAME_ATTRIBUTE = "axoniq.event_processor.name";
 
     private MicrometerTracingTestSetup tracing;
     private InMemorySpanExporter spanExporter;
@@ -163,7 +165,7 @@ class PooledStreamingEventTracingConfigurationIntegrationTest {
 
         // and both processor-owned spans identify the owning processor by name, through the real enhancer wiring
         AttributeKey<String> processorNameKey =
-                AttributeKey.stringKey(TracingEventHandlingComponent.PROCESSOR_NAME_ATTRIBUTE);
+                AttributeKey.stringKey(PROCESSOR_NAME_ATTRIBUTE);
         assertThat(batchSpan.getAttributes().get(processorNameKey)).isEqualTo("psep-tracing-test-processor");
         assertThat(processSpan.getAttributes().get(processorNameKey)).isEqualTo("psep-tracing-test-processor");
     }
@@ -242,7 +244,7 @@ class PooledStreamingEventTracingConfigurationIntegrationTest {
 
         // the command dispatched from event 1's handler nests under event 1's own method span -- the dispatch span
         // resolves its parent from the branched context, not from the enclosing batch or (worse) event 2's span
-        SpanData dispatchSpan = spanStartingWith("CommandBus.dispatchCommand");
+        SpanData dispatchSpan = spanStartingWith("CommandBus.dispatch");
         assertThat(dispatchSpan.getParentSpanContext().getSpanId()).isEqualTo(methodSpan1.getSpanId());
 
         // the follow-up event appended by event 2 produces its own EventSink span under event 2's method span --
@@ -389,7 +391,7 @@ class PooledStreamingEventTracingConfigurationIntegrationTest {
                    SpanData methodSpan1 = spanNamed(methodSpan1Name);
                    SpanData methodSpan2 = spanNamed(methodSpan2Name);
                    List<String> dispatchParents = spanExporter.getFinishedSpanItems().stream()
-                           .filter(span -> span.getName().startsWith("CommandBus.dispatchCommand"))
+                           .filter(span -> span.getName().startsWith("CommandBus.dispatch"))
                            .map(span -> span.getParentSpanContext().getSpanId())
                            .toList();
                    assertThat(dispatchParents)
@@ -443,7 +445,8 @@ class PooledStreamingEventTracingConfigurationIntegrationTest {
     private static MessagingTracingSettings settings(boolean disableBatchTrace, boolean distributedInSameTrace) {
         return new MessagingTracingSettings(
                 true, true, true,
-                disableBatchTrace, distributedInSameTrace,
+                // eventProcessorBatchTraceEnabled is the enabled-sense flag, so it is the negation of disableBatchTrace.
+                !disableBatchTrace, distributedInSameTrace,
                 MessagingTracingSettings.DEFAULT_DISTRIBUTED_IN_SAME_TRACE_TIME_LIMIT,
                 true, false, MessagingTracingSettings.SpanAttributesProviders.enabledByDefault());
     }

@@ -21,7 +21,6 @@ package io.axoniq.framework.tracing.integration;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import org.axonframework.messaging.tracing.SpanFactory;
-import org.axonframework.eventsourcing.snapshot.store.tracing.TracingSnapshotStore;
 import io.micrometer.tracing.Tracer;
 import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
@@ -64,6 +63,11 @@ import static org.awaitility.Awaitility.await;
  */
 class SnapshotStoreTracingConfigurationIntegrationTest {
 
+    // Span names produced by the tracing SnapshotStore decorator (implementation details, mirrored here for
+    // assertions).
+    private static final String STORE_SPAN = "SnapshotStore.store";
+    private static final String LOAD_SPAN = "SnapshotStore.load";
+
     private MicrometerTracingTestSetup tracing;
     private InMemorySpanExporter spanExporter;
     private SpanFactory spanFactory;
@@ -97,16 +101,16 @@ class SnapshotStoreTracingConfigurationIntegrationTest {
         // then the (asynchronously written) snapshot produces the store span
         await().atMost(Duration.ofSeconds(30))
                .untilAsserted(() -> assertThat(spanNames())
-                       .anyMatch(name -> name.startsWith(TracingSnapshotStore.STORE_SPAN)));
-        SpanData storeSpan = spanStartingWith(TracingSnapshotStore.STORE_SPAN);
+                       .anyMatch(name -> name.startsWith(STORE_SPAN)));
+        SpanData storeSpan = spanStartingWith(STORE_SPAN);
         assertThat(storeSpan.getKind()).isEqualTo(SpanKind.INTERNAL);
 
         // and when the next command loads the entity from that snapshot, the load span appears
         sendAddGuest(commandGateway, "carol");
         await().atMost(Duration.ofSeconds(30))
                .untilAsserted(() -> assertThat(spanNames())
-                       .anyMatch(name -> name.startsWith(TracingSnapshotStore.LOAD_SPAN)));
-        SpanData loadSpan = spanStartingWith(TracingSnapshotStore.LOAD_SPAN);
+                       .anyMatch(name -> name.startsWith(LOAD_SPAN)));
+        SpanData loadSpan = spanStartingWith(LOAD_SPAN);
         assertThat(loadSpan.getKind()).isEqualTo(SpanKind.INTERNAL);
     }
 
