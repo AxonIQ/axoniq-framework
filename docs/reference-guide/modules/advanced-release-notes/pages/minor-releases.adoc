@@ -5,6 +5,19 @@ Any patch release made for an Axon project is tailored towards resolving bugs. T
 
 [#release_5_2]
 == Release 5.2
+
+=== Release 5.2.2
+
+==== Dependency upgrades
+
+- Upgrade AF to 5.2.2 link:https://github.com/AxonIQ/axoniq-framework/pull/292[#292]
+
+==== Contributors
+
+A heartfelt thank you to all contributors who made this release possible:
+
+- link:https://github.com/smcvb[@smcvb]
+
 === Release 5.2.1
 
 ==== Bug fixes
