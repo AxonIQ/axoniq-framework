@@ -39,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Mateusz Nowak
  */
+@SuppressWarnings("java:S2187")
 class MicrometerTracingConfigurationEnhancerTest {
 
     @Nested

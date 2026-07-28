@@ -22,12 +22,11 @@ package io.axoniq.framework.springboot;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Spring Boot configuration properties for AxoniqFramework distributed-connector tracing.
+ * Spring Boot configuration properties for the distributed-connector tracing.
  * <p>
  * Binds the connector-specific toggles of the shared {@code axon.tracing.*} property namespace. The generic tracing
- * properties (master switch, per-component toggles, attribute providers) are bound by the open-source
- * {@code TracingProperties} from the Axon Framework Spring Boot autoconfigure module; this class adds only the
- * toggles for the distributed bus connectors shipped with {@code axoniq-distributed-messaging}:
+ * properties (master switch, per-component toggles, attribute providers) use that same namespace; this class adds the
+ * toggles for the distributed bus connectors:
  * <pre>{@code
  * axon:
  *   tracing:
@@ -54,7 +53,7 @@ public class DistributedTracingProperties {
     private final QueryBusConnector queryBusConnector = new QueryBusConnector();
 
     /**
-     * Returns the tracing settings for the distributed {@code CommandBusConnector}.
+     * The tracing settings for the distributed {@code CommandBusConnector}.
      *
      * @return the {@code CommandBusConnector} tracing settings, never {@code null}
      */
@@ -63,7 +62,7 @@ public class DistributedTracingProperties {
     }
 
     /**
-     * Returns the tracing settings for the distributed {@code QueryBusConnector}.
+     * The tracing settings for the distributed {@code QueryBusConnector}.
      *
      * @return the {@code QueryBusConnector} tracing settings, never {@code null}
      */
@@ -81,10 +80,20 @@ public class DistributedTracingProperties {
          */
         private boolean enabled = true;
 
+        /**
+         * Whether tracing is enabled for the distributed {@code CommandBusConnector}.
+         *
+         * @return {@code true} when tracing is enabled
+         */
         public boolean isEnabled() {
             return enabled;
         }
 
+        /**
+         * Whether to enable tracing for the distributed {@code CommandBusConnector}.
+         *
+         * @param enabled whether tracing is enabled
+         */
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
         }
@@ -100,10 +109,20 @@ public class DistributedTracingProperties {
          */
         private boolean enabled = true;
 
+        /**
+         * Whether tracing is enabled for the distributed {@code QueryBusConnector}.
+         *
+         * @return {@code true} when tracing is enabled
+         */
         public boolean isEnabled() {
             return enabled;
         }
 
+        /**
+         * Whether to enable tracing for the distributed {@code QueryBusConnector}.
+         *
+         * @param enabled whether tracing is enabled
+         */
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
         }

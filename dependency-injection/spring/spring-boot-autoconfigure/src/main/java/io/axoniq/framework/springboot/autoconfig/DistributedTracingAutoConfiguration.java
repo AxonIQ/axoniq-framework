@@ -33,12 +33,11 @@ import org.springframework.context.annotation.Bean;
  * {@link DistributedTracingSettings} component read by the distributed-connector tracing enhancer of
  * {@code axoniq-distributed-messaging}.
  * <p>
- * The generic tracing properties (master switch, per-component toggles, attribute providers) are handled by the
- * open-source {@code TracingAutoConfiguration} from the Axon Framework Spring Boot autoconfigure module; this
- * configuration adds only the {@link DistributedTracingSettings} translation and activates when the
- * {@code axoniq-distributed-messaging} module is on the classpath. Registration uses {@code registerIfNotPresent},
- * so a user-defined settings bean or component always wins. The configuration backs off when
- * {@code axon.tracing.enabled} is set to {@code false}.
+ * The shared tracing properties (master switch, per-component toggles, and attribute providers) use the same
+ * namespace. This configuration adds the {@link DistributedTracingSettings} translation and activates when the
+ * {@code axoniq-distributed-messaging} module is on the classpath. Registration uses
+ * {@code registerIfNotPresent}, so a user-defined settings bean or component always wins. The configuration backs off
+ * when {@code axon.tracing.enabled} is set to {@code false}.
  *
  * @author Mateusz Nowak
  * @since 5.3.0
@@ -60,8 +59,13 @@ public class DistributedTracingAutoConfiguration {
     public ConfigurationEnhancer distributedTracingConfigurationEnhancer(DistributedTracingProperties properties) {
         return registry -> registry.registerIfNotPresent(
                 DistributedTracingSettings.class,
-                c -> new DistributedTracingSettings(properties.getCommandBusConnector().isEnabled(),
-                                                    properties.getQueryBusConnector().isEnabled())
+                c -> DistributedTracingSettings.enabledByDefault()
+                                               .withCommandBusConnectorEnabled(
+                                                       properties.getCommandBusConnector().isEnabled()
+                                               )
+                                               .withQueryBusConnectorEnabled(
+                                                       properties.getQueryBusConnector().isEnabled()
+                                               )
         );
     }
 }

@@ -52,10 +52,10 @@ import java.util.concurrent.CompletableFuture;
 public final class TracingCommandBusConnector implements CommandBusConnector {
 
     /** Prefix for the connector send-leg span ({@code "CommandBusConnector.dispatch <name>"}). */
-    public static final String DISPATCH_SPAN = "CommandBusConnector.dispatch";
+    private static final String DISPATCH_SPAN = "CommandBusConnector.dispatch";
 
     /** Prefix for the connector receive-leg span ({@code "CommandBusConnector.handle <name>"}). */
-    public static final String HANDLE_SPAN = "CommandBusConnector.handle";
+    private static final String HANDLE_SPAN = "CommandBusConnector.handle";
 
     private final CommandBusConnector delegate;
     private final SpanFactory spanFactory;

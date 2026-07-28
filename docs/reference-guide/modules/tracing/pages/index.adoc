@@ -2,51 +2,75 @@
 = Distributed Tracing
 :navtitle: Tracing
 
-Distributed Tracing enables you to track the path of a message through your system to see how the system behaves and performs.
-Axon Framework ships built-in tracing decorators for commands, events, queries, repositories, state managers, event storage and snapshots, plus a per-method handler enhancer that records every annotated handler invocation.
+Distributed Tracing tracks a message's path through an application and across service boundaries.
+Axon Framework provides tracing decorators for commands, events, queries, repositories, state managers, event storage, snapshots, distributed connectors, and annotated handler methods.
 
-Tracing decorators wrap the framework's components by composition.
-A single `SpanFactory` is the only public abstraction for span creation; per-component span shapes (names, kinds, attributes, cross-process metadata propagation) are implementation details of the internal decorators registered via `ConfigurationEnhancer` (discovered through Java's `ServiceLoader`).
-The decorators ship inside the framework modules themselves, so registering a `SpanFactory` component is enough to enable tracing for every component on the classpath.
+Tracing decorators wrap framework components by composition.
+`SpanFactory` is the public abstraction for span creation.
+Registering a `SpanFactory`, or the Micrometer `Tracer` and `Propagator` used to create one, enables the decorators discovered through `ConfigurationEnhancer` services.
 
-A *trace* is a collection of one or more *spans* that together form a complete journey through your software; each span records one timed operation and its relationship to the others.
-Rendered in a tool such as link:https://www.jaegertracing.io/[Jaeger,role=external,window=_blank], a single user action becomes one navigable tree.
-The following capture shows an HTTP request that dispatches a command through Axon Server: the handler loads the entity, publishes an event, and event processors update a projection, emit a subscription-query update, and dispatch a follow-up command, all within the same trace:
+A *trace* is a collection of related *spans*.
+Each span records one timed operation and its relationship to other operations.
+The following capture shows an HTTP request that dispatches a command through Axon Server and continues through command handling, event publication, event processing, a subscription-query update, and a follow-up command:
 
 image::jaeger-command-trace.png[A command dispatched through Axon Server rendered in Jaeger, including event processors and a follow-up command in the same trace]
 
-This capture uses `axon.tracing.event-processor.distributed-in-same-trace=true` to render everything as one trace; with the default settings, event processors record their work in separate traces that link back to the publication (see <<Streaming consumer trace topology>>).
-
-Migrating from Axon Framework 4 tracing? Follow the xref:migration:paths/distributed-tracing.adoc[Distributed Tracing migration path].
+The capture uses `axon.tracing.event-processor.distributed-in-same-trace=true`.
+The default streaming topology uses a separate batch trace linked to the publication trace.
 
 [NOTE]
 ====
-Sagas, process managers and deadlines are not available in Axon Framework 5.0. They will be reintroduced in later versions. Tracing today covers the messaging, modelling and event-sourcing surfaces that exist in 5.0.
+Sagas, process managers, and deadlines are not available.
+Tracing covers the messaging, modelling, and event-sourcing components described on this page.
 ====
 
 == Modules
-
-Tracing lives inside the framework modules whose components it covers, so a consumer gets tracing for exactly the parts of the framework it uses:
 
 [cols="<,<"]
 |===
 |Module |Contents
 
-|`axon-messaging` |The public SPI in `org.axonframework.messaging.tracing`: `SpanFactory`, `Span`, `SpanScope`, `SpanAttributesProvider`, the `SpanAttributesProviderRegistry`, the built-in attribute providers, `NoOpSpanFactory`, and `LoggingSpanFactory`. It also contains decorators for `CommandBus`, `EventSink`, `EventHandlingComponent`, and `QueryBus`, plus the handler enhancer.
-|`axon-modelling` |Decorators for `Repository` and `StateManager`.
-|`axon-eventsourcing` |Decorators for `EventStore`, `EventStorageEngine`, and `SnapshotStore`, plus the event-tag span attributes.
-|`axoniq-distributed-messaging` |Decorators for the distributed `CommandBusConnector` and `QueryBusConnector`, tracing the transport leg between the bus-level dispatch and handle spans.
-|`axoniq-tracing-micrometer` |The Micrometer Tracing implementation of `SpanFactory`. It uses the `Tracer` and `Propagator` supplied by the application's OpenTelemetry or Brave bridge.
-|===
+|`axon-messaging`
+|The tracing API, built-in message attribute providers, logging implementation, and decorators for `CommandBus`, `EventSink`, event handling, `QueryBus`, and annotated handlers.
 
-The Spring Boot starter wires everything up automatically from `axon.tracing.*` properties.
-Outside Spring, the same wiring is done by the per-module `ConfigurationEnhancer` discovered by `ServiceLoader`; no explicit registration is required.
+|`axon-modelling`
+|Decorators for `Repository` and `StateManager`.
+
+|`axon-eventsourcing`
+|Decorators for `EventStorageEngine` and `SnapshotStore`, plus event-tag attributes.
+
+|`axoniq-distributed-messaging`
+|Decorators for distributed `CommandBusConnector` and `QueryBusConnector` transport legs.
+
+|`axoniq-tracing-micrometer`
+|The Micrometer Tracing implementation of `SpanFactory`, backed by an application-provided `Tracer` and `Propagator`.
+|===
 
 == Configuration
 
-=== Spring Boot
+The declarative configuration API and Spring Boot properties configure the same tracing components.
+The Spring properties use `axon.tracing.*` because the distributed connector and thread-local bridge settings extend the existing shared tracing namespace.
 
-Add the Micrometer binding, Spring Boot Actuator, an OpenTelemetry bridge, and an OTLP exporter:
+[tabs]
+====
+Configuration API::
++
+--
+Register a Micrometer `Tracer` and `Propagator` as framework components:
+
+[source,java]
+----
+include::example$tracing/configuration/DeclarativeTracingConfiguration.java[tag=register-tracing,indent=0]
+----
+
+The service-loaded Micrometer enhancer creates the `MicrometerSpanFactory`.
+The component enhancers then decorate the components present in the application.
+--
+
+Spring Boot::
++
+--
+Add the Micrometer binding, Actuator, the OpenTelemetry bridge, and an OTLP exporter:
 
 [source,xml]
 ----
@@ -69,151 +93,196 @@ Add the Micrometer binding, Spring Boot Actuator, an OpenTelemetry bridge, and a
 </dependency>
 ----
 
-Spring Boot supplies the Micrometer `Tracer` and `Propagator`.
-The Axoniq Framework binding uses them to register `MicrometerSpanFactory` as the active `SpanFactory`.
-Every component the framework creates is then decorated for tracing.
-
-Because the binding consumes Spring Boot's standard observability stack, everything Spring Boot manages applies to Axon Framework spans as well:
-
-* Sampling and propagation follow the standard `management.tracing.*` properties.
-* Traces started by Spring Boot's own instrumentation, such as an incoming HTTP request handled by Spring MVC or WebFlux, continue seamlessly into the framework's dispatch and handler spans.
-* Log correlation works out of the box: Spring Boot prefixes log lines with the current trace and span identifiers, and the worker-thread bridge keeps them correct inside asynchronous framework work.
-* Exporters are configured once, at the Spring Boot level, and apply to Axon Framework spans and every other instrumented library alike.
-
-For local experimentation you can use the SLF4J implementation:
-
-[source,java]
+[source,yaml]
 ----
-@Configuration
-public class TracingConfig {
-
-    @Bean
-    public SpanFactory spanFactory() {
-        return LoggingSpanFactory.INSTANCE;
-    }
-}
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
 ----
 
-=== Plain `MessagingConfigurer`
+Spring Boot provides the Micrometer `Tracer` and `Propagator` beans.
+The Axoniq Framework binding uses them to create the active `MicrometerSpanFactory`.
+--
+====
 
-[source,java]
-----
-MessagingConfigurer.create()
-                   .componentRegistry(registry -> registry
-                           .registerComponent(Tracer.class, c -> tracer)
-                           .registerComponent(Propagator.class, c -> propagator))
-                   .registerCommandHandlingModule(...)
-                   .start();
-----
+=== Tracing settings
 
-The Micrometer and component tracing enhancers are picked up via `ServiceLoader`.
-The Micrometer enhancer creates the `SpanFactory` from the registered `Tracer` and `Propagator`.
-
-=== Toggles
-
-Every component can be opted out individually through the `axon.tracing.*` namespace:
+Spring Boot exposes the following settings under `axon.tracing.*`.
+Declarative applications register the corresponding `MessagingTracingSettings`, `ModellingTracingSettings`, `EventSourcingTracingSettings`, and `DistributedTracingSettings` components.
 
 [cols="<,<,<"]
 |===
-|Property |Default |Effect when set to `false`
+|Property |Default |Effect
 
-|`axon.tracing.enabled` |`true` |Whole tracing auto-configuration backs off; no `SpanFactory` is registered.
-|`axon.tracing.command-bus.enabled` |`true` |The `CommandBus` is not decorated.
-|`axon.tracing.event-sink.enabled` |`true` |The `EventSink` is not decorated.
-|`axon.tracing.event-store.enabled` |`true` |The `EventStorageEngine` is not decorated.
-|`axon.tracing.event-processor.enabled` |`true` |Event-handling components are not decorated.
-|`axon.tracing.query-bus.enabled` |`true` |The `QueryBus` is not decorated.
-|`axon.tracing.repository.enabled` |`true` |`Repository` components are not decorated.
-|`axon.tracing.state-manager.enabled` |`true` |The `StateManager` is not decorated.
-|`axon.tracing.snapshot-store.enabled` |`true` |The `SnapshotStore` is not decorated.
-|`axon.tracing.command-bus-connector.enabled` |`true` |The distributed command connector is not decorated.
-|`axon.tracing.query-bus-connector.enabled` |`true` |The distributed query connector is not decorated.
-|`axon.tracing.thread-local-context-propagation.enabled` |`true` |The worker-thread bridge is disabled. Span creation and message metadata propagation remain enabled.
-|`axon.tracing.attribute-providers.*` |`true` |Disable individual built-in attribute providers (`message-id`, `message-type`, `metadata`, `aggregate-identifier`, `event-tags`).
+|`axon.tracing.enabled`
+|`true`
+|Controls the complete tracing autoconfiguration.
+
+|`axon.tracing.command-bus.enabled`
+|`true`
+|Controls `CommandBus` tracing.
+
+|`axon.tracing.event-sink.enabled`
+|`true`
+|Controls `EventSink` tracing.
+
+|`axon.tracing.event-store.enabled`
+|`true`
+|Controls `EventStorageEngine` tracing.
+
+|`axon.tracing.event-processor.enabled`
+|`true`
+|Controls event-handling component tracing.
+
+|`axon.tracing.event-processor.batch-trace-enabled`
+|`true`
+|Controls the streaming batch span.
+
+|`axon.tracing.event-processor.distributed-in-same-trace`
+|`false`
+|Selects whether eligible event-processing spans continue the publisher trace.
+
+|`axon.tracing.event-processor.distributed-in-same-trace-time-limit`
+|`PT2M`
+|Limits which events are eligible for the same-trace topology.
+
+|`axon.tracing.event-sourcing-handlers-enabled`
+|`false`
+|Controls per-method spans for `@EventSourcingHandler` methods.
+
+|`axon.tracing.query-bus.enabled`
+|`true`
+|Controls `QueryBus` tracing.
+
+|`axon.tracing.repository.enabled`
+|`true`
+|Controls `Repository` tracing.
+
+|`axon.tracing.state-manager.enabled`
+|`true`
+|Controls `StateManager` tracing.
+
+|`axon.tracing.snapshot-store.enabled`
+|`true`
+|Controls `SnapshotStore` tracing.
+
+|`axon.tracing.command-bus-connector.enabled`
+|`true`
+|Controls distributed command connector tracing.
+
+|`axon.tracing.query-bus-connector.enabled`
+|`true`
+|Controls distributed query connector tracing.
+
+|`axon.tracing.thread-local-context-propagation.enabled`
+|`true`
+|Controls the worker-thread bridge without disabling span creation or message metadata propagation.
+
+|`axon.tracing.attribute-providers.*`
+|`true`
+|Controls the `message-id`, `message-type`, `metadata`, `aggregate-identifier`, and `event-tags` providers.
 |===
 
 == Multiple tracing destinations
 
-Axon Framework uses one active `SpanFactory`; sending spans to several destinations is the export layer's job.
-With the OpenTelemetry bridge, Spring Boot picks up every `SpanExporter` bean, so a second backend is one extra dependency or bean away:
+Axon Framework uses one active `SpanFactory`.
+Exporter fan-out belongs to the OpenTelemetry SDK configuration.
+
+[tabs]
+====
+Configuration API::
++
+--
+Compose exporters before building the SDK:
 
 [source,java]
 ----
-@Bean
-public SpanExporter zipkinSpanExporter() {
-    return ZipkinSpanExporter.builder()
-                             .setEndpoint("http://zipkin:9411/api/v2/spans")
-                             .build();
-}
+include::example$tracing/configuration/OpenTelemetryTracingConfiguration.java[tag=multiple-exporters,indent=0]
 ----
+--
 
-All registered exporters receive the same spans.
-Individual exporters can be toggled per environment through `management.tracing.export.<name>.enabled`, and `management.tracing.export.enabled=false` turns off export entirely without touching the Axon configuration.
+Spring Boot::
++
+--
+Expose another `SpanExporter` bean.
+Spring Boot composes the exporter beans into its OpenTelemetry SDK:
 
-[NOTE]
-====
-Axon Framework 4 offered a `MultiSpanFactory` for this purpose.
-It no longer exists: fanning out to multiple destinations is a responsibility of the tracing setup rather than of the framework's span lifecycle, which keeps every Axon span created and ended exactly once.
+[source,java]
+----
+include::example$tracing/exporters/SpringExporterConfiguration.java[tag=additional-exporter,indent=0]
+----
+--
 ====
 
 == Span attribute providers
 
-Tracing implementations attach attributes to spans for searchability and debugging.
-The `SpanAttributesProvider` SPI lets components contribute attributes; Axon Framework ships five built-in providers.
-The first four are enabled by default; event-tag attributes are added whenever a `TagResolver` is available in the Axon configuration (see the note below).
+`SpanAttributesProvider` contributes searchable attributes to message-carrying spans.
+The built-in providers are:
 
 [cols="<,<,<"]
 |===
 |Provider |Default key |Description
 
-|`MessageIdSpanAttributesProvider` |`axoniq.message.id` |The identifier of the message.
-|`MessageTypeSpanAttributesProvider` |`axoniq.message.type` |The type of the message (its qualified name plus version).
-|`MetadataSpanAttributesProvider` |`axoniq.metadata.{key}` |Each entry of the message metadata.
-|`AggregateIdentifierSpanAttributesProvider` |`axoniq.aggregate.identifier` |The identifier of the legacy aggregate the message is bound to, when known. Absent on Dynamic Consistency Boundary or entity-based paths.
-|`EventTagsSpanAttributesProvider` |`axoniq.event_tag.{key}` |Each tag of an event, resolved through a `TagResolver` (the `@EventTag`-annotated members of the payload by default). Best-effort; see the note below.
+|`MessageIdSpanAttributesProvider`
+|`axoniq.message.id`
+|Message identifier.
+
+|`MessageTypeSpanAttributesProvider`
+|`axoniq.message.type`
+|Qualified message type and version.
+
+|`MetadataSpanAttributesProvider`
+|`axoniq.metadata.{key}`
+|Message metadata entries.
+
+|`AggregateIdentifierSpanAttributesProvider`
+|`axoniq.aggregate.identifier`
+|Aggregate identifier when available.
+
+|`EventTagsSpanAttributesProvider`
+|`axoniq.event_tag.{key}`
+|Event tags resolved by the configured `TagResolver`.
 |===
 
-Event tags are recorded on both sides of the event flow:
-
-* On the publish side, `EventTagsSpanAttributesProvider` resolves tags when the span is created, while the payload is still the concrete object.
-* On the handling side, streamed events arrive in serialized form, so span-creation-time resolution finds nothing.
-The `TracingEventTagsHandlerEnhancerDefinition` (discovered automatically from the classpath) therefore enriches the active handler span at `@EventHandler` invocation time, resolving tags against the payload converted to the handler's declared parameter type.
-`@EventSourcingHandler` methods are excluded: during a replay they would flood the enclosing span with tags from every replayed event.
-
-Tags are resolved from the *current* payload-class declaration through the configured `TagResolver` (for example the `AnnotationBasedTagResolver`, which reads `@EventTag`-annotated members); without a `TagResolver` no tag attributes are added.
-Tag resolution is *best-effort*: a resolved value can be absent or differ from what was physically stored, for example after the payload class evolved (a tag member was renamed, added or removed).
-Only event messages contribute tag attributes.
-Both sides honor the same `axon.tracing.attribute-providers.event-tags` toggle.
-
-The default keys follow the OpenTelemetry-style dotted layout with `snake_case` leaves.
-Each provider takes a constructor that overrides its attribute key (or, for `MetadataSpanAttributesProvider`, its prefix), so you can restore the Axon Framework 4 keys (`axon_message_type` and so on) without losing the typed contract.
-
-You can also register your own:
+Event tags are resolved when the payload representation needed by the configured `TagResolver` is available.
+If no tag can be resolved, no event-tag attributes are added.
 
 [source,java]
 ----
-@Bean
-public SpanAttributesProvider tenantSpanAttributesProvider() {
-    return (message, context) -> {
-        if (message.metadata().containsKey("tenant")) {
-            return Map.of("axoniq.tenant", message.metadata().get("tenant"));
-        }
-        return Map.of();
-    };
-}
+include::example$tracing/customisation/TenantSpanAttributesProvider.java[tag=provider,indent=0]
 ----
 
-Auto-configuration bridges every `SpanAttributesProvider` bean into the `SpanAttributesProviderRegistry`; the `SpanFactory` receives the registry's complete provider list at construction time. In plain Java, contribute a provider with `SpanAttributesProviderRegistry.register(componentRegistry, config -> provider)`.
+[tabs]
+====
+Configuration API::
++
+--
+[source,java]
+----
+include::example$tracing/customisation/DeclarativeSpanCustomisation.java[tag=custom-provider,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+[source,java]
+----
+include::example$tracing/customisation/SpringSpanAttributesConfiguration.java[tag=custom-provider,indent=0]
+----
+
+Every `SpanAttributesProvider` bean is contributed to the provider registry.
+--
+====
 
 == Traced components
 
-The following span trees are produced when the corresponding decorator is active.
-Span names use the layout `<Component>.<operation> <messageName>`; the kinds follow the OpenTelemetry convention (`PRODUCER` for dispatch, `CONSUMER` for handling, `INTERNAL` for everything else).
-
-[NOTE]
-====
-Each `Tracing*` decorator class owns its span-name prefixes as `public static final String` constants, for example `TracingCommandBus.DISPATCH_SPAN` / `HANDLE_SPAN`, `TracingQueryBus.DISPATCH_SPAN` / `HANDLE_SPAN`, `TracingRepository.LOAD_SPAN`, and so on. The tables below mirror those constants.
-====
+Span names use `<Component>.<operation> <messageName>`.
+Dispatch spans use `PRODUCER`, handler spans use `CONSUMER`, and local operations use `INTERNAL`.
 
 === Commands
 
@@ -221,9 +290,17 @@ Each `Tracing*` decorator class owns its span-name prefixes as `public static fi
 |===
 |Span name |Kind |Description
 
-|`CommandBus.dispatchCommand <commandName>` |`PRODUCER` |The bus is dispatching the command.
-|`CommandBus.handleCommand <commandName>` |`CONSUMER` |The bus is handing the command to its handler. Nests under the dispatch span via the W3C tracing context propagated on the command's metadata.
-|`<HandlerClass>.<method>(<PayloadClass>)` |`INTERNAL` |The annotated `@CommandHandler` invocation produced by the per-method enhancer.
+|`CommandBus.dispatch <commandName>`
+|`PRODUCER`
+|Command dispatch.
+
+|`CommandBus.handle <commandName>`
+|`CONSUMER`
+|Command handling.
+
+|`<HandlerClass>.<method>(<PayloadClass>)`
+|`INTERNAL`
+|Annotated `@CommandHandler` invocation.
 |===
 
 === Events
@@ -232,33 +309,51 @@ Each `Tracing*` decorator class owns its span-name prefixes as `public static fi
 |===
 |Span name |Kind |Description
 
-|`EventSink.publish <eventName>` |`PRODUCER` |Short-lived per-event span opened while publishing through an `EventSink`. Propagates the tracing context onto the event's metadata.
-|`EventProcessor.process <eventName>` |`CONSUMER` |The handler invocation by an event processor. For a streaming processor, it is a child of `StreamingEventProcessor.batch` and has a span link back to the publication trace (through the metadata-propagated context). If batch tracing is disabled, it starts a new trace with the same publisher link. Set `axon.tracing.event-processor.distributed-in-same-trace=true` to nest it under the publication trace instead. Carries the owning processor's name in the `axoniq.event-processor.name` attribute.
-|`StreamingEventProcessor.batch` |`INTERNAL` |Root span enclosing one streaming-event-processor batch and its `EventProcessor.process` children; gated on the segment resource so subscribing processors don't produce it. Carries the owning processor's name in the `axoniq.event-processor.name` attribute.
-|`<HandlerClass>.<method>(<EventClass>)` |`INTERNAL` |The annotated `@EventHandler` invocation produced by the per-method enhancer.
-`@EventSourcingHandler` invocations are suppressed by default (they fire once per event during entity replay and would flood traces) and appear only with `axon.tracing.show-event-sourcing-handlers=true`.
+|`EventSink.publish <eventName>`
+|`PRODUCER`
+|Event publication and trace-context propagation.
+
+|`EventProcessor.process <eventName>`
+|`CONSUMER`
+|Event processing. Carries `axoniq.event_processor.name`.
+
+|`StreamingEventProcessor.batch`
+|`INTERNAL`
+|One streaming batch. Carries `axoniq.event_processor.name`.
+
+|`<HandlerClass>.<method>(<EventClass>)`
+|`INTERNAL`
+|Annotated `@EventHandler` invocation.
 |===
 
 ==== Streaming consumer trace topology
 
-Streaming processors handle events asynchronously, possibly long after publication.
-The guiding rule for their `EventProcessor.process` spans: the parent is the operation that structurally owns the execution, while the publisher is causal provenance carried on a span link.
-Subscribing processors run inside the publisher's processing context and always continue its trace.
+The streaming settings select relationships between the publisher, batch, and process spans.
+They do not describe scheduling, threads, processing location, or the context in which handling runs.
 
 [cols="<,<,<"]
 |===
-|Configuration (streaming) |`EventProcessor.process` parent |Publisher relationship
+|Streaming settings |`EventProcessor.process` parent |Publisher relationship
 
-|`disable-batch-trace=false`, `distributed-in-same-trace=false` (default) |`StreamingEventProcessor.batch` |Span link
-|`disable-batch-trace=true`, `distributed-in-same-trace=false` |None; new trace root |Span link
-|`distributed-in-same-trace=true`, event within the time limit |Publisher span (propagated metadata) |Parent
-|`distributed-in-same-trace=true`, stale event (replay, catch-up) |None; new trace root |Span link
+|`batch-trace-enabled=true`, `distributed-in-same-trace=false` (default)
+|`StreamingEventProcessor.batch`
+|Span link
+
+|`batch-trace-enabled=false`, `distributed-in-same-trace=false`
+|No parent
+|Span link
+
+|`distributed-in-same-trace=true`, event within the time limit
+|Publisher span
+|Parent
+
+|`distributed-in-same-trace=true`, event outside the time limit
+|No parent
+|Span link
 |===
 
-Because the publisher is a link rather than a parent in both non-same-trace modes, an event handled long after publication starts a temporally coherent trace at processing time and never stretches the publisher's finished trace.
-Same-trace mode is the only shape with that risk, so it is guarded per event by `axon.tracing.event-processor.distributed-in-same-trace-time-limit` (default `PT2M`): older events, typically replays or downtime catch-up, become linked trace roots instead.
-In same-trace mode no batch span is opened at all, which makes `disable-batch-trace` irrelevant there.
-Events that carry no propagated trace metadata simply get no link; the process span is still created and parented correctly.
+Same-trace mode omits the batch span.
+An event without propagated trace metadata has no publisher relationship, while its process span is still created.
 
 === Queries
 
@@ -266,95 +361,123 @@ Events that carry no propagated trace metadata simply get no link; the process s
 |===
 |Span name |Kind |Description
 
-|`QueryBus.query <queryName>` |`PRODUCER` |The bus is dispatching a direct query.
-|`QueryBus.respond <queryName>` |`INTERNAL` |A finite direct-query response stream continues after its handler returns. The span ends when that stream completes or is cancelled.
-|`QueryBus.subscriptionQuery <queryName>` |`PRODUCER` |The bus is dispatching a subscription query. Carries the subscription query identifier in `messaging.message.conversation_id`.
-|`QueryBus.initialResponse <queryName>` |`INTERNAL` |The finite first answer of a subscription query continues after its handler returns. Carries the same `messaging.message.conversation_id` and never covers the unbounded update stream.
-|`QueryBus.handleQuery <queryName>` |`CONSUMER` |The bus is handing the query to its handler.
-|`QueryBus.emitUpdate` |`INTERNAL` |An update is being emitted to subscription queries.
-|`QueryBus.completeSubscriptions` |`INTERNAL` |Matching subscription queries are completed.
-|`QueryBus.completeSubscriptionsExceptionally` |`INTERNAL` |Matching subscription queries are completed exceptionally.
-|`<HandlerClass>.<method>(<QueryClass>)` |`INTERNAL` |The annotated `@QueryHandler` invocation produced by the per-method enhancer.
+|`QueryBus.query <queryName>`
+|`PRODUCER`
+|Direct-query dispatch.
+
+|`QueryBus.respond <queryName>`
+|`INTERNAL`
+|Finite direct-query response stream.
+
+|`QueryBus.subscriptionQuery <queryName>`
+|`PRODUCER`
+|Subscription setup. Carries `messaging.message.conversation_id`.
+
+|`QueryBus.initialResponse <queryName>`
+|`INTERNAL`
+|Finite initial response. Carries `messaging.message.conversation_id`.
+
+|`QueryBus.handle <queryName>`
+|`CONSUMER`
+|Query handling.
+
+|`QueryBus.emitUpdate`
+|`INTERNAL`
+|Subscription-query update emission.
+
+|`QueryBus.completeSubscriptions`
+|`INTERNAL`
+|Matching subscription completion.
+
+|`QueryBus.completeSubscriptionsExceptionally`
+|`INTERNAL`
+|Exceptional matching subscription completion.
+
+|`<HandlerClass>.<method>(<QueryClass>)`
+|`INTERNAL`
+|Annotated `@QueryHandler` invocation.
 |===
 
-[NOTE]
-====
-In Axon Framework 5 `QueryUpdateEmitter` is a thin layer on top of `QueryBus` (its `emit` / `complete` / `completeExceptionally` calls delegate to the bus). Tracing the bus therefore also traces the emitter; no separate tracing surface is needed.
-====
+All spans belonging to one distributed subscription carry the subscription query identifier as `messaging.message.conversation_id`.
+This includes subscription setup, the initial response, and distributed update transport spans.
 
-==== Subscription query conversation lookup
-
-All spans that identify one distributed subscription carry `messaging.message.conversation_id` with the subscription query message identifier as their value.
-This includes `QueryBus.subscriptionQuery`, `QueryBus.initialResponse`, `QueryBusConnector.subscriptionQuery`, and both `QueryBusConnector.queryUpdate` transport legs.
-In Jaeger or another backend that indexes span attributes, search for `messaging.message.conversation_id=<subscription-query-identifier>` to find the subscription setup, initial answer, and every delivered update.
-
-The conversation identifier complements Axon's `correlationId` metadata rather than replacing it.
-An update's correlation identifier follows the command and event flow that caused that update, so it can change between updates delivered to the same subscription.
-The conversation identifier remains stable for the subscription and provides the lookup key across those separate causal traces.
-
-=== Modelling
+=== Domain modelling and event sourcing
 
 [cols="<,<,<"]
 |===
 |Span name |Kind |Description
 
-|`Repository.load <EntityType>` |`INTERNAL` |The repository is loading the entity. Carries `axoniq.entity.type` and `axoniq.entity.id` attributes.
-|`Repository.loadOrCreate <EntityType>` |`INTERNAL` |Load-or-create variant.
-|`Repository.persist <EntityType>` |`INTERNAL` |The repository is persisting the entity.
-|`Repository.attach <EntityType>` |`INTERNAL` |The lifecycle-management attach call.
-|`StateManager.loadManagedEntity <EntityType>` |`INTERNAL` |The state manager is resolving an entity. The default `loadEntity` delegates to this method, so it is naturally traced too.
-|===
+|`Repository.load <EntityType>`
+|`INTERNAL`
+|Entity load.
 
-=== Event Sourcing
+|`Repository.loadOrCreate <EntityType>`
+|`INTERNAL`
+|Entity load or creation.
 
-[cols="<,<,<"]
-|===
-|Span name |Kind |Description
+|`Repository.persist <EntityType>`
+|`INTERNAL`
+|Entity persistence.
 
-|`EventStorageEngine.appendTransaction` |`INTERNAL` |The complete storage append transaction, from staging the events through commit and after-commit processing. Instrumented storage calls, such as Axon Server gRPC append or database writes, nest under this span.
-|`SnapshotStore.store <name>` |`INTERNAL` |A snapshot is being persisted.
-|`SnapshotStore.load <name>` |`INTERNAL` |A snapshot is being loaded.
+|`Repository.attach <EntityType>`
+|`INTERNAL`
+|Lifecycle attachment.
+
+|`StateManager.loadManagedEntity <EntityType>`
+|`INTERNAL`
+|Managed-entity resolution.
+
+|`EventStorageEngine.appendTransaction`
+|`INTERNAL`
+|Storage append transaction.
+
+|`SnapshotStore.store <name>`
+|`INTERNAL`
+|Snapshot persistence.
+
+|`SnapshotStore.load <name>`
+|`INTERNAL`
+|Snapshot loading.
 |===
 
 === Distributed connectors
 
-When the distributed messaging module is present, the transport leg between the bus-level dispatch and handle spans is traced as well:
-
 [cols="<,<,<"]
 |===
 |Span name |Kind |Description
 
-|`CommandBusConnector.dispatch <commandName>` |`PRODUCER` |The connector is sending the command over the transport (for example Axon Server). Child of `CommandBus.dispatchCommand`.
-|`CommandBusConnector.handle <commandName>` |`CONSUMER` |The connector received the command on the handling node. Parent of `CommandBus.handleCommand`.
-|`QueryBusConnector.query <queryName>` |`PRODUCER` |The connector is sending a direct query. The span stays open until the result stream terminates, so lazily consumed responses are timed.
-|`QueryBusConnector.subscriptionQuery <queryName>` |`PRODUCER` |The connector is setting up a subscription query. Covers subscription setup only, not the unbounded update stream, and carries `messaging.message.conversation_id`.
-|`QueryBusConnector.handle <queryName>` |`CONSUMER` |The connector received the query on the handling node.
-|`QueryBusConnector.queryUpdate <updateType>` |`PRODUCER` / `CONSUMER` |One producer span on the emitting node and one linked consumer span on the subscribing node per delivered update. Both carry the subscription's `messaging.message.conversation_id`; the consumer span also carries a span link back to the originating `QueryBus.subscriptionQuery`.
+|`CommandBusConnector.dispatch <commandName>`
+|`PRODUCER`
+|Command transport send leg.
+
+|`CommandBusConnector.handle <commandName>`
+|`CONSUMER`
+|Command transport receive leg.
+
+|`QueryBusConnector.query <queryName>`
+|`PRODUCER`
+|Direct-query transport leg.
+
+|`QueryBusConnector.subscriptionQuery <queryName>`
+|`PRODUCER`
+|Subscription setup transport leg.
+
+|`QueryBusConnector.handle <queryName>`
+|`CONSUMER`
+|Query transport receive leg.
+
+|`QueryBusConnector.queryUpdate <updateType>`
+|`PRODUCER` / `CONSUMER`
+|Update send and delivery legs. The consumer links to the originating subscription.
 |===
 
 == Context propagation
 
-Axon Framework carries trace context through its `ProcessingContext` and message metadata rather than thread-locals, so parent/child relationships survive thread hops, asynchronous composition, and process boundaries.
-A handler running on a different thread than its dispatcher, or in a different application entirely, still nests correctly under the dispatch span, for imperative and reactive call paths alike.
+Axon Framework carries trace context through `ProcessingContext` and message metadata.
+The Micrometer binding also makes the active span visible to instrumented libraries and logging during a scoped operation.
 
-The Axoniq Framework Micrometer binding extends this to everything else in the application:
+Parent selection uses the processing context first where applicable, then propagated message metadata, and finally the current tracer context.
+The current tracer context is the lowest-priority context installed by external instrumentation.
+Missing or invalid propagation metadata does not prevent message handling.
 
-* **Instrumented libraries**: work performed inside a traced framework operation, such as Axon Server gRPC calls, JDBC statements, or WebClient requests instrumented by Micrometer or the OpenTelemetry agent, nests under the correct Axon span.
-* **Log correlation**: MDC-based trace and span identifiers are correct on whichever thread framework work runs, so log lines written by handlers and framework internals link to the right span.
-* **Reactor pipelines**: the binding registers a `ProcessingContext` accessor with Micrometer's context propagation. Once Reactor's automatic context propagation is enabled, spans created inside a `Mono` or `Flux` chain keep the correct parent and MDC values across reactive operators. See xref:tracing:opentelemetry.adoc#_automatic_instrumentation_and_context_propagation[Automatic instrumentation and context propagation] for Spring Boot and plain Java configuration.
-* **Ambient fallback**: when neither the context nor message metadata yields a parent, framework work entered from an instrumented HTTP request joins that request's trace.
-
-The worker-thread bridge behind the first three points can be disabled with `axon.tracing.thread-local-context-propagation.enabled=false`; span creation and message metadata propagation remain active without it.
-See xref:tracing:opentelemetry.adoc[] for the mechanics.
-
-== OpenTelemetry
-
-Axoniq Framework integrates https://opentelemetry.io/docs/concepts/what-is-opentelemetry/[OpenTelemetry] through `axoniq-tracing-micrometer` and `micrometer-tracing-bridge-otel`.
-Spring Boot configures the OpenTelemetry SDK, propagation, sampling, and exporters.
-The OpenTelemetry Java instrumentation https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/main/docs/supported-libraries.md[covers many surrounding libraries], so traces started by an HTTP framework or messaging client outside Axon Framework continue through the Axon decorators seamlessly.
-
-== Logging
-
-For local development without an APM backend, the `LoggingSpanFactory` emits each span lifecycle event to SLF4J.
-Use it as a standalone local-development backend.
-Exporting spans to tracing backends is configured through Micrometer Tracing and its exporters.
+For Reactor and OpenTelemetry SDK configuration, see xref:tracing:opentelemetry.adoc[].

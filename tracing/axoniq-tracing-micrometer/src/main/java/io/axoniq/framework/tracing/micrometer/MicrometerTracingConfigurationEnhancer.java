@@ -53,9 +53,8 @@ import org.slf4j.LoggerFactory;
  *     wire a Micrometer bridge.</li>
  *     <li>{@link ObservationRegistry} — optional; defaulted to {@link ObservationRegistry#create()} when absent.</li>
  * </ul>
- * In a Spring Boot application these are contributed as beans by Spring Boot's own tracing auto-configuration and are
- * resolved automatically. In a plain-Java setup the host must register the {@link Tracer} and {@link Propagator} as
- * components itself, obtained from its chosen bridge, e.g.:
+ * The host application registers the {@link Tracer} and {@link Propagator} as components, obtained from its chosen
+ * bridge, e.g.:
  * <pre>{@code
  * configurer.componentRegistry(registry -> registry
  *         .registerComponent(Tracer.class, c -> tracer)
@@ -125,7 +124,7 @@ public final class MicrometerTracingConfigurationEnhancer implements Configurati
         return config.getOptionalComponent(type).orElseThrow(() -> new IllegalStateException(
                 "Micrometer tracing is enabled but no " + type.getSimpleName() + " component is available. Register a "
                         + "Tracer and a Propagator obtained from a Micrometer tracing bridge (for example "
-                        + "micrometer-tracing-bridge-otel), or turn tracing off with axon.tracing.enabled=false."));
+                        + "micrometer-tracing-bridge-otel), or disable MicrometerTracingConfigurationEnhancer."));
     }
 
     /**

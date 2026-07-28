@@ -2,137 +2,122 @@
 = Tracing Examples
 :navtitle: Examples
 
-These examples show the most common Micrometer Tracing setups.
+These examples show common Micrometer Tracing configurations and trace topologies.
 
-== Spring Boot
+== Initial setup
 
-[source,xml]
+[tabs]
+====
+Configuration API::
++
+--
+Construct the OpenTelemetry SDK, Micrometer bridge, and application configuration:
+
+[source,java]
 ----
-<dependency>
-    <groupId>io.axoniq.framework</groupId>
-    <artifactId>axoniq-spring-boot-starter</artifactId>
-    <version>${axoniq-framework.version}</version>
-</dependency>
-<dependency>
-    <groupId>io.axoniq.framework</groupId>
-    <artifactId>axoniq-tracing-micrometer</artifactId>
-    <version>${axoniq-framework.version}</version>
-</dependency>
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-actuator</artifactId>
-</dependency>
-<dependency>
-    <groupId>io.micrometer</groupId>
-    <artifactId>micrometer-tracing-bridge-otel</artifactId>
-</dependency>
-<dependency>
-    <groupId>io.opentelemetry</groupId>
-    <artifactId>opentelemetry-exporter-otlp</artifactId>
-</dependency>
+include::example$tracing/configuration/OpenTelemetryTracingConfiguration.java[tag=full-open-telemetry,indent=0]
 ----
+--
 
-Configure sampling and OTLP export:
+Spring Boot::
++
+--
+Add the Spring Boot starter, Micrometer binding, Actuator, OpenTelemetry bridge, and OTLP exporter.
+Then configure the exporter:
 
 [source,yaml]
 ----
 management:
   tracing:
-    enabled: true
     sampling:
       probability: 1.0
   otlp:
     tracing:
       endpoint: http://localhost:4318/v1/traces
 ----
+--
+====
 
-Spring Boot supplies the Micrometer `Tracer` and `Propagator`.
-The Axoniq Framework binding creates the active `MicrometerSpanFactory` from them.
-A command dispatched through Axon Server then has this shape:
+A command sent through Axon Server produces this trace shape:
 
 ----
-CommandBus.dispatchCommand BookRoom                  [PRODUCER]
-+- CommandBusConnector.dispatch BookRoom             [PRODUCER]
-   +- CommandBusConnector.handle BookRoom            [CONSUMER]
-      +- CommandBus.handleCommand BookRoom           [CONSUMER]
-         +- BookRoomHandler.handle(BookRoom)         [INTERNAL]
+CommandBus.dispatch BookRoom                     [PRODUCER]
++- CommandBusConnector.dispatch BookRoom         [PRODUCER]
+   +- CommandBusConnector.handle BookRoom        [CONSUMER]
+      +- CommandBus.handle BookRoom              [CONSUMER]
+         +- BookRoomHandler.handle(BookRoom)     [INTERNAL]
 ----
 
-== Plain `MessagingConfigurer`
+== Logging-only backend
 
-Create the Micrometer `Tracer` and `Propagator` with the bridge selected by the application.
-Register both as Axon Framework components:
+[tabs]
+====
+Configuration API::
++
+--
+[source,java]
+----
+include::example$tracing/configuration/DeclarativeTracingConfiguration.java[tag=logging-span-factory,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+[source,java]
+----
+include::example$tracing/customisation/SpringCustomSpanFactoryConfiguration.java[tag=custom-span-factory,indent=0]
+----
+
+Disable `axon.tracing.thread-local-context-propagation.enabled` when using a non-Micrometer factory with the Micrometer module on the classpath.
+--
+====
+
+`LoggingSpanFactory` writes span lifecycle events through SLF4J.
+
+== Multiple exporters
+
+[tabs]
+====
+Configuration API::
++
+--
+Use OpenTelemetry's composite exporter:
 
 [source,java]
 ----
-AxonConfiguration configuration =
-        MessagingConfigurer.create()
-                           .componentRegistry(registry -> registry
-                                   .registerComponent(Tracer.class, c -> tracer)
-                                   .registerComponent(Propagator.class, c -> propagator))
-                           .registerCommandHandlingModule(() -> commandHandlingModule)
-                           .start();
+include::example$tracing/configuration/OpenTelemetryTracingConfiguration.java[tag=multiple-exporters,indent=0]
 ----
+--
 
-The ServiceLoader-discovered Micrometer enhancer creates the `SpanFactory`.
-The messaging, modelling, event-sourcing, and connector enhancers then decorate the components present in the application.
-
-== Logging-only development backend
-
-For local development without an APM server, register `LoggingSpanFactory.INSTANCE`:
+Spring Boot::
++
+--
+Expose additional `SpanExporter` beans:
 
 [source,java]
 ----
-@Bean
-public SpanFactory spanFactory() {
-    return LoggingSpanFactory.INSTANCE;
-}
+include::example$tracing/exporters/SpringExporterConfiguration.java[tag=additional-exporter,indent=0]
 ----
-
-`LoggingSpanFactory` emits one INFO line per span lifecycle event, formatted as `[spanId][operationName]`, with DEBUG-level entries for span attributes.
-
-If `axoniq-tracing-micrometer` remains on the classpath with a custom non-Micrometer factory, disable its worker-thread bridge:
-
-[source,yaml]
-----
-axon:
-  tracing:
-    thread-local-context-propagation:
-      enabled: false
-----
+--
+====
 
 == Streaming event processing
 
-A command that publishes an event produces two related traces with the default event-processor settings.
-The command-handling trace covers publication and storage:
+The default streaming topology creates a batch trace and links each event-processing span to its publisher:
 
 ----
-CommandBus.handleCommand BookRoom                    [CONSUMER]
-+- Repository.loadOrCreate Room                      [INTERNAL]
-+- Room.decide(BookRoom,EventAppender)               [INTERNAL]
-|  +- EventSink.publish RoomBooked                   [PRODUCER]
-+- EventStorageEngine.appendTransaction              [INTERNAL]
-   +- DcbEventStore/Append                           [CLIENT, gRPC instrumentation]
-----
-
-`EventSink.publish` is a short per-event span that stamps the trace context onto the event's metadata.
-`EventStorageEngine.appendTransaction` covers the actual storage transaction, so the instrumented Axon Server gRPC append (or database write) nests under it.
-
-Each streaming processor then handles the event in its own batch trace, connected to the publication trace by a span link:
-
-----
-StreamingEventProcessor.batch                        [INTERNAL]
-+- EventProcessor.process RoomBooked                 [CONSUMER]
+StreamingEventProcessor.batch                         [INTERNAL]
++- EventProcessor.process RoomBooked                  [CONSUMER]
    |  link: EventSink.publish RoomBooked
-   +- RoomAvailabilityProjector.on(RoomBooked)       [INTERNAL]
+   +- RoomAvailabilityProjector.on(RoomBooked)        [INTERNAL]
 ----
 
-One batch can process several events, possibly from different publishers; every `EventProcessor.process` span links to its own publisher.
-Set `axon.tracing.event-processor.distributed-in-same-trace=true` to nest recent events' process spans directly under the publication trace instead.
+One batch can contain events from different publishers.
+Each `EventProcessor.process` span links to its own publisher.
+This describes the trace topology only and makes no assumption about scheduling, threads, or processing location.
 
-== Single end-to-end trace
-
-To render one user action as a single trace across dispatch, distribution, handling, and event processing, enable same-trace mode:
+Set `distributed-in-same-trace` to select a topology where eligible process spans use the publisher span as parent:
 
 [source,yaml]
 ----
@@ -142,49 +127,25 @@ axon:
       distributed-in-same-trace: true
 ----
 
-----
-http put /rooms/{roomId}/bookings                    [SERVER, Spring Boot instrumentation]
-+- CommandBus.dispatchCommand BookRoom               [PRODUCER]
-   +- CommandBusConnector.dispatch BookRoom          [PRODUCER]
-      +- CommandService/Dispatch                     [CLIENT, gRPC instrumentation]
-      +- CommandBusConnector.handle BookRoom         [CONSUMER]
-         +- CommandBus.handleCommand BookRoom        [CONSUMER]
-            +- Repository.loadOrCreate Room          [INTERNAL]
-            |  +- SnapshotStore.load Room            [INTERNAL]
-            +- Room.decide(BookRoom,EventAppender)   [INTERNAL]
-            |  +- EventSink.publish RoomBooked       [PRODUCER]
-            |     +- EventProcessor.process RoomBooked                    [CONSUMER]
-            |     |  +- RoomAvailabilityProjector.on(RoomBooked)          [INTERNAL]
-            |     |     +- QueryBus.emitUpdate                            [INTERNAL]
-            |     +- EventProcessor.process RoomBooked                    [CONSUMER]
-            |        +- WhenRoomBookedThenNotifyOwnerProcessor.on(RoomBooked) [INTERNAL]
-            |           +- CommandBus.dispatchCommand NotifyOwner         [PRODUCER]
-            |              +- ...
-            +- EventStorageEngine.appendTransaction  [INTERNAL]
-----
-
-Automation that dispatches follow-up commands from an event handler stays in the same tree, so cause and effect across the whole flow are visible at a glance.
-No batch span is opened in this mode.
-Events handled later than `distributed-in-same-trace-time-limit` (for example during a replay) still start their own linked trace, so the single-trace rendering never stretches over replays.
+The `distributed-in-same-trace-time-limit` determines eligibility.
+Events outside the time limit start a new trace linked to their publisher.
 
 == Subscription-query updates
 
-An update has a transport relationship and a subscription relationship.
-The transport relationship is a parent-child chain.
-The consumer also has a span link to the query that opened the subscription:
+An update has a transport parent-child relationship and a link to the subscription:
 
 ----
 QueryBus.emitUpdate
-+- QueryBusConnector.queryUpdate RoomView            [PRODUCER]
-   +- QueryBusConnector.queryUpdate RoomView         [CONSUMER]
++- QueryBusConnector.queryUpdate RoomView             [PRODUCER]
+   +- QueryBusConnector.queryUpdate RoomView          [CONSUMER]
       +- link: QueryBus.subscriptionQuery WatchRoom
 ----
 
-Initial subscription results are not update deliveries and do not create the update-consumer span.
+The subscription setup, initial response, and update transport spans carry `messaging.message.conversation_id`.
 
-== Exporting to Jaeger
+== Jaeger export
 
-Point Spring Boot's OTLP HTTP exporter at Jaeger:
+Point an OTLP HTTP exporter at Jaeger:
 
 [source,yaml]
 ----
@@ -194,11 +155,29 @@ management:
       endpoint: http://localhost:4318/v1/traces
 ----
 
-The `TracingJaegerIntegrationTest` in `integrationtests` is the executable reference.
-It starts Jaeger through Testcontainers, dispatches a command, and queries Jaeger's HTTP API to verify the exported span tree.
+`TracingJaegerIntegrationTest` starts Jaeger with Testcontainers, dispatches a command, and verifies the exported trace through Jaeger's HTTP API.
 
-== Disable tracing per environment
+== Environment and component controls
 
+[tabs]
+====
+Configuration API::
++
+--
+[source,java]
+----
+include::example$tracing/configuration/DeclarativeTracingConfiguration.java[tag=environment,indent=0]
+----
+
+[source,java]
+----
+include::example$tracing/configuration/DeclarativeTracingConfiguration.java[tag=component-settings,indent=0]
+----
+--
+
+Spring Boot::
++
+--
 [source,yaml]
 ----
 axon:
@@ -206,7 +185,7 @@ axon:
     enabled: false
 ----
 
-You can also disable individual concerns:
+Or disable selected components:
 
 [source,yaml]
 ----
@@ -217,6 +196,9 @@ axon:
     snapshot-store:
       enabled: false
     event-processor:
-      disable-batch-trace: true
-      distributed-in-same-trace: true
+      batch-trace-enabled: false
+    query-bus-connector:
+      enabled: false
 ----
+--
+====

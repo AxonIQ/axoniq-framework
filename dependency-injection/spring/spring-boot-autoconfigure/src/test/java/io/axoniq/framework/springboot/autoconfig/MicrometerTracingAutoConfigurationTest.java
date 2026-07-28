@@ -46,6 +46,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Mateusz Nowak
  */
+@SuppressWarnings("java:S2187")
 class MicrometerTracingAutoConfigurationTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()

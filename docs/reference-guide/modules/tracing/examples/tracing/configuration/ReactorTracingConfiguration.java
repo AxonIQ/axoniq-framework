@@ -17,14 +17,15 @@
  *  https://www.axoniq.io/pricing
  */
 
-/**
- * Micrometer Tracing binding for the tracing API, wired by {@code MicrometerTracingConfigurationEnhancer}. The
- * {@code propagator} sub-package holds the {@code Propagator} carrier over message metadata (cross-service
- * propagation); the {@code threadlocal} sub-package holds the in-process
- * thread-local trace-context-propagation bridge. The {@code ProcessingContextAccessor} here is the reactive counterpart
- * that exposes the active span from a {@code ProcessingContext} to Micrometer's context propagation.
- */
-@NullMarked
-package io.axoniq.framework.tracing.micrometer;
+package tracing.configuration;
 
-import org.jspecify.annotations.NullMarked;
+import reactor.core.publisher.Hooks;
+
+public final class ReactorTracingConfiguration {
+
+    // tag::automatic-context-propagation[]
+    public void enableAutomaticContextPropagation() {
+        Hooks.enableAutomaticContextPropagation();
+    }
+    // end::automatic-context-propagation[]
+}

@@ -41,10 +41,6 @@ import java.util.List;
  * an {@link InMemorySpanExporter} to assert on exported spans and a factory method producing the same
  * {@link MicrometerSpanFactory} the framework wires at runtime, so the tests exercise the binding that actually ships.
  * <p>
- * The exported span tree (names, kinds, attributes, nesting) is produced by the tracing decorators and is identical
- * regardless of the {@code SpanFactory} implementation; the Micrometer factory's parity with a direct OpenTelemetry
- * factory is asserted separately in the {@code axoniq-tracing-micrometer} module.
- * <p>
  * {@link #close()} shuts down the underlying {@link SdkTracerProvider}; call it from the test's {@code @AfterEach}.
  *
  * @author Mateusz Nowak

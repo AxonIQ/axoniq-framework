@@ -963,28 +963,16 @@ The following files in `axon-5/` describe the API changes:
 ### modules/monitoring/pages/tracing.adoc
 **Status:** ✅ COMPLETED
 **Changes applied:**
-- Published the Axon Framework 5 guide under `modules/tracing/pages/` and documented OSS component ownership.
-- Documented the Micrometer Tracing binding with the OpenTelemetry bridge and OTLP export.
-- Updated Spring Boot and plain Java configuration examples to use `Tracer` and `Propagator` components.
-- Documented structured span lifetimes through `ProcessingContext` branches and lexical provider scope.
-- Added distributed connector and linked subscription-query update examples.
-- Documented component, attribute-provider, and worker-thread context-propagation toggles.
-- Documented event publication under the Axon Framework 5 `EventSink.publish` operation and removed the obsolete event-bus commit span.
-- Documented `EventStorageEngine.appendTransaction` as the full storage-transaction span and its independent `event-store.enabled` toggle.
-- Documented streaming consumer spans as children of their batch span with links to their publisher trace.
-- Added the streaming consumer trace topology matrix (batch parent + publisher link, linked roots, same-trace mode) including the `distributed-in-same-trace-time-limit` replay/late-handling guard.
-- Added the distributed connector span table (`CommandBusConnector.*`, `QueryBusConnector.*` including the linked `queryUpdate` producer/consumer pair).
-- Added a streaming event-processing trace-shape example (publication trace plus linked batch trace) to the examples page.
-- Normalized the tracing pages to plain ASCII (removed em-dashes and box-drawing characters).
-- Published an OSS-facing tracing overview at `modules/monitoring/pages/tracing.adoc` in the Axon Framework repository, shown only in the open-source build (`ifndef::advanced-framework`); it documents the built-in SPI, decorators, span shapes, properties, and `LoggingSpanFactory`, and points to the Axoniq Framework Micrometer binding for span export.
-- Added a Jaeger screenshot of a real end-to-end command trace (`images/jaeger-command-trace.png`) and removed the unreferenced AF4-era `tracing.png`.
-- Documented the Spring Boot observability integration (management.tracing properties, HTTP-instrumentation trace continuation, default log correlation) and concrete multi-exporter fan-out with a `MultiSpanFactory` supersession note.
-- Added a single end-to-end same-trace example tree and a log-correlation section.
-- Reworked the pages to the framework-user perspective: the custom-decorator and custom-SpanFactory guidance is condensed into a brief "Extending tracing" mention.
-- Added a user-centric "Context propagation" section making clear the Axoniq Framework binding nests instrumented gRPC/JDBC/WebClient and MDC logging under the correct Axon span and supports Reactor context propagation via the ProcessingContext accessor.
-- Documented how to enable Reactor automatic context propagation with Spring Boot and in plain Java applications.
-- Added the Axon Framework 4 to 5 Distributed Tracing migration path (`migration/pages/paths/distributed-tracing.adoc` in the Axon Framework repository) covering dependencies, MultiSpanFactory removal, span-name and attribute-key mappings, property mappings, and topology changes; linked from the tracing index and the OSS monitoring tracing page.
-- Documented `messaging.message.conversation_id` across subscription-query setup, initial response, and distributed update spans, including how users search one subscription without conflating it with causal `correlationId` metadata.
+- Published a declarative-first tracing guide with Spring Boot alternatives in matching tabs.
+- Documented the Micrometer OpenTelemetry bridge, OTLP export, Reactor context propagation, and current tracer context.
+- Documented the supported tracing settings records and the shared `axon.tracing.*` property namespace.
+- Audited component settings, processor attribute keys, and command, query, event, storage, and connector span names against source.
+- Documented streaming settings strictly as trace-topology choices.
+- Added declarative and Spring examples for setup, multiple exporters, custom factories, custom attribute providers, custom keys, and selective disablement.
+- Moved every Java snippet to tagged files under the tracing module's `examples` directory.
+- Registered the tracing examples as integration-test sources so Maven compiles them.
+- Documented distributed subscription-query update parenting, linking, and `messaging.message.conversation_id`.
+- Included the Jaeger capture and executable Jaeger integration-test reference.
 
 ---
 

@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.tracing.micrometer.metadata;
+package io.axoniq.framework.tracing.micrometer.propagator;
 
 import io.axoniq.framework.tracing.micrometer.MicrometerSpanFactory;
 import io.micrometer.tracing.propagation.Propagator;

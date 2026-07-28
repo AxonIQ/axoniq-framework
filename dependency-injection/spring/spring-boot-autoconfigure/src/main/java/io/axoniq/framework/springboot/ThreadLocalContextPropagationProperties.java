@@ -46,10 +46,20 @@ public class ThreadLocalContextPropagationProperties {
      */
     private boolean enabled = true;
 
+    /**
+     * Whether the Micrometer thread-local context-propagation bridge is enabled.
+     *
+     * @return {@code true} when the bridge is enabled
+     */
     public boolean isEnabled() {
         return enabled;
     }
 
+    /**
+     * Whether to enable the Micrometer thread-local context-propagation bridge.
+     *
+     * @param enabled whether the bridge is enabled
+     */
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
     }

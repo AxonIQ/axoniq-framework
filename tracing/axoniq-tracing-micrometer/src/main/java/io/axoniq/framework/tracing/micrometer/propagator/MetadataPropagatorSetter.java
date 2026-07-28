@@ -17,9 +17,8 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.tracing.micrometer.metadata;
+package io.axoniq.framework.tracing.micrometer.propagator;
 
-import io.axoniq.framework.tracing.micrometer.MicrometerSpan;
 import io.micrometer.tracing.propagation.Propagator;
 import org.axonframework.common.annotation.Internal;
 import org.jspecify.annotations.Nullable;
@@ -30,11 +29,12 @@ import java.util.Map;
  * {@link Propagator.Setter} implementation that writes the active trace context into a mutable {@link Map}.
  * <p>
  * Since an {@link org.axonframework.messaging.core.Message} is immutable, this setter cannot mutate the message
- * directly. Instead it writes the propagation entries into a temporary {@code Map}, which {@link MicrometerSpan}
- * then merges onto the message via {@link org.axonframework.messaging.core.Message#andMetadata(Map)}.
+ * directly. Instead it writes the propagation entries into a temporary {@code Map}, which the binding's span
+ * implementation then merges onto the message via
+ * {@link org.axonframework.messaging.core.Message#andMetadata(Map)}.
  * <p>
  * This type is {@link Internal} because it is an implementation detail of the Micrometer Tracing binding; it is
- * exposed only so {@link MicrometerSpan} and tests can reference the shared {@link #INSTANCE}.
+ * exposed only so the binding and tests can reference the shared {@link #INSTANCE}.
  *
  * @author Mateusz Nowak
  * @since 5.3.0
@@ -43,7 +43,7 @@ import java.util.Map;
 public final class MetadataPropagatorSetter implements Propagator.Setter<Map<String, String>> {
 
     /**
-     * Shared singleton instance, used by {@link MicrometerSpan}.
+     * Shared singleton instance used by the Micrometer binding.
      */
     public static final MetadataPropagatorSetter INSTANCE = new MetadataPropagatorSetter();
 

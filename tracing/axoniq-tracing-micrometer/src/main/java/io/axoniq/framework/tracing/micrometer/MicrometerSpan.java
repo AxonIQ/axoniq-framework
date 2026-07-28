@@ -19,10 +19,9 @@
 
 package io.axoniq.framework.tracing.micrometer;
 
-import io.axoniq.framework.tracing.micrometer.metadata.MetadataPropagatorSetter;
+import io.axoniq.framework.tracing.micrometer.propagator.MetadataPropagatorSetter;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.propagation.Propagator;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.tracing.Span;
 import org.axonframework.messaging.tracing.SpanScope;
@@ -46,7 +45,7 @@ import java.util.function.Supplier;
  * {@link Span#coverLifecycle(org.axonframework.messaging.core.unitofwork.ProcessingContext)} (writes the context's
  * root); a branch-scoped span is started via {@link #start()} and its scope carried inward on a branch via
  * {@link SpanScope#addToContext}. {@link MicrometerSpanFactory} resolves the parent for a new span by reading that
- * same key back off whichever context it is given -- see {@link MicrometerSpanFactory#rawSpanFrom}.
+ * same key back off whichever context it is given.
  * <p>
  * The returned scope's {@link SpanScope#within(Supplier)} makes this span
  * {@link Tracer#withSpan(io.micrometer.tracing.Span) ThreadLocal-current} for the duration of the synchronous segment
@@ -61,8 +60,7 @@ import java.util.function.Supplier;
  * @author Mateusz Nowak
  * @since 5.3.0
  */
-@Internal
-public final class MicrometerSpan implements Span, RawSpanCarrier {
+final class MicrometerSpan implements Span, RawSpanCarrier {
 
     private static final Logger logger = LoggerFactory.getLogger(MicrometerSpan.class);
 
@@ -105,13 +103,11 @@ public final class MicrometerSpan implements Span, RawSpanCarrier {
 
     /**
      * Returns the underlying, already-started Micrometer span, for parent resolution by
-     * {@link MicrometerSpanFactory#rawSpanFrom}. Internal: not part of the {@link Span} contract. Only ever called
-     * through a {@link SpanScope} read back off a context, which by construction only exists once this span has been
-     * {@link #start() started} -- so {@code span} is guaranteed non-{@code null} here.
+     * internal parent resolution. This is not part of the {@link Span} contract. It is only called through a
+     * {@link SpanScope} read from a context, which exists only after this span has been {@link #start() started}.
      *
      * @return the underlying, started Micrometer span
      */
-    @Internal
     @Override
     public io.micrometer.tracing.Span rawSpan() {
         return Objects.requireNonNull(span, "rawSpan() may only be called after the span has been started.");

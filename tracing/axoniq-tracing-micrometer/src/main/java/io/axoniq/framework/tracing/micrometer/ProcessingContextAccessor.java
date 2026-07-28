@@ -22,7 +22,6 @@ package io.axoniq.framework.tracing.micrometer;
 import io.micrometer.context.ContextAccessor;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.contextpropagation.ObservationAwareSpanThreadLocalAccessor;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.tracing.SpanScope;
 import org.jspecify.annotations.Nullable;
@@ -33,12 +32,10 @@ import java.util.function.Predicate;
 /**
  * {@link ContextAccessor} that lets Micrometer's context-propagation machinery read the active trace context from an
  * Axon {@link ProcessingContext}. It bridges the binding's active span, carried under the single, framework-generic
- * {@link SpanScope#RESOURCE_KEY} (resolved via {@link MicrometerSpanFactory#rawSpanFrom}), to the span thread-local
- * key ({@link ObservationAwareSpanThreadLocalAccessor#KEY}), so that
+ * {@link SpanScope#RESOURCE_KEY}, to the span thread-local key
+ * ({@link ObservationAwareSpanThreadLocalAccessor#KEY}), so that
  * {@code ContextSnapshot.captureAll(processingContext)} captures the active span for restoration elsewhere via
- * {@code setThreadLocals()} -- the same read this binding's {@code UnitOfWork}-level bridge performs directly per
- * action (via {@link MicrometerSpanFactory#rawSpanFrom}), exposed here for Micrometer's generic
- * {@code ContextAccessor} SPI instead.
+ * {@code setThreadLocals()}.
  * <p>
  * <b>Read-only.</b> {@link #writeValues} is a required part of the {@link ContextAccessor} contract but is a no-op:
  * no code path restores a captured span back <em>into</em> a {@link ProcessingContext} (the {@code ProcessingContext}
@@ -51,8 +48,7 @@ import java.util.function.Predicate;
  * @author Mateusz Nowak
  * @since 5.3.0
  */
-@Internal
-public final class ProcessingContextAccessor implements ContextAccessor<ProcessingContext, ProcessingContext> {
+final class ProcessingContextAccessor implements ContextAccessor<ProcessingContext, ProcessingContext> {
 
     /**
      * The single key this accessor bridges: the Micrometer span thread-local key, so a captured value restores the

@@ -23,9 +23,8 @@
  * active Axon span is thread-local-current inside handler execution and instrumented JDBC/gRPC/WebClient calls and MDC
  * logging nest under it.
  * <p>
- * This is distinct from cross-service propagation (carried by the {@code Propagator} over message metadata, part of
- * core tracing); the bridge here is independently toggleable via
- * {@code axon.tracing.thread-local-context-propagation.enabled}.
+ * This is distinct from cross-service propagation, which is carried by the {@code Propagator} over message metadata.
+ * The bridge can be disabled independently through its configuration enhancer.
  */
 @NullMarked
 package io.axoniq.framework.tracing.micrometer.threadlocal;

@@ -54,16 +54,19 @@ import java.util.concurrent.CompletableFuture;
 public final class TracingQueryBusConnector implements QueryBusConnector {
 
     /** Prefix for the connector query send-leg span ({@code "QueryBusConnector.query <name>"}). */
-    public static final String QUERY_SPAN = "QueryBusConnector.query";
+    private static final String QUERY_SPAN = "QueryBusConnector.query";
 
-    /** Prefix for the connector subscription-query send-leg span ({@code "QueryBusConnector.subscriptionQuery <name>"}). */
-    public static final String SUBSCRIPTION_QUERY_SPAN = "QueryBusConnector.subscriptionQuery";
+    /**
+     * Prefix for the connector subscription-query send-leg span
+     * ({@code "QueryBusConnector.subscriptionQuery <name>"}).
+     */
+    private static final String SUBSCRIPTION_QUERY_SPAN = "QueryBusConnector.subscriptionQuery";
 
     /** Prefix for the connector receive-leg span ({@code "QueryBusConnector.handle <name>"}). */
-    public static final String HANDLE_SPAN = "QueryBusConnector.handle";
+    private static final String HANDLE_SPAN = "QueryBusConnector.handle";
 
     /** Prefix for connector subscription-query update spans ({@code "QueryBusConnector.queryUpdate <name>"}). */
-    public static final String QUERY_UPDATE_SPAN = "QueryBusConnector.queryUpdate";
+    private static final String QUERY_UPDATE_SPAN = "QueryBusConnector.queryUpdate";
 
     private static final String MESSAGE_CONVERSATION_ID_ATTRIBUTE = "messaging.message.conversation_id";
 
@@ -108,12 +111,8 @@ public final class TracingQueryBusConnector implements QueryBusConnector {
                                   .onNext(entry -> {
                                       if (entry.message() instanceof SubscriptionQueryUpdateMessage update) {
                                           // Child of the emitter trace, with a link to the originating subscription.
-                                          // The near-zero delivery window matches the AF4 fluxSink.next marker.
-                                          // One marker per consumed entry: the subscription stream is consumed exactly
-                                          // once downstream; subscribing to it again would re-fire onNext and
-                                          // duplicate markers. The captured 'scoped' branch intentionally outlives its
-                                          // (long-completed) context -- it is read only as the parent fallback for
-                                          // updates carrying no propagated trace metadata.
+                                          // One marker is created per consumed entry. The captured branch is read only
+                                          // as the parent fallback for updates without propagated trace metadata.
                                           spanFactory.createLinkedHandlerSpan(
                                                              QUERY_UPDATE_SPAN + " "
                                                                      + update.type().qualifiedName().name(),

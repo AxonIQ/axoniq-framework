@@ -19,19 +19,17 @@
 
 package io.axoniq.framework.messaging.distributed.tracing;
 
-import org.axonframework.common.annotation.Internal;
-
 /**
- * Per-component on/off toggles for distributed-connector tracing, read by
- * {@code DistributedTracingConfigurationEnhancer} to decide which connectors to decorate. Registered as a framework
- * component by the Spring autoconfiguration. When absent, every component defaults to enabled.
+ * Settings controlling tracing for distributed messaging connectors.
+ * <p>
+ * Register these settings as a configuration component to enable or disable tracing for individual connector types.
+ * When no settings are registered, tracing is enabled for every distributed connector.
  *
  * @param commandBusConnectorEnabled whether the {@code CommandBusConnector} is decorated with tracing
  * @param queryBusConnectorEnabled   whether the {@code QueryBusConnector} is decorated with tracing
  * @author Mateusz Nowak
  * @since 5.3.0
  */
-@Internal
 public record DistributedTracingSettings(boolean commandBusConnectorEnabled,
                                          boolean queryBusConnectorEnabled) {
 
@@ -42,5 +40,25 @@ public record DistributedTracingSettings(boolean commandBusConnectorEnabled,
      */
     public static DistributedTracingSettings enabledByDefault() {
         return new DistributedTracingSettings(true, true);
+    }
+
+    /**
+     * Returns settings with command bus connector tracing set to {@code enabled}.
+     *
+     * @param enabled whether command bus connector tracing is enabled
+     * @return settings with the updated command bus connector tracing value
+     */
+    public DistributedTracingSettings withCommandBusConnectorEnabled(boolean enabled) {
+        return new DistributedTracingSettings(enabled, queryBusConnectorEnabled);
+    }
+
+    /**
+     * Returns settings with query bus connector tracing set to {@code enabled}.
+     *
+     * @param enabled whether query bus connector tracing is enabled
+     * @return settings with the updated query bus connector tracing value
+     */
+    public DistributedTracingSettings withQueryBusConnectorEnabled(boolean enabled) {
+        return new DistributedTracingSettings(commandBusConnectorEnabled, enabled);
     }
 }

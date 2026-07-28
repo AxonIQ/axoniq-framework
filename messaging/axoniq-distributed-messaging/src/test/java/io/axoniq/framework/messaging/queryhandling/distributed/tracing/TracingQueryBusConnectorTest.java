@@ -50,6 +50,7 @@ class TracingQueryBusConnectorTest {
     private static final String QUERY_SPAN = "QueryBusConnector.query MyQuery";
     private static final String SUBSCRIPTION_QUERY_SPAN = "QueryBusConnector.subscriptionQuery MyQuery";
     private static final String HANDLE_SPAN = "QueryBusConnector.handle MyQuery";
+    private static final String QUERY_UPDATE_SPAN_PREFIX = "QueryBusConnector.queryUpdate";
     private static final String QUERY_UPDATE_SPAN = "QueryBusConnector.queryUpdate MyUpdate";
     private static final String EMITTER_SPAN = "Emitter";
     private static final String MESSAGE_CONVERSATION_ID_ATTRIBUTE = "messaging.message.conversation_id";
@@ -125,7 +126,7 @@ class TracingQueryBusConnectorTest {
 
             // then the initial result opens no update span under ANY name -- the prefix check catches a broken
             // update-type guard, which would open a span suffixed with the initial result's own type instead
-            spanFactory.verifyNoSpanWithNamePrefix(TracingQueryBusConnector.QUERY_UPDATE_SPAN);
+            spanFactory.verifyNoSpanWithNamePrefix(QUERY_UPDATE_SPAN_PREFIX);
 
             // when the update is delivered
             assertThat(result.next()).get().extracting(MessageStream.Entry::message).isSameAs(update);
@@ -332,6 +333,7 @@ class TracingQueryBusConnectorTest {
 
         @Override
         public void describeTo(ComponentDescriptor descriptor) {
+            // No component details are needed for this recording test stub.
         }
     }
 }

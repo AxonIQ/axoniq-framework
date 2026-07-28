@@ -19,13 +19,12 @@
 
 package io.axoniq.framework.tracing.micrometer;
 
-import io.axoniq.framework.tracing.micrometer.metadata.MetadataPropagatorGetter;
+import io.axoniq.framework.tracing.micrometer.propagator.MetadataPropagatorGetter;
 import io.micrometer.tracing.Link;
 import io.micrometer.tracing.Span.Kind;
 import io.micrometer.tracing.TraceContext;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.propagation.Propagator;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.tracing.Span;
@@ -38,20 +37,17 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * {@link SpanFactory} implementation backed by Micrometer Tracing. Micrometer Tracing is the tracing facade that
- * Spring Boot itself uses; this factory implements the tracing part by producing {@link MicrometerSpan} instances that
- * delegate to Micrometer's {@link io.micrometer.tracing.Span}, obtained from an application-configured {@link Tracer}
- * and {@link Propagator} (which are, in turn, bridged onto OpenTelemetry or Brave by the host application).
+ * {@link SpanFactory} implementation backed by Micrometer Tracing. It produces spans that delegate to Micrometer's
+ * {@link io.micrometer.tracing.Span}, obtained from an application-configured {@link Tracer} and {@link Propagator}.
  * <p>
  * <b>No {@code ThreadLocal} writes.</b> A span's parent is resolved from (1) the {@link SpanScope} carried on the
  * supplied {@link ProcessingContext} under the single, framework-generic {@link SpanScope#RESOURCE_KEY} (in-process
- * nesting -- see {@link #rawSpanFrom}), unwrapped to the Micrometer {@link TraceContext} via
+ * nesting), unwrapped to the Micrometer {@link TraceContext} via
  * {@link io.micrometer.tracing.Span#context()}, and (2) the trace context propagated in an inbound {@link Message}'s
- * metadata (handler spans, via the app {@link Propagator}). As the lowest-precedence, read-only fallback the ambient
- * {@code tracer.currentTraceContext().context()} is consulted, so spans created on externally-instrumented threads
- * (for example a Spring Boot server span) join the ambient trace instead of starting a disconnected root. Context is
- * propagated onto outbound messages by {@link Span#propagateContext(Message)} (the span injects its own context). This
- * class never writes a {@code ThreadLocal}.
+ * metadata (handler spans, via the application {@link Propagator}). As the lowest-priority, read-only fallback, the
+ * current tracer context is consulted. The current tracer context is the context installed by external
+ * instrumentation and exposed through {@code tracer.currentTraceContext().context()}. Context is propagated onto
+ * outbound messages by {@link Span#propagateContext(Message)}. This class never writes a {@code ThreadLocal}.
  * <p>
  * There is no no-argument constructor: Micrometer has no {@code GlobalOpenTelemetry} equivalent. The host application
  * supplies the {@link Tracer} and {@link Propagator} (tests use {@code Tracer.NOOP} / {@code Propagator.NOOP} or a
@@ -80,8 +76,7 @@ public final class MicrometerSpanFactory implements SpanFactory {
      * @param context the processing context to resolve the active raw span from, or {@code null}
      * @return the active raw Micrometer span, or {@code null} when none is present or it is not this binding's
      */
-    @Internal
-    public static io.micrometer.tracing.@Nullable Span rawSpanFrom(@Nullable ProcessingContext context) {
+    static io.micrometer.tracing.@Nullable Span rawSpanFrom(@Nullable ProcessingContext context) {
         if (context == null) {
             return null;
         }
@@ -130,10 +125,7 @@ public final class MicrometerSpanFactory implements SpanFactory {
 
     @Override
     public Span createDispatchSpan(String operationName, Message message, @Nullable ProcessingContext context) {
-        // Parent resolution for a dispatch: active span on the context (typical in-process chain), else any
-        // already-propagated context on the message's metadata (an upstream dispatcher injected it), else the
-        // read-only ambient context, else a root. Matches the AF4 chain-naturally semantics and prevents nested
-        // dispatch decorators (bus + connector) from accidentally starting unrelated traces.
+        // Prefer the processing context, then propagated message metadata, and finally the current tracer context.
         io.micrometer.tracing.Span.Builder builder;
         TraceContext resourceParent = resourceContext(context);
         if (resourceParent != null) {
@@ -141,7 +133,7 @@ public final class MicrometerSpanFactory implements SpanFactory {
         } else if (hasTraceMetadata(message)) {
             builder = propagator.extract(message.metadata(), MetadataPropagatorGetter.INSTANCE);
         } else {
-            builder = parentedTo(ambientContext());
+            builder = parentedTo(currentTracerContext());
         }
         return span(builder, operationName, Kind.PRODUCER, message, context);
     }
@@ -154,7 +146,7 @@ public final class MicrometerSpanFactory implements SpanFactory {
     @Override
     public Span createContextParentHandlerSpan(String operationName, Message message,
                                                @Nullable ProcessingContext context) {
-        io.micrometer.tracing.Span.Builder builder = parentedTo(activeOrAmbient(context));
+        io.micrometer.tracing.Span.Builder builder = parentedTo(processingOrCurrentContext(context));
         addMessageLink(builder, message);
         return span(builder, operationName, Kind.CONSUMER, message, context);
     }
@@ -169,23 +161,21 @@ public final class MicrometerSpanFactory implements SpanFactory {
 
     @Override
     public Span createInternalSpan(String operationName, @Nullable ProcessingContext context) {
-        // No span kind -> renders as an INTERNAL span; parent from the context resource, else ambient, else root.
-        return span(parentedTo(activeOrAmbient(context)), operationName, null, null, context);
+        // No span kind renders as an INTERNAL span.
+        return span(parentedTo(processingOrCurrentContext(context)), operationName, null, null, context);
     }
 
     @Override
     public Span createRootSpan(String operationName, @Nullable ProcessingContext context) {
         io.micrometer.tracing.Span.Builder builder = tracer.spanBuilder().setNoParent();
-        addActiveOrAmbientLink(builder, context);
+        addProcessingOrCurrentContextLink(builder, context);
         return span(builder, operationName, null, null, context);
     }
 
     @Override
     public Span createDisconnectedHandlerSpan(String operationName, Message message,
                                               @Nullable ProcessingContext context) {
-        // A new root trace linked back to the publisher's context extracted from the message metadata. AF4 parity:
-        // createHandlerSpan(..., isChildTrace=false). Kind stays CONSUMER so the APM UI still renders an inbound
-        // handler operation.
+        // A new root trace linked back to the publisher's context extracted from the message metadata.
         io.micrometer.tracing.Span.Builder builder = tracer.spanBuilder().setNoParent();
         addMessageLink(builder, message);
         return span(builder, operationName, Kind.CONSUMER, message, context);
@@ -194,19 +184,19 @@ public final class MicrometerSpanFactory implements SpanFactory {
     /**
      * Resolves the parent builder for a handler span: the context propagated in the message's metadata when present
      * (via the app {@link Propagator}, yielding a pre-parented builder), else a fresh builder parented to the active
-     * context on {@code context}, else the ambient context, else a root.
+     * context on {@code context}, else the current tracer context, else a root.
      */
     private io.micrometer.tracing.Span.Builder handlerBuilder(Message message, @Nullable ProcessingContext context) {
         if (hasTraceMetadata(message)) {
             return propagator.extract(message.metadata(), MetadataPropagatorGetter.INSTANCE);
         }
-        return parentedTo(activeOrAmbient(context));
+        return parentedTo(processingOrCurrentContext(context));
     }
 
     /**
      * Builds a fresh span builder parented to the given {@code parent}, or an explicit no-parent root when
      * {@code parent} is {@code null}. Setting the parent explicitly is required: the Micrometer OpenTelemetry bridge
-     * otherwise defaults an un-parented builder to the ambient {@code Context.current()}.
+     * otherwise defaults an un-parented builder to its implicit current context.
      */
     private io.micrometer.tracing.Span.Builder parentedTo(@Nullable TraceContext parent) {
         io.micrometer.tracing.Span.Builder builder = tracer.spanBuilder();
@@ -214,12 +204,11 @@ public final class MicrometerSpanFactory implements SpanFactory {
     }
 
     /**
-     * Resolves the in-process parent: the active span's context on {@code context}, else the read-only ambient
-     * context.
+     * Resolves the in-process parent: the active span's context on {@code context}, else the current tracer context.
      */
-    private @Nullable TraceContext activeOrAmbient(@Nullable ProcessingContext context) {
+    private @Nullable TraceContext processingOrCurrentContext(@Nullable ProcessingContext context) {
         TraceContext resourceParent = resourceContext(context);
-        return resourceParent != null ? resourceParent : ambientContext();
+        return resourceParent != null ? resourceParent : currentTracerContext();
     }
 
     /**
@@ -232,11 +221,10 @@ public final class MicrometerSpanFactory implements SpanFactory {
     }
 
     /**
-     * Returns the read-only ambient {@code tracer.currentTraceContext().context()} (never mutated by this factory), or
-     * {@code null} when there is no ambient trace context. This lets spans created on externally-instrumented threads
-     * join the ambient trace.
+     * Returns the read-only current tracer context, or {@code null} when external instrumentation has not installed
+     * one. This is the lowest-priority parent source.
      */
-    private @Nullable TraceContext ambientContext() {
+    private @Nullable TraceContext currentTracerContext() {
         return tracer.currentTraceContext().context();
     }
 
@@ -250,11 +238,12 @@ public final class MicrometerSpanFactory implements SpanFactory {
     }
 
     /**
-     * Attaches the active/ambient context (if any) to {@code builder} as a span <em>link</em> — never as its parent —
-     * so a root span stays navigable back to the operation that triggered it.
+     * Attaches the processing or current tracer context to {@code builder} as a span <em>link</em>, never as its
+     * parent, so a root span stays navigable back to the operation that triggered it.
      */
-    private void addActiveOrAmbientLink(io.micrometer.tracing.Span.Builder builder, @Nullable ProcessingContext context) {
-        TraceContext linked = activeOrAmbient(context);
+    private void addProcessingOrCurrentContextLink(io.micrometer.tracing.Span.Builder builder,
+                                                   @Nullable ProcessingContext context) {
+        TraceContext linked = processingOrCurrentContext(context);
         if (linked != null) {
             builder.addLink(new Link(linked));
         }

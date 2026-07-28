@@ -23,6 +23,6 @@
  * message's metadata, so a trace continues across message and service boundaries.
  */
 @NullMarked
-package io.axoniq.framework.tracing.micrometer.metadata;
+package io.axoniq.framework.tracing.micrometer.propagator;
 
 import org.jspecify.annotations.NullMarked;

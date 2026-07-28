@@ -20,17 +20,16 @@
 package io.axoniq.framework.messaging.distributed.tracing;
 
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
-import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
-import org.axonframework.messaging.tracing.SpanFactory;
-import org.axonframework.messaging.tracing.configuration.TracingConfigurationOrder;
 import io.axoniq.framework.messaging.commandhandling.distributed.tracing.TracingCommandBusConnector;
+import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import io.axoniq.framework.messaging.queryhandling.distributed.tracing.TracingQueryBusConnector;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
-import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.messaging.tracing.SpanFactory;
+import org.axonframework.messaging.tracing.configuration.TracingConfigurationOrder;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -87,22 +86,10 @@ public final class DistributedTracingConfigurationEnhancer implements Configurat
     }
 
     /**
-     * Resolves the configured {@link SpanFactory}, or {@code null} when none is configured (tracing disabled). The
-     * {@code SpanFactory} is an optional bean; when absent {@link Configuration#getComponent(Class)} throws
-     * {@link ComponentNotFoundException}, translated to {@code null} so the connector is left undecorated.
+     * Resolves the configured {@link SpanFactory}, or {@code null} when none is configured.
      */
     private static @Nullable SpanFactory spanFactory(Configuration config) {
-        try {
-            return config.getComponent(SpanFactory.class);
-        } catch (ComponentNotFoundException e) {
-            return null;
-        } catch (RuntimeException e) {
-            // A Spring-backed Configuration signals absence with its own exception type (NoSuchBeanDefinitionException
-            // from SpringComponentRegistry's getComponent(Class)) instead of ComponentNotFoundException. Distinguish
-            // absence from a genuine construction failure via the optional lookup: absent -> undecorated; a factory
-            // that fails to construct rethrows from the optional lookup and still surfaces.
-            return config.getOptionalComponent(SpanFactory.class).orElse(null);
-        }
+        return config.getOptionalComponent(SpanFactory.class).orElse(null);
     }
 
     /**

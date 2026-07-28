@@ -59,15 +59,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@link MessagingConfigurer} (Axon Server connector disabled to keep it local). Only the backend components — a
  * {@link Tracer} and {@link Propagator} over Micrometer Tracing's OpenTelemetry bridge — are registered; the
  * ServiceLoader-discovered {@link MicrometerTracingConfigurationEnhancer} then builds the {@link MicrometerSpanFactory}
- * and installs the thread-local bridge. Spans are captured with an in-memory OTel exporter. It proves two things:
- * <ol>
- *     <li><b>Span-tree parity</b>: a command and a query each produce the same nested span tree the OpenTelemetry
- *     binding produces ({@code *.dispatch/query} → {@code *.handle} → handler-method span), one trace each.</li>
- *     <li><b>Deep context propagation</b>: the thread-local context-propagation bridge (auto-installed as a
- *     {@code UnitOfWorkFactory} decorator via ServiceLoader) makes the Axon span thread-local-current <em>inside the
- *     handler</em>, so {@code tracer.currentSpan()} observed from the handler body is non-null and on the command's
- *     trace — this is what lets instrumented JDBC/gRPC/WebClient calls and MDC logging nest correctly.</li>
- * </ol>
+ * and installs the thread-local bridge. Spans are captured with an in-memory OpenTelemetry exporter. The test covers
+ * command and query results, their span trees, current tracer context inside a handler, and bridge installation.
  */
 class MicrometerTracingEndToEndIntegrationTest {
 
@@ -109,7 +102,7 @@ class MicrometerTracingEndToEndIntegrationTest {
     }
 
     @Test
-    void aCommandAndAQueryEachProduceTheExpectedNestedSpanTreeAndDoNotShareATrace() {
+    void commandAndQueryFlowProducesResultsSpanTreesAndCurrentHandlerContext() {
         // given an end-to-end configuration with both command and query handling wired up
         configuration = startApplication();
         CommandGateway commandGateway = configuration.getComponent(CommandGateway.class);
@@ -150,35 +143,14 @@ class MicrometerTracingEndToEndIntegrationTest {
 
         // Independent dispatches produce independent traces.
         assertThat(commandDispatch.getTraceId()).isNotEqualTo(queryDispatch.getTraceId());
-    }
 
-    @Test
-    void theAxonSpanIsThreadLocalCurrentInsideTheHandlerViaTheContextPropagationBridge() {
-        // given
-        configuration = startApplication();
-        CommandGateway commandGateway = configuration.getComponent(CommandGateway.class);
-
-        // when a command is handled (the handler records tracer.currentSpan() observed from its own body)
-        commandGateway.send(new BookRoom("room-7"))
-                      .resultAs(String.class)
-                      .orTimeout(30, TimeUnit.SECONDS)
-                      .join();
-
-        // then a span was current inside the handler and it belongs to the command's trace — the bridge propagated it
-        SpanData commandDispatch = spanStartingWith("CommandBus.dispatch");
+        // The command span is current inside the handler.
         assertThat(CURRENT_TRACE_ID_IN_HANDLER.get())
                 .as("tracer.currentSpan() inside the handler")
                 .isNotNull()
                 .isEqualTo(commandDispatch.getTraceId());
-    }
 
-    @Test
-    void threadLocalContextPropagationBridgeIsInstalledByDefault() {
-        // given / when
-        configuration = startApplication();
-
-        // then the ServiceLoader thread-local enhancer ran (registering its ContextSnapshotFactory) and decorated the
-        // UnitOfWorkFactory
+        // The ServiceLoader-discovered bridge is installed.
         assertThat(configuration.getOptionalComponent(ContextSnapshotFactory.class)).isPresent();
     }
 

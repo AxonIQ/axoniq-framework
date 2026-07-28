@@ -19,16 +19,14 @@
 
 package io.axoniq.framework.tracing.micrometer.threadlocal;
 
-import io.axoniq.framework.tracing.micrometer.MicrometerSpanFactory;
 import io.micrometer.context.ContextSnapshot;
 import io.micrometer.context.ContextSnapshotFactory;
-import io.micrometer.tracing.Span;
-import io.micrometer.tracing.Tracer;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingLifecycleInterceptor;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkConfiguration;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.tracing.SpanScope;
 
 import java.util.Objects;
 import java.util.function.Function;
@@ -44,14 +42,11 @@ import java.util.function.Function;
  * thread that runs each phase action and, for the duration of that action:
  * <ol>
  *     <li>restores the captured thread-locals ({@link ContextSnapshot#setThreadLocals()}), and</li>
- *     <li>makes the action's own Axon span (read live via {@link MicrometerSpanFactory#rawSpanFrom} off the
- *     {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}) the current Micrometer span via
- *     {@link Tracer#withSpan(Span)}, layered <em>inside</em> the restored snapshot so the Axon span wins for tracing
- *     while caller MDC/security accessors stay restored.</li>
+ *     <li>runs the action through the {@link SpanScope} carried by its
+ *     {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}, when present.</li>
  * </ol>
- * Both restorations are torn down deterministically and exception-safely through try-with-resources. This is the
- * imperative-edge {@code ThreadLocal} write sanctioned by the tracing constitution; the
- * {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} remains the source of truth for nesting.
+ * Both scopes are torn down deterministically and exception-safely. The span scope decides how to make its span
+ * current, keeping this decorator independent of a concrete tracing implementation.
  * <p>
  * The per-action span read always reflects whatever is active on the <em>root</em> {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}
  * -- this bridge fires once per phase action for the whole unit of work, so it can never see a per-event handler span
@@ -68,20 +63,17 @@ import java.util.function.Function;
 final class ThreadLocalContextPropagatingUnitOfWorkFactory implements UnitOfWorkFactory {
 
     private final UnitOfWorkFactory delegate;
-    private final Tracer tracer;
     private final ContextSnapshotFactory snapshotFactory;
 
     /**
      * Initializes the decorator.
      *
      * @param delegate        the {@link UnitOfWorkFactory} to delegate creation to
-     * @param tracer          the tracer used to make the per-action Axon span current
      * @param snapshotFactory the factory capturing the dispatching thread's context snapshot
      */
-    ThreadLocalContextPropagatingUnitOfWorkFactory(UnitOfWorkFactory delegate, Tracer tracer,
+    ThreadLocalContextPropagatingUnitOfWorkFactory(UnitOfWorkFactory delegate,
                                                    ContextSnapshotFactory snapshotFactory) {
         this.delegate = Objects.requireNonNull(delegate, "delegate may not be null");
-        this.tracer = Objects.requireNonNull(tracer, "tracer may not be null");
         this.snapshotFactory = Objects.requireNonNull(snapshotFactory, "snapshotFactory may not be null");
     }
 
@@ -92,12 +84,9 @@ final class ThreadLocalContextPropagatingUnitOfWorkFactory implements UnitOfWork
         ContextSnapshot snapshot = snapshotFactory.captureAll();
 
         ProcessingLifecycleInterceptor restore = ProcessingLifecycleInterceptor.intercept((context, action) -> {
-            // LIVE per action: whatever is active on the root context for this phase (see class-level documentation).
-            Span current = MicrometerSpanFactory.rawSpanFrom(context);
-            try (ContextSnapshot.Scope threadLocals = snapshot.setThreadLocals();
-                 Tracer.SpanInScope spanScope = current != null ? tracer.withSpan(current) : () -> {
-                 }) {
-                return action.get();
+            SpanScope spanScope = SpanScope.fromContext(context);
+            try (ContextSnapshot.Scope ignored = snapshot.setThreadLocals()) {
+                return spanScope == null ? action.get() : spanScope.within(action);
             }
         });
 

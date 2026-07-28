@@ -58,9 +58,7 @@ import org.slf4j.LoggerFactory;
  * <p>
  * This governs only the <em>in-process, thread-local</em> bridge. Cross-service trace-context propagation (via the
  * {@code Propagator} over message metadata) is part of core tracing and is unaffected by disabling this enhancer. To
- * turn this bridge off, disable this enhancer: call {@link ComponentRegistry#disableEnhancer(Class)} with this class
- * (plain-Java setups), or set {@code axon.tracing.thread-local-context-propagation.enabled=false} in Spring Boot, whose
- * auto-configuration disables this enhancer for you.
+ * turn this bridge off, call {@link ComponentRegistry#disableEnhancer(Class)} with this class.
  * <p>
  * The {@link ContextSnapshotFactory} that captures the dispatching thread's thread-locals is registered as a component
  * via {@link ComponentRegistry#registerIfNotPresent} (built from the {@link ContextRegistry} component), so a
@@ -119,7 +117,6 @@ public final class MicrometerThreadLocalContextPropagationConfigurationEnhancer 
                     }
                     return new ThreadLocalContextPropagatingUnitOfWorkFactory(
                             delegate,
-                            config.getComponent(Tracer.class),
                             config.getComponent(ContextSnapshotFactory.class)
                     );
                 }
@@ -169,8 +166,8 @@ public final class MicrometerThreadLocalContextPropagationConfigurationEnhancer 
             throw new IllegalStateException(
                     "The Micrometer thread-local context-propagation bridge is enabled but the configured SpanFactory "
                             + "is a " + spanFactory.getClass().getName() + ", not a MicrometerSpanFactory. Configure the "
-                            + "Micrometer SpanFactory, or disable this bridge with "
-                            + "axon.tracing.thread-local-context-propagation.enabled=false.");
+                            + "Micrometer SpanFactory or disable "
+                            + "MicrometerThreadLocalContextPropagationConfigurationEnhancer.");
         }
         return true;
     }

@@ -59,8 +59,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.axonframework.common.FutureUtils.emptyCompletedFuture;
 
 /**
- * Tests {@link ThreadLocalContextPropagatingUnitOfWorkFactory}: caller thread-locals captured at creation are restored inside
- * phase actions that run on worker threads, the per-action Axon span (on the {@link
+ * Tests {@link ThreadLocalContextPropagatingUnitOfWorkFactory}: caller thread-locals captured at creation are restored
+ * inside phase actions that run on worker threads, the per-action Axon span (on the {@link
  * org.axonframework.messaging.core.unitofwork.ProcessingContext}) is made current, and thread-locals are torn down
  * cleanly after completion and on exception.
  */
@@ -98,7 +98,7 @@ class ThreadLocalContextPropagatingUnitOfWorkFactoryTest {
                                                                        .contextRegistry(contextRegistry)
                                                                        .build();
         UnitOfWorkFactory delegate = new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE);
-        testSubject = new ThreadLocalContextPropagatingUnitOfWorkFactory(delegate, tracer, snapshotFactory);
+        testSubject = new ThreadLocalContextPropagatingUnitOfWorkFactory(delegate, snapshotFactory);
     }
 
     @AfterEach
@@ -116,7 +116,7 @@ class ThreadLocalContextPropagatingUnitOfWorkFactoryTest {
             // given the caller thread carries a correlation value when the unit of work is created
             CORRELATION.set("req-1");
             UnitOfWork unitOfWork = testSubject.create("uow", config -> config.workScheduler(worker));
-            // clear it on the caller to prove the value seen inside comes from the captured snapshot, not ambient
+            // Clear it on the caller to prove the value seen inside comes from the captured snapshot.
             CORRELATION.remove();
 
             AtomicReference<String> seenValue = new AtomicReference<>();
@@ -183,8 +183,8 @@ class ThreadLocalContextPropagatingUnitOfWorkFactoryTest {
                 // context in the later INVOCATION phase action, which is a *different* phase action entirely.
                 Span segment = spanFactory.createInternalSpan("segment", pc);
                 segment.coverLifecycle(pc);
-                io.micrometer.tracing.Span current = MicrometerSpanFactory.rawSpanFrom(pc);
-                segmentSpanId.set(current.context().spanId());
+                SpanScope segmentScope = SpanScope.fromContext(pc);
+                segmentSpanId.set(segmentScope.within(() -> tracer.currentSpan().context().spanId()));
                 return emptyCompletedFuture();
             });
             unitOfWork.on(DefaultPhases.INVOCATION, pc -> {
@@ -209,16 +209,19 @@ class ThreadLocalContextPropagatingUnitOfWorkFactoryTest {
             unitOfWork.on(DefaultPhases.PRE_INVOCATION, pc -> {
                 Span segment = spanFactory.createInternalSpan("segment", pc);
                 segment.coverLifecycle(pc);
-                segmentSpanId.set(MicrometerSpanFactory.rawSpanFrom(pc).context().spanId());
+                SpanScope segmentScope = SpanScope.fromContext(pc);
+                segmentSpanId.set(segmentScope.within(() -> tracer.currentSpan().context().spanId()));
                 return emptyCompletedFuture();
             });
             unitOfWork.on(DefaultPhases.INVOCATION, pc -> {
-                // a child dispatch created with the same context must parent on the resource span, not the ambient one
+                // A child dispatch created with the same context must parent on the resource span.
                 Span child = spanFactory.createDispatchSpan("child", EventTestUtils.asEventMessage("p"), pc);
-                SpanScope childScope = child.start();
-                ProcessingContext branch = SpanScope.addToContext(pc, childScope);
-                io.micrometer.tracing.Span childSpan = MicrometerSpanFactory.rawSpanFrom(branch);
-                childParentSpanId.set(childSpan.context().parentId());
+                try (SpanScope childScope = child.start()) {
+                    SpanScope.addToContext(pc, childScope);
+                    childParentSpanId.set(
+                            childScope.within(() -> tracer.currentSpan().context().parentId())
+                    );
+                }
                 return emptyCompletedFuture();
             });
 

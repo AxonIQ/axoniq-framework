@@ -20,8 +20,6 @@
 package io.axoniq.framework.messaging.commandhandling.distributed.tracing;
 
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
-import org.axonframework.messaging.tracing.support.TestSpanFactory;
-import org.axonframework.messaging.tracing.support.TestSpanFactory.TestSpanType;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
@@ -31,6 +29,8 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
+import org.axonframework.messaging.tracing.support.TestSpanFactory;
+import org.axonframework.messaging.tracing.support.TestSpanFactory.TestSpanType;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -81,8 +81,7 @@ class TracingCommandBusConnectorTest {
         @Test
         void dispatchPassesABranchCarryingTheConnectorSpanToTheDelegate() {
             // given
-            delegate.dispatchResult = CompletableFuture.completedFuture(
-                    new GenericCommandResultMessage(new MessageType("Result"), "ok"));
+            delegate.dispatchResult = new CompletableFuture<>();
 
             // when / then
             UnitOfWorkTestUtils.aUnitOfWork().executeWithResult(context -> {
@@ -90,6 +89,9 @@ class TracingCommandBusConnectorTest {
                 assertThat(delegate.dispatchContext).isNotSameAs(context);
                 // the branch carries specifically the connector dispatch span's scope, not just any active span
                 spanFactory.verifyContextCarriesScopeOf(DISPATCH_SPAN, delegate.dispatchContext);
+                delegate.dispatchResult.complete(
+                        new GenericCommandResultMessage(new MessageType("Result"), "ok")
+                );
                 return result;
             }).orTimeout(5, TimeUnit.SECONDS).join();
         }
@@ -145,6 +147,7 @@ class TracingCommandBusConnectorTest {
 
         @Override
         public void describeTo(ComponentDescriptor descriptor) {
+            // No component details are needed for this recording test stub.
         }
     }
 
@@ -152,10 +155,12 @@ class TracingCommandBusConnectorTest {
 
         @Override
         public void onSuccess(@Nullable CommandResultMessage resultMessage) {
+            // The test only needs completion to close the tracing scope.
         }
 
         @Override
         public void onError(Throwable cause) {
+            // The test only needs completion to close the tracing scope.
         }
     }
 }

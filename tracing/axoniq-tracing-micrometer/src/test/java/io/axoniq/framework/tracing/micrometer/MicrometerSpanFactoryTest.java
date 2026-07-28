@@ -56,14 +56,12 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * Tests {@link MicrometerSpanFactory} against Micrometer Tracing's OpenTelemetry bridge over a real OpenTelemetry SDK,
- * using an in-memory span exporter as the recording double and asserting on the exported {@link SpanData}. The
- * assertions mirror the OpenTelemetry-binding tests one-for-one — this is the parity proof for the pivot.
+ * using an in-memory span exporter as the recording double and asserting on the exported {@link SpanData}.
  * <p>
  * Cross-boundary parenting rides on message metadata (W3C trace context via the {@link Propagator}) and in-process
- * nesting rides on the {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} resource the factory and
- * spans share -- the framework itself never derives parentage from ambient state. The only tests that
- * touch the ambient current context are in {@code AmbientContextCurrentFallback}, which simulates <em>external</em>
- * instrumentation making a span current and verifies the read-only, lowest-precedence fallback.
+ * nesting rides on the {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} resource shared by the
+ * factory and spans. {@code CurrentTracerContextFallback} verifies the read-only, lowest-priority context installed by
+ * external instrumentation.
  */
 class MicrometerSpanFactoryTest {
 
@@ -137,9 +135,9 @@ class MicrometerSpanFactoryTest {
         void createDispatchSpanAppliesMessageAttributesFromConstructorProvidedProvider() {
             // given a factory constructed with an inline SpanAttributesProvider contributing a message attribute
             Message message = anEvent();
-            MicrometerSpanFactory factory = new MicrometerSpanFactory(
+            MicrometerSpanFactory factoryWithProvider = new MicrometerSpanFactory(
                     tracer, propagator, List.of((m, c) -> Map.of("axoniq.message.id", m.identifier())));
-            Span span = factory.createDispatchSpan("MyDispatch", message, null);
+            Span span = factoryWithProvider.createDispatchSpan("MyDispatch", message, null);
 
             // when
             try (SpanScope ignored = span.start()) {
@@ -277,13 +275,26 @@ class MicrometerSpanFactoryTest {
             assertThat(handlerSpanData.getParentSpanContext().getSpanId())
                     .isEqualTo(dispatchSpanData.getSpanId());
         }
+
+        @Test
+        void handlerSpanWithoutPropagationMetadataStartsNewRoot() {
+            // given a message without trace propagation metadata
+            Message message = anEvent();
+
+            // when
+            factory.createHandlerSpan("Handler", message, null).start().close();
+
+            // then
+            SpanData handler = exportedSpanNamed("Handler");
+            assertThat(handler.getParentSpanContext().isValid()).isFalse();
+        }
     }
 
     @Nested
     class InProcessNestingViaProcessingContext {
 
         @Test
-        void closedBranchFallsBackToItsParentWithoutAmbientThreadLocalState() {
+        void closedBranchFallsBackToItsParentWithoutCurrentTracerContext() {
             // given a root scope and a branch retained beyond the branch span's lifetime
             ProcessingContext root = new StubProcessingContext();
             SpanScope rootScope = factory.createInternalSpan("Root", null).start();
@@ -291,7 +302,7 @@ class MicrometerSpanFactoryTest {
             SpanScope branchScope = factory.createInternalSpan("Repository", root).start();
             ProcessingContext escapedBranch = SpanScope.addToContext(root, branchScope);
 
-            // when deferred work resolves a parent after the branch closes, with no ambient span on this thread
+            // when deferred work resolves a parent after the branch closes, with no current span on this thread
             branchScope.close();
             assertThat(tracer.currentSpan()).isNull();
             factory.createInternalSpan("Deferred", escapedBranch).start().close();
@@ -515,7 +526,7 @@ class MicrometerSpanFactoryTest {
             // given a real UnitOfWork; the parent span is started on the UoW thread
             UnitOfWork unitOfWork = UnitOfWorkTestUtils.aUnitOfWork();
             AtomicReference<Throwable> childThreadFailure = new AtomicReference<>();
-            AtomicReference<Boolean> ambientOnWorkerWasNull = new AtomicReference<>();
+            AtomicReference<Boolean> currentTracerContextOnWorkerWasNull = new AtomicReference<>();
 
             unitOfWork.executeWithResult(processingContext -> {
                 Span parent = factory.createInternalSpan("Parent", processingContext);
@@ -525,8 +536,8 @@ class MicrometerSpanFactoryTest {
                     // when the child span is created AND started on a different thread, sharing the parent's branch
                     Thread childThread = new Thread(() -> {
                         try {
-                            // no bridge active on this worker -> ambient current context is empty
-                            ambientOnWorkerWasNull.set(tracer.currentTraceContext().context() == null);
+                            // No bridge is active on this worker, so the current tracer context is empty.
+                            currentTracerContextOnWorkerWasNull.set(tracer.currentTraceContext().context() == null);
                             factory.createInternalSpan("Child", branch).start().close();
                         } catch (Throwable t) {
                             childThreadFailure.set(t);
@@ -545,7 +556,7 @@ class MicrometerSpanFactoryTest {
 
             // then the child nests under the parent — the context rode on the ProcessingContext, not a thread-local
             assertThat(childThreadFailure.get()).isNull();
-            assertThat(ambientOnWorkerWasNull.get()).isTrue();
+            assertThat(currentTracerContextOnWorkerWasNull.get()).isTrue();
             SpanData parent = exportedSpanNamed("Parent");
             SpanData child = exportedSpanNamed("Child");
             assertThat(child.getTraceId()).isEqualTo(parent.getTraceId());
@@ -554,93 +565,91 @@ class MicrometerSpanFactoryTest {
     }
 
     @Nested
-    class AmbientContextCurrentFallback {
+    class CurrentTracerContextFallback {
 
         /**
          * When neither the {@code ProcessingContext} resource nor message metadata yields a trace context, the factory
-         * consults the ambient {@code tracer.currentTraceContext().context()} as a <em>read-only, lowest-precedence</em>
-         * fallback so spans created on externally-instrumented threads (e.g. a Spring Boot server span) join the
-         * ambient trace instead of starting a disconnected root. The framework itself still never makes a span current
-         * — these tests simulate the external instrumentation doing so through the raw OpenTelemetry API.
+         * consults {@code tracer.currentTraceContext().context()} as a read-only, lowest-priority fallback. This is the
+         * current tracer context installed by external instrumentation.
          */
         @Test
-        void internalSpanWithNoProcessingContextParentsUnderTheAmbientCurrentSpan() {
-            // given an ambient span made current by external instrumentation (e.g. an MVC filter)
-            io.opentelemetry.api.trace.Span ambient =
-                    openTelemetry.getTracer("external").spanBuilder("Ambient").startSpan();
-            try (io.opentelemetry.context.Scope ignored = ambient.makeCurrent()) {
+        void internalSpanWithNoProcessingContextParentsUnderTheCurrentTracerSpan() {
+            // given a span made current by external instrumentation
+            io.opentelemetry.api.trace.Span externalSpan =
+                    openTelemetry.getTracer("external").spanBuilder("External").startSpan();
+            try (io.opentelemetry.context.Scope ignored = externalSpan.makeCurrent()) {
                 // when a span is created with no ProcessingContext and no metadata context
                 factory.createInternalSpan("Inner", null).start().close();
             } finally {
-                ambient.end();
+                externalSpan.end();
             }
 
-            // then the span joins the ambient trace
+            // then the span joins the current tracer context
             SpanData inner = exportedSpanNamed("Inner");
-            assertThat(inner.getTraceId()).isEqualTo(ambient.getSpanContext().getTraceId());
-            assertThat(inner.getParentSpanContext().getSpanId()).isEqualTo(ambient.getSpanContext().getSpanId());
+            assertThat(inner.getTraceId()).isEqualTo(externalSpan.getSpanContext().getTraceId());
+            assertThat(inner.getParentSpanContext().getSpanId()).isEqualTo(externalSpan.getSpanContext().getSpanId());
         }
 
         @Test
-        void handlerSpanWithoutMetadataOrContextParentsUnderTheAmbientCurrentSpan() {
+        void handlerSpanWithoutMetadataOrContextParentsUnderTheCurrentTracerSpan() {
             // given
-            io.opentelemetry.api.trace.Span ambient =
-                    openTelemetry.getTracer("external").spanBuilder("Ambient").startSpan();
-            try (io.opentelemetry.context.Scope ignored = ambient.makeCurrent()) {
+            io.opentelemetry.api.trace.Span externalSpan =
+                    openTelemetry.getTracer("external").spanBuilder("External").startSpan();
+            try (io.opentelemetry.context.Scope ignored = externalSpan.makeCurrent()) {
                 // when a handler span is created for a message without propagated metadata, outside any context
                 factory.createHandlerSpan("Handler", anEvent(), null).start().close();
             } finally {
-                ambient.end();
+                externalSpan.end();
             }
 
             // then
             SpanData handler = exportedSpanNamed("Handler");
-            assertThat(handler.getParentSpanContext().getSpanId()).isEqualTo(ambient.getSpanContext().getSpanId());
+            assertThat(handler.getParentSpanContext().getSpanId()).isEqualTo(externalSpan.getSpanContext().getSpanId());
         }
 
         @Test
-        void theProcessingContextResourceStillWinsOverTheAmbientContext() {
-            // given an active span carried on a branch of the ProcessingContext AND a different ambient current span
+        void theProcessingContextResourceStillWinsOverTheCurrentTracerContext() {
+            // given an active span on a context branch and a different span made current externally
             StubProcessingContext context = new StubProcessingContext();
             Span outer = factory.createInternalSpan("Outer", context);
             SpanScope outerScope = outer.start();
             ProcessingContext branch = SpanScope.addToContext(context, outerScope);
-            io.opentelemetry.api.trace.Span ambient =
-                    openTelemetry.getTracer("external").spanBuilder("Ambient").startSpan();
-            try (io.opentelemetry.context.Scope ignored = ambient.makeCurrent()) {
+            io.opentelemetry.api.trace.Span externalSpan =
+                    openTelemetry.getTracer("external").spanBuilder("External").startSpan();
+            try (io.opentelemetry.context.Scope ignored = externalSpan.makeCurrent()) {
                 // when
                 factory.createInternalSpan("Inner", branch).start().close();
             } finally {
-                ambient.end();
+                externalSpan.end();
                 outerScope.close();
             }
 
-            // then the context resource takes precedence — the ambient context is the LOWEST-precedence fallback
+            // then the processing context takes precedence over the lowest-priority current tracer context
             SpanData inner = exportedSpanNamed("Inner");
             SpanData outerData = exportedSpanNamed("Outer");
             assertThat(inner.getParentSpanContext().getSpanId()).isEqualTo(outerData.getSpanId());
-            assertThat(inner.getTraceId()).isNotEqualTo(ambient.getSpanContext().getTraceId());
+            assertThat(inner.getTraceId()).isNotEqualTo(externalSpan.getSpanContext().getTraceId());
         }
 
         @Test
-        void rootSpanLinksBackToTheAmbientCurrentSpanWithoutParentingToIt() {
+        void rootSpanLinksBackToTheCurrentTracerSpanWithoutParentingToIt() {
             // given
-            io.opentelemetry.api.trace.Span ambient =
-                    openTelemetry.getTracer("external").spanBuilder("Ambient").startSpan();
-            try (io.opentelemetry.context.Scope ignored = ambient.makeCurrent()) {
+            io.opentelemetry.api.trace.Span externalSpan =
+                    openTelemetry.getTracer("external").spanBuilder("External").startSpan();
+            try (io.opentelemetry.context.Scope ignored = externalSpan.makeCurrent()) {
                 // when a root span is created with no ProcessingContext
                 factory.createRootSpan("Root", null).start().close();
             } finally {
-                ambient.end();
+                externalSpan.end();
             }
 
-            // then the root starts its own trace but links back to the ambient span
+            // then the root starts its own trace but links back to the current tracer span
             SpanData root = exportedSpanNamed("Root");
             assertThat(root.getParentSpanContext().isValid()).isFalse();
-            assertThat(root.getTraceId()).isNotEqualTo(ambient.getSpanContext().getTraceId());
+            assertThat(root.getTraceId()).isNotEqualTo(externalSpan.getSpanContext().getTraceId());
             assertThat(root.getLinks())
                     .anySatisfy(link -> assertThat(link.getSpanContext().getSpanId())
-                            .isEqualTo(ambient.getSpanContext().getSpanId()));
+                            .isEqualTo(externalSpan.getSpanContext().getSpanId()));
         }
     }
 }
