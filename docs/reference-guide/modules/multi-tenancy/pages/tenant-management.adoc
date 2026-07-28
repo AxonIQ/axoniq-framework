@@ -8,9 +8,16 @@ A tenant is represented by a `TenantDescriptor`, identified by its `tenantId`, w
 
 == Enabling multi-tenancy
 
-Multi-tenancy is opt-in.
-Register the `MultiTenancyEnabled` component on the configurer to activate it.
-When it is absent, multi-tenancy is not active and the application behaves as a single-tenant application.
+Multi-tenancy is opt-in through the Configuration API.
+In a Spring Boot application it is auto-configured: with the `axoniq-multi-tenancy` module on the classpath it is active by default, and no code is needed to switch it on.
+When it is not active, the application behaves as a single-tenant application.
+
+[tabs]
+====
+Declarative - Configuration API::
++
+--
+Register the `MultiTenancyEnabled` component on the configurer to activate multi-tenancy:
 
 [source,java]
 ----
@@ -18,26 +25,39 @@ public void enableMultiTenancy(MessagingConfigurer configurer) {
     configurer.componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer);
 }
 ----
+--
+Autodetected - Spring Boot::
++
+--
+Because tenants are Axon Server contexts, multi-tenancy is only active while Axon Server is enabled, and stays inactive when `axon.axonserver.enabled=false`.
 
-With multi-tenancy enabled, tenants are taken from your Axon Server contexts and the tenant of each message is resolved automatically.
+To switch it off entirely:
+
+[source,properties]
+----
+axon.multitenancy.enabled=false
+----
+--
+====
+
+With multi-tenancy active, tenants are taken from your Axon Server contexts and the tenant of each message is resolved automatically.
 The sections below show how to customize which contexts become tenants and how the tenant of a message is resolved.
-
-[NOTE]
-====
-Multi-tenancy is enabled and configured through the Configuration API.
-There is no dedicated Spring Boot auto-configuration for multi-tenancy, so use the Configuration API shown here even in a Spring Boot application.
-====
 
 == How tenants become known
 
 Each tenant maps to an Axon Server context.
-With multi-tenancy enabled, the contexts of the connected Axon Server are discovered as tenants at startup, and the set is kept current at runtime: contexts added or removed on Axon Server become tenants that are added or removed in the running application, without further configuration.
+With multi-tenancy enabled, the contexts of the connected Axon Server are discovered as tenants at startup, and the set is kept current at runtime: contexts xref:axon-server-reference:ROOT:axon-server/administration/multi-context.adoc[added or removed on Axon Server] become tenants that are added or removed in the running application, without further configuration.
 
 === Filtering which contexts are tenants
 
 By default, every Axon Server context except the `_admin` context is treated as a tenant.
 To narrow the set, register a `TenantConnectPredicate`, for example to include only contexts matching a naming convention:
 
+[tabs]
+====
+Declarative - Configuration API::
++
+--
 [source,java]
 ----
 public void registerTenantFilter(MessagingConfigurer configurer) {
@@ -45,6 +65,21 @@ public void registerTenantFilter(MessagingConfigurer configurer) {
     configurer.componentRegistry(registerTenantConnectPredicate(predicate));
 }
 ----
+--
+Autodetected - Spring Boot::
++
+--
+Expose the predicate as a bean of type `TenantConnectPredicate`:
+
+[source,java]
+----
+@Bean
+public TenantConnectPredicate tenantConnectPredicate() {
+    return tenant -> tenant.tenantId().startsWith("tenant-");
+}
+----
+--
+====
 
 [#tenant-resolution]
 == Tenant resolution
@@ -66,16 +101,41 @@ A message whose metadata does not contain that key cannot be resolved and fails 
 
 To read the tenant from a different metadata key, register a `MetadataBasedTenantResolver` with that key:
 
+[tabs]
+====
+Declarative - Configuration API::
++
+--
 [source,java]
 ----
 public void registerTenantResolverForKey(MessagingConfigurer configurer) {
     configurer.componentRegistry(registerTenantResolver(new MetadataBasedTenantResolver("tenant")));
 }
 ----
+--
+Autodetected - Spring Boot::
++
+--
+Expose the resolver as a bean of type `TenantResolver`:
+
+[source,java]
+----
+@Bean
+public TenantResolver tenantResolver() {
+    return new MetadataBasedTenantResolver("tenant");
+}
+----
+--
+====
 
 To resolve the tenant from something other than metadata, register your own `TenantResolver`.
 It receives the message and the collection of known tenants, and returns the resolved `TenantDescriptor`, or throws a `TenantNotResolvedException` when it cannot:
 
+[tabs]
+====
+Declarative - Configuration API::
++
+--
 [source,java]
 ----
 public void registerCustomTenantResolver(MessagingConfigurer configurer) {
@@ -90,3 +150,25 @@ public void registerCustomTenantResolver(MessagingConfigurer configurer) {
 }
 ----
 <1> Application-specific logic deriving the tenant identifier from the message.
+--
+Autodetected - Spring Boot::
++
+--
+Expose your `TenantResolver` as a bean:
+
+[source,java]
+----
+@Bean
+public TenantResolver tenantResolver() {
+    return (message, tenants) -> {
+        String tenantId = extractTenantId(message);            // <1>
+        if (tenantId == null) {
+            throw new TenantNotResolvedException("Could not resolve a tenant for the message");
+        }
+        return TenantDescriptor.tenantWithId(tenantId);
+    };
+}
+----
+<1> Application-specific logic deriving the tenant identifier from the message.
+--
+====

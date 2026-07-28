@@ -104,7 +104,7 @@
                 <artifactId>axoniq-data-protection</artifactId>
                 <!-- explicit versioning since it's maintained in a separate repository -->
                 <!-- make sure to update to the latest compatible release when releasing Axon Framework -->
-                <version>5.1.0</version>
+                <version>5.2.0</version>
             </dependency>
 
             <!-- Axoniq Framework: Test -->

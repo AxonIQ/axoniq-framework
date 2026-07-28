@@ -16,3 +16,6 @@ jobs:
           project-url: https://github.com/orgs/AxonIQ/projects/25
           github-token: ${{ secrets.ADD_PROJECT_TOKEN }}
           labeled: 'Type: Dependency Upgrade'
+        # prevent failure if the PR is already added to the project
+        continue-on-error: true
+
