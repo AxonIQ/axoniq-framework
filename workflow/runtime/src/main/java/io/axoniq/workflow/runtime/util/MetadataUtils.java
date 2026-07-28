@@ -67,10 +67,12 @@ public class MetadataUtils {
      * Metadata key storing the workflow lifecycle status value.
      */
     public static final String METADATA_KEY_WORKFLOW_STATUS = "workflowStatus";
+
     /**
      * Metadata key storing the workflow definition name.
      */
     public static final String METADATA_KEY_WORKFLOW_DEFINITION_NAME = "workflowDefinitionName";
+
     /**
      * Metadata key storing the workflow definition version.
      */
@@ -133,6 +135,13 @@ public class MetadataUtils {
     }
 
     /**
+     * Metadata for a version-marker event: a COMPLETED step event with {@code stepName = changeId} plus marker keys
+     * ({@code versionChangeId}, {@code version}) whose presence flags this as a version marker.
+     *
+     * @param workflowId the workflow id
+     * @param changeId   the change id
+     * @param version    the version
+     * @return metadata instance
      * Creates a new metadata instance with the given workflow id, workflow status, and workflow definition id.
      *
      * @param workflowId           the workflow id
@@ -218,6 +227,11 @@ public class MetadataUtils {
         return Optional.ofNullable(metadata.getOrDefault(METADATA_KEY_VERSION, null));
     }
 
+    /**
+     * Returns whether the given metadata carries a version marker.
+     *
+     * @return {@code true} if the metadata carries a {@code versionChangeId} key — i.e. it's a version marker.
+     */
     /**
      * Enriches metadata with the workflow definition id.
      *

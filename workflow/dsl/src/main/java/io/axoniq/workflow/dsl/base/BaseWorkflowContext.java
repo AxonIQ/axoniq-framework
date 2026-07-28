@@ -42,7 +42,7 @@ import io.axoniq.workflow.runtime.association.ValueRetriever;
 import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
-import io.axoniq.workflow.runtime.util.Version;
+import io.axoniq.workflow.runtime.api.execution.context.Version;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageTypeResolver;
@@ -104,7 +104,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @param value expected association value
      * @return matcher that can be used when building event conditions
-     * @deprecated use {@link EventAssociationsUtils.equalsTo(String)} instead.
+     * @deprecated use {@link EventAssociationsUtils#equalsTo(Object)} instead.
      */
     @Deprecated(since = "0.2.0", forRemoval = true)
     public static Associations.Matcher equalsTo(Object value) {
@@ -116,7 +116,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @param propertyName payload property name
      * @return payload-property retriever
-     * @deprecated use {@link EventAssociationsUtils.payloadProperty(String)} instead.
+     * @deprecated use {@link EventAssociationsUtils#payloadProperty(String)} instead.
      */
     @Deprecated(since = "0.2.0", forRemoval = true)
     public static ValueRetriever payloadProperty(@Nonnull String propertyName) {
@@ -128,7 +128,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @param propertyName metadata key
      * @return metadata-property retriever
-     * @deprecated use {@link EventAssociationsUtils.metadataProperty(String)} instead.
+     * @deprecated use {@link EventAssociationsUtils#metadataProperty(String)} instead.
      */
     @Deprecated(since = "0.2.0", forRemoval = true)
     public static ValueRetriever metadataProperty(@Nonnull String propertyName) {

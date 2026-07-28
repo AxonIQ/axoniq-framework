@@ -23,7 +23,10 @@ import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
+import io.axoniq.workflow.runtime.execution.DefaultExecuteStepActionResolver;
+import io.axoniq.workflow.runtime.execution.DefaultWorkflowScheduler;
 import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
+import io.axoniq.workflow.runtime.execution.ExecuteStepActionResolver;
 import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
 import io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.RepositoryBackedWorkflowStateRehydrationSupport;
@@ -33,17 +36,20 @@ import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
+import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.execution.WorkflowScheduler;
 import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
 import io.axoniq.workflow.runtime.execution.WorkflowStateRehydrationSupport;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
-import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
+import org.axonframework.common.ClockUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
@@ -124,9 +130,13 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerPayloadReducerRegistry(componentRegistry);
         registerEventNameCustomizer(componentRegistry);
         registerClock(componentRegistry);
-        registerRunningWorkflows(componentRegistry);
         decorateTagResolver(componentRegistry);
         registerWorkflowStateRepository(componentRegistry);
+        registerExecuteStepActionResolver(componentRegistry);
+        registerWorkflowTimeoutScheduler(componentRegistry);
+        registerRunningWorkflows(componentRegistry);
+        registerExecuteStepActionResolver(componentRegistry);
+        registerWorkflowTimeoutScheduler(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
         registerWorkflowExecutionRepository(componentRegistry);
         registerMutableWorkflowHistoryRepository(componentRegistry);
@@ -148,14 +158,28 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     void registerClock(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(Clock.class, cfg -> Clock.systemUTC());
+        componentRegistry.registerIfNotPresent(Clock.class, cfg -> ClockUtils.get());
+    }
+
+    void registerExecuteStepActionResolver(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(ExecuteStepActionResolver.class,
+                                               cfg -> new DefaultExecuteStepActionResolver());
+    }
+
+    void registerWorkflowTimeoutScheduler(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(WorkflowScheduler.class,
+                                               cfg -> new DefaultWorkflowScheduler(
+                                                       cfg.getComponent(Clock.class)
+                                               ));
     }
 
     void decorateTagResolver(ComponentRegistry componentRegistry) {
         componentRegistry.registerDecorator(
-                TagResolver.class,
-                0,
-                (cfg, name, delegate) -> new MultiTagResolver(delegate, new WorkflowEventTagResolver())
+                DecoratorDefinition
+                        .forType(TagResolver.class)
+                        .with((cfg, name, delegate) -> new MultiTagResolver(delegate,
+                                                                            new WorkflowEventTagResolver()))
+
         );
     }
 
@@ -172,11 +196,11 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                         .entityFactory(c -> (identifier, firstEvent, context) -> new RunningWorkflows())
                         .criteriaResolver(c -> (identifier, context) ->
                                 RunningWorkflows.workflowLifecycleEvents())
-                        // FIXME Register snapshot configuration eventually
+                        // FIXME Register snapshot configuration eventually, see #245
                         .build()
         );
+        componentRegistry.registerIfNotPresent(Clock.class, cfg -> ClockUtils.get());
     }
-
 
     void registerWorkflowStateRepository(ComponentRegistry componentRegistry) {
 
@@ -198,7 +222,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                         ))
                                 )
                         ).criteriaResolver(c -> (identifier, context) ->
-                                EventSourcedWorkflowState.workflowEvents(identifier))
+                                EventSourcedWorkflowState.criteriaBuilder(identifier))
                         .build()
 
         );

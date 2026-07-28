@@ -60,13 +60,38 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
             @Nonnull EventSink eventSink,
             @Nonnull Executor executor
     ) {
+        this(workflowContext,
+             workflowExecution,
+             parentEventNameCustomizer,
+             clock,
+             unitOfWorkFactory,
+             eventSink,
+             executor,
+             new DefaultWorkflowScheduler(clock));
+    }
+
+    /**
+     * Constructs the primitive implementation.
+     */
+    @Internal
+    public PayloadDelegate(
+            @Nonnull WorkflowContext workflowContext,
+            @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull EventNameCustomizer parentEventNameCustomizer,
+            @Nonnull Clock clock,
+            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
+            @Nonnull EventSink eventSink,
+            @Nonnull Executor executor,
+            @Nonnull WorkflowScheduler timeoutScheduler
+    ) {
         super(workflowContext,
               workflowExecution,
               parentEventNameCustomizer,
               clock,
               unitOfWorkFactory,
               eventSink,
-              executor);
+              executor,
+              timeoutScheduler);
     }
 
     @Override

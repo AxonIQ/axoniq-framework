@@ -58,7 +58,7 @@ public interface EventCondition {
      * @return serialized association strings
      */
     @Nonnull
-    default Set<String> serializedAssociations() {
+    default Set<String> associations() {
         return Set.of();
     }
 }

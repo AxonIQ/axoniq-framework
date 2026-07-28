@@ -37,9 +37,7 @@ import org.axonframework.messaging.eventhandling.EventSink;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Decorator that adds retry behavior to an {@link ExecuteDelegate}.
@@ -76,10 +74,11 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
             @Nonnull EventSink eventSink,
-            @Nonnull ExecutorService executor
+            @Nonnull ExecutorService executor,
+            @Nonnull WorkflowScheduler timeoutScheduler
     ) {
         super(workflowContext, workflowExecution, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink,
-              executor);
+              executor, timeoutScheduler);
         this.delegate = delegate;
     }
 
@@ -196,15 +195,19 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
                 }
             });
         } else {
-            // Schedule delayed launch via delayedExecutor (non-blocking, keeps workflow thread responsive)
-            var backoffFuture = CompletableFuture.runAsync(
-                    () -> workflowExecution.appendTask(i -> {
-                        if (!i.state().getStep(stepName).status().isTerminal()) {
-                            launchWithRetry(command, nextAttempt);
-                        }
-                    }),
-                    CompletableFuture.delayedExecutor(delay.toMillis(), TimeUnit.MILLISECONDS)
-            ).exceptionally(e -> {
+            var backoffTask = timeoutScheduler.schedule(
+                    retryReadyAt,
+                    () -> {
+                        workflowExecution.removeRunningStep(stepName);
+                        workflowExecution.appendTask(i -> {
+                            if (!i.state().getStep(stepName).status().isTerminal()) {
+                                launchWithRetry(command, nextAttempt);
+                            }
+                        });
+                    }
+            );
+            var backoffFuture = backoffTask.completion();
+            backoffFuture.exceptionally(e -> {
                 // Cancelled during backoff — cancellation handled by the event flow
                 return null;
             });

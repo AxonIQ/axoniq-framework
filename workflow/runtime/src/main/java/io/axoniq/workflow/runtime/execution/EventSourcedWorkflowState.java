@@ -18,19 +18,19 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.context.Version;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import io.axoniq.workflow.runtime.util.Version;
 import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -96,22 +96,6 @@ public class EventSourcedWorkflowState implements WorkflowState {
     }
 
     /**
-     * Creates a new workflow state to be used with a given workflow context and listeners.
-     *
-     * @param context   workflow context to use.
-     * @param listeners workflow status change listeners.
-     */
-    public EventSourcedWorkflowState(
-            @Nonnull String workflowId,
-            @Nonnull Map<String, Object> payload,
-            @Nonnull WorkflowDefinitionId workflowDefinitionId,
-            @Nonnull WorkflowContext context,
-            @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
-    ) {
-        this(workflowId, payload, workflowDefinitionId, context, listeners, true);
-    }
-
-    /**
      * Creates a new workflow state seeded with the workflow definition identity.
      *
      * @param workflowId           workflow id.
@@ -120,13 +104,12 @@ public class EventSourcedWorkflowState implements WorkflowState {
      * @param context              workflow context to use.
      * @param listeners            workflow status change listeners.
      */
-    private EventSourcedWorkflowState(
+    EventSourcedWorkflowState(
             @Nonnull String workflowId,
             @Nonnull Map<String, Object> payload,
             @Nonnull WorkflowDefinitionId workflowDefinitionId,
             @Nonnull WorkflowContext context,
-            @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners,
-            boolean ignored
+            @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
         this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must be set.");
         this.payload = Objects.requireNonNull(payload, "Payload must be set.");
@@ -151,7 +134,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
      * @return event criteria for workflow-state reconstruction
      */
     @Nonnull
-    public static EventCriteria workflowEvents(@Nonnull String workflowId) {
+    public static EventCriteria criteriaBuilder(@Nonnull String workflowId) {
         return EventCriteria.havingTags(Tag.of(WorkflowEventTagResolver.TAG_WORKFLOW_ID, workflowId));
     }
 

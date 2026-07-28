@@ -18,12 +18,16 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
+import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
+import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventstreaming.Tag;
@@ -33,15 +37,17 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 
-import static io.axoniq.workflow.runtime.util.WorkflowEventTagResolver.*;
+import static io.axoniq.workflow.runtime.execution.WorkflowEventTags.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class WorkflowEventTagResolverTest {
 
     private final WorkflowEventTagResolver resolver = new WorkflowEventTagResolver();
-    private final WorkflowDefinitionId workflowDefinitionId =
-            new WorkflowDefinitionId(new QualifiedName("OrderWorkflow"), "0.0.1");
+    private final EventNameCustomizer customizer = new TestEventNameCustomizer();
+    private final WorkflowDefinitionId workflowDefinitionId = new WorkflowDefinitionId(
+            new QualifiedName("OrderWorkflow"),
+            "0.0.1");
     private WorkflowContext context;
 
     @BeforeEach
@@ -54,7 +60,6 @@ class WorkflowEventTagResolverTest {
 
     @Test
     void workflowLifecycleEventsGetWorkflowIdAndLifecycleTags() {
-        var customizer = DefaultEventNameCustomizer.Builder.defaults();
         var started = EventMessageUtils.startedWorkflow(context, "OrderWorkflow", workflowDefinitionId, customizer);
         var timedOut = EventMessageUtils.timeoutWorkflow(context,
                                                          "OrderWorkflow",
@@ -74,7 +79,6 @@ class WorkflowEventTagResolverTest {
 
     @Test
     void waitForEventStepEventsGetWorkflowWaitTag() {
-        var customizer = DefaultEventNameCustomizer.Builder.defaults();
         var started = EventMessageUtils.startedWaitForEventStep(
                 context,
                 "awaitPayment",
@@ -106,7 +110,6 @@ class WorkflowEventTagResolverTest {
 
     @Test
     void regularStepEventsKeepOnlyWorkflowIdTag() {
-        var customizer = DefaultEventNameCustomizer.Builder.defaults();
         var started = EventMessageUtils.startedStep(context, "shipOrder", Map.of("x", "y"), customizer);
 
         assertThat(resolver.resolve(started)).isEqualTo(Set.of(Tag.of("workflowId", "wf-123")));
@@ -114,13 +117,12 @@ class WorkflowEventTagResolverTest {
 
     @Test
     void retryingWaitForEventStepDoesNotGetWorkflowWaitTag() {
-        var customizer = DefaultEventNameCustomizer.Builder.defaults();
         var retrying = retryingWaitForEventStep(customizer);
 
         assertThat(resolver.resolve(retrying)).isEqualTo(Set.of(Tag.of("workflowId", "wf-123")));
     }
 
-    private EventMessage retryingWaitForEventStep(DefaultEventNameCustomizer customizer) {
+    private EventMessage retryingWaitForEventStep(EventNameCustomizer customizer) {
         var retryInfo = mock(StepRetryInfo.class);
         var retrying = EventMessageUtils.retryingStep(context, "awaitPayment", retryInfo, customizer);
         return mockEventMessage(MetadataUtils.markWaitForEventStep(retrying.metadata()));
@@ -130,5 +132,27 @@ class WorkflowEventTagResolverTest {
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(metadata);
         return eventMessage;
+    }
+
+    private static final class TestEventNameCustomizer implements EventNameCustomizer {
+
+        @Override
+        public @Nonnull QualifiedName getEventName(@Nonnull String stepName,
+                                                   @Nonnull Map<String, Object> parameters,
+                                                   @Nonnull StepStatus stepStatus) {
+            return new QualifiedName("test", stepName + stepStatus.name());
+        }
+
+        @Override
+        public @Nonnull QualifiedName getEventName(@Nonnull String stepName,
+                                                   @Nonnull Map<String, Object> parameters,
+                                                   @Nonnull WorkflowStatus stepStatus) {
+            return new QualifiedName("test", stepName + stepStatus.name());
+        }
+
+        @Override
+        public @Nonnull EventNameCustomizer forStepInheritance() {
+            return this;
+        }
     }
 }

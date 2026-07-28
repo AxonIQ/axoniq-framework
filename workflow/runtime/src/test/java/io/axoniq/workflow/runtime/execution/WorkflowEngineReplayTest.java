@@ -59,6 +59,7 @@ import java.util.function.Consumer;
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.workflow.runtime.util.ProcessingContextUtils.RESTART_TOKEN_RESOURCE_KEY;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.axonframework.messaging.core.MessageType.DEFAULT_VERSION;
 import static org.mockito.Mockito.*;
 
 /**
@@ -158,17 +159,22 @@ class WorkflowEngineReplayTest {
         ProcessingContext pc = mock(ProcessingContext.class);
         WorkflowConfiguration<?> config = mock(WorkflowConfiguration.class);
         when(config.workflowName()).thenReturn("test-workflow");
-        when(config.workflowVersion()).thenReturn(org.axonframework.messaging.core.MessageType.DEFAULT_VERSION);
+        when(config.workflowVersion()).thenReturn(DEFAULT_VERSION);
         when(config.eventNameCustomizer()).thenReturn(defaults());
 
         when(pc.resources()).thenReturn(Map.of(
                 TrackingToken.RESOURCE_KEY, token(18),
                 RESTART_TOKEN_RESOURCE_KEY, Optional.empty()
         ));
+        when(pc.component(WorkflowScheduler.class)).thenReturn(new DefaultWorkflowScheduler(Clock.systemUTC()));
+        when(pc.component(ExecuteStepActionResolver.class)).thenReturn(new DefaultExecuteStepActionResolver());
+
         when(pc.component(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
         when(pc.component(Clock.class)).thenReturn(Clock.systemUTC());
         when(pc.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
         when(pc.component(EventSink.class)).thenReturn(mock(EventSink.class));
+        when(pc.component(WorkflowScheduler.class)).thenReturn(mock(WorkflowScheduler.class));
+        when(pc.component(ExecuteStepActionResolver.class)).thenReturn(mock(ExecuteStepActionResolver.class));
 
         WorkflowContext workflowContext = mock(WorkflowContext.class);
         when(workflowContext.processingContext()).thenReturn(pc);
@@ -207,11 +213,19 @@ class WorkflowEngineReplayTest {
         when(restoreContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
         when(restoreContext.component(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
         when(restoreContext.component(Clock.class)).thenReturn(Clock.systemUTC());
+        when(restoreContext.component(WorkflowScheduler.class)).thenReturn(mock(WorkflowScheduler.class));
+        when(restoreContext.component(ExecuteStepActionResolver.class)).thenReturn(
+                mock(ExecuteStepActionResolver.class)
+        );
         when(restoreContext.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
         when(restoreContext.component(EventSink.class)).thenReturn(mock(EventSink.class));
         when(executionContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
         when(executionContext.component(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
         when(executionContext.component(Clock.class)).thenReturn(Clock.systemUTC());
+        when(executionContext.component(WorkflowScheduler.class)).thenReturn(mock(WorkflowScheduler.class));
+        when(executionContext.component(ExecuteStepActionResolver.class)).thenReturn(
+                mock(ExecuteStepActionResolver.class)
+        );
         when(executionContext.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
         when(executionContext.component(EventSink.class)).thenReturn(mock(EventSink.class));
 
@@ -544,7 +558,7 @@ class WorkflowEngineReplayTest {
             String workflowId = invocation.getArgument(1);
             ProcessingContext processingContext = invocation.getArgument(2);
             Optional<TrackingToken> restartTokenResource = (Optional<TrackingToken>) processingContext.resources()
-                                                                                                     .get(RESTART_TOKEN_RESOURCE_KEY);
+                                                                                                      .get(RESTART_TOKEN_RESOURCE_KEY);
             restartTokensByWorkflowId.put(workflowId, restartTokenResource.orElse(null));
             var workflowContext = mock(WorkflowContext.class);
             when(workflowContext.processingContext()).thenReturn(processingContext);

@@ -42,7 +42,7 @@ The entity reads only event metadata:
 
 The payload is ignored.
 
-### AF5 construction
+### Axon Framework construction
 
 The implementation uses standard AF5 event-sourced entity infrastructure registered declaratively through
 `EventSourcedEntityModule`:

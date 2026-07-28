@@ -26,7 +26,6 @@ import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.RunningWorkflows;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
-import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
@@ -49,6 +48,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static io.axoniq.workflow.runtime.execution.WorkflowEventTags.TAG_VALUE_EVENT_TYPE_LIFECYCLE;
+import static io.axoniq.workflow.runtime.execution.WorkflowEventTags.TAG_WORKFLOW_EVENT_TYPE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
@@ -56,7 +57,6 @@ import static org.mockito.Mockito.*;
  * RunningWorkflows integration test.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class RunningWorkflowsRepositoryIntegrationTest {
 
@@ -158,8 +158,8 @@ class RunningWorkflowsRepositoryIntegrationTest {
         MessageStream<EventMessage> stream = eventStorageEngine.source(
                 SourcingCondition.conditionFor(
                         EventCriteria.havingTags(Tag.of(
-                                WorkflowEventTagResolver.TAG_WORKFLOW_EVENT_TYPE,
-                                WorkflowEventTagResolver.TAG_VALUE_EVENT_TYPE_LIFECYCLE
+                                TAG_WORKFLOW_EVENT_TYPE,
+                                TAG_VALUE_EVENT_TYPE_LIFECYCLE
                         ))
                 )
         );

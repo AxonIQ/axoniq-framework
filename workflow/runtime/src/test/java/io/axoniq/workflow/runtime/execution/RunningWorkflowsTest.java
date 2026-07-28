@@ -20,13 +20,14 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.*;
+import org.junit.jupiter.params.provider.*;
 
+import static io.axoniq.workflow.runtime.execution.WorkflowEventTags.TAG_VALUE_EVENT_TYPE_LIFECYCLE;
+import static io.axoniq.workflow.runtime.execution.WorkflowEventTags.TAG_WORKFLOW_EVENT_TYPE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -36,8 +37,8 @@ class RunningWorkflowsTest {
     void workflowLifecycleEventsSelectLifecycleTaggedEvents() {
         assertThat(RunningWorkflows.workflowLifecycleEvents()).isEqualTo(
                 EventCriteria.havingTags(Tag.of(
-                        WorkflowEventTagResolver.TAG_WORKFLOW_EVENT_TYPE,
-                        WorkflowEventTagResolver.TAG_VALUE_EVENT_TYPE_LIFECYCLE
+                        TAG_WORKFLOW_EVENT_TYPE,
+                        TAG_VALUE_EVENT_TYPE_LIFECYCLE
                 ))
         );
     }
