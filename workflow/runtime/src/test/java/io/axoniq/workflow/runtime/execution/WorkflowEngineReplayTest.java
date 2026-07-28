@@ -223,7 +223,7 @@ class WorkflowEngineReplayTest {
         when(workflowStore.loadRunningWorkflows(same(processingContext))).thenReturn(CompletableFuture.completedFuture(running));
 
         var definitionId = new MessageType(new QualifiedName("RestoredWorkflow"), "1.0.0");
-        var restoredState = new WorkflowState(workflowId, definitionId);
+        var restoredState = new EventSourcedWorkflowState(workflowId, definitionId);
         restoredState.evolve(workflowStartedEvent(workflowId, definitionId, Map.of("mode", "wait")), processingContext);
         restoredState.evolve(stepStartedEvent(workflowId, "waitForResume"), processingContext);
         when(workflowStore.loadWorkflow(eq(workflowId), same(processingContext)))
@@ -253,8 +253,7 @@ class WorkflowEngineReplayTest {
         );
         when(executionFactory.create(workflowContext)).thenReturn(restoredExecution);
 
-        workflowEngine.initializeSafePoint(checkpointToken);
-        workflowEngine.loadRunningWorkflows(processingContext);
+        workflowEngine.start(checkpointToken, processingContext);
 
         var restored = workflowEngine.workflowExecutions().iterator().next();
         assertThat(restored.workflowId()).isEqualTo(workflowId);

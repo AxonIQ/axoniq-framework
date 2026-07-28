@@ -20,7 +20,7 @@ package io.axoniq.workflow.history;
 
 import io.axoniq.workflow.history.api.WorkflowHistory;
 import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
-import io.axoniq.workflow.runtime.execution.WorkflowState;
+import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.*;
@@ -45,7 +45,7 @@ class InMemoryWorkflowHistoryRepositoryTest {
     void shouldSaveAndFindById() {
         String workflowId = "wf-1";
         WorkflowHistory history = new WorkflowHistory(workflowId,
-                                                      new WorkflowState(workflowId, DEFINITION_ID));
+                                                      new EventSourcedWorkflowState(workflowId, DEFINITION_ID));
 
         repository.save(history);
 
@@ -62,8 +62,8 @@ class InMemoryWorkflowHistoryRepositoryTest {
 
     @Test
     void shouldFindAll() {
-        WorkflowHistory history1 = new WorkflowHistory("wf-1", new WorkflowState("wf-1", DEFINITION_ID));
-        WorkflowHistory history2 = new WorkflowHistory("wf-2", new WorkflowState("wf-2", DEFINITION_ID));
+        WorkflowHistory history1 = new WorkflowHistory("wf-1", new EventSourcedWorkflowState("wf-1", DEFINITION_ID));
+        WorkflowHistory history2 = new WorkflowHistory("wf-2", new EventSourcedWorkflowState("wf-2", DEFINITION_ID));
 
         repository.save(history1);
         repository.save(history2);
@@ -75,7 +75,7 @@ class InMemoryWorkflowHistoryRepositoryTest {
 
     @Test
     void shouldClearRepository() {
-        repository.save(new WorkflowHistory("wf-1", new WorkflowState("wf-1", DEFINITION_ID)));
+        repository.save(new WorkflowHistory("wf-1", new EventSourcedWorkflowState("wf-1", DEFINITION_ID)));
         assertThat(repository.findAll()).isNotEmpty();
 
         repository.clear();
@@ -87,11 +87,11 @@ class InMemoryWorkflowHistoryRepositoryTest {
     void shouldUpdateExistingEntry() {
         String workflowId = "wf-1";
         WorkflowHistory history1 = new WorkflowHistory(workflowId,
-                                                       new WorkflowState(workflowId, DEFINITION_ID));
+                                                       new EventSourcedWorkflowState(workflowId, DEFINITION_ID));
         repository.save(history1);
 
         WorkflowHistory history2 = new WorkflowHistory(workflowId,
-                                                       new WorkflowState(workflowId, DEFINITION_ID));
+                                                       new EventSourcedWorkflowState(workflowId, DEFINITION_ID));
         repository.save(history2);
 
         Optional<WorkflowHistory> found = repository.findById(workflowId);

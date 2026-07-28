@@ -28,7 +28,7 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
-import static io.axoniq.workflow.runtime.execution.WorkflowState.PAYLOAD_TYPE;
+import static io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState.PAYLOAD_TYPE;
 
 /**
  * Workflow id provider accessing event message property.

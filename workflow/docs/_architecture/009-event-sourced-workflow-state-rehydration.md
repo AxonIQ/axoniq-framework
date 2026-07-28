@@ -75,16 +75,11 @@ This re-entry must happen before replay catch-up resumes, because that pass reco
 Executing restored workflows before catch-up ensures backlog events that arrived while the application was down are
 routed to rebuilt waits instead of being lost behind an uninitialized transient runtime.
 
-### Processing-context split
+### Processing context
 
-Startup uses two processing contexts:
-
-- a bootstrap sourcing context for repository loads inside the startup unit of work
-- a long-lived execution context for recreated workflow executions
-
-The execution context must not be the closing bootstrap unit of work. Restored workflows may emit new workflow events
-while catch-up is still in progress, so their runtime must hold a live configuration-backed context rather than a
-context that is already advancing to commit.
+The initial implementation used separate sourcing and execution contexts. [ADR-013](./013-workflow-engine-startup-ownership.md)
+proposes consolidating startup ownership in `WorkflowEngine` and using the startup unit of work's processing context for
+both state sourcing and restored execution creation.
 
 ### No checkpoint state images
 

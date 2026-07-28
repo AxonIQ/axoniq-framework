@@ -87,11 +87,11 @@ class TerminateDelegateFailTest {
                     return action.apply(processingContext);
                 });
 
-        when(workflowExecution.state()).thenReturn(new WorkflowState("wf-1",
-                                                                     Map.of(),
-                                                                     workflowDefinitionId,
-                                                                     workflowContext,
-                                                                     Map.of()));
+        when(workflowExecution.state()).thenReturn(new EventSourcedWorkflowState("wf-1",
+                                                                                 Map.of(),
+                                                                                 workflowDefinitionId,
+                                                                                 workflowContext,
+                                                                                 Map.of()));
         when(workflowExecution.workflowConfiguration()).thenReturn(workflowConfiguration);
         when(workflowConfiguration.workflowName()).thenReturn("test-workflow");
         when(workflowConfiguration.workflowVersion()).thenReturn("0.0.1");
@@ -169,11 +169,11 @@ class TerminateDelegateFailTest {
     @Test
     void terminateFailInvokesFailedStatusChangeListener() throws InterruptedException {
         var listener = mock(WorkflowStatusChangeListener.class);
-        WorkflowState state = new WorkflowState("wf-1",
-                                                Map.of(),
-                                                workflowDefinitionId,
-                                                workflowContext,
-                                                Map.of(WorkflowStatus.FAILED, listener));
+        EventSourcedWorkflowState state = new EventSourcedWorkflowState("wf-1",
+                                                                        Map.of(),
+                                                                        workflowDefinitionId,
+                                                                        workflowContext,
+                                                                        Map.of(WorkflowStatus.FAILED, listener));
         when(workflowExecution.state()).thenReturn(state);
 
         var cause = new RuntimeException("boom");

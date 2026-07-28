@@ -19,7 +19,7 @@
 package io.axoniq.workflow.history.inmemory;
 
 import io.axoniq.workflow.history.api.WorkflowHistory;
-import io.axoniq.workflow.runtime.execution.WorkflowState;
+import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
@@ -65,7 +65,7 @@ public class WorkflowHistoryProjector implements EventHandler {
             }, () -> {
                 historyRepository.save(
                         new WorkflowHistory(workflowId,
-                                            new WorkflowState(
+                                            new EventSourcedWorkflowState(
                                                     workflowId,
                                                     new HashMap<>(),
                                                     MetadataUtils.getWorkflowDefinitionId(event.metadata())

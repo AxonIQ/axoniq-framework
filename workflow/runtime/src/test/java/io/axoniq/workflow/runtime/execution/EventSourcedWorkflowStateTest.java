@@ -44,17 +44,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-class WorkflowStateTest {
+class EventSourcedWorkflowStateTest {
 
     private static final String WORKFLOW_ID = "workflowId";
     private static final MessageType DEFINITION_ID = new MessageType(new QualifiedName("TestWorkflow"), "0.0.1");
 
-    private WorkflowState state;
+    private EventSourcedWorkflowState state;
     private ProcessingContext processingContext;
 
     @BeforeEach
     void setUp() {
-        state = new WorkflowState(WORKFLOW_ID, DEFINITION_ID);
+        state = new EventSourcedWorkflowState(WORKFLOW_ID, DEFINITION_ID);
         processingContext = mock(ProcessingContext.class);
         when(processingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
     }
@@ -79,7 +79,7 @@ class WorkflowStateTest {
 
     @Test
     void rehydratedStateRetainsSourcedDataAndUsesLiveStatusListeners() {
-        var sourcedState = new WorkflowState(
+        var sourcedState = new EventSourcedWorkflowState(
                 WORKFLOW_ID,
                 Map.of("key", "value"),
                 DEFINITION_ID
@@ -88,7 +88,7 @@ class WorkflowStateTest {
         var workflowContext = mock(WorkflowContext.class);
         var listener = mock(WorkflowStatusChangeListener.class);
 
-        var rehydratedState = new WorkflowState(
+        var rehydratedState = new EventSourcedWorkflowState(
                 sourcedState,
                 workflowContext,
                 Map.of(WorkflowStatus.COMPLETED, listener)
@@ -183,7 +183,7 @@ class WorkflowStateTest {
     void testEvolveStepCompletedAndEvolvePayload() {
         String stepName = "testStep";
         Map<String, Object> initialPayload = Map.of("key1", "value1");
-        state = new WorkflowState(WORKFLOW_ID, initialPayload, DEFINITION_ID);
+        state = new EventSourcedWorkflowState(WORKFLOW_ID, initialPayload, DEFINITION_ID);
 
         Map<String, Object> stepResult = Map.of("key2", "value2");
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.COMPLETED)
@@ -234,7 +234,7 @@ class WorkflowStateTest {
         // Seed state with the workflow definition's configured version so that, when SimpleWorkflowExecution
         // constructs the STARTED event via startedWorkflow(...), the event's MessageType.version() reflects
         // the configured version (not the implicit "0.0.1" default).
-        var seeded = new WorkflowState("wf-1",
+        var seeded = new EventSourcedWorkflowState("wf-1",
                                                    Map.of(),
                                                    new MessageType(new QualifiedName("OrderWorkflow"), "1.2.3"),
                                                    mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowContext.class),
@@ -248,7 +248,7 @@ class WorkflowStateTest {
         // started event in history carries the original version it was launched under (e.g. "1.0.0").
         // evolve() must adopt the started event's MessageType.version() so resolveVersionedDefinition can
         // route to the matching sibling.
-        var seeded = new WorkflowState("wf-1",
+        var seeded = new EventSourcedWorkflowState("wf-1",
                                                    Map.of(),
                                                    new MessageType(new QualifiedName("OrderWorkflow"), "2.0.0"),
                                                    mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowContext.class),

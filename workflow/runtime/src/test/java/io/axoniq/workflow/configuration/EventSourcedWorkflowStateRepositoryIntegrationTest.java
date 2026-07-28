@@ -24,7 +24,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
-import io.axoniq.workflow.runtime.execution.WorkflowState;
+import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
@@ -43,7 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class WorkflowStateRepositoryIntegrationTest {
+class EventSourcedWorkflowStateRepositoryIntegrationTest {
 
     private AxonConfiguration configuration;
 
@@ -108,7 +108,7 @@ class WorkflowStateRepositoryIntegrationTest {
                          .join();
     }
 
-    private WorkflowState load(String workflowId) {
+    private EventSourcedWorkflowState load(String workflowId) {
         var unitOfWorkFactory = configuration.getComponent(UnitOfWorkFactory.class);
         return unitOfWorkFactory.create("load-workflow-state-test")
                                 .executeWithResult(context -> repository().loadOrCreate(workflowId, context)
@@ -117,12 +117,12 @@ class WorkflowStateRepositoryIntegrationTest {
     }
 
     @SuppressWarnings("unchecked")
-    private Repository<String, WorkflowState> repository() {
+    private Repository<String, EventSourcedWorkflowState> repository() {
         return configuration.getComponents(Repository.class)
                             .values()
                             .stream()
-                            .filter(repository -> repository.entityType().equals(WorkflowState.class))
-                            .map(repository -> (Repository<String, WorkflowState>) repository)
+                            .filter(repository -> repository.entityType().equals(EventSourcedWorkflowState.class))
+                            .map(repository -> (Repository<String, EventSourcedWorkflowState>) repository)
                             .findFirst()
                             .orElseThrow();
     }

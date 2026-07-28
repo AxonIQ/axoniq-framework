@@ -28,6 +28,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
@@ -124,7 +125,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                 processingContext
         );
         initializeState(
-                new WorkflowState(
+                new EventSourcedWorkflowState(
                         Objects.requireNonNull(workflowId, "Workflow id must not be null"),
                         initial,
                         workflowDefinitionId
@@ -575,8 +576,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
     @Override
-    public void initializeState(@Nonnull io.axoniq.workflow.runtime.api.execution.state.WorkflowState state) {
-        this.workflowState = new WorkflowState(
+    public void initializeState(@Nonnull WorkflowState state) {
+        this.workflowState = new EventSourcedWorkflowState(
                 state,
                 this.contextDelegate.typedWorkflowContext(),
                 this.workflowConfiguration.workflowStatusChangeListeners()

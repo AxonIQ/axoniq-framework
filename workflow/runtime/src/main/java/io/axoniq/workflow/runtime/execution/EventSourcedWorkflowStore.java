@@ -41,11 +41,11 @@ import java.util.concurrent.CompletableFuture;
 public class EventSourcedWorkflowStore implements WorkflowStore {
 
     private final Repository<String, EventSourcedRunningWorkflows> runningWorkflowsRepository;
-    private final Repository<String, WorkflowState> workflowStateRepository;
+    private final Repository<String, EventSourcedWorkflowState> workflowStateRepository;
 
     public EventSourcedWorkflowStore(
             @Nonnull Repository<String, EventSourcedRunningWorkflows> runningWorkflowsRepository,
-            @Nonnull Repository<String, WorkflowState> workflowStateRepository
+            @Nonnull Repository<String, EventSourcedWorkflowState> workflowStateRepository
     ) {
         this.runningWorkflowsRepository = Objects.requireNonNull(runningWorkflowsRepository,
                                                                  "Running workflows repository must not be null");
@@ -62,8 +62,8 @@ public class EventSourcedWorkflowStore implements WorkflowStore {
 
     @Override
     @Nonnull
-    public CompletableFuture<WorkflowState> loadWorkflow(@Nonnull String workflowId,
-                                                         @Nonnull ProcessingContext processingContext) {
+    public CompletableFuture<EventSourcedWorkflowState> loadWorkflow(@Nonnull String workflowId,
+                                                                     @Nonnull ProcessingContext processingContext) {
         return workflowStateRepository.loadOrCreate(workflowId, processingContext)
                                       .thenApply(ManagedEntity::entity);
     }

@@ -40,16 +40,16 @@ import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocal
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
-class WorkflowStateWorkflowStatusTest {
+class WorkflowStateEventSourcedWorkflowStatusTest {
 
     private static final MessageType DEFINITION_ID = new MessageType(new QualifiedName("TestWorkflow"), "0.0.1");
     private final EventConverter converter = new DelegatingEventConverter(new JacksonConverter());
-    private WorkflowState state;
+    private EventSourcedWorkflowState state;
     private ProcessingContext processingContext;
 
     @BeforeEach
     void setUp() {
-        state = new WorkflowState("wfId", Map.of("initialKey", "initialValue"), DEFINITION_ID);
+        state = new EventSourcedWorkflowState("wfId", Map.of("initialKey", "initialValue"), DEFINITION_ID);
         processingContext = mock(ProcessingContext.class);
         when(processingContext.component(EventConverter.class)).thenReturn(converter);
         when(processingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());

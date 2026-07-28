@@ -42,7 +42,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static io.axoniq.workflow.runtime.execution.WorkflowState.PAYLOAD_TYPE;
+import static io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState.PAYLOAD_TYPE;
 import static io.axoniq.workflow.runtime.util.ProcessingContextUtils.RESTART_TOKEN_RESOURCE_KEY;
 
 /**
@@ -186,60 +186,6 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         }
     }
 
-    /**
-     * Loads running workflows and creates live executions from their event-sourced state.
-     *
-     * @param processingContext context used to source durable state and create restored live workflow executions
-     */
-    public void loadRunningWorkflows(@Nonnull ProcessingContext processingContext) {
-        initializeRestoreProcessingContext(processingContext);
-        var runningWorkflows = workflowStore.loadRunningWorkflows(processingContext).join();
-        if (runningWorkflows.workflowIds().isEmpty()) {
-            logger.debug("No running workflows to rehydrate.");
-            return;
-        }
-        logger.debug("Rehydrating {} running workflow execution(s) from event-sourced state.",
-                     runningWorkflows.workflowIds().size());
-        for (var workflowId : runningWorkflows.workflowIds()) {
-            var state = workflowStore.loadWorkflow(workflowId, processingContext).join();
-            var workflowConfiguration = workflowConfigurationRegistry
-                    .getWorkflowConfiguration(state.workflowDefinitionId())
-                    .orElseThrow(() -> new IllegalStateException(
-                            "No workflow configuration found for workflow '%s' with definition %s."
-                                    .formatted(workflowId, state.workflowDefinitionId())
-                    ));
-            var workflowContext = workflowConfiguration.workflowContextFactory().createContext(
-                    state.payload(),
-                    workflowId,
-                    processingContext,
-                    workflowConfiguration
-            );
-            var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
-            execution.initializeState(state);
-            workflowExecutionRepository.save(workflowId, () -> execution);
-        }
-    }
-
-    /**
-     * Starts restored workflow executions before processor replay resumes so transient wait registrations are rebuilt.
-     */
-    public void startExecutions() {
-        var executionsToStart = workflowExecutionRepository
-                .findAll()
-                .stream()
-                .filter(execution -> !execution.isExecutable())
-                .filter(execution -> !execution.state().workflowStatus().isTerminal())
-                .toList();
-        if (executionsToStart.isEmpty()) {
-            return;
-        }
-        logger.info("Starting {} rehydrated workflow execution(s) before replay catch-up.",
-                    executionsToStart.size());
-        for (var execution : executionsToStart) {
-            execute(execution);
-        }
-    }
-
     private void execute(@Nonnull WorkflowExecution execution) {
         execution
                 .workflowContext()
@@ -323,6 +269,18 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
     }
 
     /**
+     * Starts the engine from its replay safe point and restores active workflow executions.
+     *
+     * @param safePoint         replay safe point for restored workflow executions
+     * @param processingContext context used to restore and start live workflow executions
+     */
+    public void start(@Nullable TrackingToken safePoint, @Nonnull ProcessingContext processingContext) {
+        initializeSafePoint(safePoint);
+        loadRunningWorkflows(processingContext);
+        startExecutions();
+    }
+
+    /**
      * Shuts downs the engine and removes all running workflow executions.
      * <p>
      * Before clearing the repository, all in-flight step futures are interrupted so that workflow driver threads parked
@@ -343,12 +301,59 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         workflowExecutionRepository.clear();
     }
 
+    private void loadRunningWorkflows(@Nonnull ProcessingContext processingContext) {
+        initializeRestoreProcessingContext(processingContext);
+        var runningWorkflows = workflowStore.loadRunningWorkflows(processingContext).join();
+        if (runningWorkflows.workflowIds().isEmpty()) {
+            logger.debug("No running workflows to rehydrate.");
+            return;
+        }
+        logger.debug("Rehydrating {} running workflow execution(s) from event-sourced state.",
+                     runningWorkflows.workflowIds().size());
+        for (var workflowId : runningWorkflows.workflowIds()) {
+            var state = workflowStore.loadWorkflow(workflowId, processingContext).join();
+            var workflowConfiguration = workflowConfigurationRegistry
+                    .getWorkflowConfiguration(state.workflowDefinitionId())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "No workflow configuration found for workflow '%s' with definition %s."
+                                    .formatted(workflowId, state.workflowDefinitionId())
+                    ));
+            var workflowContext = workflowConfiguration.workflowContextFactory().createContext(
+                    state.payload(),
+                    workflowId,
+                    processingContext,
+                    workflowConfiguration
+            );
+            var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
+            execution.initializeState(state);
+            workflowExecutionRepository.save(workflowId, () -> execution);
+        }
+    }
+
+    private void startExecutions() {
+        var executionsToStart = workflowExecutionRepository
+                .findAll()
+                .stream()
+                .filter(execution -> !execution.isExecutable())
+                .filter(execution -> !execution.state().workflowStatus().isTerminal())
+                .toList();
+        if (executionsToStart.isEmpty()) {
+            return;
+        }
+        logger.info("Starting {} rehydrated workflow execution(s) before replay catch-up.",
+                    executionsToStart.size());
+        for (var execution : executionsToStart) {
+            execute(execution);
+        }
+    }
+
+
     /**
      * Initializes the current and last processed tracking tokens.
      *
      * @param safePoint safe point tracking token passed on reset / empty store start.
      */
-    public void initializeSafePoint(@Nullable TrackingToken safePoint) {
+    void initializeSafePoint(@Nullable TrackingToken safePoint) {
         lastProcessedTrackingToken.set(safePoint);
         currentTrackingToken.set(safePoint);
     }

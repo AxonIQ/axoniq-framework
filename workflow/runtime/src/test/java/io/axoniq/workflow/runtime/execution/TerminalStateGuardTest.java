@@ -61,7 +61,7 @@ class TerminalStateGuardTest {
 
     private WorkflowContext workflowContext;
     private WorkflowExecution workflowExecution;
-    private WorkflowState workflowState;
+    private EventSourcedWorkflowState workflowState;
     private EventSink eventSink;
     private ProcessingContext processingContext;
     private UnitOfWorkFactory unitOfWorkFactory;
@@ -131,11 +131,11 @@ class TerminalStateGuardTest {
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         eventNameCustomizer = defaults();
-        workflowState = new WorkflowState("wf-1",
-                                          Map.of(),
-                                          new MessageType(new QualifiedName("test-workflow"), "0.0.1"),
-                                          workflowContext,
-                                          Map.of());
+        workflowState = new EventSourcedWorkflowState("wf-1",
+                                                      Map.of(),
+                                                      new MessageType(new QualifiedName("test-workflow"), "0.0.1"),
+                                                      workflowContext,
+                                                      Map.of());
         when(workflowExecution.state()).thenReturn(workflowState);
 
         stepExecutor = new TestableStepExecutor(

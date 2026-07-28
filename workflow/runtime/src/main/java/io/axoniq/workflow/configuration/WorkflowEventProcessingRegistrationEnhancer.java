@@ -177,21 +177,19 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
             TokenStore tokenStore,
             StreamableEventSource eventSource
     ) {
-        return eventSource.latestToken(null)
-                          .thenCompose(latestToken -> tokenStore.fetchSegments(moduleName, null)
-                                                                .thenCompose(segments -> {
-                                                                    if (!segments.isEmpty()) {
-                                                                        return completedFuture(latestToken);
-                                                                    } else {
-                                                                        return tokenStore.initializeTokenSegments(
-                                                                                                 moduleName,
-                                                                                                 1, // FIXME #190 (https://github.com/AxonIQ/extension-workflow/issues/190) -> should be configurable?
-                                                                                                 latestToken,
-                                                                                                 null
-                                                                                         )
-                                                                                         .thenApply(ignored -> latestToken);
-                                                                    }
-                                                                }));
+        return eventSource
+                .latestToken(null)
+                .thenCompose(latestToken -> tokenStore
+                        .fetchSegments(moduleName, null)
+                        .thenCompose(segments -> (!segments.isEmpty())
+                                                                        ? completedFuture(latestToken)
+                                                                        : tokenStore.initializeTokenSegments(
+                                                                                             moduleName,
+                                                                                             1, // FIXME #190 (https://github.com/AxonIQ/extension-workflow/issues/190) -> should be configurable?
+                                                                                             latestToken,
+                                                                                             null
+                                                                                     )
+                                                                                     .thenApply(ignored -> latestToken)));
     }
 
     CompletableFuture<Void> resetOrSwitchToLiveMode(
@@ -203,21 +201,17 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
             @Nullable TrackingToken latestToken
     ) {
         return determineResetToken(eventSource, safePointStore)
-                .thenCompose(resetToken -> {
-                    workflowEngine.initializeSafePoint(resetToken);
-                    return unitOfWorkFactory.create(moduleName + "WorkflowRehydration")
-                                            .executeWithResult(context -> {
-                                                workflowEngine.loadRunningWorkflows(context);
-                                                workflowEngine.startExecutions();
-                                                return completedFuture(null);
-                                            })
-                                            .thenCompose(ignored -> switchToLiveOrReplay(
-                                                    processor,
-                                                    workflowEngine,
-                                                    resetToken,
-                                                    latestToken
-                                            ));
-                });
+                .thenCompose(resetToken -> unitOfWorkFactory.create(moduleName + "WorkflowRehydration")
+                                        .executeWithResult(context -> {
+                                            workflowEngine.start(resetToken, context);
+                                            return completedFuture(null);
+                                        })
+                                        .thenCompose(ignored -> switchToLiveOrReplay(
+                                                processor,
+                                                workflowEngine,
+                                                resetToken,
+                                                latestToken
+                                        )));
     }
 
     private CompletableFuture<Void> switchToLiveOrReplay(StreamingEventProcessor processor,

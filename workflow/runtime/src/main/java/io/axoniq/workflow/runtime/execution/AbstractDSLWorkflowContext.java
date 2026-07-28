@@ -50,7 +50,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Predicate;
 
-import static io.axoniq.workflow.runtime.execution.WorkflowState.PAYLOAD_TYPE;
+import static io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState.PAYLOAD_TYPE;
 
 /**
  * Base class for DSL implementations.

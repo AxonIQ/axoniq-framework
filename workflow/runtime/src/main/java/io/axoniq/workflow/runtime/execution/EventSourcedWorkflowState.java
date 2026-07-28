@@ -25,6 +25,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
@@ -59,7 +60,7 @@ import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepName;
  * @since 1.0.0
  */
 @Internal
-public class WorkflowState implements io.axoniq.workflow.runtime.api.execution.state.WorkflowState {
+public class EventSourcedWorkflowState implements WorkflowState {
 
     /**
      * Type reference for a map of strings to objects used as workflow payload.
@@ -67,7 +68,7 @@ public class WorkflowState implements io.axoniq.workflow.runtime.api.execution.s
     public static final TypeReference<Map<String, Object>> PAYLOAD_TYPE = new TypeReference<>() {
     };
 
-    private final static Logger logger = LoggerFactory.getLogger(WorkflowState.class);
+    private final static Logger logger = LoggerFactory.getLogger(EventSourcedWorkflowState.class);
 
     private final String workflowId;
     private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
@@ -82,15 +83,17 @@ public class WorkflowState implements io.axoniq.workflow.runtime.api.execution.s
     /**
      * Creates a new workflow state without reference to a workflow context and with an empty initial payload.
      */
-    public WorkflowState(@Nonnull String workflowId,
-                         @Nonnull MessageType workflowDefinitionId) {
+    @Internal
+    public EventSourcedWorkflowState(@Nonnull String workflowId,
+                              @Nonnull MessageType workflowDefinitionId) {
         this(workflowId, Map.of(), workflowDefinitionId);
     }
 
     /**
      * Creates a new workflow state without reference to a workflow context.
      */
-    public WorkflowState(
+    @Internal
+    public EventSourcedWorkflowState(
             @Nonnull String workflowId,
             @Nonnull Map<String, Object> payload,
             @Nonnull MessageType workflowDefinitionId
@@ -111,7 +114,7 @@ public class WorkflowState implements io.axoniq.workflow.runtime.api.execution.s
      * @param context              workflow context to use
      * @param listeners            workflow status change listeners
      */
-    WorkflowState(
+    EventSourcedWorkflowState(
             @Nonnull String workflowId,
             @Nonnull Map<String, Object> payload,
             @Nonnull MessageType workflowDefinitionId,
@@ -128,17 +131,16 @@ public class WorkflowState implements io.axoniq.workflow.runtime.api.execution.s
         );
     }
 
-    WorkflowState(
-            @Nonnull io.axoniq.workflow.runtime.api.execution.state.WorkflowState state,
+    EventSourcedWorkflowState(
+            @Nonnull WorkflowState state,
             @Nonnull WorkflowContext context,
             @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
         this(requireEventSourcedState(state), context, listeners);
     }
 
-    private static WorkflowState requireEventSourcedState(
-            io.axoniq.workflow.runtime.api.execution.state.WorkflowState state) {
-        if (!(state instanceof WorkflowState sourcedState)) {
+    private static EventSourcedWorkflowState requireEventSourcedState(WorkflowState state) {
+        if (!(state instanceof EventSourcedWorkflowState sourcedState)) {
             throw new IllegalArgumentException(
                     "Currently only EventSourcedWorkflowState is supported, but you passed an instance of %s.".formatted(
                             state.getClass().getName()));
@@ -153,8 +155,8 @@ public class WorkflowState implements io.axoniq.workflow.runtime.api.execution.s
      * @param context      workflow context to use for status change notifications
      * @param listeners    workflow status change listeners
      */
-    WorkflowState(
-            @Nonnull WorkflowState sourcedState,
+    EventSourcedWorkflowState(
+            @Nonnull EventSourcedWorkflowState sourcedState,
             @Nonnull WorkflowContext context,
             @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
@@ -244,7 +246,7 @@ public class WorkflowState implements io.axoniq.workflow.runtime.api.execution.s
     }
 
     @Override
-    public io.axoniq.workflow.runtime.api.execution.state.WorkflowState evolve(
+    public WorkflowState evolve(
             @Nonnull EventMessage eventMessage,
             @Nonnull ProcessingContext processingContext) {
         logger.trace("Applying event {}", eventMessage.type());

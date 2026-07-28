@@ -24,7 +24,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
-import io.axoniq.workflow.runtime.execution.WorkflowState;
+import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.execution.EventSourcedRunningWorkflows;
 import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
 import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowStore;
@@ -164,7 +164,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                             cfg.getComponent(WorkflowConfigurationRegistry.class),
                             cfg.getComponent(WorkflowExecutionRepository.class),
                             cfg.getComponent(SafePointStore.class, COMPONENT_SAFE_POINT_STORE),
-                            workflowStateRehydrationSupport(cfg)
+                            cfg.getComponent(WorkflowStore.class)
                     )
             );
 
@@ -283,39 +283,6 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         // Append rather than replace: a single module can host multiple workflow definitions (e.g. several
         // @Workflow beans of the same context type, including multiple version variants of one workflow).
         this.workflowConfigurationBuilders.add(workflowConfigurationBuilder);
-    }
-
-    private WorkflowStore workflowStateRehydrationSupport(Configuration configuration) {
-        return new EventSourcedWorkflowStore(
-                runningWorkflowsRepository(configuration),
-                workflowStateRepository(configuration)
-        );
-    }
-
-    @SuppressWarnings("unchecked")
-    private Repository<String, EventSourcedRunningWorkflows> runningWorkflowsRepository(Configuration configuration) {
-        return configuration.getComponents(Repository.class)
-                            .values()
-                            .stream()
-                            .filter(repository -> repository.entityType().equals(EventSourcedRunningWorkflows.class))
-                            .map(repository -> (Repository<String, EventSourcedRunningWorkflows>) repository)
-                            .findFirst()
-                            .orElseThrow(() -> new NoSuchElementException(
-                                    "No repository found for %s".formatted(EventSourcedRunningWorkflows.class.getName())
-                            ));
-    }
-
-    @SuppressWarnings("unchecked")
-    private Repository<String, WorkflowState> workflowStateRepository(Configuration configuration) {
-        return configuration.getComponents(Repository.class)
-                            .values()
-                            .stream()
-                            .filter(repository -> repository.entityType().equals(WorkflowState.class))
-                            .map(repository -> (Repository<String, WorkflowState>) repository)
-                            .findFirst()
-                            .orElseThrow(() -> new NoSuchElementException(
-                                    "No repository found for %s".formatted(WorkflowState.class.getName())
-                            ));
     }
 
     record ConditionedWorkflowConfiguration<C extends WorkflowContext>(

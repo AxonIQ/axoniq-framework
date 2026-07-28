@@ -50,6 +50,6 @@ public interface WorkflowStore {
      * @return durable workflow state
      */
     @Nonnull
-    CompletableFuture<WorkflowState> loadWorkflow(@Nonnull String workflowId,
-                                                  @Nonnull ProcessingContext processingContext);
+    CompletableFuture<EventSourcedWorkflowState> loadWorkflow(@Nonnull String workflowId,
+                                                              @Nonnull ProcessingContext processingContext);
 }
