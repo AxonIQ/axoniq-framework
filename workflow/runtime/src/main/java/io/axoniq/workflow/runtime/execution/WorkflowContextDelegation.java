@@ -34,6 +34,7 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -78,6 +79,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
     // Services
     private final EventSink eventSink;
     private final UnitOfWorkFactory unitOfWorkFactory;
+    private final UnitOfWorkFactory workflowBodyUnitOfWorkFactory;
     private final Clock clock;
     private final ExecutorService executorService;
     private final WorkflowScheduler timeoutScheduler;
@@ -110,6 +112,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
         this.unitOfWorkFactory = Objects.requireNonNull(
                 processingContext.component(UnitOfWorkFactory.class),
                 "Could not retrieve UoW factory");
+        this.workflowBodyUnitOfWorkFactory = new SimpleUnitOfWorkFactory(processingContext);
         this.clock = Objects.requireNonNull(
                 processingContext.component(Clock.class),
                 "Could not retrieve Clock");
@@ -297,6 +300,22 @@ public class WorkflowContextDelegation implements WorkflowContext {
     @Nonnull
     public UnitOfWorkFactory unitOfWorkFactory() {
         return this.unitOfWorkFactory;
+    }
+
+    /**
+     * Factory for the unit of work wrapping a workflow instance's body execution.
+     * <p>
+     * The body-wrapper unit of work stays open for the workflow instance's entire lifetime, including any time the
+     * body spends parked at {@code awaitEvent}, {@code sleep}, or retry backoff. It is therefore non-transactional,
+     * as a transaction bound to it would hold its resources per in-flight instance for as long as the instance
+     * lives. Workflow and step events are published in short-lived child units of work created from the
+     * transactional {@link #unitOfWorkFactory()} instead.
+     *
+     * @return the non-transactional unit of work factory used for the workflow-body wrapper.
+     */
+    @Nonnull
+    public UnitOfWorkFactory workflowBodyUnitOfWorkFactory() {
+        return this.workflowBodyUnitOfWorkFactory;
     }
 
     @Nonnull
