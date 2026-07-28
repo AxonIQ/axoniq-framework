@@ -25,8 +25,6 @@ import org.axonframework.common.infra.ComponentDescriptor;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * Default implementation of {@link TenantComponentProvider}, caching one lazily created component instance per tenant.
@@ -42,7 +40,9 @@ import java.util.concurrent.ConcurrentMap;
  * tenants on, nor request components from, this provider on the creating thread.
  * <p>
  * Re-registering a tenant supersedes its previous registration, and cancelling a registration affects only the
- * instance created under it, so a stale cancellation never disturbs a newer registration of the same tenant.
+ * instance created under it, so a stale cancellation never disturbs a newer registration of the same tenant. The
+ * registration bookkeeping this rests on is {@link TenantScopedCache}, which this provider adds the component type and
+ * the {@link TenantComponentFactory#destroy(TenantDescriptor, Object) destroy} half of the lifecycle to.
  * <p>
  * Internal, because users obtain this provider through
  * {@link TenantComponentProvider#withFactory(Class, TenantComponentFactory)} rather than constructing it directly.
@@ -57,13 +57,7 @@ import java.util.concurrent.ConcurrentMap;
 class DefaultTenantComponentProvider<T> implements TenantComponentProvider<T> {
 
     private final Class<T> componentType;
-    private final TenantComponentFactory<T> factory;
-    // Each registerTenant call is identified by its own token. Instances are cached per token rather than per
-    // tenant, so membership and instance ownership always trace back to the registration that created them.
-    private final ConcurrentMap<TenantDescriptor, RegistrationToken> activeRegistrations = new ConcurrentHashMap<>();
-    private final ConcurrentMap<RegistrationToken, T> components = new ConcurrentHashMap<>();
-    // Refreshed on (un)registration, so the per-message tenants() call does not allocate on the hot path.
-    private volatile List<TenantDescriptor> tenantsView = List.of();
+    private final TenantScopedCache<T> instances;
 
     /**
      * Constructs a provider for the given {@code componentType}, using the given {@code factory} to build and destroy
@@ -76,40 +70,15 @@ class DefaultTenantComponentProvider<T> implements TenantComponentProvider<T> {
     DefaultTenantComponentProvider(Class<T> componentType,
                                    TenantComponentFactory<T> factory) {
         this.componentType = Objects.requireNonNull(componentType, "The component type must not be null");
-        this.factory = Objects.requireNonNull(factory, "The factory must not be null");
+        Objects.requireNonNull(factory, "The factory must not be null");
+        this.instances = new TenantScopedCache<>(factory::create,
+                                                 factory::destroy,
+                                                 "the component provider for type [" + componentType.getName() + "]");
     }
 
     @Override
     public T componentFor(TenantDescriptor tenant) {
-        Objects.requireNonNull(tenant, "The tenant must not be null");
-        while (true) {
-            RegistrationToken token = activeRegistrations.get(tenant);
-            if (token == null) {
-                throw unknownTenantException(tenant);
-            }
-            T component = components.computeIfAbsent(
-                    token,
-                    ignored -> Objects.requireNonNull(factory.create(tenant),
-                                                      "The factory returned null for tenant [" + tenant.tenantId()
-                                                              + "]")
-            );
-            if (activeRegistrations.get(tenant) == token) {
-                return component;
-            }
-            // The registration was cancelled or superseded while creating, so the fresh instance would escape the
-            // cleanup of its registration. Destroy it instead of leaking it and re-evaluate: a cancelled tenant is
-            // rejected on the next iteration, a superseded one gets an instance under the newer registration.
-            if (components.remove(token, component)) {
-                factory.destroy(tenant, component);
-            }
-        }
-    }
-
-    private TenantNotResolvedException unknownTenantException(TenantDescriptor tenant) {
-        return new TenantNotResolvedException(
-                "Tenant [%s] is not registered with the component provider for type [%s]",
-                tenant.tenantId(), componentType.getName()
-        );
+        return instances.componentFor(tenant);
     }
 
     @Override
@@ -119,51 +88,22 @@ class DefaultTenantComponentProvider<T> implements TenantComponentProvider<T> {
 
     @Override
     public List<TenantDescriptor> tenants() {
-        return tenantsView;
+        return instances.tenants();
     }
 
     @Override
     public Registration registerTenant(TenantDescriptor tenantDescriptor) {
-        Objects.requireNonNull(tenantDescriptor, "The tenant descriptor must not be null");
-        RegistrationToken token = new RegistrationToken();
-        activeRegistrations.put(tenantDescriptor, token);
-        refreshTenantsView();
-        return () -> {
-            // The tenant-scoped remove only succeeds while this registration is still the active one, and the
-            // token-scoped remove only yields the instance created under it. Cancelling is therefore idempotent
-            // and never affects a newer registration of the same tenant.
-            boolean wasRegistered = activeRegistrations.remove(tenantDescriptor, token);
-            if (wasRegistered) {
-                refreshTenantsView();
-            }
-            T owned = components.remove(token);
-            if (owned != null) {
-                factory.destroy(tenantDescriptor, owned);
-            }
-            return wasRegistered;
-        };
+        return instances.registerTenant(tenantDescriptor);
     }
 
     @Override
     public Registration registerAndStartTenant(TenantDescriptor tenantDescriptor) {
-        // Components are created lazily on first access, so there is nothing to start eagerly.
-        return registerTenant(tenantDescriptor);
-    }
-
-    // Synchronized so concurrent (un)registrations cannot publish an older snapshot last, leaving the view stale.
-    private synchronized void refreshTenantsView() {
-        this.tenantsView = List.copyOf(activeRegistrations.keySet());
+        return instances.registerAndStartTenant(tenantDescriptor);
     }
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("componentType", componentType.getName());
-        // Describes the immutable snapshot, so descriptors serialized lazily never observe mid-mutation state.
-        descriptor.describeProperty("tenants", tenantsView);
-    }
-
-    // Identifies a single registerTenant call, tying tenant membership and instance ownership to that registration.
-    private static final class RegistrationToken {
-
+        descriptor.describeProperty("tenants", instances.tenants());
     }
 }

@@ -24,8 +24,8 @@ import org.axonframework.common.infra.MockComponentDescriptor;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -212,17 +212,46 @@ class TenantScopedCacheTest {
             assertThat(registration.cancel()).isFalse();
         }
 
-        // Re-registering supersedes, so the superseded registration's component is dropped there and then: its own
+        // Re-registering supersedes, so the superseded registration's component is handed over there and then: its own
         // Registration may never be cancelled, leaving nothing else to reclaim it.
         @Test
         void reRegisteringATenantEvictsTheSupersededComponent() {
-            testSubject.registerTenant(TENANT_A);
-            String supersededComponent = testSubject.componentFor(TENANT_A);
+            List<String> evicted = new CopyOnWriteArrayList<>();
+            TenantScopedCache<String> evictionRecording =
+                    new TenantScopedCache<>(countingFactory, (tenant, component) -> evicted.add(component), "a cache");
+            evictionRecording.registerTenant(TENANT_A);
+            String supersededComponent = evictionRecording.componentFor(TENANT_A);
 
-            testSubject.registerTenant(TENANT_A);
+            evictionRecording.registerTenant(TENANT_A);
 
-            assertThat(testSubject.componentFor(TENANT_A)).isNotEqualTo(supersededComponent);
-            assertThat(creations.get(TENANT_A)).hasValue(2);
+            assertThat(evicted).containsExactly(supersededComponent);
+            assertThat(evictionRecording.componentFor(TENANT_A)).isNotEqualTo(supersededComponent);
+        }
+
+        // Whoever owns the component's lifecycle gets it back on eviction, so it can be released.
+        @Test
+        void cancellingATenantRegistrationHandsTheComponentToTheEvictionCallback() {
+            List<String> evicted = new CopyOnWriteArrayList<>();
+            TenantScopedCache<String> evictionRecording =
+                    new TenantScopedCache<>(countingFactory, (tenant, component) -> evicted.add(component), "a cache");
+            Registration registration = evictionRecording.registerTenant(TENANT_A);
+            String component = evictionRecording.componentFor(TENANT_A);
+
+            assertThat(registration.cancel()).isTrue();
+
+            assertThat(evicted).containsExactly(component);
+        }
+
+        @Test
+        void cancellingATenantRegistrationWithoutAComponentEvictsNothing() {
+            List<String> evicted = new CopyOnWriteArrayList<>();
+            TenantScopedCache<String> evictionRecording =
+                    new TenantScopedCache<>(countingFactory, (tenant, component) -> evicted.add(component), "a cache");
+            Registration registration = evictionRecording.registerTenant(TENANT_A);
+
+            assertThat(registration.cancel()).isTrue();
+
+            assertThat(evicted).isEmpty();
         }
 
         // Tenant removals reach a component through retained registrations, so a stale one can be cancelled after its
@@ -247,7 +276,7 @@ class TenantScopedCacheTest {
 
         testSubject.describeTo(descriptor);
 
-        assertThat(descriptor.getDescribedProperties()).containsEntry("tenants", Set.of(TENANT_A));
+        assertThat(descriptor.getDescribedProperties()).containsEntry("tenants", List.of(TENANT_A));
     }
 
     private static String componentOf(Future<String> access) {
