@@ -158,9 +158,6 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
     }
 
     private static RegisterTenantDescriptorHandlerInterceptor interceptorFactory(Configuration config) {
-        return new RegisterTenantDescriptorHandlerInterceptor(
-                config.getComponent(TenantResolver.class),
-                config.getComponent(TenantProvider.class)
-        );
+        return new RegisterTenantDescriptorHandlerInterceptor(config.getComponent(TenantRouter.class));
     }
 }

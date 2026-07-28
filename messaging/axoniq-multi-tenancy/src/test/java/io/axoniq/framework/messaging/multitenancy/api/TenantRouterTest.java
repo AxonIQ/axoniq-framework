@@ -91,6 +91,31 @@ class TenantRouterTest {
     }
 
     @Nested
+    class ResolvingFromMessage {
+
+        @Test
+        void resolvesTheKnownTenantNamedByTheMessage() {
+            TenantRouter resolver = new TenantRouter(metadataResolver, TENANT_DESCRIPTORS);
+
+            assertThat(resolver.resolveFromMessage(eventWithTenant(TENANT_B))).hasValue(TENANT_B);
+        }
+
+        @Test
+        void returnsEmptyWhenTheMessageNamesATenantThatIsNotKnown() {
+            TenantRouter resolver = new TenantRouter(metadataResolver, () -> List.of(TENANT_A));
+
+            assertThat(resolver.resolveFromMessage(eventWithTenant(TENANT_B))).isEmpty();
+        }
+
+        @Test
+        void returnsEmptyWhenTheMessageNamesNoTenant() {
+            TenantRouter resolver = new TenantRouter(metadataResolver, TENANT_DESCRIPTORS);
+
+            assertThat(resolver.resolveFromMessage(eventWithTenant(null))).isEmpty();
+        }
+    }
+
+    @Nested
     class ResolvingFromCollection {
 
         @Test

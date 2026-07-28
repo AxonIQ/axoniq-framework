@@ -39,7 +39,7 @@ import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConne
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.common.lifecycle.ShutdownInProgressException;
@@ -49,6 +49,8 @@ import org.axonframework.messaging.commandhandling.GenericCommandMessage;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
@@ -58,7 +60,6 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -79,13 +80,14 @@ class MultiTenantAxonServerCommandBusConnectorTest {
         private final AxonServerConnectionManager connectionManager =
                 new RecordingConnectionManager(configuration, Map.of());
         private final MessageConverter converter = Mockito.mock(MessageConverter.class);
-        private final TenantResolver tenantResolver =
+        private final TenantRouter tenantRouter = new TenantRouter(
                 (message, tenants) -> tenants.stream()
                                              .findFirst()
-                                             .orElseThrow(() -> new TenantNotResolvedException("no tenant"));
+                                             .orElseThrow(() -> new TenantNotResolvedException("no tenant")),
+                List::of);
 
         @Test
-        void rejectsNullTenantResolver() {
+        void rejectsNullTenantRouter() {
             assertThatThrownBy(() -> new MultiTenantAxonServerCommandBusConnector(
                     null, connectionManager, configuration, converter))
                     .isInstanceOf(NullPointerException.class);
@@ -94,21 +96,21 @@ class MultiTenantAxonServerCommandBusConnectorTest {
         @Test
         void rejectsNullConnectionManager() {
             assertThatThrownBy(() -> new MultiTenantAxonServerCommandBusConnector(
-                    tenantResolver, null, configuration, converter))
+                    tenantRouter, null, configuration, converter))
                     .isInstanceOf(NullPointerException.class);
         }
 
         @Test
         void rejectsNullConfiguration() {
             assertThatThrownBy(() -> new MultiTenantAxonServerCommandBusConnector(
-                    tenantResolver, connectionManager, null, converter))
+                    tenantRouter, connectionManager, null, converter))
                     .isInstanceOf(NullPointerException.class);
         }
 
         @Test
         void rejectsNullConverter() {
             assertThatThrownBy(() -> new MultiTenantAxonServerCommandBusConnector(
-                    tenantResolver, connectionManager, configuration, null))
+                    tenantRouter, connectionManager, configuration, null))
                     .isInstanceOf(NullPointerException.class);
         }
     }
@@ -181,6 +183,49 @@ class MultiTenantAxonServerCommandBusConnectorTest {
             CompletableFuture<CommandResultMessage> result = testSubject.dispatch(command, null);
 
             assertThat(result).isCompleted();
+            assertThat(connection2.recordingCommandChannel().sentCommands()).hasSize(1);
+        }
+
+        @Test
+        void dispatchRoutesOnTheTenantCarriedByTheProcessingContext() {
+            TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1, TENANT_2));
+            RecordingConnection connection1 = new RecordingConnection();
+            RecordingConnection connection2 = new RecordingConnection();
+            MultiTenantAxonServerCommandBusConnector testSubject = createSubject(tenantProvider,
+                                                                                Map.of(TENANT_1.tenantId(),
+                                                                                       connection1,
+                                                                                       TENANT_2.tenantId(),
+                                                                                       connection2));
+
+            CommandMessage command = commandWithoutTenant();
+            ProcessingContext context = StubProcessingContext.forMessage(command)
+                                                             .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_2);
+            CompletableFuture<CommandResultMessage> result = testSubject.dispatch(command, context);
+
+            assertThat(result).isCompleted();
+            assertThat(connection1.recordingCommandChannel().sentCommands()).isEmpty();
+            assertThat(connection2.recordingCommandChannel().sentCommands()).hasSize(1);
+        }
+
+        @Test
+        void dispatchPrefersTheTenantOfTheProcessingContextOverTheTenantNamedInTheCommand() {
+            TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1, TENANT_2));
+            RecordingConnection connection1 = new RecordingConnection();
+            RecordingConnection connection2 = new RecordingConnection();
+            MultiTenantAxonServerCommandBusConnector testSubject = createSubject(tenantProvider,
+                                                                                Map.of(TENANT_1.tenantId(),
+                                                                                       connection1,
+                                                                                       TENANT_2.tenantId(),
+                                                                                       connection2));
+
+            // Command metadata must not redirect a command out of the tenant it is dispatched in.
+            CommandMessage command = commandFor(TENANT_1.tenantId());
+            ProcessingContext context = StubProcessingContext.forMessage(command)
+                                                             .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_2);
+            CompletableFuture<CommandResultMessage> result = testSubject.dispatch(command, context);
+
+            assertThat(result).isCompleted();
+            assertThat(connection1.recordingCommandChannel().sentCommands()).isEmpty();
             assertThat(connection2.recordingCommandChannel().sentCommands()).hasSize(1);
         }
 
@@ -562,16 +607,18 @@ class MultiTenantAxonServerCommandBusConnectorTest {
     class DescribeTo {
 
         @Test
-        void describeToExposesTenantsSubscriptionsAndConnectors() {
+        void describeToExposesTheRouterSubscriptionsAndConnectors() {
             // given
             TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1, TENANT_2));
             RecordingConnection connection1 = new RecordingConnection();
             RecordingConnection connection2 = new RecordingConnection();
+            TenantRouter tenantRouter = routerFor(tenantProvider);
             MultiTenantAxonServerCommandBusConnector testSubject = createSubject(tenantProvider,
                                                                                 Map.of(TENANT_1.tenantId(),
                                                                                        connection1,
                                                                                        TENANT_2.tenantId(),
-                                                                                       connection2));
+                                                                                       connection2),
+                                                                                tenantRouter);
             testSubject.subscribe(COMMAND_ONE, 100).join();
 
             // when
@@ -579,8 +626,7 @@ class MultiTenantAxonServerCommandBusConnectorTest {
             testSubject.describeTo(descriptor);
 
             // then
-            Set<TenantDescriptor> describedTenants = descriptor.getProperty("tenants");
-            assertThat(describedTenants).containsExactlyInAnyOrder(TENANT_1, TENANT_2);
+            assertThat((TenantRouter) descriptor.getProperty("tenantRouter")).isSameAs(tenantRouter);
 
             Map<QualifiedName, Integer> describedSubscriptions = descriptor.getProperty("subscribedCommands");
             assertThat(describedSubscriptions).containsEntry(COMMAND_ONE, 100);
@@ -599,17 +645,42 @@ class MultiTenantAxonServerCommandBusConnectorTest {
 
     private static MultiTenantAxonServerCommandBusConnector createSubject(TestTenantProvider tenantProvider,
                                                                            Map<String, RecordingConnection> connections) {
+        return createSubject(tenantProvider, connections, routerFor(tenantProvider));
+    }
+
+    private static MultiTenantAxonServerCommandBusConnector createSubject(TestTenantProvider tenantProvider,
+                                                                           Map<String, RecordingConnection> connections,
+                                                                           TenantRouter tenantRouter) {
         AxonServerConfiguration configuration = defaultConfiguration();
         MessageConverter converter = Mockito.mock(MessageConverter.class);
         MultiTenantAxonServerCommandBusConnector connector = new MultiTenantAxonServerCommandBusConnector(
-                (a, c) -> c.stream().filter(d -> d.tenantId().equals(a.metadata().get("tenantId"))).findFirst()
-                              .orElseThrow(() -> new TenantNotResolvedException("Not tenant found in metadata")),
+                tenantRouter,
                 new RecordingConnectionManager(configuration, connections),
                 configuration,
                 converter
         );
         tenantProvider.subscribe(connector);
         return connector;
+    }
+
+    /**
+     * A router resolving on the tenant named in the command's metadata, against the tenants the provider knows.
+     */
+    private static TenantRouter routerFor(TestTenantProvider tenantProvider) {
+        return new TenantRouter(
+                (message, tenants) -> tenants.stream()
+                                             .filter(tenant -> tenant.tenantId()
+                                                                     .equals(message.metadata().get("tenantId")))
+                                             .findFirst()
+                                             .orElseThrow(() -> new TenantNotResolvedException(
+                                                     "No tenant found in metadata")),
+                tenantProvider);
+    }
+
+    private static CommandMessage commandWithoutTenant() {
+        return new GenericCommandMessage(
+                new GenericMessage("message-id", new MessageType(COMMAND_ONE.name()), "payload".getBytes(), Map.of())
+        );
     }
 
     private static CommandMessage commandFor(String tenantId) {

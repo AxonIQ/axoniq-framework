@@ -25,7 +25,6 @@ import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConne
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
@@ -152,7 +151,7 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
         AtomicReference<@Nullable Registration> tenantSubscription = new AtomicReference<>();
         return ComponentDefinition.ofType(CommandBusConnector.class)
                                   .withBuilder(config -> new MultiTenantAxonServerCommandBusConnector(
-                                          config.getComponent(TenantResolver.class),
+                                          config.getComponent(TenantRouter.class),
                                           config.getComponent(AxonServerConnectionManager.class),
                                           config.getComponent(AxonServerConfiguration.class),
                                           config.getComponent(MessageConverter.class)))

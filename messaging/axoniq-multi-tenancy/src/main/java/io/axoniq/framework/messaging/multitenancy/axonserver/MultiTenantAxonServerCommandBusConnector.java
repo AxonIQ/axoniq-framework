@@ -28,7 +28,7 @@ import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConne
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -44,11 +44,12 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
+
+import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException.tenantNotResolved;
 
 /**
  * Multi-tenant Axon Server {@link CommandBusConnector}.
@@ -66,12 +67,11 @@ public class MultiTenantAxonServerCommandBusConnector
 
     private static final Logger logger = LoggerFactory.getLogger(MultiTenantAxonServerCommandBusConnector.class);
 
-    private final TenantResolver tenantResolver;
+    private final TenantRouter tenantRouter;
     private final AxonServerConnectionManager connectionManager;
     private final AxonServerConfiguration configuration;
     private final MessageConverter converter;
 
-    private final Set<TenantDescriptor> tenantDescriptors = ConcurrentHashMap.newKeySet();
     private final Map<String, AxonServerCommandBusConnector> tenantConnectors = new ConcurrentHashMap<>();
     private final Map<QualifiedName, Integer> knownSubscriptions = new ConcurrentHashMap<>();
 
@@ -81,18 +81,17 @@ public class MultiTenantAxonServerCommandBusConnector
     /**
      * Constructs a {@code MultiTenantAxonServerCommandBusConnector}.
      *
-     * @param tenantResolver    the resolver used to determine the {@link TenantDescriptor} a given
-     *                          {@link CommandMessage} belongs to
+     * @param tenantRouter      the router deciding which tenant a dispatched {@link CommandMessage} is routed to
      * @param connectionManager the manager used to obtain the {@link AxonServerConnection} for a given tenant
      * @param configuration     the configuration applied to each per-tenant {@link AxonServerCommandBusConnector}
      * @param converter         the {@link MessageConverter} used by each per-tenant
      *                          {@link AxonServerCommandBusConnector}
      */
-    public MultiTenantAxonServerCommandBusConnector(TenantResolver tenantResolver,
+    public MultiTenantAxonServerCommandBusConnector(TenantRouter tenantRouter,
                                                     AxonServerConnectionManager connectionManager,
                                                     AxonServerConfiguration configuration,
                                                     MessageConverter converter) {
-        this.tenantResolver = Objects.requireNonNull(tenantResolver, "The tenantResolver must not be null.");
+        this.tenantRouter = Objects.requireNonNull(tenantRouter, "The tenantRouter must not be null.");
         this.connectionManager = Objects.requireNonNull(connectionManager, "The connectionManager must not be null.");
         this.configuration = Objects.requireNonNull(configuration, "The configuration must not be null.");
         this.converter = Objects.requireNonNull(converter, "The converter must not be null.");
@@ -105,8 +104,7 @@ public class MultiTenantAxonServerCommandBusConnector
     }
 
     /**
-     * Resolves the {@link TenantResolver connector for the current tenant} and subsequently dispatches the given
-     * {@code command} to it.
+     * Resolves the connector of the tenant the given {@code command} belongs to and dispatches the command to it.
      *
      * @param command           the command message to dispatch
      * @param processingContext the processing context for the command
@@ -115,7 +113,7 @@ public class MultiTenantAxonServerCommandBusConnector
     @Override
     public CompletableFuture<CommandResultMessage> dispatch(CommandMessage command,
                                                             @Nullable ProcessingContext processingContext) {
-        return resolveConnector(command).dispatch(command, processingContext);
+        return resolveConnector(command, processingContext).dispatch(command, processingContext);
     }
 
     /**
@@ -222,25 +220,40 @@ public class MultiTenantAxonServerCommandBusConnector
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
-        descriptor.describeProperty("tenants", tenantDescriptors);
+        descriptor.describeProperty("tenantRouter", tenantRouter);
         descriptor.describeProperty("subscribedCommands", knownSubscriptions);
         descriptor.describeProperty("tenantConnectors", tenantConnectors);
     }
 
-    private AxonServerCommandBusConnector resolveConnector(CommandMessage command) {
-        TenantDescriptor tenantDescriptor = tenantResolver.resolveTenant(command, tenantDescriptors);
-        AxonServerCommandBusConnector connector = tenantConnectors.get(tenantDescriptor.tenantId());
+    /**
+     * Resolves the connector of the tenant the given {@code command} belongs to, taking the tenant of the given
+     * {@code context} when it carries one, so a command dispatched while handling another message stays with the tenant
+     * of that message instead of having to name its tenant again.
+     *
+     * @param command the command to resolve the connector for
+     * @param context the processing context the command is dispatched in, if any
+     * @return the connector of the tenant the given {@code command} belongs to
+     * @throws TenantNotResolvedException if the command belongs to no known tenant, or to a tenant this connector has
+     *                                    no connection for
+     */
+    private AxonServerCommandBusConnector resolveConnector(CommandMessage command,
+                                                           @Nullable ProcessingContext context) {
+        TenantDescriptor tenant = tenantRouter.resolveFromContext(context)
+                                              .or(() -> tenantRouter.resolveFromMessage(command))
+                                              .orElseThrow(tenantNotResolved(
+                                                      "No known tenant for command [%s]",
+                                                      command.type().qualifiedName()));
+        AxonServerCommandBusConnector connector = tenantConnectors.get(tenant.tenantId());
         if (connector == null) {
             logger.warn("No command bus connector found for tenant [{}] while dispatching command [{}].",
-                        tenantDescriptor.tenantId(), command.type().qualifiedName());
-            throw TenantNotResolvedException.forTenantId(tenantDescriptor.tenantId());
+                        tenant.tenantId(), command.type().qualifiedName());
+            throw TenantNotResolvedException.forTenantId(tenant.tenantId());
         }
-        logger.debug("Resolved tenant [{}] for command [{}].", tenantDescriptor.tenantId(), command.type().qualifiedName());
+        logger.debug("Resolved tenant [{}] for command [{}].", tenant.tenantId(), command.type().qualifiedName());
         return connector;
     }
 
     private Registration addTenant(TenantDescriptor tenantDescriptor) {
-        tenantDescriptors.add(tenantDescriptor);
         tenantConnectors.computeIfAbsent(tenantDescriptor.tenantId(), tenantId -> {
             AxonServerCommandBusConnector connector = createConnector(tenantId);
             // Known subscriptions are replayed only while creating a new connector. An already-registered tenant's
@@ -262,7 +275,6 @@ public class MultiTenantAxonServerCommandBusConnector
     }
 
     private boolean removeTenant(TenantDescriptor tenantDescriptor) {
-        tenantDescriptors.remove(tenantDescriptor);
         AxonServerCommandBusConnector connector = tenantConnectors.remove(tenantDescriptor.tenantId());
         if (connector == null) {
             return false;

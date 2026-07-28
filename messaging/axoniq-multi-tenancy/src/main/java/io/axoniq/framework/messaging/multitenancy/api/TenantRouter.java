@@ -98,6 +98,20 @@ public class TenantRouter implements DescribableComponent {
     }
 
     /**
+     * Resolves the tenant of the given {@code message}.
+     * <p>
+     * Returns {@link Optional#empty()} when the message cannot be attributed to a known tenant, so a message naming a
+     * tenant this application does not know never routes.
+     *
+     * @param message the message to resolve the tenant of
+     * @return the known tenant of the message, or empty when none matches
+     */
+    public Optional<TenantDescriptor> resolveFromMessage(Message message) {
+        Objects.requireNonNull(message, "The message must not be null");
+        return resolve(message, tenantDescriptors.tenants());
+    }
+
+    /**
      * Resolves the single tenant shared by all given {@code messages}.
      * <p>
      * Returns the resolved tenant when every message resolves to it. Returns {@link Optional#empty()} when the batch is
