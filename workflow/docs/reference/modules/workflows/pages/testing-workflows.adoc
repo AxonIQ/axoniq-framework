@@ -508,7 +508,7 @@ void vip_registration_completes_after_magic_event() {
 Use the BDD fixture for normal workflow behavior tests.
 The lower-level APIs are useful when you need an imperative harness, custom configuration, direct runtime services, or broader integration-style coverage.
 
-=== WorkflowTestDriver
+=== `WorkflowTestDriver`
 
 `WorkflowTestDriver` is the lower-level test harness used by the BDD fixture.
 It starts a workflow module, exposes workflow test services, publishes events, waits for executions and histories, and stores the selected workflow state for later assertions.
@@ -562,7 +562,7 @@ WorkflowTestDriver driver = WorkflowTestDriver.live(module, UnaryOperator.identi
 
 In live mode, use `publishEvent(...)`, `executionExists()`, `historyExists()`, `noExecution()`, `noHistory()`, and `testingState()` for assertions over normally running workflows.
 
-=== WorkflowTestSteppingModeEnhancer
+=== `WorkflowTestSteppingModeEnhancer`
 
 `WorkflowTestSteppingModeEnhancer` installs the stepping components used by the BDD fixture and by `WorkflowTestDriver.stepper(...)`.
 It registers:
