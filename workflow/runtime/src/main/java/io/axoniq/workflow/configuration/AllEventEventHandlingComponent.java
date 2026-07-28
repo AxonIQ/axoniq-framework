@@ -18,8 +18,6 @@
  */
 package io.axoniq.workflow.configuration;
 
-import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.Message;
@@ -34,9 +32,7 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
@@ -48,7 +44,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 
 /**
@@ -57,7 +52,7 @@ import java.util.function.BiFunction;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public class AllEventEventHandlingComponent implements EventHandlingComponent, Checkpointing {
+public class AllEventEventHandlingComponent implements EventHandlingComponent {
 
     private static final Logger logger = LoggerFactory.getLogger(AllEventEventHandlingComponent.class);
     public static final BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
@@ -79,8 +74,6 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
     private final SequencingPolicy<EventMessage> sequencingPolicy;
     private final EventHandler eventHandler;
     @Nullable
-    private final Checkpointing checkpointingHandler;
-    @Nullable
     private final ReplayStatusChangedHandler replayStatusChangedHandler;
 
     /**
@@ -94,18 +87,12 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
                 SequentialPerAggregatePolicy.INSTANCE,
                 SequentialPolicy.INSTANCE
         );
-        if (eventHandler instanceof Checkpointing checkpointing) {
-            checkpointingHandler = checkpointing;
-        } else {
-            checkpointingHandler = null;
-        }
         if (eventHandler instanceof ReplayStatusChangedHandler) {
             replayStatusChangedHandler = (ReplayStatusChangedHandler) eventHandler;
         } else {
             replayStatusChangedHandler = null;
         }
     }
-
 
     @Override
     public MessageStream.Empty<Message> handle(EventMessage event, ProcessingContext context) {
@@ -123,7 +110,6 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
         return true;
     }
 
-
     @Override
     public Object sequenceIdentifierFor(EventMessage event,
                                         ProcessingContext context) {
@@ -140,20 +126,8 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
     }
 
     @Override
-    public CompletableFuture<TrackingToken> onCheckpointAdvanced(@Nonnull Segment segment,
-                                                                 @Nonnull TrackingToken requested) {
-        if (checkpointingHandler != null) {
-            return checkpointingHandler.onCheckpointAdvanced(segment, requested);
-        }
-        return CompletableFuture.completedFuture(requested);
-    }
-
-    @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("event-handler", eventHandler.getClass());
-        if (checkpointingHandler != null) {
-            descriptor.describeProperty("checkpointing-handler", checkpointingHandler.getClass());
-        }
         if (replayStatusChangedHandler != null) {
             descriptor.describeProperty("replay-status-changed-handler", replayStatusChangedHandler.getClass());
         }

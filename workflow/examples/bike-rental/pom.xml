@@ -53,7 +53,7 @@
             <dependency>
                 <groupId>io.axoniq.framework</groupId>
                 <artifactId>axoniq-framework-bom</artifactId>
-                <version>${axoniq.framework.version}</version>
+                <version>${axoniq.version}</version>
                 <scope>import</scope>
                 <type>pom</type>
             </dependency>

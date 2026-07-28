@@ -59,6 +59,7 @@ import org.junit.jupiter.api.*;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -226,7 +227,7 @@ class WorkflowReplayPreparedStateTest {
         }
 
         private static Set<Tag> tagsFor(EventMessage eventMessage) {
-            var tags = new java.util.LinkedHashSet<>(new WorkflowEventTagResolver().resolve(eventMessage));
+            var tags = new LinkedHashSet<>(new WorkflowEventTagResolver().resolve(eventMessage));
             tags.add(Tag.of("type", eventMessage.type().qualifiedName().toString()));
             return Set.copyOf(tags);
         }

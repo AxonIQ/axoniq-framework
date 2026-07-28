@@ -221,8 +221,9 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
         if (!requiresReplay(resetToken, latestToken)) {
             workflowEngine.switchToLiveMode();
             return completedFuture(null);
+        } else {
+            return processor.resetTokens(resetToken);
         }
-        return processor.resetTokens(resetToken);
     }
 
     private CompletableFuture<TrackingToken> determineResetToken(
@@ -230,19 +231,17 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
             SafePointStore safePointStore
     ) {
         return safePointStore.fetchSafePointToken()
-                             .thenCompose(storedToken -> {
-                                 if (storedToken != null) {
-                                     return completedFuture(storedToken);
-                                 }
-                                 return eventSource.firstToken(null);
-                             });
+                             .thenCompose(token ->
+                                 token != null ? completedFuture(token): eventSource.firstToken(null)
+                             );
     }
 
     boolean requiresReplay(@Nullable TrackingToken resetToken, @Nullable TrackingToken latestToken) {
         if (resetToken == null || latestToken == null) {
             return false;
+        } else {
+            return !resetToken.samePositionAs(latestToken);
         }
-        return !resetToken.samePositionAs(latestToken);
     }
 
     @Override

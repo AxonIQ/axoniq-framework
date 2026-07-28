@@ -41,6 +41,7 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.modelling.repository.Repository;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -74,14 +75,19 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     private final String name;
     private final Class<C> workflowContextType;
     private final boolean defaultConfiguration;
-    private ComponentBuilder<WorkflowConfigurationRegistry<?>> workflowConfigurationRegistryBuilder;
-    private ComponentBuilder<WorkflowExecutionRepository> workflowExecutionRepositoryBuilder;
-    private boolean useHistory = true;
-    private ComponentBuilder<WorkflowHistoryProjector> workflowHistoryProjectorBuilder;
     /**
      * Workflow-definition builders appended during configuration; concatenated at build time.
      */
     private final List<ComponentBuilder<List<ConditionedWorkflowConfiguration<C>>>> workflowConfigurationBuilders = new ArrayList<>();
+
+    @Nullable
+    private ComponentBuilder<WorkflowConfigurationRegistry<?>> workflowConfigurationRegistryBuilder;
+    @Nullable
+    private ComponentBuilder<WorkflowExecutionRepository> workflowExecutionRepositoryBuilder;
+    private boolean useHistory = true;
+    @Nullable
+    private ComponentBuilder<WorkflowHistoryProjector> workflowHistoryProjectorBuilder;
+    @Nullable
     private ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory;
 
     /**
@@ -91,8 +97,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
      * @param workflowContextType the type of {@link WorkflowContext} of the workflow module being constructed
      */
     @Internal
-    SimpleWorkflowModule(String name,
-                         Class<C> workflowContextType) {
+    SimpleWorkflowModule(String name, Class<C> workflowContextType) {
         this(name, workflowContextType, false);
     }
 
@@ -131,6 +136,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     private void registerGivenComponents() {
         componentRegistry(cr -> {
             if (workflowConfigurationRegistryBuilder != null) {
+                //noinspection unchecked,rawtypes
                 cr.registerComponent(
                         WorkflowConfigurationRegistry.class,
                         (ComponentBuilder) workflowConfigurationRegistryBuilder

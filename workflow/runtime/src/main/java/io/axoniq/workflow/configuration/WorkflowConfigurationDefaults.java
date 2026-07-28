@@ -26,6 +26,7 @@ import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.DefaultExecuteStepActionResolver;
 import io.axoniq.workflow.runtime.execution.DefaultWorkflowScheduler;
 import io.axoniq.workflow.runtime.execution.EventSourcedRunningWorkflows;
+import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowStore;
 import io.axoniq.workflow.runtime.execution.ExecuteStepActionResolver;
 import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
@@ -38,7 +39,6 @@ import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowScheduler;
-import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
 import io.axoniq.workflow.runtime.execution.WorkflowStore;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
@@ -98,17 +98,17 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
     /**
      * Token JDBC schema used for the {@link TokenStore}.
      */
-    public static final TokenSchema SAFE_POINT_TOKEN_STORE_JDBC_SCHEMA = TokenSchema
-            .builder()
-            .setTokenTable("WF_TOKEN_ENTRY")
-            .setProcessorNameColumn("PROCESSOR_NAME")
-            .setTokenTypeColumn("TOKEN_TYPE")
-            .setTokenColumn("TOKEN")
-            .setMaskColumn("MASK")
-            .setOwnerColumn("OWNER")
-            .setTimestampColumn("TIMESTAMP")
-            .setSegmentColumn("SEGMENT")
-            .build();
+    public static final TokenSchema SAFE_POINT_TOKEN_STORE_JDBC_SCHEMA = TokenSchema.builder()
+                                                                                    .setTokenTable("WF_TOKEN_ENTRY")
+                                                                                    .setProcessorNameColumn(
+                                                                                            "PROCESSOR_NAME")
+                                                                                    .setTokenTypeColumn("TOKEN_TYPE")
+                                                                                    .setTokenColumn("TOKEN")
+                                                                                    .setMaskColumn("MASK")
+                                                                                    .setOwnerColumn("OWNER")
+                                                                                    .setTimestampColumn("TIMESTAMP")
+                                                                                    .setSegmentColumn("SEGMENT")
+                                                                                    .build();
     /**
      * Name of the executor service component.
      */
