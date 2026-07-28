@@ -20,8 +20,7 @@ The default streaming topology uses a separate batch trace linked to the publica
 
 [NOTE]
 ====
-Sagas, process managers, and deadlines are not available.
-Tracing covers the messaging, modelling, and event-sourcing components described on this page.
+Sagas, process managers and deadlines are not available in Axon Framework 5.
 ====
 
 == Modules
