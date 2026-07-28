@@ -65,7 +65,8 @@ public class AxonServerTenantEventStorageEngineFactory
      */
     public AxonServerTenantEventStorageEngineFactory(Configuration configuration) {
         Objects.requireNonNull(configuration, "The configuration must not be null");
-        this.engineCache = new TenantScopedCache<>(perTenantEngine(configuration));
+        this.engineCache = new TenantScopedCache<>(perTenantEngine(configuration),
+                                                  "the tenant event storage engine factory");
     }
 
     @Override
@@ -85,7 +86,7 @@ public class AxonServerTenantEventStorageEngineFactory
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
-        descriptor.describeProperty("engineCache", engineCache);
+        engineCache.describeTo(descriptor);
     }
 
     private static Function<TenantDescriptor, EventStorageEngine> perTenantEngine(Configuration configuration) {

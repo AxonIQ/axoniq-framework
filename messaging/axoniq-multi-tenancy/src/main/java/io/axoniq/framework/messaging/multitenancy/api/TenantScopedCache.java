@@ -56,33 +56,38 @@ import java.util.function.Function;
  * Component creation runs inside the cache update. The factory must therefore not register or unregister tenants on,
  * nor request components from, this cache on the creating thread.
  *
- * @param <S> the type of per-tenant component cached
+ * @param <C> the type of per-tenant component cached
  * @author Jakob Hatzl
  * @author Laura Devriendt
  * @since 5.3.0
  */
 @Internal
-public class TenantScopedCache<S> implements MultiTenantAwareComponent {
+public class TenantScopedCache<C> implements MultiTenantAwareComponent {
 
-    private final Function<TenantDescriptor, S> componentFactory;
-    private final BiConsumer<TenantDescriptor, S> onEviction;
-    private final String name;
+    private final Function<TenantDescriptor, C> componentFactory;
+    private final BiConsumer<TenantDescriptor, C> onEviction;
+    private final String owner;
     // Each registerTenant call is identified by its own token. Components are cached per token rather than per tenant,
     // so a cached component always traces back to the registration that created it.
     private final Map<TenantDescriptor, RegistrationToken> activeRegistrations = new ConcurrentHashMap<>();
-    private final Map<RegistrationToken, S> components = new ConcurrentHashMap<>();
-    // Refreshed on (un)registration, so a per-message tenants() call does not allocate on the hot path.
+    private final Map<RegistrationToken, C> components = new ConcurrentHashMap<>();
+    // Refreshed on (un)registration, so the per-message tenants() call of a DefaultTenantComponentProvider does not
+    // allocate.
     private volatile List<TenantDescriptor> tenantsView = List.of();
+    private final Object tenantsViewLock = new Object();
 
     /**
      * Constructs a {@code TenantScopedCache} building its components with the given {@code componentFactory}, dropping
      * its reference to a component on eviction without releasing it any further.
      *
      * @param componentFactory the factory building a tenant's component, invoked once per tenant on first access
-     * @throws NullPointerException if the given {@code componentFactory} is {@code null}
+     * @param owner            how {@code this} cache names its owner in the {@link TenantNotResolvedException} raised
+     *                         for a tenant that is not registered, so the component that rejected the tenant can be
+     *                         told from the others caching per tenant in the same call
+     * @throws NullPointerException if any of the given arguments is {@code null}
      */
-    public TenantScopedCache(Function<TenantDescriptor, S> componentFactory) {
-        this(componentFactory, TenantScopedCache::dropReference, "this cache");
+    public TenantScopedCache(Function<TenantDescriptor, C> componentFactory, String owner) {
+        this(componentFactory, TenantScopedCache::dropReference, owner);
     }
 
     /**
@@ -92,16 +97,16 @@ public class TenantScopedCache<S> implements MultiTenantAwareComponent {
      * @param componentFactory the factory building a tenant's component, invoked once per tenant on first access
      * @param onEviction       invoked with a tenant and the component evicted for it, exactly once per evicted
      *                         component, so its owner can release it
-     * @param name             how {@code this} cache refers to itself in the {@link TenantNotResolvedException} raised
+     * @param owner            how {@code this} cache names its owner in the {@link TenantNotResolvedException} raised
      *                         for a tenant that is not registered
      * @throws NullPointerException if any of the given arguments is {@code null}
      */
-    TenantScopedCache(Function<TenantDescriptor, S> componentFactory,
-                      BiConsumer<TenantDescriptor, S> onEviction,
-                      String name) {
+    TenantScopedCache(Function<TenantDescriptor, C> componentFactory,
+                      BiConsumer<TenantDescriptor, C> onEviction,
+                      String owner) {
         this.componentFactory = Objects.requireNonNull(componentFactory, "The component factory must not be null");
         this.onEviction = Objects.requireNonNull(onEviction, "The eviction callback must not be null");
-        this.name = Objects.requireNonNull(name, "The name must not be null");
+        this.owner = Objects.requireNonNull(owner, "The owner must not be null");
     }
 
     /**
@@ -111,7 +116,7 @@ public class TenantScopedCache<S> implements MultiTenantAwareComponent {
      * @return the tenant's cached component
      * @throws TenantNotResolvedException if the given {@code tenant} is not registered
      */
-    public S componentFor(TenantDescriptor tenant) {
+    public C componentFor(TenantDescriptor tenant) {
         Objects.requireNonNull(tenant, "The tenant must not be null");
         // Retried only when a concurrent (un)registration intervened between reading the token and checking it again,
         // so a caller progresses unless the tenant is registered anew without bound. Bounding the retries instead would
@@ -121,9 +126,9 @@ public class TenantScopedCache<S> implements MultiTenantAwareComponent {
             if (token == null) {
                 throw new TenantNotResolvedException("Tenant [%s] is not registered with %s",
                                                      tenant.tenantId(),
-                                                     name);
+                                                     owner);
             }
-            S component = components.computeIfAbsent(
+            C component = components.computeIfAbsent(
                     token,
                     ignored -> Objects.requireNonNull(componentFactory.apply(tenant),
                                                       "The component factory returned null for tenant ["
@@ -185,7 +190,7 @@ public class TenantScopedCache<S> implements MultiTenantAwareComponent {
         return tenantsView;
     }
 
-    private static <C> void dropReference(TenantDescriptor tenant, C component) {
+    private static <T> void dropReference(TenantDescriptor tenant, T component) {
         // The component's lifecycle is owned elsewhere, so eviction only drops this cache's reference to it.
     }
 
@@ -193,20 +198,22 @@ public class TenantScopedCache<S> implements MultiTenantAwareComponent {
         if (token == null) {
             return;
         }
-        S evicted = components.remove(token);
+        C evicted = components.remove(token);
         if (evicted != null) {
             onEviction.accept(tenant, evicted);
         }
     }
 
-    // Synchronized so concurrent (un)registrations cannot publish an older snapshot last, leaving the view stale.
-    private synchronized void refreshTenantsView() {
-        this.tenantsView = List.copyOf(activeRegistrations.keySet());
+    // Locked so concurrent (un)registrations cannot publish an older snapshot last, leaving the view stale. On a
+    // private lock, so no caller holding this cache can stall a registration.
+    private void refreshTenantsView() {
+        synchronized (tenantsViewLock) {
+            this.tenantsView = List.copyOf(activeRegistrations.keySet());
+        }
     }
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
-        descriptor.describeProperty("componentFactory", componentFactory);
         // Describes the immutable snapshot, so descriptors serialized lazily never observe mid-mutation state.
         descriptor.describeProperty("tenants", tenantsView);
     }

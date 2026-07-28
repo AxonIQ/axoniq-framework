@@ -52,7 +52,7 @@ class TenantScopedCacheTest {
         int creation = creations.computeIfAbsent(tenant, ignored -> new AtomicInteger()).incrementAndGet();
         return tenant.tenantId() + "#" + creation;
     };
-    private final TenantScopedCache<String> testSubject = new TenantScopedCache<>(countingFactory);
+    private final TenantScopedCache<String> testSubject = new TenantScopedCache<>(countingFactory, "a cache");
 
     @Nested
     class Creation {
@@ -78,9 +78,16 @@ class TenantScopedCacheTest {
 
         @Test
         void rejectsANullFactory() {
-            assertThatThrownBy(() -> new TenantScopedCache<>(null))
+            assertThatThrownBy(() -> new TenantScopedCache<String>(null, "a cache"))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessage("The component factory must not be null");
+        }
+
+        @Test
+        void rejectsANullOwner() {
+            assertThatThrownBy(() -> new TenantScopedCache<>(countingFactory, null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("The owner must not be null");
         }
 
         // Registering a tenant only records it. A deployment with many tenants must not pay for a component, and the
@@ -107,7 +114,7 @@ class TenantScopedCacheTest {
 
         @Test
         void rejectsAFactoryThatReturnsNull() {
-            TenantScopedCache<String> nullBuilding = new TenantScopedCache<>(tenant -> null);
+            TenantScopedCache<String> nullBuilding = new TenantScopedCache<>(tenant -> null, "a cache");
             nullBuilding.registerTenant(TENANT_A);
 
             assertThatThrownBy(() -> nullBuilding.componentFor(TENANT_A))
@@ -125,7 +132,7 @@ class TenantScopedCacheTest {
                     throw new IllegalStateException("no connection");
                 }
                 return tenant.tenantId();
-            });
+            }, "a cache");
             failingOnce.registerTenant(TENANT_A);
 
             assertThatThrownBy(() -> failingOnce.componentFor(TENANT_A)).isInstanceOf(IllegalStateException.class);

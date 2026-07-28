@@ -73,7 +73,8 @@ public class AxonServerTenantSnapshotStoreFactory
      * @param converter         the converter used to (de)serialize snapshot payloads
      */
     public AxonServerTenantSnapshotStoreFactory(AxonServerConnectionManager connectionManager, Converter converter) {
-        this.storeCache = new TenantScopedCache<>(perTenantStore(connectionManager, converter));
+        this.storeCache = new TenantScopedCache<>(perTenantStore(connectionManager, converter),
+                                                 "the tenant snapshot store factory");
     }
 
     @Override
@@ -93,7 +94,7 @@ public class AxonServerTenantSnapshotStoreFactory
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
-        descriptor.describeProperty("storeCache", storeCache);
+        storeCache.describeTo(descriptor);
     }
 
     private static Function<TenantDescriptor, SnapshotStore> perTenantStore(

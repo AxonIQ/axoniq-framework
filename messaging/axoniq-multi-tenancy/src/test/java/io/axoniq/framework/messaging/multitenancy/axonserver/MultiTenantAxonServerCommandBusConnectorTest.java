@@ -230,6 +230,23 @@ class MultiTenantAxonServerCommandBusConnectorTest {
         }
 
         @Test
+        void dispatchingWithAContextNamingAnUnknownTenantFailsRatherThanFallingBackToTheCommand() {
+            TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1));
+            RecordingConnection connection1 = new RecordingConnection();
+            MultiTenantAxonServerCommandBusConnector testSubject = createSubject(tenantProvider,
+                                                                                Map.of(TENANT_1.tenantId(),
+                                                                                       connection1));
+
+            CommandMessage command = commandFor(TENANT_1.tenantId());
+            ProcessingContext context = StubProcessingContext.forMessage(command)
+                                                             .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_2);
+
+            assertThatThrownBy(() -> testSubject.dispatch(command, context))
+                    .isInstanceOf(TenantNotResolvedException.class);
+            assertThat(connection1.recordingCommandChannel().sentCommands()).isEmpty();
+        }
+
+        @Test
         void dispatchingWithUnknownTenantFails() {
             TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1));
             RecordingConnection connection1 = new RecordingConnection();

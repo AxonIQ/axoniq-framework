@@ -209,16 +209,21 @@ class MultiTenantEventStorageEngineTest {
         @Test
         void snapshotSourcingOfATenantWithADecoratedEngineReadsFromThatTenantsStore() {
             RecordingEventStorageEngine plainEngine = new RecordingEventStorageEngine();
-            RecordingSnapshotStore plainEngineStore = new RecordingSnapshotStore();
-            TenantEventStorage storage = new TenantEventStorage(tenant -> plainEngine, tenant -> plainEngineStore);
+            RecordingSnapshotStore storeOfTenantA = new RecordingSnapshotStore();
+            RecordingSnapshotStore storeOfTenantB = new RecordingSnapshotStore();
+            TenantEventStorage storage = new TenantEventStorage(
+                    tenant -> plainEngine,
+                    tenant -> TENANT_A.equals(tenant) ? storeOfTenantA : storeOfTenantB);
             storage.registerTenant(TENANT_A);
+            storage.registerTenant(TENANT_B);
             MultiTenantEventStorageEngine testSubject =
                     new MultiTenantEventStorageEngine(storage,
                                                       new TenantRouter(alwaysTenant(TENANT_A), engines));
 
             testSubject.source(snapshotCondition(), contextFor(TENANT_A));
 
-            assertThat(plainEngineStore.loadCount()).isEqualTo(1);
+            assertThat(storeOfTenantA.loadCount()).isEqualTo(1);
+            assertThat(storeOfTenantB.loadCount()).isZero();
             // the strategy was resolved by the decoration, so the tenant's engine was sourced by position
             assertThat(plainEngine.sourcedWithSnapshotStrategy()).isFalse();
             assertThat(plainEngine.sourceCount()).isEqualTo(1);

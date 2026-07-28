@@ -108,6 +108,15 @@ class TenantRouterTest {
         }
 
         @Test
+        void rejectsANullMessage() {
+            TenantRouter resolver = new TenantRouter(metadataResolver, TENANT_DESCRIPTORS);
+
+            assertThatThrownBy(() -> resolver.resolveFromMessage(null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("The message must not be null");
+        }
+
+        @Test
         void returnsEmptyWhenTheMessageNamesNoTenant() {
             TenantRouter resolver = new TenantRouter(metadataResolver, TENANT_DESCRIPTORS);
 

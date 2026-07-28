@@ -74,7 +74,7 @@ public class TenantEventStorage implements MultiTenantAwareComponent {
                                             "The tenant event storage engine factory must not be null");
         this.snapshotStoreFactory = requireNonNull(snapshotStoreFactory,
                                                    "The tenant snapshot store factory must not be null");
-        this.composedEngines = new TenantScopedCache<>(this::compose);
+        this.composedEngines = new TenantScopedCache<>(this::compose, "the tenant event storage");
     }
 
     /**
@@ -83,7 +83,7 @@ public class TenantEventStorage implements MultiTenantAwareComponent {
      * @param tenant the tenant to return the engine for
      * @return the given {@code tenant}'s engine, able to resolve that tenant's snapshots
      */
-    public EventStorageEngine engineFor(TenantDescriptor tenant) {
+    public EventStorageEngine composedEngineFor(TenantDescriptor tenant) {
         requireNonNull(tenant, "The tenant must not be null");
         return composedEngines.componentFor(tenant);
     }

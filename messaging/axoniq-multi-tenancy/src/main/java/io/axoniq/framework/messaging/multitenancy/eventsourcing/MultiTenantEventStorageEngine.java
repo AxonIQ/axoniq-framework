@@ -90,7 +90,7 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine {
                                                                 List<TaggedEventMessage<?>> events) {
         try {
             TenantDescriptor tenant = tenantForAppend(context, events);
-            return tenantEventStorage.engineFor(tenant).appendEvents(condition, context, events);
+            return tenantEventStorage.composedEngineFor(tenant).appendEvents(condition, context, events);
         } catch (RuntimeException failure) {
             return CompletableFuture.failedFuture(failure);
         }
@@ -99,7 +99,7 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine {
     @Override
     public MessageStream<EventMessage> source(SourcingCondition condition, @Nullable ProcessingContext context) {
         try {
-            return tenantEventStorage.engineFor(tenantFor(context)).source(condition, context);
+            return tenantEventStorage.composedEngineFor(tenantFor(context)).source(condition, context);
         } catch (RuntimeException failure) {
             return MessageStream.failed(failure);
         }

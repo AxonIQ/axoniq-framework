@@ -27,6 +27,7 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.*;
 
@@ -57,6 +58,25 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
                     "payload",
                     Map.of(TENANT_KEY, TENANT_A.tenantId())
             );
+            ProcessingContext context = StubProcessingContext.forMessage(message);
+            CapturingChain interceptorChain = new CapturingChain();
+
+            // when
+            MessageStream<?> result = testSubject.interceptOnHandle(message, context, interceptorChain);
+
+            // then
+            assertThat(result).isSameAs(interceptorChain.result);
+            assertThat(TenantDescriptor.fromContext(interceptorChain.context)).contains(TENANT_A);
+        }
+
+        @Test
+        void registersTheResolvedTenantDescriptorBeforeProceedingForQueryMessages() {
+            RegisterTenantDescriptorHandlerInterceptor testSubject =
+                    new RegisterTenantDescriptorHandlerInterceptor(routerKnowing(TENANT_A));
+            Message message = new GenericQueryMessage(new GenericMessage("message-id",
+                                                                         new MessageType("TestQuery"),
+                                                                         "payload".getBytes(),
+                                                                         Map.of(TENANT_KEY, TENANT_A.tenantId())));
             ProcessingContext context = StubProcessingContext.forMessage(message);
             CapturingChain interceptorChain = new CapturingChain();
 

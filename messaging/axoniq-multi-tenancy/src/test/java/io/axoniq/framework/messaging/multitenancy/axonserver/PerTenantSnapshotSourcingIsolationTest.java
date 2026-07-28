@@ -94,14 +94,17 @@ class PerTenantSnapshotSourcingIsolationTest {
         tenantEngines.entry(TENANT_A, new RecordingEventStorageEngine());
         tenantEngines.entry(TENANT_B, new RecordingEventStorageEngine());
         TenantRouter tenantRouter = new TenantRouter(new MetadataBasedTenantResolver(), tenantEngines);
-        routingEngine = new MultiTenantEventStorageEngine(
-                registeredStorage(tenantEngines::apply, tenantSnapshotStores::apply), tenantRouter);
-        MultiTenantSnapshotStore routingSnapshotStore =
-                new MultiTenantSnapshotStore(tenantSnapshotStores::apply, tenantRouter);
-
         StubTenantProvider tenantProvider = new StubTenantProvider();
         tenantProvider.addTenant(TENANT_A);
         tenantProvider.addTenant(TENANT_B);
+
+        // Subscribed rather than registered by hand, so the tenants reach the composer the way they do in production.
+        TenantEventStorage tenantEventStorage = new TenantEventStorage(tenantEngines::apply,
+                                                                      tenantSnapshotStores::apply);
+        tenantProvider.subscribe(tenantEventStorage);
+        routingEngine = new MultiTenantEventStorageEngine(tenantEventStorage, tenantRouter);
+        MultiTenantSnapshotStore routingSnapshotStore =
+                new MultiTenantSnapshotStore(tenantSnapshotStores::apply, tenantRouter);
 
         configuration = EventSourcingConfigurer
                 .create()
@@ -192,13 +195,5 @@ class PerTenantSnapshotSourcingIsolationTest {
         EventMessage first = stream.next().orElseThrow().message();
         assertThat(first).isInstanceOf(SnapshotEventMessage.class);
         return ((SnapshotEventMessage) first).payload();
-    }
-
-    private static TenantEventStorage registeredStorage(TenantEventStorageEngineFactory engineFactory,
-                                                        TenantSnapshotStoreFactory snapshotStoreFactory) {
-        TenantEventStorage storage = new TenantEventStorage(engineFactory, snapshotStoreFactory);
-        storage.registerTenant(TENANT_A);
-        storage.registerTenant(TENANT_B);
-        return storage;
     }
 }

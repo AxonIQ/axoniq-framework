@@ -87,12 +87,12 @@ class TenantEventStorageTest {
         @Test
         void isHandedBackUntouched() {
             // decorating it would resolve the snapshot separately, costing it that single round trip
-            assertThat(storage().engineFor(TENANT_A)).isSameAs(tenantEngine);
+            assertThat(storage().composedEngineFor(TENANT_A)).isSameAs(tenantEngine);
         }
 
         @Test
         void receivesTheSnapshotSourcingStrategyItself() {
-            storage().engineFor(TENANT_A).source(snapshotCondition(), null);
+            storage().composedEngineFor(TENANT_A).source(snapshotCondition(), null);
 
             assertThat(tenantEngine.sourcedWithSnapshotStrategy()).isTrue();
             // read from its own storage, within that one call
@@ -106,7 +106,7 @@ class TenantEventStorageTest {
             Snapshot snapshot = new Snapshot(new GlobalIndexPosition(0L), "0", "payload", Instant.EPOCH, Map.of());
             tenantEngine.store(SNAPSHOT_NAME, IDENTIFIER, snapshot, null).join();
 
-            MessageStream<EventMessage> sourced = storage().engineFor(TENANT_A).source(snapshotCondition(), null);
+            MessageStream<EventMessage> sourced = storage().composedEngineFor(TENANT_A).source(snapshotCondition(), null);
 
             EventMessage leading = sourced.next().orElseThrow().message();
             assertThat(leading).isInstanceOf(SnapshotEventMessage.class);
@@ -122,7 +122,7 @@ class TenantEventStorageTest {
 
         @Test
         void readsTheSnapshotFromTheTenantsStore() {
-            storageFor(tenantEngine).engineFor(TENANT_A).source(snapshotCondition(), null);
+            storageFor(tenantEngine).composedEngineFor(TENANT_A).source(snapshotCondition(), null);
 
             assertThat(tenantSnapshotStore.loadCount()).isEqualTo(1);
             // the strategy is resolved above the engine, which is then sourced by position
@@ -135,7 +135,7 @@ class TenantEventStorageTest {
             tenantSnapshotStore.store(SNAPSHOT_NAME, IDENTIFIER, snapshot, null).join();
 
             MessageStream<EventMessage> sourced =
-                    storageFor(tenantEngine).engineFor(TENANT_A).source(snapshotCondition(), null);
+                    storageFor(tenantEngine).composedEngineFor(TENANT_A).source(snapshotCondition(), null);
 
             EventMessage leading = sourced.next().orElseThrow().message();
             assertThat(leading).isInstanceOf(SnapshotEventMessage.class);
@@ -144,7 +144,7 @@ class TenantEventStorageTest {
 
         @Test
         void passesAPlainSourcingThroughWithoutConsultingTheSnapshotStore() {
-            storageFor(tenantEngine).engineFor(TENANT_A)
+            storageFor(tenantEngine).composedEngineFor(TENANT_A)
                                     .source(SourcingCondition.conditionFor(EventCriteria.havingAnyTag()), null);
 
             assertThat(tenantEngine.sourceCount()).isEqualTo(1);
@@ -163,8 +163,8 @@ class TenantEventStorageTest {
                 tenant -> TENANT_A.equals(tenant) ? selfResolving : tenantSnapshotStore
         ));
 
-        testSubject.engineFor(TENANT_A).source(snapshotCondition(), null);
-        testSubject.engineFor(TENANT_B).source(snapshotCondition(), null);
+        testSubject.composedEngineFor(TENANT_A).source(snapshotCondition(), null);
+        testSubject.composedEngineFor(TENANT_B).source(snapshotCondition(), null);
 
         // tenant A served the strategy itself, tenant B had it resolved from that tenant's own store
         assertThat(selfResolving.sourcedWithSnapshotStrategy()).isTrue();
@@ -181,19 +181,19 @@ class TenantEventStorageTest {
                 new TenantEventStorage(tenant -> tenantEngine, tenant -> tenantSnapshotStore);
         Registration registration = testSubject.registerTenant(TENANT_A);
 
-        EventStorageEngine composed = testSubject.engineFor(TENANT_A);
-        assertThat(testSubject.engineFor(TENANT_A)).isSameAs(composed);
+        EventStorageEngine composed = testSubject.composedEngineFor(TENANT_A);
+        assertThat(testSubject.composedEngineFor(TENANT_A)).isSameAs(composed);
 
         assertThat(registration.cancel()).isTrue();
 
-        assertThatThrownBy(() -> testSubject.engineFor(TENANT_A))
+        assertThatThrownBy(() -> testSubject.composedEngineFor(TENANT_A))
                 .isInstanceOf(TenantNotResolvedException.class);
 
         // A re-added tenant never continues with the engine composed under its previous registration. That the previous
         // engine is also let go of is not observable here, since this composer only drops its reference to it. The
         // eviction itself is asserted where the callback exists, in TenantScopedCacheTest.
         testSubject.registerTenant(TENANT_A);
-        assertThat(testSubject.engineFor(TENANT_A)).isNotSameAs(composed);
+        assertThat(testSubject.composedEngineFor(TENANT_A)).isNotSameAs(composed);
     }
 
     @Test

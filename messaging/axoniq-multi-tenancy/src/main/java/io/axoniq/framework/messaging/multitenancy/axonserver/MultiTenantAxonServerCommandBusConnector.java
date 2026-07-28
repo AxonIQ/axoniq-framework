@@ -238,6 +238,8 @@ public class MultiTenantAxonServerCommandBusConnector
      */
     private AxonServerCommandBusConnector resolveConnector(CommandMessage command,
                                                            @Nullable ProcessingContext context) {
+        // Three steps, in descending authority: the tenant the context carries, the tenant of the message being handled
+        // in that context, then the tenant the dispatched command itself names. The router owns the first two.
         TenantDescriptor tenant = tenantRouter.resolveFromContext(context)
                                               .or(() -> tenantRouter.resolveFromMessage(command))
                                               .orElseThrow(tenantNotResolved(
@@ -269,7 +271,16 @@ public class MultiTenantAxonServerCommandBusConnector
 
     private void replaySubscriptions(AxonServerCommandBusConnector connector, String tenantId) {
         for (Map.Entry<QualifiedName, Integer> entry : knownSubscriptions.entrySet()) {
-            connector.subscribe(entry.getKey(), entry.getValue());
+            QualifiedName commandName = entry.getKey();
+            // A replay that fails leaves this tenant unable to receive that command, with every other tenant still
+            // handling it, so it is reported rather than dropped.
+            connector.subscribe(commandName, entry.getValue())
+                     .whenComplete((ignored, failure) -> {
+                         if (failure != null) {
+                             logger.warn("Failed to subscribe tenant [{}] to command [{}].",
+                                         tenantId, commandName, failure);
+                         }
+                     });
         }
         logger.debug("Replayed [{}] known subscription(s) onto tenant [{}].", knownSubscriptions.size(), tenantId);
     }

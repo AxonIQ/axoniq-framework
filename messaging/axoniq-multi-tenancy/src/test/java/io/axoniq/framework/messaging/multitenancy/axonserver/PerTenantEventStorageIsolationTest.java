@@ -92,13 +92,17 @@ class PerTenantEventStorageIsolationTest {
         tenantSnapshotStores.entry(TENANT_A, new RecordingSnapshotStore());
         tenantSnapshotStores.entry(TENANT_B, new RecordingSnapshotStore());
         MetadataBasedTenantResolver tenantResolver = new MetadataBasedTenantResolver();
-        EventStorageEngine routingEngine = new MultiTenantEventStorageEngine(
-                registeredStorage(tenantEngines::apply, tenantSnapshotStores::apply),
-                new TenantRouter(tenantResolver, tenantEngines));
-
         StubTenantProvider tenantProvider = new StubTenantProvider();
         tenantProvider.addTenant(TENANT_A);
         tenantProvider.addTenant(TENANT_B);
+
+        // Subscribed rather than registered by hand, so the tenants reach the composer the way they do in production.
+        TenantEventStorage tenantEventStorage = new TenantEventStorage(tenantEngines::apply,
+                                                                      tenantSnapshotStores::apply);
+        tenantProvider.subscribe(tenantEventStorage);
+        EventStorageEngine routingEngine = new MultiTenantEventStorageEngine(
+                tenantEventStorage,
+                new TenantRouter(tenantResolver, tenantEngines));
 
         configuration = EventSourcingConfigurer
                 .create()
@@ -196,13 +200,5 @@ class PerTenantEventStorageIsolationTest {
             }
             eventAppender.append(new StudentEnrolledInCourse(command.courseId(), command.studentId()));
         }
-    }
-
-    private static TenantEventStorage registeredStorage(TenantEventStorageEngineFactory engineFactory,
-                                                        TenantSnapshotStoreFactory snapshotStoreFactory) {
-        TenantEventStorage storage = new TenantEventStorage(engineFactory, snapshotStoreFactory);
-        storage.registerTenant(TENANT_A);
-        storage.registerTenant(TENANT_B);
-        return storage;
     }
 }
