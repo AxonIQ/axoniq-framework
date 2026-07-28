@@ -24,9 +24,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
@@ -35,7 +33,9 @@ import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.TypeReference;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -58,9 +58,16 @@ import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepName;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public class EventSourcedWorkflowState implements WorkflowState {
+@Internal
+public class WorkflowState implements io.axoniq.workflow.runtime.api.execution.state.WorkflowState {
 
-    private final static Logger logger = LoggerFactory.getLogger(EventSourcedWorkflowState.class);
+    /**
+     * Type reference for a map of strings to objects used as workflow payload.
+     */
+    public static final TypeReference<Map<String, Object>> PAYLOAD_TYPE = new TypeReference<>() {
+    };
+
+    private final static Logger logger = LoggerFactory.getLogger(WorkflowState.class);
 
     private final String workflowId;
     private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
@@ -68,25 +75,25 @@ public class EventSourcedWorkflowState implements WorkflowState {
     private WorkflowStatus status = WorkflowStatus.NONE;
     private Map<String, Object> payload;
     private volatile Throwable terminationCause;
-    private volatile WorkflowDefinitionId workflowDefinitionId;
+    private volatile MessageType workflowDefinitionId;
 
     private final WorkflowStateListenerSupport listenerSupport;
 
     /**
      * Creates a new workflow state without reference to a workflow context and with an empty initial payload.
      */
-    public EventSourcedWorkflowState(@Nonnull String workflowId,
-                                     @Nonnull WorkflowDefinitionId workflowDefinitionId) {
+    public WorkflowState(@Nonnull String workflowId,
+                         @Nonnull MessageType workflowDefinitionId) {
         this(workflowId, Map.of(), workflowDefinitionId);
     }
 
     /**
      * Creates a new workflow state without reference to a workflow context.
      */
-    public EventSourcedWorkflowState(
+    public WorkflowState(
             @Nonnull String workflowId,
             @Nonnull Map<String, Object> payload,
-            @Nonnull WorkflowDefinitionId workflowDefinitionId
+            @Nonnull MessageType workflowDefinitionId
     ) {
         this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must be set.");
         this.listenerSupport = WorkflowStateListenerSupport.EMPTY;
@@ -98,16 +105,16 @@ public class EventSourcedWorkflowState implements WorkflowState {
     /**
      * Creates a new workflow state seeded with the workflow definition identity.
      *
-     * @param workflowId           workflow id.
-     * @param payload              initial workflow payload.
-     * @param workflowDefinitionId stable workflow definition identifier.
-     * @param context              workflow context to use.
-     * @param listeners            workflow status change listeners.
+     * @param workflowId           workflow id
+     * @param payload              initial workflow payload
+     * @param workflowDefinitionId stable workflow definition identifier
+     * @param context              workflow context to use
+     * @param listeners            workflow status change listeners
      */
-    EventSourcedWorkflowState(
+    WorkflowState(
             @Nonnull String workflowId,
             @Nonnull Map<String, Object> payload,
-            @Nonnull WorkflowDefinitionId workflowDefinitionId,
+            @Nonnull MessageType workflowDefinitionId,
             @Nonnull WorkflowContext context,
             @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
@@ -119,6 +126,49 @@ public class EventSourcedWorkflowState implements WorkflowState {
                 Objects.requireNonNull(listeners, "Workflow status listeners must be set."),
                 Objects.requireNonNull(context, "Workflow context must be set.")
         );
+    }
+
+    WorkflowState(
+            @Nonnull io.axoniq.workflow.runtime.api.execution.state.WorkflowState state,
+            @Nonnull WorkflowContext context,
+            @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
+    ) {
+        this(requireEventSourcedState(state), context, listeners);
+    }
+
+    private static WorkflowState requireEventSourcedState(
+            io.axoniq.workflow.runtime.api.execution.state.WorkflowState state) {
+        if (!(state instanceof WorkflowState sourcedState)) {
+            throw new IllegalArgumentException(
+                    "Currently only EventSourcedWorkflowState is supported, but you passed an instance of %s.".formatted(
+                            state.getClass().getName()));
+        }
+        return sourcedState;
+    }
+
+    /**
+     * Creates a live workflow state from sourced durable state.
+     *
+     * @param sourcedState sourced durable workflow state
+     * @param context      workflow context to use for status change notifications
+     * @param listeners    workflow status change listeners
+     */
+    WorkflowState(
+            @Nonnull WorkflowState sourcedState,
+            @Nonnull WorkflowContext context,
+            @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
+    ) {
+        this(
+                Objects.requireNonNull(sourcedState, "Sourced workflow state must not be null").workflowId,
+                sourcedState.payload,
+                sourcedState.workflowDefinitionId,
+                context,
+                listeners
+        );
+        this.steps.putAll(sourcedState.steps);
+        this.versions.putAll(sourcedState.versions);
+        this.status = sourcedState.status;
+        this.terminationCause = sourcedState.terminationCause;
     }
 
     @Override
@@ -168,7 +218,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
 
     @Override
     @Nonnull
-    public WorkflowDefinitionId workflowDefinitionId() {
+    public MessageType workflowDefinitionId() {
         return workflowDefinitionId;
     }
 
@@ -194,7 +244,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     }
 
     @Override
-    public WorkflowState evolve(
+    public io.axoniq.workflow.runtime.api.execution.state.WorkflowState evolve(
             @Nonnull EventMessage eventMessage,
             @Nonnull ProcessingContext processingContext) {
         logger.trace("Applying event {}", eventMessage.type());
@@ -295,7 +345,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                      && !startedVersion.isBlank()
                                      && !startedVersion.equals(workflowDefinitionId.version())) {
                                  synchronized (this) {
-                                     this.workflowDefinitionId = new WorkflowDefinitionId(
+                                     this.workflowDefinitionId = new MessageType(
                                              workflowDefinitionId.qualifiedName(),
                                              startedVersion
                                      );
@@ -306,29 +356,6 @@ public class EventSourcedWorkflowState implements WorkflowState {
                      });
         logger.trace("Finished applying event {} in thread {}", eventMessage.type(), Thread.currentThread());
         return this;
-    }
-
-    /**
-     * Restores this live state instance from an event-sourced state loaded from the repository.
-     *
-     * @param restoredState sourced workflow state
-     */
-    void restoreFrom(@Nonnull EventSourcedWorkflowState restoredState) {
-        Objects.requireNonNull(restoredState, "Restored state must not be null");
-        steps.clear();
-        steps.putAll(restoredState.steps);
-        versions.clear();
-        versions.putAll(restoredState.versions);
-        status = restoredState.status;
-        payload = restoredState.payload;
-        terminationCause = restoredState.terminationCause;
-        if (!workflowId.equals(restoredState.workflowId)) {
-            throw new IllegalArgumentException(
-                    "Cannot restore workflow state for '%s' into '%s'."
-                            .formatted(restoredState.workflowId, workflowId)
-            );
-        }
-        workflowDefinitionId = restoredState.workflowDefinitionId;
     }
 
     /**
@@ -343,7 +370,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
         versions.putIfAbsent(changeId, newVersion);
         synchronized (this) {
             if (Version.of(newVersion).isGreaterThan(Version.of(workflowDefinitionId.version()))) {
-                workflowDefinitionId = new WorkflowDefinitionId(workflowDefinitionId.qualifiedName(), newVersion);
+                workflowDefinitionId = new MessageType(workflowDefinitionId.qualifiedName(), newVersion);
             }
         }
     }

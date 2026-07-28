@@ -24,16 +24,16 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
-import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
+import io.axoniq.workflow.runtime.execution.WorkflowState;
+import io.axoniq.workflow.runtime.execution.EventSourcedRunningWorkflows;
 import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
-import io.axoniq.workflow.runtime.execution.RepositoryBackedWorkflowStateRehydrationSupport;
-import io.axoniq.workflow.runtime.execution.RunningWorkflows;
+import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowStore;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
-import io.axoniq.workflow.runtime.execution.WorkflowStateRehydrationSupport;
+import io.axoniq.workflow.runtime.execution.WorkflowStore;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
@@ -187,11 +187,10 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     protected void registerWorkflowDefinitions(Configuration configuration) {
         WorkflowConfigurationRegistry<?> registry = configuration.getComponent(WorkflowConfigurationRegistry.class);
-        List<ConditionedWorkflowConfiguration<C>> workflowConfigs = workflowConfigurationBuilders.stream()
-                                                                                                 .flatMap(b -> b.build(
-                                                                                                                        configuration)
-                                                                                                                .stream())
-                                                                                                 .toList();
+        List<ConditionedWorkflowConfiguration<C>> workflowConfigs = workflowConfigurationBuilders
+                .stream()
+                .flatMap(b -> b.build(configuration).stream())
+                .toList();
         workflowConfigs.forEach(workflowConfig -> registry.register(
                 workflowConfig.eventCondition(),
                 workflowConfig.workflowConfiguration()
@@ -286,36 +285,36 @@ class SimpleWorkflowModule<C extends WorkflowContext>
         this.workflowConfigurationBuilders.add(workflowConfigurationBuilder);
     }
 
-    private WorkflowStateRehydrationSupport workflowStateRehydrationSupport(Configuration configuration) {
-        return new RepositoryBackedWorkflowStateRehydrationSupport(
+    private WorkflowStore workflowStateRehydrationSupport(Configuration configuration) {
+        return new EventSourcedWorkflowStore(
                 runningWorkflowsRepository(configuration),
                 workflowStateRepository(configuration)
         );
     }
 
     @SuppressWarnings("unchecked")
-    private Repository<String, RunningWorkflows> runningWorkflowsRepository(Configuration configuration) {
+    private Repository<String, EventSourcedRunningWorkflows> runningWorkflowsRepository(Configuration configuration) {
         return configuration.getComponents(Repository.class)
                             .values()
                             .stream()
-                            .filter(repository -> repository.entityType().equals(RunningWorkflows.class))
-                            .map(repository -> (Repository<String, RunningWorkflows>) repository)
+                            .filter(repository -> repository.entityType().equals(EventSourcedRunningWorkflows.class))
+                            .map(repository -> (Repository<String, EventSourcedRunningWorkflows>) repository)
                             .findFirst()
                             .orElseThrow(() -> new NoSuchElementException(
-                                    "No repository found for %s".formatted(RunningWorkflows.class.getName())
+                                    "No repository found for %s".formatted(EventSourcedRunningWorkflows.class.getName())
                             ));
     }
 
     @SuppressWarnings("unchecked")
-    private Repository<String, EventSourcedWorkflowState> workflowStateRepository(Configuration configuration) {
+    private Repository<String, WorkflowState> workflowStateRepository(Configuration configuration) {
         return configuration.getComponents(Repository.class)
                             .values()
                             .stream()
-                            .filter(repository -> repository.entityType().equals(EventSourcedWorkflowState.class))
-                            .map(repository -> (Repository<String, EventSourcedWorkflowState>) repository)
+                            .filter(repository -> repository.entityType().equals(WorkflowState.class))
+                            .map(repository -> (Repository<String, WorkflowState>) repository)
                             .findFirst()
                             .orElseThrow(() -> new NoSuchElementException(
-                                    "No repository found for %s".formatted(EventSourcedWorkflowState.class.getName())
+                                    "No repository found for %s".formatted(WorkflowState.class.getName())
                             ));
     }
 

@@ -22,6 +22,8 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
+import java.util.concurrent.CompletableFuture;
+
 /**
  * Narrow adapter around event-sourced workflow-state repositories used during startup rehydration.
  *
@@ -29,7 +31,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
  * @since 1.0.0
  */
 @Internal
-public interface WorkflowStateRehydrationSupport {
+public interface WorkflowStore {
 
     /**
      * Loads the singleton running-workflows projection.
@@ -38,16 +40,16 @@ public interface WorkflowStateRehydrationSupport {
      * @return current running workflow ids
      */
     @Nonnull
-    RunningWorkflows loadRunningWorkflows(@Nonnull ProcessingContext processingContext);
+    CompletableFuture<RunningWorkflows> loadRunningWorkflows(@Nonnull ProcessingContext processingContext);
 
     /**
      * Loads the event-sourced durable state for a workflow id.
      *
-     * @param workflowId         workflow identifier
-     * @param processingContext  processing context used for sourcing
+     * @param workflowId        workflow identifier
+     * @param processingContext processing context used for sourcing
      * @return durable workflow state
      */
     @Nonnull
-    EventSourcedWorkflowState loadWorkflowState(@Nonnull String workflowId,
-                                                @Nonnull ProcessingContext processingContext);
+    CompletableFuture<WorkflowState> loadWorkflow(@Nonnull String workflowId,
+                                                  @Nonnull ProcessingContext processingContext);
 }

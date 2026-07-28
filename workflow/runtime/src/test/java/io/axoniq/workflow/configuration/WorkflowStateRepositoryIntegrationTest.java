@@ -21,14 +21,14 @@ package io.axoniq.workflow.configuration;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
-import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
+import io.axoniq.workflow.runtime.execution.WorkflowState;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -59,7 +59,7 @@ class WorkflowStateRepositoryIntegrationTest {
         configuration = configuration();
         configuration.start();
 
-        var definitionId = new WorkflowDefinitionId(new QualifiedName("OrderWorkflow"), "1.0.0");
+        var definitionId = new MessageType(new QualifiedName("OrderWorkflow"), "1.0.0");
         var customizer = DefaultEventNameCustomizer.Builder.defaults();
         var context = workflowContext("wf-1", "1.0.0");
 
@@ -108,7 +108,7 @@ class WorkflowStateRepositoryIntegrationTest {
                          .join();
     }
 
-    private EventSourcedWorkflowState load(String workflowId) {
+    private WorkflowState load(String workflowId) {
         var unitOfWorkFactory = configuration.getComponent(UnitOfWorkFactory.class);
         return unitOfWorkFactory.create("load-workflow-state-test")
                                 .executeWithResult(context -> repository().loadOrCreate(workflowId, context)
@@ -117,12 +117,12 @@ class WorkflowStateRepositoryIntegrationTest {
     }
 
     @SuppressWarnings("unchecked")
-    private Repository<String, EventSourcedWorkflowState> repository() {
+    private Repository<String, WorkflowState> repository() {
         return configuration.getComponents(Repository.class)
                             .values()
                             .stream()
-                            .filter(repository -> repository.entityType().equals(EventSourcedWorkflowState.class))
-                            .map(repository -> (Repository<String, EventSourcedWorkflowState>) repository)
+                            .filter(repository -> repository.entityType().equals(WorkflowState.class))
+                            .map(repository -> (Repository<String, WorkflowState>) repository)
                             .findFirst()
                             .orElseThrow();
     }

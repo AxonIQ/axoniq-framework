@@ -21,7 +21,6 @@ package io.axoniq.workflow.history;
 import io.axoniq.workflow.history.api.WorkflowHistory;
 import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
@@ -36,8 +35,8 @@ import static org.mockito.Mockito.*;
 
 class WorkflowHistoryProjectorTest {
 
-    private static final WorkflowDefinitionId DEFINITION_ID =
-            new WorkflowDefinitionId(new QualifiedName("test-workflow"), "1.0.0");
+    private static final MessageType DEFINITION_ID =
+            new MessageType(new QualifiedName("test-workflow"), "1.0.0");
 
     private InMemoryWorkflowHistoryRepository repository;
     private WorkflowHistoryProjector projector;
@@ -95,7 +94,9 @@ class WorkflowHistoryProjectorTest {
 
     @Test
     void shouldIgnoreEventWithoutWorkflowId() {
-        EventMessage event = new GenericEventMessage(new MessageType("test"), new Object(), Metadata.with("other", "value"));
+        EventMessage event = new GenericEventMessage(new MessageType("test"),
+                                                     new Object(),
+                                                     Metadata.with("other", "value"));
         ProcessingContext context = mock(ProcessingContext.class);
 
         projector.handle(event, context);

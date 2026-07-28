@@ -28,11 +28,10 @@ import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
+import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
@@ -46,6 +45,7 @@ import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -65,8 +65,8 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import static io.axoniq.workflow.dsl.api.EventAssociationsUtils.equalsTo;
 import static io.axoniq.workflow.runtime.association.Associations.associate;
-import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -187,8 +187,8 @@ class WorkflowReplayPreparedStateTest {
                     payload,
                     MetadataUtils.create(workflowId,
                                          WorkflowStatus.STARTED,
-                                         new WorkflowDefinitionId(new org.axonframework.messaging.core.QualifiedName("ReplayAwareWorkflow"),
-                                                                  MessageType.DEFAULT_VERSION))
+                                         new MessageType(new QualifiedName("ReplayAwareWorkflow"),
+                                                         MessageType.DEFAULT_VERSION))
                                  .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
                                       CombineGlobalAndLocalPayloadReducer.NAME)
             ));
@@ -200,7 +200,7 @@ class WorkflowReplayPreparedStateTest {
                     Map.of(),
                     MetadataUtils.create(workflowId,
                                          WorkflowStatus.COMPLETED,
-                                         new WorkflowDefinitionId(new org.axonframework.messaging.core.QualifiedName("ReplayAwareWorkflow"),
+                                         new MessageType(new QualifiedName("ReplayAwareWorkflow"),
                                                                   MessageType.DEFAULT_VERSION))
             ));
         }

@@ -28,14 +28,13 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -74,12 +73,12 @@ import static java.lang.Thread.currentThread;
  * @author Steven van Beelen
  * @since 1.0.0
  */
-public final class SimpleWorkflowExecution implements WorkflowExecution, WorkflowStateRehydratable {
+public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleWorkflowExecution.class);
 
     // State variables
-    private final EventSourcedWorkflowState workflowState;
+    private io.axoniq.workflow.runtime.api.execution.state.WorkflowState workflowState;
     @Nullable
     private final TrackingToken restartToken;
     private final WorkflowConfiguration<?> workflowConfiguration;
@@ -112,7 +111,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     ) {
         this.workflowConfiguration = Objects.requireNonNull(workflowConfiguration,
                                                             "Workflow configuration must not be null");
-        var workflowDefinitionId = new WorkflowDefinitionId(
+        var workflowDefinitionId = new MessageType(
                 new QualifiedName(workflowConfiguration.workflowName()),
                 workflowConfiguration.workflowVersion()
         );
@@ -124,12 +123,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 this,
                 processingContext
         );
-        this.workflowState = new EventSourcedWorkflowState(
-                Objects.requireNonNull(workflowId, "Workflow id must not be null"),
-                initial,
-                workflowDefinitionId,
-                this.contextDelegate.typedWorkflowContext(),
-                workflowConfiguration.workflowStatusChangeListeners()
+        initializeState(
+                new WorkflowState(
+                        Objects.requireNonNull(workflowId, "Workflow id must not be null"),
+                        initial,
+                        workflowDefinitionId
+                )
         );
     }
 
@@ -180,9 +179,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         if (this.state().workflowStatus() == WorkflowStatus.NONE) {
             // FIXME join without timeout?
             sendWorkflowEvent(startedWorkflow(this.workflowContext(),
-                                             workflowName(),
-                                             workflowState.workflowDefinitionId(),
-                                             eventNameCustomizer), ctx).join();
+                                              workflowName(),
+                                              workflowState.workflowDefinitionId(),
+                                              eventNameCustomizer), ctx).join();
             try {
                 awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
             } catch (Exception e) {
@@ -358,7 +357,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     @Override
     public void awaitStateChange(
-            @Nonnull Predicate<WorkflowState> predicate
+            @Nonnull Predicate<io.axoniq.workflow.runtime.api.execution.state.WorkflowState> predicate
     ) throws InterruptedException {
         do {
             var taken = taskQueue.take();
@@ -443,7 +442,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
             if (cancelledSteps.isEmpty()) {
                 return;
             }
-            Predicate<WorkflowState> allTerminal = workflowState -> cancelledSteps
+            Predicate<io.axoniq.workflow.runtime.api.execution.state.WorkflowState> allTerminal = workflowState -> cancelledSteps
                     .stream()
                     .allMatch(stepName -> workflowState.containsStep(stepName)
                             && workflowState.getStep(stepName).status().isTerminal());
@@ -541,7 +540,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     @Override
     @Nonnull
-    public WorkflowState state() {
+    public io.axoniq.workflow.runtime.api.execution.state.WorkflowState state() {
         return workflowState;
     }
 
@@ -576,8 +575,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     @Override
-    public void rehydrate(@Nonnull EventSourcedWorkflowState state) {
-        workflowState.restoreFrom(state);
+    public void initializeState(@Nonnull io.axoniq.workflow.runtime.api.execution.state.WorkflowState state) {
+        this.workflowState = new WorkflowState(
+                state,
+                this.contextDelegate.typedWorkflowContext(),
+                this.workflowConfiguration.workflowStatusChangeListeners()
+        );
     }
 
     @Override

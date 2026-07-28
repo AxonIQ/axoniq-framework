@@ -21,10 +21,9 @@ package io.axoniq.workflow.configuration;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
-import io.axoniq.workflow.runtime.execution.RunningWorkflows;
+import io.axoniq.workflow.runtime.execution.EventSourcedRunningWorkflows;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
@@ -33,6 +32,7 @@ import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -75,7 +75,7 @@ class RunningWorkflowsRepositoryIntegrationTest {
         configuration.start();
 
         var customizer = DefaultEventNameCustomizer.Builder.defaults();
-        var definitionId = new WorkflowDefinitionId(new QualifiedName("OrderWorkflow"), "0.0.1");
+        var definitionId = new MessageType(new QualifiedName("OrderWorkflow"), "0.0.1");
         var first = workflowContext("wf-1");
         var second = workflowContext("wf-2");
 
@@ -130,12 +130,12 @@ class RunningWorkflowsRepositoryIntegrationTest {
                          .join();
     }
 
-    private RunningWorkflows load() {
+    private EventSourcedRunningWorkflows load() {
         var unitOfWorkFactory = configuration.getComponent(UnitOfWorkFactory.class);
         return unitOfWorkFactory.create("load-running-workflows-test")
                                 .executeWithResult(context -> repository()
                                         .loadOrCreate(
-                                                RunningWorkflows.ENTITY_ID,
+                                                EventSourcedRunningWorkflows.ENTITY_ID,
                                                 context
                                         )
                                         .thenApply(managedEntity -> managedEntity.entity()))
@@ -143,12 +143,12 @@ class RunningWorkflowsRepositoryIntegrationTest {
     }
 
     @SuppressWarnings("unchecked")
-    private Repository<String, RunningWorkflows> repository() {
+    private Repository<String, EventSourcedRunningWorkflows> repository() {
         return configuration.getComponents(Repository.class)
                             .values()
                             .stream()
-                            .filter(repository -> repository.entityType().equals(RunningWorkflows.class))
-                            .map(repository -> (Repository<String, RunningWorkflows>) repository)
+                            .filter(repository -> repository.entityType().equals(EventSourcedRunningWorkflows.class))
+                            .map(repository -> (Repository<String, EventSourcedRunningWorkflows>) repository)
                             .findFirst()
                             .orElseThrow();
     }

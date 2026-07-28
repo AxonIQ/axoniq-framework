@@ -19,15 +19,12 @@
 package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
-import io.axoniq.workflow.runtime.execution.ConfigurationBackedProcessingContext;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
-import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ComponentDefinition;
-import org.axonframework.common.configuration.ComponentLifecycleHandler;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
@@ -35,8 +32,6 @@ import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationD
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.GapAwareTrackingToken;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
@@ -107,54 +102,43 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                         .pooledStreaming(moduleName)
                         .eventHandlingComponents(
                                 req -> {
-                                    var engineRegistration = req
-                                            .declarative(
-                                                    engineComponentName != null
-                                                            ? engineComponentName + "ExecutionEventing"
-                                                            : DEFAULT_MODULE_NAME + "ExecutionEventing",
-                                                    cfg -> {
-                                                        if (engineComponentName != null) {
-                                                            return new AllEventEventHandlingComponent(
-                                                                    cfg.getComponent(
-                                                                            WorkflowEngine.class,
-                                                                            engineComponentName)
-                                                            );
-                                                        } else {
-                                                            return new AllEventEventHandlingComponent(
-                                                                    cfg.getComponent(
-                                                                            WorkflowEngine.class
-                                                                    )
-                                                            );
-                                                        }
-                                                    }
-                                            );
+                                    var cp = req.declarative(
+                                            engineComponentName != null
+                                                    ? engineComponentName + "ExecutionEventing"
+                                                    : DEFAULT_MODULE_NAME + "ExecutionEventing",
+                                            cfg -> {
+                                                if (engineComponentName != null) {
+                                                    return new AllEventEventHandlingComponent(
+                                                            cfg.getComponent(WorkflowEngine.class,
+                                                                             engineComponentName));
+                                                } else {
+                                                    return new AllEventEventHandlingComponent(
+                                                            cfg.getComponent(WorkflowEngine.class));
+                                                }
+                                            }
+                                    );
                                     if (registerHistoryProjector) {
-                                        engineRegistration = engineRegistration.
-                                                declarative(
-                                                        projectorComponentName != null
-                                                                ? projectorComponentName + "Eventing"
-                                                                : DEFAULT_MODULE_NAME + "HistoryEventing",
-                                                        cfg -> {
-                                                            if (projectorComponentName != null) {
-                                                                return new AllEventEventHandlingComponent(
-                                                                        cfg.getComponent(
-                                                                                WorkflowHistoryProjector.class,
-                                                                                projectorComponentName
-                                                                        )
-                                                                );
-                                                            } else {
-                                                                // FIXME: eventually history projector doesn't need to be replayed.
-                                                                // configure this separately InMemoryHistoryRepo = InMemoryTokeStore and replay
-                                                                return new AllEventEventHandlingComponent(
-                                                                        cfg.getComponent(
-                                                                                WorkflowHistoryProjector.class
-                                                                        )
-                                                                );
-                                                            }
-                                                        }
-                                                );
+                                        cp = cp.declarative(
+                                                projectorComponentName != null
+                                                        ? projectorComponentName + "Eventing"
+                                                        : DEFAULT_MODULE_NAME + "HistoryEventing",
+                                                cfg -> {
+                                                    if (projectorComponentName != null) {
+                                                        return new AllEventEventHandlingComponent(
+                                                                cfg.getComponent(WorkflowHistoryProjector.class,
+                                                                                 projectorComponentName)
+                                                        );
+                                                    } else {
+                                                        // FIXME: eventually history projector doesn't need to be replayed.
+                                                        // configure this separately InMemoryHistoryRepo = InMemoryTokeStore and replay
+                                                        return new AllEventEventHandlingComponent(
+                                                                cfg.getComponent(WorkflowHistoryProjector.class)
+                                                        );
+                                                    }
+                                                }
+                                        );
                                     }
-                                    return engineRegistration;
+                                    return cp;
                                 }
                         )
                         .customized(ANY_EVENT_IN_ONE_SEGMENT)
@@ -162,40 +146,27 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                 ComponentDefinition
                                         .ofTypeAndName(Object.class, moduleName + "ReplayResetHook")
                                         .withInstance(new Object())
-                                        .onStart(PRE_PROCESSOR_START_PHASE,
-                                                 (ComponentLifecycleHandler<Object>)
-                                                         (cfg, ignored) -> {
-                                                             var tokenStore = cfg.getComponent(
-                                                                     TokenStore.class,
-                                                                     tokenStoreComponentName(moduleName));
-                                                             var eventSource = cfg.getComponent(
-                                                                     StreamableEventSource.class);
-                                                             var processor = cfg.getComponent(
-                                                                     StreamingEventProcessor.class,
-                                                                     moduleName);
-                                                             var unitOfWorkFactory = cfg.getComponent(
-                                                                     UnitOfWorkFactory.class);
-                                                             var safePointStore = cfg.getComponent(
-                                                                     SafePointStore.class,
-                                                                     COMPONENT_SAFE_POINT_STORE
-                                                             );
-                                                             var workflowEngine =
-                                                                     engineComponentName != null
-                                                                             ? cfg.getComponent(WorkflowEngine.class,
-                                                                                                engineComponentName)
-                                                                             : cfg.getComponent(WorkflowEngine.class);
-
-                                                                     return ensureSegmentsInitialized(tokenStore, eventSource)
-                                                                             .thenCompose(latestToken -> resetOrSwitchToLiveMode(
-                                                                                     cfg,
-                                                                                     eventSource,
-                                                                                     processor,
-                                                                                     workflowEngine,
-                                                                             safePointStore,
-                                                                             unitOfWorkFactory,
-                                                                             latestToken
-                                                                     ));
-                                                         }
+                                        .onStart(PRE_PROCESSOR_START_PHASE, (cfg, ignored) -> {
+                                            // @formatter:off
+                                                     var tokenStore = cfg.getComponent(TokenStore.class, tokenStoreComponentName(moduleName));
+                                                     var eventSource = cfg.getComponent(StreamableEventSource.class);
+                                                     var processor = cfg.getComponent(StreamingEventProcessor.class, moduleName);
+                                                     var unitOfWorkFactory = cfg.getComponent(UnitOfWorkFactory.class);
+                                                     var safePointStore = cfg.getComponent(SafePointStore.class, COMPONENT_SAFE_POINT_STORE);
+                                                     var workflowEngine = engineComponentName != null
+                                                             ? cfg.getComponent(WorkflowEngine.class, engineComponentName)
+                                                             : cfg.getComponent(WorkflowEngine.class);
+                                                     return ensureSegmentsInitialized(tokenStore, eventSource)
+                                                             .thenCompose(latestToken -> resetOrSwitchToLiveMode(
+                                                                     eventSource,
+                                                                     processor,
+                                                                     workflowEngine,
+                                                                     safePointStore,
+                                                                     unitOfWorkFactory,
+                                                                     latestToken
+                                                             ));
+                                            // @formatter:off
+                                                 }
                                         )
                         ))
                         .build()
@@ -224,7 +195,6 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     }
 
     CompletableFuture<Void> resetOrSwitchToLiveMode(
-            Configuration configuration,
             StreamableEventSource eventSource,
             StreamingEventProcessor processor,
             WorkflowEngine workflowEngine,
@@ -235,11 +205,10 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
         return determineResetToken(eventSource, safePointStore)
                 .thenCompose(resetToken -> {
                     workflowEngine.initializeSafePoint(resetToken);
-                    var executionContext = new ConfigurationBackedProcessingContext(configuration);
                     return unitOfWorkFactory.create(moduleName + "WorkflowRehydration")
                                             .executeWithResult(context -> {
-                                                workflowEngine.rehydrateRunningWorkflows(context, executionContext);
-                                                workflowEngine.startRehydratedExecutions();
+                                                workflowEngine.loadRunningWorkflows(context);
+                                                workflowEngine.startExecutions();
                                                 return completedFuture(null);
                                             })
                                             .thenCompose(ignored -> switchToLiveOrReplay(
@@ -267,12 +236,12 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
             SafePointStore safePointStore
     ) {
         return safePointStore.fetchSafePointToken()
-                                 .thenCompose(storedToken -> {
-                                     if (storedToken != null) {
-                                         return completedFuture(storedToken);
-                                     }
-                                     return eventSource.firstToken(null);
-                                 });
+                             .thenCompose(storedToken -> {
+                                 if (storedToken != null) {
+                                     return completedFuture(storedToken);
+                                 }
+                                 return eventSource.firstToken(null);
+                             });
     }
 
     boolean requiresReplay(@Nullable TrackingToken resetToken, @Nullable TrackingToken latestToken) {

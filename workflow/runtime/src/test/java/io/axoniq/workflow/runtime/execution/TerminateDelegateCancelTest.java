@@ -23,12 +23,12 @@ import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive.Termi
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -63,7 +63,7 @@ class TerminateDelegateCancelTest {
     private Executor executor;
     private EventNameCustomizer eventNameCustomizer;
     private TerminateDelegate delegate;
-    private WorkflowDefinitionId workflowDefinitionId;
+    private MessageType workflowDefinitionId;
 
     @SuppressWarnings("unchecked")
     @BeforeEach
@@ -77,7 +77,7 @@ class TerminateDelegateCancelTest {
         processingContext = mock(ProcessingContext.class);
         unitOfWorkFactory = mock(UnitOfWorkFactory.class);
         executor = Runnable::run;
-        workflowDefinitionId = new WorkflowDefinitionId(new QualifiedName("test-workflow"), "0.0.1");
+        workflowDefinitionId = new MessageType(new QualifiedName("test-workflow"), "0.0.1");
 
         UnitOfWork unitOfWork = mock(UnitOfWork.class);
         when(unitOfWorkFactory.create(any(String.class))).thenReturn(unitOfWork);
@@ -87,11 +87,11 @@ class TerminateDelegateCancelTest {
                     Function<ProcessingContext, CompletableFuture<?>> action = invocation.getArgument(0);
                     return action.apply(processingContext);
                 });
-        when(workflowExecution.state()).thenReturn(new EventSourcedWorkflowState("wf-1",
-                                                                                 Map.of(),
-                                                                                 workflowDefinitionId,
-                                                                                 workflowContext,
-                                                                                 Map.of()));
+        when(workflowExecution.state()).thenReturn(new WorkflowState("wf-1",
+                                                                     Map.of(),
+                                                                     workflowDefinitionId,
+                                                                     workflowContext,
+                                                                     Map.of()));
         when(workflowExecution.workflowConfiguration()).thenReturn(workflowConfiguration);
         when(workflowConfiguration.workflowName()).thenReturn("test-workflow");
         when(workflowConfiguration.workflowVersion()).thenReturn("0.0.1");
@@ -170,11 +170,11 @@ class TerminateDelegateCancelTest {
     @Test
     void terminateCancelInvokesCancelledStatusChangeListener() throws InterruptedException {
         var listener = mock(WorkflowStatusChangeListener.class);
-        EventSourcedWorkflowState state = new EventSourcedWorkflowState("wf-1",
-                                                                        Map.of(),
-                                                                        workflowDefinitionId,
-                                                                        workflowContext,
-                                                                        Map.of(WorkflowStatus.CANCELLED, listener));
+        WorkflowState state = new WorkflowState("wf-1",
+                                                Map.of(),
+                                                workflowDefinitionId,
+                                                workflowContext,
+                                                Map.of(WorkflowStatus.CANCELLED, listener));
         when(workflowExecution.state()).thenReturn(state);
 
         assertThatThrownBy(() -> delegate.terminate(

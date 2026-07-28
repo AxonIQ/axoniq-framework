@@ -18,10 +18,10 @@
  */
 package io.axoniq.workflow.runtime.util;
 
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 
@@ -138,20 +138,17 @@ public class MetadataUtils {
      * Metadata for a version-marker event: a COMPLETED step event with {@code stepName = changeId} plus marker keys
      * ({@code versionChangeId}, {@code version}) whose presence flags this as a version marker.
      *
-     * @param workflowId the workflow id
-     * @param changeId   the change id
-     * @param version    the version
-     * @return metadata instance
-     * Creates a new metadata instance with the given workflow id, workflow status, and workflow definition id.
-     *
+     * @param workflowId           the workflow id
      * @param workflowId           the workflow id
      * @param workflowStatus       the workflow status
      * @param workflowDefinitionId the workflow definition identifier
+     * @return metadata instance Creates a new metadata instance with the given workflow id, workflow status, and
+     * workflow definition id.
      * @return metadata instance
      */
     public static Metadata create(String workflowId,
                                   WorkflowStatus workflowStatus,
-                                  WorkflowDefinitionId workflowDefinitionId) {
+                                  MessageType workflowDefinitionId) {
         return withWorkflowDefinitionId(create(workflowId, workflowStatus), workflowDefinitionId);
     }
 
@@ -218,10 +215,10 @@ public class MetadataUtils {
     }
 
     /**
-     * Returns the version if present in the metadata.
+     * Returns the version if present in the metadata
      *
      * @param metadata metadata to inspect
-     * @return optional of version
+     * @return optional of version of the workflow
      */
     public static Optional<String> getVersion(Metadata metadata) {
         return Optional.ofNullable(metadata.getOrDefault(METADATA_KEY_VERSION, null));
@@ -239,7 +236,7 @@ public class MetadataUtils {
      * @param workflowDefinitionId workflow definition id to store
      * @return enriched metadata
      */
-    public static Metadata withWorkflowDefinitionId(Metadata metadata, WorkflowDefinitionId workflowDefinitionId) {
+    public static Metadata withWorkflowDefinitionId(Metadata metadata, MessageType workflowDefinitionId) {
         return metadata.and(METADATA_KEY_WORKFLOW_DEFINITION_NAME, workflowDefinitionId.qualifiedName().toString())
                        .and(METADATA_KEY_WORKFLOW_DEFINITION_VERSION, workflowDefinitionId.version());
     }
@@ -250,12 +247,12 @@ public class MetadataUtils {
      * @param metadata metadata to inspect
      * @return optional workflow definition id
      */
-    public static Optional<WorkflowDefinitionId> getWorkflowDefinitionId(Metadata metadata) {
+    public static Optional<MessageType> getWorkflowDefinitionId(Metadata metadata) {
         if (!metadata.containsKey(METADATA_KEY_WORKFLOW_DEFINITION_NAME)
                 || !metadata.containsKey(METADATA_KEY_WORKFLOW_DEFINITION_VERSION)) {
             return Optional.empty();
         }
-        return Optional.of(new WorkflowDefinitionId(
+        return Optional.of(new MessageType(
                 new QualifiedName(metadata.get(METADATA_KEY_WORKFLOW_DEFINITION_NAME)),
                 metadata.get(METADATA_KEY_WORKFLOW_DEFINITION_VERSION)
         ));

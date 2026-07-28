@@ -20,15 +20,15 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import jakarta.annotation.Nonnull;
-import org.axonframework.common.TypeReference;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
+
+import static io.axoniq.workflow.runtime.execution.WorkflowState.PAYLOAD_TYPE;
 
 /**
  * Workflow id provider accessing event message property.
@@ -78,10 +78,8 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
     @Override
     public String apply(@Nonnull EventMessage eventMessage) {
         return idProcessor
-                .apply(Optional.ofNullable(eventMessage.payloadAs(
-                                       new TypeReference<Map<String, Object>>() {
-                                       }
-                               )).flatMap(p -> Optional.ofNullable(p.get(attributeName)))
+                .apply(Optional.ofNullable(eventMessage.payloadAs(PAYLOAD_TYPE))
+                               .flatMap(p -> Optional.ofNullable(p.get(attributeName)))
                                .map(Object::toString)
                                .orElse(null));
     }

@@ -22,9 +22,9 @@ import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.context.Version;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -138,7 +138,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      */
     @Nonnull
     default Optional<WorkflowConfiguration<?>> getWorkflowConfiguration(
-            @Nonnull WorkflowDefinitionId workflowDefinitionId
+            @Nonnull MessageType workflowDefinitionId
     ) {
         return findByWorkflowNameAndVersion(
                 workflowDefinitionId.qualifiedName().toString(),

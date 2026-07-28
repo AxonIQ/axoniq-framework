@@ -22,11 +22,9 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
@@ -53,6 +51,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 
@@ -71,19 +70,19 @@ class WorkflowEngineReplayTest {
     private WorkflowExecutionRepository workflowExecutionRepository;
     private WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private SafePointStore safePointStore;
-    private WorkflowStateRehydrationSupport workflowStateRehydrationSupport;
+    private WorkflowStore workflowStore;
 
     @BeforeEach
     void setUp() {
         workflowExecutionRepository = spy(new InMemoryWorkflowExecutionRepository());
         workflowConfigurationRegistry = mock(WorkflowConfigurationRegistry.class);
         safePointStore = mock(SafePointStore.class);
-        workflowStateRehydrationSupport = mock(WorkflowStateRehydrationSupport.class);
+        workflowStore = mock(WorkflowStore.class);
         workflowEngine = new WorkflowEngine(
                 workflowConfigurationRegistry,
                 workflowExecutionRepository,
                 safePointStore,
-                workflowStateRehydrationSupport
+                workflowStore
         );
     }
 
@@ -109,7 +108,7 @@ class WorkflowEngineReplayTest {
     void replayFinishedCleanupAndExecute() {
 
         WorkflowExecution terminalExecution = mock(WorkflowExecution.class);
-        WorkflowState terminalState = mock(WorkflowState.class);
+        io.axoniq.workflow.runtime.api.execution.state.WorkflowState terminalState = mock(io.axoniq.workflow.runtime.api.execution.state.WorkflowState.class);
         when(terminalExecution.workflowId()).thenReturn("terminalId");
         when(terminalExecution.state()).thenReturn(terminalState);
         when(terminalState.workflowStatus()).thenReturn(WorkflowStatus.COMPLETED);
@@ -120,7 +119,7 @@ class WorkflowEngineReplayTest {
         when(terminalPC.whenComplete(any())).thenReturn(terminalPC);
 
         WorkflowExecution runningExecution = mock(WorkflowExecution.class);
-        WorkflowState runningState = mock(WorkflowState.class);
+        io.axoniq.workflow.runtime.api.execution.state.WorkflowState runningState = mock(io.axoniq.workflow.runtime.api.execution.state.WorkflowState.class);
         WorkflowContext runningContext = mock(WorkflowContext.class);
         when(runningExecution.workflowId()).thenReturn("runningId");
         when(runningExecution.state()).thenReturn(runningState);
@@ -205,40 +204,30 @@ class WorkflowEngineReplayTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void rehydrateRunningWorkflowsRestoresExecutionStateAndRestartToken() {
+    void loadRunningWorkflowsRestoresExecutionStateAndRestartToken() {
         String workflowId = "wf-1";
         TrackingToken checkpointToken = token(30);
-        ProcessingContext restoreContext = processingContext(checkpointToken);
-        ProcessingContext executionContext = processingContext(checkpointToken);
-        when(restoreContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
-        when(restoreContext.component(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
-        when(restoreContext.component(Clock.class)).thenReturn(Clock.systemUTC());
-        when(restoreContext.component(WorkflowScheduler.class)).thenReturn(mock(WorkflowScheduler.class));
-        when(restoreContext.component(ExecuteStepActionResolver.class)).thenReturn(
+        ProcessingContext processingContext = processingContext(checkpointToken);
+        when(processingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
+        when(processingContext.component(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
+        when(processingContext.component(Clock.class)).thenReturn(Clock.systemUTC());
+        when(processingContext.component(WorkflowScheduler.class)).thenReturn(mock(WorkflowScheduler.class));
+        when(processingContext.component(ExecuteStepActionResolver.class)).thenReturn(
                 mock(ExecuteStepActionResolver.class)
         );
-        when(restoreContext.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
-        when(restoreContext.component(EventSink.class)).thenReturn(mock(EventSink.class));
-        when(executionContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
-        when(executionContext.component(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
-        when(executionContext.component(Clock.class)).thenReturn(Clock.systemUTC());
-        when(executionContext.component(WorkflowScheduler.class)).thenReturn(mock(WorkflowScheduler.class));
-        when(executionContext.component(ExecuteStepActionResolver.class)).thenReturn(
-                mock(ExecuteStepActionResolver.class)
-        );
-        when(executionContext.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
-        when(executionContext.component(EventSink.class)).thenReturn(mock(EventSink.class));
+        when(processingContext.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
+        when(processingContext.component(EventSink.class)).thenReturn(mock(EventSink.class));
 
-        var running = new RunningWorkflows();
+        var running = new EventSourcedRunningWorkflows();
         running.evolve(MetadataUtils.create(workflowId, WorkflowStatus.STARTED));
-        when(workflowStateRehydrationSupport.loadRunningWorkflows(same(restoreContext))).thenReturn(running);
+        when(workflowStore.loadRunningWorkflows(same(processingContext))).thenReturn(CompletableFuture.completedFuture(running));
 
-        var definitionId = new WorkflowDefinitionId(new QualifiedName("RestoredWorkflow"), "1.0.0");
-        var restoredState = new EventSourcedWorkflowState(workflowId, definitionId);
-        restoredState.evolve(workflowStartedEvent(workflowId, definitionId, Map.of("mode", "wait")), restoreContext);
-        restoredState.evolve(stepStartedEvent(workflowId, "waitForResume"), restoreContext);
-        when(workflowStateRehydrationSupport.loadWorkflowState(eq(workflowId), same(restoreContext)))
-                .thenReturn(restoredState);
+        var definitionId = new MessageType(new QualifiedName("RestoredWorkflow"), "1.0.0");
+        var restoredState = new WorkflowState(workflowId, definitionId);
+        restoredState.evolve(workflowStartedEvent(workflowId, definitionId, Map.of("mode", "wait")), processingContext);
+        restoredState.evolve(stepStartedEvent(workflowId, "waitForResume"), processingContext);
+        when(workflowStore.loadWorkflow(eq(workflowId), same(processingContext)))
+                .thenReturn(CompletableFuture.completedFuture(restoredState));
 
         WorkflowConfiguration<WorkflowContext> configuration = mock(WorkflowConfiguration.class);
         WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
@@ -252,20 +241,20 @@ class WorkflowEngineReplayTest {
         when(configuration.workflowContextFactory()).thenReturn(contextFactory);
         when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
         when(workflowConfigurationRegistry.getWorkflowConfiguration(definitionId)).thenReturn(Optional.of(configuration));
-        when(contextFactory.createContext(anyMap(), eq(workflowId), same(executionContext), eq(configuration)))
+        when(contextFactory.createContext(anyMap(), eq(workflowId), same(processingContext), eq(configuration)))
                 .thenReturn(workflowContext);
-        executionContext.putResource(RESTART_TOKEN_RESOURCE_KEY, Optional.of(checkpointToken));
+        processingContext.putResource(RESTART_TOKEN_RESOURCE_KEY, Optional.of(checkpointToken));
         var restoredExecution = new SimpleWorkflowExecution(
                 workflowId,
                 restoredState.payload(),
-                executionContext,
+                processingContext,
                 configuration,
                 workflowContext
         );
         when(executionFactory.create(workflowContext)).thenReturn(restoredExecution);
 
         workflowEngine.initializeSafePoint(checkpointToken);
-        workflowEngine.rehydrateRunningWorkflows(restoreContext, executionContext);
+        workflowEngine.loadRunningWorkflows(processingContext);
 
         var restored = workflowEngine.workflowExecutions().iterator().next();
         assertThat(restored.workflowId()).isEqualTo(workflowId);
@@ -284,7 +273,7 @@ class WorkflowEngineReplayTest {
 
         // Pre-register a running v1.0.0 workflow under the base id.
         WorkflowExecution existing = mock(WorkflowExecution.class);
-        WorkflowState existingState = mock(WorkflowState.class);
+        io.axoniq.workflow.runtime.api.execution.state.WorkflowState existingState = mock(io.axoniq.workflow.runtime.api.execution.state.WorkflowState.class);
         when(existing.state()).thenReturn(existingState);
         when(existingState.workflowDefinitionVersion()).thenReturn("1.0.0");
         workflowExecutionRepository.save(baseId, () -> existing);
@@ -329,7 +318,7 @@ class WorkflowEngineReplayTest {
 
         // Pre-register a running v2.0.0 workflow under "order-1".
         WorkflowExecution existing = mock(WorkflowExecution.class);
-        WorkflowState existingState = mock(WorkflowState.class);
+        io.axoniq.workflow.runtime.api.execution.state.WorkflowState existingState = mock(io.axoniq.workflow.runtime.api.execution.state.WorkflowState.class);
         when(existing.state()).thenReturn(existingState);
         when(existingState.workflowDefinitionVersion()).thenReturn("2.0.0");
         workflowExecutionRepository.save(workflowId, () -> existing);
@@ -360,7 +349,7 @@ class WorkflowEngineReplayTest {
 
         // Pre-register a running workflow under "dup-id" at version "1.0.0".
         WorkflowExecution existing = mock(WorkflowExecution.class);
-        WorkflowState existingState = mock(WorkflowState.class);
+        io.axoniq.workflow.runtime.api.execution.state.WorkflowState existingState = mock(io.axoniq.workflow.runtime.api.execution.state.WorkflowState.class);
         when(existing.state()).thenReturn(existingState);
         when(existingState.workflowDefinitionVersion()).thenReturn("1.0.0");
         workflowExecutionRepository.save(workflowId, () -> existing);
@@ -515,7 +504,7 @@ class WorkflowEngineReplayTest {
             when(execution.workflowId()).thenReturn(workflowId);
             when(execution.restartToken()).thenReturn(restartTokensByWorkflowId.get(workflowId).orElse(null));
             when(execution.workflowContext()).thenReturn(workflowContext);
-            when(execution.state()).thenReturn(mock(WorkflowState.class));
+            when(execution.state()).thenReturn(mock(io.axoniq.workflow.runtime.api.execution.state.WorkflowState.class));
             return execution;
         });
 
@@ -569,7 +558,7 @@ class WorkflowEngineReplayTest {
             WorkflowContext workflowContext = invocation.getArgument(0);
             String workflowId = workflowIdsByContext.get(workflowContext);
             var execution = mock(WorkflowExecution.class);
-            var state = mock(WorkflowState.class);
+            var state = mock(io.axoniq.workflow.runtime.api.execution.state.WorkflowState.class);
             when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
             when(execution.workflowId()).thenReturn(workflowId);
             when(execution.restartToken()).thenReturn(restartTokensByWorkflowId.get(workflowId));
@@ -606,7 +595,7 @@ class WorkflowEngineReplayTest {
         TrackingToken currentToken = token(191);
 
         WorkflowExecution execution = mock(WorkflowExecution.class);
-        WorkflowState state = mock(WorkflowState.class);
+        io.axoniq.workflow.runtime.api.execution.state.WorkflowState state = mock(io.axoniq.workflow.runtime.api.execution.state.WorkflowState.class);
         WorkflowContext workflowContext = mock(WorkflowContext.class);
         ProcessingContext workflowProcessingContext = mock(ProcessingContext.class);
 
@@ -669,12 +658,12 @@ class WorkflowEngineReplayTest {
     }
 
     private static EventMessage workflowStartedEvent(String workflowId,
-                                                     WorkflowDefinitionId definitionId,
+                                                     MessageType definitionId,
                                                      Map<String, Object> payload) {
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(MetadataUtils.create(workflowId, WorkflowStatus.STARTED, definitionId)
-                                                             .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
-                                                                  io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME));
+                                                              .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
+                                                                   io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME));
         when(eventMessage.type()).thenReturn(new MessageType("RestoredWorkflowStarted", definitionId.version()));
         when(eventMessage.payloadAs(Object.class)).thenReturn(payload);
         when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(payload);
@@ -702,13 +691,13 @@ class WorkflowEngineReplayTest {
         String disambiguatedId = baseId + "#2.0.0";
 
         WorkflowExecution v1Existing = mock(WorkflowExecution.class);
-        WorkflowState v1State = mock(WorkflowState.class);
+        io.axoniq.workflow.runtime.api.execution.state.WorkflowState v1State = mock(io.axoniq.workflow.runtime.api.execution.state.WorkflowState.class);
         when(v1Existing.state()).thenReturn(v1State);
         when(v1State.workflowDefinitionVersion()).thenReturn("1.0.0");
         workflowExecutionRepository.save(baseId, () -> v1Existing);
 
         WorkflowExecution v2Existing = mock(WorkflowExecution.class);
-        WorkflowState v2State = mock(WorkflowState.class);
+        io.axoniq.workflow.runtime.api.execution.state.WorkflowState v2State = mock(io.axoniq.workflow.runtime.api.execution.state.WorkflowState.class);
         when(v2Existing.state()).thenReturn(v2State);
         when(v2State.workflowDefinitionVersion()).thenReturn("2.0.0");
         workflowExecutionRepository.save(disambiguatedId, () -> v2Existing);
@@ -738,5 +727,4 @@ class WorkflowEngineReplayTest {
         assertThat(actual.lowerBound(expected)).isEqualTo(expected);
         assertThat(expected.lowerBound(actual)).isEqualTo(actual);
     }
-
 }

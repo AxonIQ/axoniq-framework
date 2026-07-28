@@ -27,9 +27,10 @@ import io.axoniq.workflow.runtime.api.execution.context.FailWorkflowDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.Version;
 import io.axoniq.workflow.runtime.api.execution.context.VersionPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.VersionStepDefinition;
+import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
@@ -39,9 +40,7 @@ import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.execution.context.Version;
 import jakarta.annotation.Nonnull;
-import org.axonframework.common.TypeReference;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -50,6 +49,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Predicate;
+
+import static io.axoniq.workflow.runtime.execution.WorkflowState.PAYLOAD_TYPE;
 
 /**
  * Base class for DSL implementations.
@@ -299,8 +300,7 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     @Nonnull
     private Map<String, Object> resolveStepPayload(@Nonnull WorkflowStepResult result) {
         if (result.success()) {
-            return result.resultAs(new TypeReference<Map<String, Object>>() {
-            }, processingContext().component(EventConverter.class)).orElse(Map.of());
+            return result.resultAs(PAYLOAD_TYPE, processingContext().component(EventConverter.class)).orElse(Map.of());
         }
         if (result.timeout()) {
             throw new StepTimedOutException(

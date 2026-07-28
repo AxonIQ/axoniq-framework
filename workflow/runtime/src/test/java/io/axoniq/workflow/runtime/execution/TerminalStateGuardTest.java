@@ -21,11 +21,11 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -61,7 +61,7 @@ class TerminalStateGuardTest {
 
     private WorkflowContext workflowContext;
     private WorkflowExecution workflowExecution;
-    private EventSourcedWorkflowState workflowState;
+    private WorkflowState workflowState;
     private EventSink eventSink;
     private ProcessingContext processingContext;
     private UnitOfWorkFactory unitOfWorkFactory;
@@ -131,12 +131,11 @@ class TerminalStateGuardTest {
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         eventNameCustomizer = defaults();
-        workflowState = new EventSourcedWorkflowState("wf-1",
-                                                      Map.of(),
-                                                      new WorkflowDefinitionId(new QualifiedName("test-workflow"),
-                                                                               "0.0.1"),
-                                                      workflowContext,
-                                                      Map.of());
+        workflowState = new WorkflowState("wf-1",
+                                          Map.of(),
+                                          new MessageType(new QualifiedName("test-workflow"), "0.0.1"),
+                                          workflowContext,
+                                          Map.of());
         when(workflowExecution.state()).thenReturn(workflowState);
 
         stepExecutor = new TestableStepExecutor(

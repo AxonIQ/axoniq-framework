@@ -21,10 +21,10 @@ package io.axoniq.workflow.runtime.util;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.*;
@@ -48,7 +48,7 @@ class EventMessageUtilsTest {
 
     private WorkflowContext context;
     private EventNameCustomizer customizer;
-    private WorkflowDefinitionId workflowDefinitionId;
+    private MessageType workflowDefinitionId;
     private final String workflowId = "wf123";
     private final Map<String, Object> payload = Map.of("key", "value");
 
@@ -56,7 +56,7 @@ class EventMessageUtilsTest {
     void setUp() {
         context = mock(WorkflowContext.class);
         customizer = mock(EventNameCustomizer.class);
-        workflowDefinitionId = new WorkflowDefinitionId(new QualifiedName("myWorkflow"), "0.0.1");
+        workflowDefinitionId = new MessageType(new QualifiedName("myWorkflow"), "0.0.1");
 
         when(context.workflowId()).thenReturn(workflowId);
         when(context.workflowPayload()).thenReturn(payload);

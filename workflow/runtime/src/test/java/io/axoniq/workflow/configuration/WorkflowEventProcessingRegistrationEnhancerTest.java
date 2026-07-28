@@ -20,18 +20,15 @@ package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
-import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.GapAwareTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 import org.junit.jupiter.api.*;
 
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -52,15 +49,13 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         var processor = mock(StreamingEventProcessor.class);
         var workflowEngine = mock(WorkflowEngine.class);
         var safePointStore = mock(SafePointStore.class);
-        var configuration = mock(Configuration.class);
         var unitOfWorkFactory = unitOfWorkFactory();
         TrackingToken storedToken = token(18);
 
         when(safePointStore.fetchSafePointToken()).thenReturn(CompletableFuture.completedFuture(storedToken));
         when(processor.resetTokens(any(TrackingToken.class))).thenReturn(CompletableFuture.completedFuture(null));
 
-        enhancer.resetOrSwitchToLiveMode(configuration,
-                                         eventSource,
+        enhancer.resetOrSwitchToLiveMode(eventSource,
                                          processor,
                                          workflowEngine,
                                          safePointStore,
@@ -71,8 +66,8 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         verify(processor).resetTokens(tokenCaptor.capture());
         assertSameToken(tokenCaptor.getValue(), storedToken);
         verify(workflowEngine).initializeSafePoint(storedToken);
-        verify(workflowEngine).rehydrateRunningWorkflows(any(ProcessingContext.class), any(ProcessingContext.class));
-        verify(workflowEngine).startRehydratedExecutions();
+        verify(workflowEngine).loadRunningWorkflows(any(ProcessingContext.class));
+        verify(workflowEngine).startExecutions();
         verifyNoInteractions(eventSource);
         verify(workflowEngine, never()).switchToLiveMode();
     }
@@ -84,7 +79,6 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         var processor = mock(StreamingEventProcessor.class);
         var workflowEngine = mock(WorkflowEngine.class);
         var safePointStore = mock(SafePointStore.class);
-        var configuration = mock(Configuration.class);
         var unitOfWorkFactory = unitOfWorkFactory();
         TrackingToken firstToken = token(5);
 
@@ -92,8 +86,7 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         when(eventSource.firstToken(null)).thenReturn(CompletableFuture.completedFuture(firstToken));
         when(processor.resetTokens(any(TrackingToken.class))).thenReturn(CompletableFuture.completedFuture(null));
 
-        enhancer.resetOrSwitchToLiveMode(configuration,
-                                         eventSource,
+        enhancer.resetOrSwitchToLiveMode(eventSource,
                                          processor,
                                          workflowEngine,
                                          safePointStore,
@@ -104,8 +97,8 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         verify(processor).resetTokens(tokenCaptor.capture());
         assertSameToken(tokenCaptor.getValue(), firstToken);
         verify(workflowEngine).initializeSafePoint(firstToken);
-        verify(workflowEngine).rehydrateRunningWorkflows(any(ProcessingContext.class), any(ProcessingContext.class));
-        verify(workflowEngine).startRehydratedExecutions();
+        verify(workflowEngine).loadRunningWorkflows(any(ProcessingContext.class));
+        verify(workflowEngine).startExecutions();
         verify(workflowEngine, never()).switchToLiveMode();
     }
 
@@ -116,14 +109,12 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         var processor = mock(StreamingEventProcessor.class);
         var workflowEngine = mock(WorkflowEngine.class);
         var safePointStore = mock(SafePointStore.class);
-        var configuration = mock(Configuration.class);
         var unitOfWorkFactory = unitOfWorkFactory();
         TrackingToken latestToken = token(192);
 
         when(safePointStore.fetchSafePointToken()).thenReturn(CompletableFuture.completedFuture(latestToken));
 
-        enhancer.resetOrSwitchToLiveMode(configuration,
-                                         eventSource,
+        enhancer.resetOrSwitchToLiveMode(eventSource,
                                          processor,
                                          workflowEngine,
                                          safePointStore,
@@ -132,8 +123,8 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
                 .join();
 
         verify(workflowEngine).initializeSafePoint(latestToken);
-        verify(workflowEngine).rehydrateRunningWorkflows(any(ProcessingContext.class), any(ProcessingContext.class));
-        verify(workflowEngine).startRehydratedExecutions();
+        verify(workflowEngine).loadRunningWorkflows(any(ProcessingContext.class));
+        verify(workflowEngine).startExecutions();
         verify(workflowEngine).switchToLiveMode();
         verify(processor, never()).resetTokens(any(TrackingToken.class));
         verifyNoInteractions(eventSource);

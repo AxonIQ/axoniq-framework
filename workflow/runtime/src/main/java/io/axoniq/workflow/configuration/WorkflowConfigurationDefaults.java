@@ -25,12 +25,12 @@ import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.DefaultExecuteStepActionResolver;
 import io.axoniq.workflow.runtime.execution.DefaultWorkflowScheduler;
-import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
+import io.axoniq.workflow.runtime.execution.WorkflowState;
 import io.axoniq.workflow.runtime.execution.ExecuteStepActionResolver;
 import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
 import io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
-import io.axoniq.workflow.runtime.execution.RepositoryBackedWorkflowStateRehydrationSupport;
-import io.axoniq.workflow.runtime.execution.RunningWorkflows;
+import io.axoniq.workflow.runtime.execution.EventSourcedRunningWorkflows;
+import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowStore;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
@@ -40,7 +40,7 @@ import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowScheduler;
 import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
-import io.axoniq.workflow.runtime.execution.WorkflowStateRehydrationSupport;
+import io.axoniq.workflow.runtime.execution.WorkflowStore;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import org.axonframework.common.ClockUtils;
 import org.axonframework.common.annotation.Internal;
@@ -73,22 +73,24 @@ import static io.axoniq.workflow.runtime.util.MetadataUtils.getWorkflowDefinitio
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-@Internal
-@RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
-public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
+@Internal @RegistrationScope(scope = RegistrationScope.Scope.CURRENT) public class WorkflowConfigurationDefaults
+        implements ConfigurationEnhancer {
 
     /**
      * Name of the event handling component used for workflow history projector.
      */
     public static final String COMPONENT_WORKFLOW_HISTORY_PROJECTOR = "WorkflowHistoryProjector";
+
     /**
      * Name of the event handling component used for the workflow engine.
      */
     public static final String COMPONENT_WORKFLOW_ENGINE = "WorkflowEngine";
+
     /**
      * Name of the component used for the workflow engine safe point tracking token store.
      */
     public static final String COMPONENT_SAFE_POINT_STORE = "WorkflowEngineSafePointStore";
+
     /**
      * Name of the component used for the workflow engine token store used for safe point persistence.
      */
@@ -97,21 +99,22 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     /**
      * Token JDBC schema used for the {@link TokenStore}.
      */
-    public static final TokenSchema SAFE_POINT_TOKEN_STORE_JDBC_SCHEMA = TokenSchema.builder()
-                                                                                    .setTokenTable("WF_TOKEN_ENTRY")
-                                                                                    .setProcessorNameColumn(
-                                                                                            "PROCESSOR_NAME")
-                                                                                    .setTokenTypeColumn("TOKEN_TYPE")
-                                                                                    .setTokenColumn("TOKEN")
-                                                                                    .setMaskColumn("MASK")
-                                                                                    .setOwnerColumn("OWNER")
-                                                                                    .setTimestampColumn("TIMESTAMP")
-                                                                                    .setSegmentColumn("SEGMENT")
-                                                                                    .build();
+    public static final TokenSchema SAFE_POINT_TOKEN_STORE_JDBC_SCHEMA = TokenSchema
+            .builder()
+            .setTokenTable("WF_TOKEN_ENTRY")
+            .setProcessorNameColumn("PROCESSOR_NAME")
+            .setTokenTypeColumn("TOKEN_TYPE")
+            .setTokenColumn("TOKEN")
+            .setMaskColumn("MASK")
+            .setOwnerColumn("OWNER")
+            .setTimestampColumn("TIMESTAMP")
+            .setSegmentColumn("SEGMENT")
+            .build();
     /**
      * Name of the executor service component.
      */
     public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngineExecutor";
+
     /**
      * Order for this enhancer.
      * <p>
@@ -131,7 +134,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerEventNameCustomizer(componentRegistry);
         registerClock(componentRegistry);
         decorateTagResolver(componentRegistry);
-        registerWorkflowStateRepository(componentRegistry);
+        registerEventSourcedWorkflowStateModule(componentRegistry);
         registerExecuteStepActionResolver(componentRegistry);
         registerWorkflowTimeoutScheduler(componentRegistry);
         registerRunningWorkflows(componentRegistry);
@@ -148,8 +151,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     private void registerPayloadReducerRegistry(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(PayloadReducerRegistry.class,
-                                               cfg -> new PayloadReducerRegistry());
+        componentRegistry.registerIfNotPresent(PayloadReducerRegistry.class, cfg -> new PayloadReducerRegistry());
     }
 
     void registerEventNameCustomizer(ComponentRegistry componentRegistry) {
@@ -168,64 +170,45 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
 
     void registerWorkflowTimeoutScheduler(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(WorkflowScheduler.class,
-                                               cfg -> new DefaultWorkflowScheduler(
-                                                       cfg.getComponent(Clock.class)
-                                               ));
+                                               cfg -> new DefaultWorkflowScheduler(cfg.getComponent(Clock.class)));
     }
 
     void decorateTagResolver(ComponentRegistry componentRegistry) {
         componentRegistry.registerDecorator(
                 DecoratorDefinition
                         .forType(TagResolver.class)
-                        .with((cfg, name, delegate) -> new MultiTagResolver(delegate,
-                                                                            new WorkflowEventTagResolver()))
-
+                        .with((cfg, name, delegate) -> new MultiTagResolver(delegate, new WorkflowEventTagResolver()))
         );
     }
 
     void registerRunningWorkflows(ComponentRegistry componentRegistry) {
-        componentRegistry.registerModule(
-                EventSourcedEntityModule
-                        .declarative(String.class, RunningWorkflows.class)
-                        .messagingModel((c, model) -> model
-                                .entityEvolver((entity, event, context) -> {
-                                    entity.evolve(event.metadata());
-                                    return entity;
-                                })
-                                .build())
-                        .entityFactory(c -> (identifier, firstEvent, context) -> new RunningWorkflows())
-                        .criteriaResolver(c -> (identifier, context) ->
-                                RunningWorkflows.workflowLifecycleEvents())
-                        // FIXME Register snapshot configuration eventually, see #245
-                        .build()
-        );
+        componentRegistry.registerModule(EventSourcedEntityModule.declarative(String.class,
+                                                                              EventSourcedRunningWorkflows.class)
+                                                                 .messagingModel((c, model) -> model.entityEvolver((entity, event, context) -> {
+                                                                     entity.evolve(event.metadata());
+                                                                     return entity;
+                                                                 }).build())
+                                                                 .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedRunningWorkflows())
+                                                                 .criteriaResolver(c -> (identifier, context) -> EventSourcedRunningWorkflows.criteriaBuilder())
+                                                                 // FIXME Register snapshot configuration eventually, see #245
+                                                                 .build());
         componentRegistry.registerIfNotPresent(Clock.class, cfg -> ClockUtils.get());
     }
 
-    void registerWorkflowStateRepository(ComponentRegistry componentRegistry) {
-
-        componentRegistry.registerModule(
-                EventSourcedEntityModule
-                        .declarative(String.class, EventSourcedWorkflowState.class)
-                        .messagingModel((c, model) -> model
-                                .entityEvolver((entity, event, context) -> (EventSourcedWorkflowState) entity.evolve(
-                                        event,
-                                        context))
-                                .build())
-                        .entityFactory(c -> (identifier, firstEvent, context) ->
-                                new EventSourcedWorkflowState(
-                                        identifier,
-                                        getWorkflowDefinitionId(firstEvent.metadata()).orElseThrow(() -> new IllegalStateException(
-                                                "Workflow state for '%s' cannot be created without workflowDefinitionId metadata."
-                                                        .formatted(
-                                                                identifier)
-                                        ))
-                                )
-                        ).criteriaResolver(c -> (identifier, context) ->
-                                EventSourcedWorkflowState.criteriaBuilder(identifier))
-                        .build()
-
-        );
+    void registerEventSourcedWorkflowStateModule(ComponentRegistry componentRegistry) {
+        componentRegistry.registerModule(EventSourcedEntityModule.declarative(String.class,
+                                                                              WorkflowState.class)
+                                                                 .messagingModel((c, model) -> model.entityEvolver((entity, event, context) -> (WorkflowState) entity.evolve(
+                                                                         event,
+                                                                         context)).build())
+                                                                 .entityFactory(c -> (identifier, firstEvent, context) -> new WorkflowState(
+                                                                         identifier,
+                                                                         getWorkflowDefinitionId(firstEvent.metadata()).orElseThrow(
+                                                                                 () -> new IllegalStateException(
+                                                                                         "Workflow state for '%s' cannot be created without workflowDefinitionId metadata.".formatted(
+                                                                                                 identifier)))))
+                                                                 .criteriaResolver(c -> (identifier, context) -> WorkflowState.criteriaBuilder(
+                                                                         identifier)).build());
     }
 
     void registerWorkflowEngineExecutor(ComponentRegistry componentRegistry) {
@@ -235,89 +218,69 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     void registerWorkflowEngine(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(
-                ComponentDefinition
-                        .ofType(WorkflowEngine.class)
-                        .withBuilder(cfg -> new WorkflowEngine(
-                                cfg.getComponent(WorkflowConfigurationRegistry.class),
-                                cfg.getComponent(WorkflowExecutionRepository.class),
-                                cfg.getComponent(SafePointStore.class, COMPONENT_SAFE_POINT_STORE),
-                                workflowStateRehydrationSupport(cfg)
-                        ))
-                        .onShutdown(Phase.INBOUND_EVENT_CONNECTORS, WorkflowEngine::shutdown)
-        );
+        componentRegistry.registerIfNotPresent(ComponentDefinition.ofType(WorkflowEngine.class)
+                                                                  .withBuilder(cfg -> new WorkflowEngine(cfg.getComponent(
+                                                                          WorkflowConfigurationRegistry.class),
+                                                                                                         cfg.getComponent(
+                                                                                                                 WorkflowExecutionRepository.class),
+                                                                                                         cfg.getComponent(
+                                                                                                                 SafePointStore.class,
+                                                                                                                 COMPONENT_SAFE_POINT_STORE),
+                                                                                                         workflowStateRehydrationSupport(
+                                                                                                                 cfg)))
+                                                                  .onShutdown(Phase.INBOUND_EVENT_CONNECTORS,
+                                                                              WorkflowEngine::shutdown));
     }
 
-    private WorkflowStateRehydrationSupport workflowStateRehydrationSupport(Configuration configuration) {
-        return new RepositoryBackedWorkflowStateRehydrationSupport(
-                runningWorkflowsRepository(configuration),
-                workflowStateRepository(configuration)
-        );
-    }
-
-    @SuppressWarnings("unchecked")
-    private Repository<String, RunningWorkflows> runningWorkflowsRepository(Configuration configuration) {
-        return configuration.getComponents(Repository.class)
-                            .values()
-                            .stream()
-                            .filter(repository -> repository.entityType().equals(RunningWorkflows.class))
-                            .map(repository -> (Repository<String, RunningWorkflows>) repository)
-                            .findFirst()
-                            .orElseThrow(() -> new NoSuchElementException(
-                                    "No repository found for %s".formatted(RunningWorkflows.class.getName())
-                            ));
+    private WorkflowStore workflowStateRehydrationSupport(Configuration configuration) {
+        return new EventSourcedWorkflowStore(runningWorkflowsRepository(configuration),
+                                             workflowStateRepository(configuration));
     }
 
     @SuppressWarnings("unchecked")
-    private Repository<String, EventSourcedWorkflowState> workflowStateRepository(Configuration configuration) {
-        return configuration.getComponents(Repository.class)
-                            .values()
-                            .stream()
-                            .filter(repository -> repository.entityType().equals(EventSourcedWorkflowState.class))
-                            .map(repository -> (Repository<String, EventSourcedWorkflowState>) repository)
-                            .findFirst()
-                            .orElseThrow(() -> new NoSuchElementException(
-                                    "No repository found for %s".formatted(EventSourcedWorkflowState.class.getName())
-                            ));
+    private Repository<String, EventSourcedRunningWorkflows> runningWorkflowsRepository(Configuration configuration) {
+        return configuration.getComponents(Repository.class).values().stream()
+                            .filter(repository -> repository.entityType().equals(EventSourcedRunningWorkflows.class))
+                            .map(repository -> (Repository<String, EventSourcedRunningWorkflows>) repository).findFirst()
+                            .orElseThrow(() -> new NoSuchElementException("No repository found for %s".formatted(
+                                    EventSourcedRunningWorkflows.class.getName())));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Repository<String, WorkflowState> workflowStateRepository(Configuration configuration) {
+        return configuration.getComponents(Repository.class).values().stream()
+                            .filter(repository -> repository.entityType().equals(WorkflowState.class)).map(
+                        repository -> (Repository<String, WorkflowState>) repository).findFirst()
+                            .orElseThrow(() -> new NoSuchElementException("No repository found for %s".formatted(
+                                    WorkflowState.class.getName())));
     }
 
     void registerSafePointStore(ComponentRegistry componentRegistry) {
-        componentRegistry
-                .registerIfNotPresent(
-                        SafePointStore.class,
-                        COMPONENT_SAFE_POINT_STORE,
-                        cfg -> cfg.getOptionalComponent(
-                                          TokenStore.class,
-                                          COMPONENT_SAFE_POINT_TOKEN_STORE
-                                  )
-                                  .<SafePointStore>map(tokenStore ->
-                                                               new TokenStoreSafePointStore(
-                                                                       tokenStore,
-                                                                       TokenStoreSafePointStore.tokenStoreIdentifier(
-                                                                               WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME
-                                                                       )
-                                                               ))
-                                  .orElseGet(InMemorySafePointStore::new)
-                );
+        componentRegistry.registerIfNotPresent(SafePointStore.class,
+                                               COMPONENT_SAFE_POINT_STORE,
+                                               cfg -> cfg.getOptionalComponent(TokenStore.class,
+                                                                               COMPONENT_SAFE_POINT_TOKEN_STORE)
+                                                         .<SafePointStore>map(tokenStore -> new TokenStoreSafePointStore(
+                                                                 tokenStore,
+                                                                 TokenStoreSafePointStore.tokenStoreIdentifier(
+                                                                         WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME)))
+                                                         .orElseGet(InMemorySafePointStore::new));
     }
 
     void registerWorkflowHistoryProjector(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(WorkflowHistoryProjector.class,
-                                               cfg -> new WorkflowHistoryProjector(
-                                                       cfg.getComponent(MutableWorkflowHistoryRepository.class)
-                                               ));
+                                               cfg -> new WorkflowHistoryProjector(cfg.getComponent(
+                                                       MutableWorkflowHistoryRepository.class)));
     }
 
     void registerWorkflowExecutionRepository(ComponentRegistry componentRegistry) {
-        componentRegistry
-                .registerComponent(WorkflowExecutionRepository.class,
-                                   cfg -> new InMemoryWorkflowExecutionRepository());
+        componentRegistry.registerComponent(WorkflowExecutionRepository.class,
+                                            cfg -> new InMemoryWorkflowExecutionRepository());
     }
 
     void registerMutableWorkflowHistoryRepository(ComponentRegistry componentRegistry) {
-        componentRegistry
-                .registerIfNotPresent(MutableWorkflowHistoryRepository.class,
-                                      cfg -> new InMemoryWorkflowHistoryRepository());
+        componentRegistry.registerIfNotPresent(MutableWorkflowHistoryRepository.class,
+                                               cfg -> new InMemoryWorkflowHistoryRepository());
     }
 
     void registerWorkflowConfigurationRegistry(ComponentRegistry componentRegistry) {
@@ -326,10 +289,8 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     void registerWorkflowStateParameterResolverFactory(ComponentRegistry componentRegistry) {
-        ParameterResolverFactoryUtils.registerToComponentRegistry(
-                componentRegistry,
-                WorkflowStateParameterResolverFactory::new
-        );
+        ParameterResolverFactoryUtils.registerToComponentRegistry(componentRegistry,
+                                                                  WorkflowStateParameterResolverFactory::new);
     }
 
     @Override

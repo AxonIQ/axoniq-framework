@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowExecutionException;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
@@ -41,17 +40,16 @@ import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocal
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
-class EventSourcedWorkflowStateWorkflowStatusTest {
+class WorkflowStateWorkflowStatusTest {
 
-    private static final WorkflowDefinitionId DEFINITION_ID =
-            new WorkflowDefinitionId(new QualifiedName("TestWorkflow"), "0.0.1");
+    private static final MessageType DEFINITION_ID = new MessageType(new QualifiedName("TestWorkflow"), "0.0.1");
     private final EventConverter converter = new DelegatingEventConverter(new JacksonConverter());
-    private EventSourcedWorkflowState state;
+    private WorkflowState state;
     private ProcessingContext processingContext;
 
     @BeforeEach
     void setUp() {
-        state = new EventSourcedWorkflowState("wfId", Map.of("initialKey", "initialValue"), DEFINITION_ID);
+        state = new WorkflowState("wfId", Map.of("initialKey", "initialValue"), DEFINITION_ID);
         processingContext = mock(ProcessingContext.class);
         when(processingContext.component(EventConverter.class)).thenReturn(converter);
         when(processingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());

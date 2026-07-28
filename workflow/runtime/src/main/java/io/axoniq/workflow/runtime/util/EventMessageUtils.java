@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.util;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
@@ -83,7 +82,7 @@ public class EventMessageUtils {
     @Nonnull
     public static EventMessage startedWorkflow(@Nonnull WorkflowContext context,
                                                @Nonnull String workflowName,
-                                               @Nonnull WorkflowDefinitionId workflowDefinitionId,
+                                               @Nonnull MessageType workflowDefinitionId,
                                                @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.STARTED);
         return new GenericEventMessage(new MessageType(name, versionOf(context)), context.workflowPayload(),
@@ -106,7 +105,7 @@ public class EventMessageUtils {
     @Nonnull
     public static EventMessage completedWorkflow(@Nonnull WorkflowContext context,
                                                  @Nonnull String workflowName,
-                                                 @Nonnull WorkflowDefinitionId workflowDefinitionId,
+                                                 @Nonnull MessageType workflowDefinitionId,
                                                  @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.COMPLETED);
         return new GenericEventMessage(new MessageType(name, versionOf(context)), Map.of(),
@@ -129,7 +128,7 @@ public class EventMessageUtils {
     public static EventMessage failedWorkflow(@Nonnull WorkflowContext context,
                                               @Nonnull String workflowName,
                                               @Nonnull Exception exception,
-                                              @Nonnull WorkflowDefinitionId workflowDefinitionId,
+                                              @Nonnull MessageType workflowDefinitionId,
                                               @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.FAILED);
         return new GenericEventMessage(new MessageType(name, versionOf(context)), WorkflowError.from(exception),
@@ -152,7 +151,7 @@ public class EventMessageUtils {
     public static EventMessage timeoutWorkflow(@Nonnull WorkflowContext context,
                                                @Nonnull String workflowName,
                                                @Nonnull Instant time,
-                                               @Nonnull WorkflowDefinitionId workflowDefinitionId,
+                                               @Nonnull MessageType workflowDefinitionId,
                                                @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.TIMED_OUT);
         return new GenericEventMessage(new MessageType(name, versionOf(context)), time,
@@ -173,7 +172,7 @@ public class EventMessageUtils {
     @Nonnull
     public static EventMessage cancelledWorkflow(@Nonnull WorkflowContext context,
                                                  @Nonnull String workflowName,
-                                                 @Nonnull WorkflowDefinitionId workflowDefinitionId,
+                                                 @Nonnull MessageType workflowDefinitionId,
                                                  @Nonnull EventNameCustomizer customizer) {
         return cancelledWorkflow(context, workflowName, null, workflowDefinitionId, customizer);
     }
@@ -182,7 +181,7 @@ public class EventMessageUtils {
     public static EventMessage cancelledWorkflow(@Nonnull WorkflowContext context,
                                                  @Nonnull String workflowName,
                                                  @Nullable Throwable cause,
-                                                 @Nonnull WorkflowDefinitionId workflowDefinitionId,
+                                                 @Nonnull MessageType workflowDefinitionId,
                                                  @Nonnull EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.CANCELLED);
         return new GenericEventMessage(new MessageType(name, versionOf(context)),
