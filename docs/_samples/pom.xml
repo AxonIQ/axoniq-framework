@@ -47,7 +47,7 @@
         <!-- Several samples demonstrate Spring (Boot) configuration in compile scope; the root enforcer bans
              Spring outside test scope, so this compile-only, never-deployed module opts out of that rule. -->
         <maven-enforcer.allow-spring-dependencies>true</maven-enforcer.allow-spring-dependencies>
-        <build-helper-maven-plugin.version>3.6.0</build-helper-maven-plugin.version>
+        <build-helper-maven-plugin.version>3.6.1</build-helper-maven-plugin.version>
     </properties>
 
     <dependencyManagement>

@@ -36,6 +36,12 @@
     </description>
 
     <dependencies>
+        <!-- Axoniq Entitlement -->
+        <dependency>
+            <groupId>io.axoniq.license</groupId>
+            <artifactId>entitlement-manager</artifactId>
+        </dependency>
+
         <!-- Core Axon Framework -->
         <dependency>
             <groupId>org.axonframework</groupId>
