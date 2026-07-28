@@ -113,7 +113,7 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine {
             return tenantFor(context);
         }
         return tenantRouter.resolveSharedTenant(events.stream().map(TaggedEventMessage::event).toList())
-                             .orElseThrow(tenantNotResolved("Tenant could not be resolved from the events to append"));
+                           .orElseThrow(tenantNotResolved("Tenant could not be resolved from the events to append"));
     }
 
     private TenantDescriptor tenantFor(@Nullable ProcessingContext context) {

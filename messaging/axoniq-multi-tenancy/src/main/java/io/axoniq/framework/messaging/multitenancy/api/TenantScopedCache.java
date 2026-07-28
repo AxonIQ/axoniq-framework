@@ -32,8 +32,8 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 /**
- * A cache of one infrastructure component per tenant that creates each
- * component lazily on first use and evicts it when its tenant is removed.
+ * A cache of one infrastructure component per tenant that creates each component lazily on first use and evicts it when
+ * its tenant is removed.
  * <p>
  * As a {@link MultiTenantAwareComponent} it follows the tenant provider: {@link #registerTenant(TenantDescriptor)} and
  * {@link #registerAndStartTenant(TenantDescriptor)} return a {@link Registration} whose cancellation evicts the
@@ -206,6 +206,7 @@ public class TenantScopedCache<S> implements MultiTenantAwareComponent {
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
+        descriptor.describeProperty("componentFactory", componentFactory);
         // Describes the immutable snapshot, so descriptors serialized lazily never observe mid-mutation state.
         descriptor.describeProperty("tenants", tenantsView);
     }

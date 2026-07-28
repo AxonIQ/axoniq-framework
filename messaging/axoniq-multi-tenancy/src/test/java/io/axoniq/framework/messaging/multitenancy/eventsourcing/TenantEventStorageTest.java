@@ -19,9 +19,11 @@
 
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
+import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotResolvingEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
+import org.axonframework.common.Registration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
@@ -56,7 +58,13 @@ class TenantEventStorageTest {
     private final RecordingSnapshotStore tenantSnapshotStore = new RecordingSnapshotStore();
 
     private TenantEventStorage storageFor(EventStorageEngine tenantEngine) {
-        return new TenantEventStorage(tenant -> tenantEngine, tenant -> tenantSnapshotStore);
+        return registered(new TenantEventStorage(tenant -> tenantEngine, tenant -> tenantSnapshotStore));
+    }
+
+    private static TenantEventStorage registered(TenantEventStorage storage) {
+        storage.registerTenant(TENANT_A);
+        storage.registerTenant(TENANT_B);
+        return storage;
     }
 
     private static SourcingCondition snapshotCondition() {
@@ -73,7 +81,7 @@ class TenantEventStorageTest {
         // Its snapshot store for this tenant is the engine itself, as a PostgresqlEventStorageEngine tenant factory
         // would return.
         private TenantEventStorage storage() {
-            return new TenantEventStorage(tenant -> tenantEngine, tenant -> tenantEngine);
+            return registered(new TenantEventStorage(tenant -> tenantEngine, tenant -> tenantEngine));
         }
 
         @Test
@@ -150,10 +158,10 @@ class TenantEventStorageTest {
     void decidesPerTenantWhenTenantsDifferInHowTheyResolveSnapshots() {
         RecordingSnapshotResolvingEventStorageEngine selfResolving = new RecordingSnapshotResolvingEventStorageEngine();
         RecordingEventStorageEngine plain = new RecordingEventStorageEngine();
-        TenantEventStorage testSubject = new TenantEventStorage(
+        TenantEventStorage testSubject = registered(new TenantEventStorage(
                 tenant -> TENANT_A.equals(tenant) ? selfResolving : plain,
                 tenant -> TENANT_A.equals(tenant) ? selfResolving : tenantSnapshotStore
-        );
+        ));
 
         testSubject.engineFor(TENANT_A).source(snapshotCondition(), null);
         testSubject.engineFor(TENANT_B).source(snapshotCondition(), null);
@@ -162,6 +170,24 @@ class TenantEventStorageTest {
         assertThat(selfResolving.sourcedWithSnapshotStrategy()).isTrue();
         assertThat(plain.sourcedWithSnapshotStrategy()).isFalse();
         assertThat(tenantSnapshotStore.loadCount()).isEqualTo(1);
+    }
+
+    // A tenant's engine and snapshot store are gone once the tenant is removed, so a composed engine holding them must
+    // not survive it, and composing is not repeated per operation while the tenant is there.
+    @Test
+    void composesOncePerTenantAndEvictsOnTenantRemoval() {
+        RecordingEventStorageEngine tenantEngine = new RecordingEventStorageEngine();
+        TenantEventStorage testSubject =
+                new TenantEventStorage(tenant -> tenantEngine, tenant -> tenantSnapshotStore);
+        Registration registration = testSubject.registerTenant(TENANT_A);
+
+        EventStorageEngine composed = testSubject.engineFor(TENANT_A);
+        assertThat(testSubject.engineFor(TENANT_A)).isSameAs(composed);
+
+        assertThat(registration.cancel()).isTrue();
+
+        assertThatThrownBy(() -> testSubject.engineFor(TENANT_A))
+                .isInstanceOf(TenantNotResolvedException.class);
     }
 
     @Test

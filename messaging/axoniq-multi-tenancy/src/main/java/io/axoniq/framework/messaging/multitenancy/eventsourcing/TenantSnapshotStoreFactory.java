@@ -21,7 +21,6 @@ package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 
 /**
@@ -30,8 +29,9 @@ import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
  * The multi-tenant snapshot store calls this factory to obtain the store to route a tenant's snapshot load and store
  * operations to. Implementations are expected to create the per-tenant store lazily and cache it.
  * <p>
- * A tenant whose {@link EventStorageEngine engine} resolves snapshots itself never reaches this factory while sourcing:
- * {@link TenantEventStorage} only asks for a snapshot store when the tenant's engine needs one.
+ * {@link TenantEventStorage} asks for a tenant's snapshot store once, when it composes that tenant's engine, and
+ * compares the two to decide whether the engine needs the store at all. An engine that is its own snapshot store is the
+ * one case where this factory is expected to return that very engine.
  *
  * @author Stefan Dragisic
  * @author Laura Devriendt

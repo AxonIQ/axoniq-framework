@@ -76,7 +76,7 @@ public class RecordingSnapshotResolvingEventStorageEngine extends RecordingEvent
                                         .orTimeout(5, TimeUnit.SECONDS)
                                         .join();
             if (snapshot != null) {
-                return MessageStream.just(new SnapshotEventMessage(snapshot));
+                return MessageStream.<EventMessage>just(new SnapshotEventMessage(snapshot)).concatWith(sourced);
             }
         }
         return sourced;

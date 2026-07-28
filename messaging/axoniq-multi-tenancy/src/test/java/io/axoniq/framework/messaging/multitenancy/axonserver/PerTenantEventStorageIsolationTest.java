@@ -27,6 +27,8 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorage;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
@@ -91,7 +93,7 @@ class PerTenantEventStorageIsolationTest {
         tenantSnapshotStores.entry(TENANT_B, new RecordingSnapshotStore());
         MetadataBasedTenantResolver tenantResolver = new MetadataBasedTenantResolver();
         EventStorageEngine routingEngine = new MultiTenantEventStorageEngine(
-                new TenantEventStorage(tenantEngines::apply, tenantSnapshotStores::apply),
+                registeredStorage(tenantEngines::apply, tenantSnapshotStores::apply),
                 new TenantRouter(tenantResolver, tenantEngines));
 
         StubTenantProvider tenantProvider = new StubTenantProvider();
@@ -195,4 +197,13 @@ class PerTenantEventStorageIsolationTest {
             eventAppender.append(new StudentEnrolledInCourse(command.courseId(), command.studentId()));
         }
     }
+
+    private static TenantEventStorage registeredStorage(TenantEventStorageEngineFactory engineFactory,
+                                                        TenantSnapshotStoreFactory snapshotStoreFactory) {
+        TenantEventStorage storage = new TenantEventStorage(engineFactory, snapshotStoreFactory);
+        storage.registerTenant(TENANT_A);
+        storage.registerTenant(TENANT_B);
+        return storage;
+    }
+
 }

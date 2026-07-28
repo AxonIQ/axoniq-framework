@@ -28,6 +28,8 @@ import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConf
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorage;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
@@ -93,7 +95,7 @@ class PerTenantSnapshotSourcingIsolationTest {
         tenantEngines.entry(TENANT_B, new RecordingEventStorageEngine());
         TenantRouter tenantRouter = new TenantRouter(new MetadataBasedTenantResolver(), tenantEngines);
         routingEngine = new MultiTenantEventStorageEngine(
-                new TenantEventStorage(tenantEngines::apply, tenantSnapshotStores::apply), tenantRouter);
+                registeredStorage(tenantEngines::apply, tenantSnapshotStores::apply), tenantRouter);
         MultiTenantSnapshotStore routingSnapshotStore =
                 new MultiTenantSnapshotStore(tenantSnapshotStores::apply, tenantRouter);
 
@@ -191,4 +193,13 @@ class PerTenantSnapshotSourcingIsolationTest {
         assertThat(first).isInstanceOf(SnapshotEventMessage.class);
         return ((SnapshotEventMessage) first).payload();
     }
+
+    private static TenantEventStorage registeredStorage(TenantEventStorageEngineFactory engineFactory,
+                                                        TenantSnapshotStoreFactory snapshotStoreFactory) {
+        TenantEventStorage storage = new TenantEventStorage(engineFactory, snapshotStoreFactory);
+        storage.registerTenant(TENANT_A);
+        storage.registerTenant(TENANT_B);
+        return storage;
+    }
+
 }

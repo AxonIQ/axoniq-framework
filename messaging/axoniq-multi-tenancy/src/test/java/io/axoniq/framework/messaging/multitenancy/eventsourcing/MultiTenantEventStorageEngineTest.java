@@ -24,6 +24,8 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
+import io.axoniq.framework.messaging.multitenancy.util.RecordingEventStorageEngine;
+import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotResolvingEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
 import org.axonframework.common.infra.MockComponentDescriptor;
@@ -69,8 +71,10 @@ class MultiTenantEventStorageEngineTest {
     private final TenantSnapshotStoreFactory snapshotStores = engines::apply;
 
     private MultiTenantEventStorageEngine engineWith(TenantResolver tenantResolver) {
-        return new MultiTenantEventStorageEngine(new TenantEventStorage(engines::apply, snapshotStores),
-                                                 new TenantRouter(tenantResolver, engines));
+        TenantEventStorage tenantEventStorage = new TenantEventStorage(engines::apply, snapshotStores);
+        tenantEventStorage.registerTenant(TENANT_A);
+        tenantEventStorage.registerTenant(TENANT_B);
+        return new MultiTenantEventStorageEngine(tenantEventStorage, new TenantRouter(tenantResolver, engines));
     }
 
     private static EventMessage event(@Nullable TenantDescriptor tenant) {
@@ -198,6 +202,26 @@ class MultiTenantEventStorageEngineTest {
 
             assertThat(tenantA.sourcedWithSnapshotStrategy()).isTrue();
             assertThat(tenantB.sourcedWithSnapshotStrategy()).isFalse();
+        }
+
+        // A tenant whose engine resolves no snapshots is served through the decorated route, and that decoration sits
+        // below the fan-out, so the snapshot comes from that tenant's own store.
+        @Test
+        void snapshotSourcingOfATenantWithADecoratedEngineReadsFromThatTenantsStore() {
+            RecordingEventStorageEngine plainEngine = new RecordingEventStorageEngine();
+            RecordingSnapshotStore plainEngineStore = new RecordingSnapshotStore();
+            TenantEventStorage storage = new TenantEventStorage(tenant -> plainEngine, tenant -> plainEngineStore);
+            storage.registerTenant(TENANT_A);
+            MultiTenantEventStorageEngine testSubject =
+                    new MultiTenantEventStorageEngine(storage,
+                                                      new TenantRouter(alwaysTenant(TENANT_A), engines));
+
+            testSubject.source(snapshotCondition(), contextFor(TENANT_A));
+
+            assertThat(plainEngineStore.loadCount()).isEqualTo(1);
+            // the strategy was resolved by the decoration, so the tenant's engine was sourced by position
+            assertThat(plainEngine.sourcedWithSnapshotStrategy()).isFalse();
+            assertThat(plainEngine.sourceCount()).isEqualTo(1);
         }
 
         // Routing never resolves a snapshot itself, so a plain sourcing must not touch any tenant's snapshot store.

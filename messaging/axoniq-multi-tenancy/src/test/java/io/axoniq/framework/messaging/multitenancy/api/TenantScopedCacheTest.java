@@ -205,6 +205,8 @@ class TenantScopedCacheTest {
             Registration registration = testSubject.registerTenant(TENANT_A);
 
             assertThat(registration.cancel()).isTrue();
+
+            assertThat(creations).isEmpty();
         }
 
         @Test

@@ -32,6 +32,7 @@ Covers per-tenant event stores: appending to and sourcing from the event store o
 
 See xref:multi-tenancy:tenant-event-storage.adoc[Tenant-aware event storage] for details.
 
+[#event-processing]
 == Event processing
 
 Covers per-tenant streaming, pooled, and persistent-stream-based event processors, including per-tenant token stores and transaction management.

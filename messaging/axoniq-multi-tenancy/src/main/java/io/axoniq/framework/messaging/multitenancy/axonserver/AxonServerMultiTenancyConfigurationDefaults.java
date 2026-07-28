@@ -203,12 +203,18 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
         // engine without the snapshot sourcing strategy.
         componentRegistry.disableEnhancer(SnapshotSourcingConfigurationEnhancer.class);
         componentRegistry.registerIfNotPresent(
-                subscribedFactory(TenantSnapshotStoreFactory.class,
+                subscribedComponent(TenantSnapshotStoreFactory.class,
                                   AxonServerTenantSnapshotStoreFactory::new),
                 SearchScope.ALL);
         componentRegistry.registerIfNotPresent(
-                subscribedFactory(TenantEventStorageEngineFactory.class,
+                subscribedComponent(TenantEventStorageEngineFactory.class,
                                   AxonServerTenantEventStorageEngineFactory::new),
+                SearchScope.ALL);
+        componentRegistry.registerIfNotPresent(
+                subscribedComponent(TenantEventStorage.class,
+                                  config -> new TenantEventStorage(
+                                          config.getComponent(TenantEventStorageEngineFactory.class),
+                                          config.getComponent(TenantSnapshotStoreFactory.class))),
                 SearchScope.ALL);
         componentRegistry.registerIfNotPresent(
                 ComponentDefinition.ofType(SnapshotStore.class)
@@ -241,10 +247,8 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
     }
 
     private static MultiTenantEventStorageEngine routingEngine(Configuration config) {
-        TenantEventStorage tenantEventStorage =
-                new TenantEventStorage(config.getComponent(TenantEventStorageEngineFactory.class),
-                                       config.getComponent(TenantSnapshotStoreFactory.class));
-        return new MultiTenantEventStorageEngine(tenantEventStorage, config.getComponent(TenantRouter.class));
+        return new MultiTenantEventStorageEngine(config.getComponent(TenantEventStorage.class),
+                                                 config.getComponent(TenantRouter.class));
     }
 
     private static MultiTenantSnapshotStore routingSnapshotStore(Configuration config) {
@@ -253,23 +257,23 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
     }
 
     /**
-     * Builds a {@link ComponentDefinition} for a per-tenant component factory. When the built factory is a
-     * {@link MultiTenantAwareComponent}, it is subscribed to the {@link TenantProvider} at startup and unsubscribed at
-     * shutdown, so tenant additions and removals reach the factory's cache.
+     * Builds a {@link ComponentDefinition} for a component that follows the tenant lifecycle. When the built component
+     * is a {@link MultiTenantAwareComponent}, it is subscribed to the {@link TenantProvider} at startup and
+     * unsubscribed at shutdown, so tenant additions and removals reach its per-tenant cache.
      *
-     * @param factoryType the component type of the factory
-     * @param builder     the builder constructing the factory from the {@link Configuration}
-     * @param <F>         the factory type
-     * @return a {@link ComponentDefinition} for the subscribed factory
+     * @param componentType the component type to register
+     * @param builder       the builder constructing the component from the {@link Configuration}
+     * @param <C>           the component type
+     * @return a {@link ComponentDefinition} for the subscribed component
      */
-    private static <F> ComponentDefinition<F> subscribedFactory(Class<F> factoryType,
-                                                                Function<Configuration, F> builder) {
+    private static <C> ComponentDefinition<C> subscribedComponent(Class<C> componentType,
+                                                                 Function<Configuration, C> builder) {
         AtomicReference<@Nullable Registration> subscription = new AtomicReference<>();
-        return ComponentDefinition.ofType(factoryType)
+        return ComponentDefinition.ofType(componentType)
                                   .withBuilder(builder::apply)
                                   .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
-                                           (config, factory) -> {
-                                               if (factory instanceof MultiTenantAwareComponent aware) {
+                                           (config, component) -> {
+                                               if (component instanceof MultiTenantAwareComponent aware) {
                                                    subscription.set(config.getComponent(TenantProvider.class)
                                                                            .subscribe(aware));
                                                }

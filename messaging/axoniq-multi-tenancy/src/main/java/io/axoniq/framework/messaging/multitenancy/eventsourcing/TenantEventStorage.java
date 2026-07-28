@@ -19,16 +19,19 @@
 
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
+import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
+import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 
-import java.util.Objects;
+import static java.util.Objects.requireNonNull;
+
 
 /**
  * Provides the complete {@link EventStorageEngine} of a single tenant: the tenant's engine, able to resolve that
@@ -46,18 +49,19 @@ import java.util.Objects;
  * application-wide composition is switched off for that reason, by the configuration enhancer registering these
  * components.
  * <p>
- * Composing holds no state of its own, so this component takes no part in the tenant lifecycle. Each factory caches its
- * own per-tenant component and evicts it when the tenant is removed, and composing them again costs nothing: an engine
- * serving snapshots itself is returned as is, and any other engine is wrapped in two fields.
+ * A tenant's engine is composed once and cached, and evicted when the tenant is removed, so sourcing neither composes
+ * anew on every call nor hands out a different instance each time. Composing asks both factories for that tenant's
+ * component, so a tenant is never charged for a snapshot store its engine does not need beyond the first composition.
  *
  * @author Laura Devriendt
  * @since 5.3.0
  */
 @Internal
-public class TenantEventStorage implements DescribableComponent {
+public class TenantEventStorage implements MultiTenantAwareComponent {
 
     private final TenantEventStorageEngineFactory engineFactory;
     private final TenantSnapshotStoreFactory snapshotStoreFactory;
+    private final TenantScopedCache<EventStorageEngine> composedEngines;
 
     /**
      * Constructs a {@code TenantEventStorage} combining the engines and snapshot stores of the given factories.
@@ -67,10 +71,11 @@ public class TenantEventStorage implements DescribableComponent {
      */
     public TenantEventStorage(TenantEventStorageEngineFactory engineFactory,
                               TenantSnapshotStoreFactory snapshotStoreFactory) {
-        this.engineFactory = Objects.requireNonNull(engineFactory,
+        this.engineFactory = requireNonNull(engineFactory,
                                                    "The tenant event storage engine factory must not be null");
-        this.snapshotStoreFactory = Objects.requireNonNull(snapshotStoreFactory,
+        this.snapshotStoreFactory = requireNonNull(snapshotStoreFactory,
                                                            "The tenant snapshot store factory must not be null");
+        this.composedEngines = new TenantScopedCache<>(this::compose);
     }
 
     /**
@@ -80,14 +85,29 @@ public class TenantEventStorage implements DescribableComponent {
      * @return the given {@code tenant}'s engine, able to resolve that tenant's snapshots
      */
     public EventStorageEngine engineFor(TenantDescriptor tenant) {
-        Objects.requireNonNull(tenant, "The tenant must not be null");
+        requireNonNull(tenant, "The tenant must not be null");
+        return composedEngines.componentFor(tenant);
+    }
+
+    private EventStorageEngine compose(TenantDescriptor tenant) {
         return SnapshotCapableEventStorageEngine.decorate(engineFactory.engineFor(tenant),
                                                          snapshotStoreFactory.storeFor(tenant));
+    }
+
+    @Override
+    public Registration registerTenant(TenantDescriptor tenantDescriptor) {
+        return composedEngines.registerTenant(tenantDescriptor);
+    }
+
+    @Override
+    public Registration registerAndStartTenant(TenantDescriptor tenantDescriptor) {
+        return composedEngines.registerAndStartTenant(tenantDescriptor);
     }
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("engineFactory", engineFactory);
         descriptor.describeProperty("snapshotStoreFactory", snapshotStoreFactory);
+        composedEngines.describeTo(descriptor);
     }
 }
