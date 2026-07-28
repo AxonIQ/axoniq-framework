@@ -56,11 +56,7 @@ To create a policy which snapshots after 5 events or if sourcing time exceeds 50
 
 [source,java]
 ----
-SnapshotPolicy snapshotPolicy =
-        SnapshotPolicy.afterEvents(5)
-                      .or(SnapshotPolicy.whenSourcingTimeExceeds(
-                          Duration.millis(500)
-                      ));
+include::example$snapshotting/index/SnapshotPolicyConfig.java[tag=snapshot-policy,indent=0]
 ----
 
 == Snapshot storage
@@ -89,25 +85,14 @@ A suitable `SnapshotStore` is typically registered automatically by Axon Framewo
 
 [source,java]
 ----
-registry.registerComponent(SnapshotStore.class, c -> {
-    AxonServerConnectionManager connectionManager =
-            c.getComponent(AxonServerConnectionManager.class);
-
-    return new AxonServerSnapshotStore(
-            connectionManager.getConnection(),
-            c.getComponent(Converter.class)
-    );
-});
+include::example$snapshotting/index/AxonServerSnapshotStoreConfig.java[tag=axon-server-snapshot-store,indent=0]
 ----
 
 For testing or simple setups, an in-memory store can be used instead:
 
 [source,java]
 ----
-registry.registerComponent(
-        SnapshotStore.class,
-        c -> new InMemorySnapshotStore()
-);
+include::example$snapshotting/index/InMemorySnapshotStoreConfig.java[tag=in-memory-snapshot-store,indent=0]
 ----
 
 == Configuring snapshotting
@@ -116,7 +101,7 @@ Snapshotting is enabled by providing a `SnapshotPolicy` for an event-sourced ent
 
 The `SnapshotPolicy` is configured as part of the entity registration. The example below shows how to configure snapshotting for an event-sourced entity:
 
-[source,java]
+[source,java,role=pseudocode]
 ----
 SnapshotPolicy snapshotPolicy = SnapshotPolicy.afterEvents(5)
         .or(SnapshotPolicy.whenEventMatches(
@@ -153,23 +138,12 @@ Modern best practices favor immutable entities that provide a constructor capabl
 
 [source,java]
 ----
-public class Account {
-    private final String accountId;
-    private final int balance;
-
-    public Account(String accountId, int balance) {
-        this.accountId = accountId;
-        this.balance = balance;
-    }
-
-    public String getAccountId() { return accountId; }
-    public int getBalance() { return balance; }
-}
+include::example$snapshotting/index/immutableclass/Account.java[tag=account-class,indent=0]
 ----
 Or using a `record`:
 [source,java]
 ----
-public record Account(String accountId, int balance) {}
+include::example$snapshotting/index/recordvariant/Account.java[tag=account-record,indent=0]
 ----
 
 While setters and default constructors can still be used if necessary, the constructor-based approach ensures immutability and aligns with modern Java development practices.

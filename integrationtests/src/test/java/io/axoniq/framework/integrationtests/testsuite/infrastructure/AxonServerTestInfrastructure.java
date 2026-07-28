@@ -28,6 +28,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.function.Consumer;
+
+import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.*;
 
 /**
  * {@link TestInfrastructure} implementation that wires tests against a real Axon Server instance managed by
@@ -54,12 +60,48 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
 
     private static final Logger LOG = LoggerFactory.getLogger(AxonServerTestInfrastructure.class);
 
+    public static final String AXON_SERVER_TEST_LICENSE = "axon-server-test.license";
     private static final AxonServerContainer CONTAINER =
             new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:latest")
                     .withAxonServerHostname("localhost")
                     .withDevMode(true)
                     .withReuse(true)
-                    .withDcbContext(true);
+                    .withDcbContext(true)
+                    .withLicense(licenseExists()
+                                         ? AXON_SERVER_TEST_LICENSE
+                                         : null);
+
+    public static boolean licenseExists() {
+        return AxonServerTestInfrastructure.class.getResource("/" + AXON_SERVER_TEST_LICENSE) != null;
+    }
+
+    private final List<Consumer<ComponentRegistry>> infrastructureConfigurators;
+
+    public AxonServerTestInfrastructure() {
+        this(Collections.emptyList());
+    }
+
+    /**
+     * Creates a new {@code AxonServerTestInfrastructure} instance with the given infrastructure configurators.
+     *
+     * @param infrastructureConfigurators to be executed when {@link #configureInfrastructure(ComponentRegistry)} is
+     *                                    called.
+     * @see AxonServerTestInfrastructure#AxonServerTestInfrastructure(List)
+     */
+    @SafeVarargs
+    public AxonServerTestInfrastructure(Consumer<ComponentRegistry>... infrastructureConfigurators) {
+        this(List.of(infrastructureConfigurators));
+    }
+
+    /**
+     * Creates a new {@code AxonServerTestInfrastructure} instance with the given infrastructure configurators.
+     *
+     * @param infrastructureConfigurators to be executed when {@link #configureInfrastructure(ComponentRegistry)} is
+     *                                    called.
+     */
+    public AxonServerTestInfrastructure(List<Consumer<ComponentRegistry>> infrastructureConfigurators) {
+        this.infrastructureConfigurators = infrastructureConfigurators;
+    }
 
     @Override
     public void start() {
@@ -72,24 +114,31 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
 
     @Override
     public void configureInfrastructure(ComponentRegistry registry) {
-        AxonServerConfiguration config = new AxonServerConfiguration();
-        config.setServers(CONTAINER.getHost() + ":" + CONTAINER.getGrpcPort());
-        registry.registerComponent(AxonServerConfiguration.class, c -> config);
+        // builder so we can eventually add more configuration options if needed, without having to change impl.
+        AxonServerConfiguration.Builder builder = builder()
+                .servers(CONTAINER.getHost() + ":" + CONTAINER.getGrpcPort());
+
+        registry.registerComponent(AxonServerConfiguration.class, c -> builder.build());
+        infrastructureConfigurators.forEach(configurator -> configurator.accept(registry));
     }
 
     @Override
     public void purgeData() {
-        try {
-            LOG.info("Purging events from Axon Server.");
-            AxonServerContainerUtils.purgeEventsFromAxonServer(
-                    CONTAINER.getHost(),
-                    CONTAINER.getHttpPort(),
-                    "default",
-                    AxonServerContainerUtils.DCB_CONTEXT
-            );
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to purge AxonServer event storage", e);
-        }
+        LOG.info("Purging events from Axon Server.");
+        getContextManager().getContexts().stream().filter(c -> !"_admin".equals(c))
+                           .forEach(context -> {
+                               try {
+                                   AxonServerContainerUtils.purgeEventsFromAxonServer(
+                                           CONTAINER.getHost(),
+                                           CONTAINER.getHttpPort(),
+                                           context,
+                                           AxonServerContainerUtils.DCB_CONTEXT,
+                                           DEFAULT_REPLICATION_GROUP
+                                   );
+                               } catch (IOException e) {
+                                   throw new RuntimeException("Failed to purge events from Axon Server", e);
+                               }
+                           });
     }
 
     @Override
@@ -97,5 +146,87 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
         // The container is shared across the JVM (static final, withReuse(true)).
         // Testcontainers + Ryuk handle cleanup on JVM exit; stopping per test would
         // defeat reuse. No-op on purpose.
+    }
+
+    public ContextManager getContextManager() {
+        return new ContextManager() {
+            @Override
+            public List<String> getContexts() {
+                try {
+                    return AxonServerContainerUtils.contexts(CONTAINER.getHost(),
+                                                             CONTAINER.getHttpPort());
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to list contexts from Axon Server", e);
+                }
+            }
+
+            @Override
+            public void createContext(String name, boolean dcb) {
+                try {
+                    AxonServerContainerUtils.createContext(CONTAINER.getHost(),
+                                                           CONTAINER.getHttpPort(),
+                                                           name,
+                                                           dcb,
+                                                           DEFAULT_REPLICATION_GROUP);
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to create context in Axon Server", e);
+                }
+            }
+
+            @Override
+            public void deleteContext(String name) {
+                try {
+                    AxonServerContainerUtils.deleteContext(CONTAINER.getHost(), CONTAINER.getHttpPort(), name);
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to delete context in Axon Server", e);
+                }
+            }
+        };
+    }
+
+    /**
+     * Utility to manage contexts for an {@code AxonServerTestInfrastructure}
+     */
+    public interface ContextManager {
+
+        /**
+         * List all contexts
+         *
+         * @return the list of context names
+         */
+        List<String> getContexts();
+
+        /**
+         * Create a new DCB context
+         *
+         * @param name the context name
+         */
+        default void createContext(String name) {
+            createContext(name, true);
+        }
+
+        /**
+         * Create a new context
+         *
+         * @param name the context name
+         * @param dcb  flag to indicate if it should be a DCB context
+         */
+        void createContext(String name, boolean dcb);
+
+        /**
+         * Delete a context
+         *
+         * @param name the context name
+         */
+        void deleteContext(String name);
+
+        /**
+         * Delete all contexts except the default and admin contexts
+         */
+        default void deleteAllCustomContexts() {
+            getContexts().stream()
+                         .filter(it -> !Set.of(DEFAULT_CONTEXT, ADMIN_CONTEXT).contains(it))
+                         .forEach(this::deleteContext);
+        }
     }
 }

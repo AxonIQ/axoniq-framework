@@ -183,32 +183,46 @@ public final class EventTransformation {
        Forward-compatibility invariant #4) -------------------------------------- */
 
     /**
-     * Begin a 1:N split. Continue with {@code transform(...)} returning the list of
-     * replacement events.
+     * Begin a 1:N split. The stored payload is converted to {@code inputType} once. Each
+     * output declared via {@code producing(...)} derives its payload from that converted
+     * input. Finish with {@code build()}. A {@code TypeReference<T>} overload exists for
+     * generic input types.
      *
-     * @param source the {@code from} identity
-     * @return a builder awaiting {@code transform(...)}
+     * @param <T>       input payload type
+     * @param source    the {@code from} identity
+     * @param inputType the type the stored payload is converted to before invocation
+     * @return a builder awaiting one or more {@code producing(...)} declarations
      */
-    public static MultiEventTransformationBuilder split(MessageType source) { /* ... */ }
+    public static <T> SplitStep<T> split(MessageType source, Class<T> inputType) { /* ... */ }
 
-    public static final class MultiEventTransformationBuilder {
+    public static final class SplitStep<T> {
 
         /**
-         * Supply the splitting behaviour. The mapper returns the replacement events in
-         * declared order; each inherits the input event's tracking token and sequence number.
-         * Receives the active {@link ProcessingContext} -- non-null on the entity-load read
-         * path; possibly-null on the tracking-processor read path (see the 1:1 overload's
-         * Javadoc for details). Returning an empty list works as a drop, but prefer
-         * {@link EventTransformation#drop(MessageType)} for that case -- it skips payload
-         * conversion entirely.
+         * Declare one produced event, pairing its identity with the mapper deriving its
+         * payload. Outputs are emitted in declaration order; each inherits the input
+         * event's tracking token and sequence number. The declared identities widen a
+         * type-filtering read back to the source. Declaring the same identity twice emits
+         * one event per declaration. A context-aware {@code BiFunction} overload exists,
+         * receiving the active {@link ProcessingContext} -- non-null on the entity-load
+         * read path; possibly-null on the tracking-processor read path (see the 1:1
+         * overload's Javadoc for details).
          *
-         * @param <T>               input payload type
-         * @param inputType         the type the stored payload is converted to before invocation
-         * @param replacementMapper maps the input payload + processing context to its replacement events
-         * @return the resulting {@link EventTransformation}
+         * @param producedType the produced event's identity
+         * @param outputMapper maps the input payload to the produced event's payload
+         * @return this builder, for further declarations or {@code build()}
          */
-        public <T> EventTransformation transform(Class<T> inputType,
-                                              BiFunction<T, @Nullable ProcessingContext, List<TransformedEvent>> replacementMapper) { /* ... */ }
+        public SplitStep<T> producing(MessageType producedType, Function<T, ?> outputMapper) { /* ... */ }
+
+        /**
+         * Complete the split. A split always emits exactly its declared outputs; to remove
+         * an event from the read stream instead, use
+         * {@link EventTransformation#drop(MessageType)} -- it skips payload conversion
+         * entirely.
+         *
+         * @return the resulting {@link EventTransformation}
+         * @throws IllegalArgumentException if no output was declared
+         */
+        public EventTransformation build() { /* ... */ }
     }
 
     /* US4 -- drop (FR-003, FR-014; MAY in 5.2.0; method name reserved per
@@ -383,7 +397,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import io.axoniq.framework.messaging.transformation.events.EventTransformerChain;
 import io.axoniq.framework.messaging.transformation.events.EventTransformation;
-import io.axoniq.framework.messaging.transformation.events.TransformedEvent;
 import io.axoniq.framework.messaging.transformation.commandhandling.CommandTransformerChain;   // 5.3+
 import io.axoniq.framework.messaging.transformation.commandhandling.CommandTransformation;    // 5.3+
 import io.axoniq.framework.messaging.transformation.queryhandling.QueryTransformerChain;       // 5.3+
@@ -416,13 +429,13 @@ EventTransformerChain eventChain = EventTransformerChain.builder()
                                           new MessageType("com.example.CourseCreated", "1.0.0")))
 
     // US3 -- 1:N split (FR-003, FR-010, MAY in 5.2.0)
-    .register(EventTransformation.split(new MessageType("com.example.StudentEnrolledAndCourseUpdated", "1.0.0"))
-                                 .transform(JsonNode.class, (v1, ctx) -> List.of(
-                                     TransformedEvent.of(new MessageType("com.example.StudentEnrolled",       "1.0.0"),
-                                                         v1.get("studentEnrollment")),
-                                     TransformedEvent.of(new MessageType("com.example.CourseCapacityUpdated", "1.0.0"),
-                                                         v1.get("courseUpdate"))
-                                 )))
+    .register(EventTransformation.split(new MessageType("com.example.StudentEnrolledAndCourseUpdated", "1.0.0"),
+                                        JsonNode.class)
+                                 .producing(new MessageType("com.example.StudentEnrolled", "1.0.0"),
+                                            v1 -> v1.get("studentEnrollment"))
+                                 .producing(new MessageType("com.example.CourseCapacityUpdated", "1.0.0"),
+                                            v1 -> v1.get("courseUpdate"))
+                                 .build())
 
     // US4 -- 1:0 drop (FR-003, FR-014, MAY in 5.2.0)
     .register(EventTransformation.drop(new MessageType("com.example.SystemHeartbeat", "1.0.0")))

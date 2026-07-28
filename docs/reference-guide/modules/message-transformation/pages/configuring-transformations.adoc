@@ -11,21 +11,7 @@ Build the chain with the transformations in the order they should run:
 
 [source,java]
 ----
-import io.axoniq.framework.messaging.transformation.events.EventTransformerChain;
-
-public final class CourseCatalogTransformations {
-
-    public static EventTransformerChain chain() {
-        return EventTransformerChain.builder()                               // <1>
-                                    .register(SystemAnnouncementLegacyUplift.build())
-                                    .register(CoursePublishedV1ToV2.build()) // <2>
-                                    .register(CoursePublishedV2ToV3.build())
-                                    .register(StudentRegisteredV1ToV2.build())
-                                    .register(WelcomeMessageBetaCleanup.build())
-                                    .register(SystemHeartbeatDrop.build())   // <3>
-                                    .build();                                // <4>
-    }
-}
+include::example$messagetransformation/coursecatalog/CourseCatalogTransformations.java[tag=register-chain,indent=0]
 ----
 <1> Start building the chain.
 <2> Each transformation runs in the order it is registered. See <<_why_ordering_matters>>.
@@ -45,9 +31,7 @@ Register the chain as a component on your `EventSourcingConfigurer`:
 
 [source,java]
 ----
-configurer.componentRegistry(registry -> registry
-        .registerComponent(EventTransformerChain.class,            // <1>
-                           config -> CourseCatalogTransformations.chain()));
+include::example$messagetransformation/configuringtransformations/ComponentRegistration.java[tag=register-declarative,indent=0]
 ----
 <1> Register the chain under `EventTransformerChain.class`. Axon Framework's transformation enhancer detects this component and decorates the event store with it.
 --
@@ -59,10 +43,7 @@ Axon's Spring Boot integration registers it as a component, where the same enhan
 
 [source,java]
 ----
-@Bean
-public EventTransformerChain eventTransformerChain() {
-    return CourseCatalogTransformations.chain();
-}
+include::example$messagetransformation/configuringtransformations/SpringConfiguration.java[tag=register-spring,indent=0]
 ----
 --
 ====
@@ -71,7 +52,7 @@ Both approaches do the same thing: they provide one `EventTransformerChain` comp
 Register no chain and the event store is left untouched.
 
 The chain is built once at startup and is immutable afterwards.
-The xref:message-transformation:demo.adoc[course catalog example] assembles a fuller chain the same way, adding a rename and more version hops alongside the drop shown here.
+The xref:message-transformation:demo.adoc[course catalog example] assembles a fuller chain the same way, adding a rename, a split, and more version hops alongside the drop shown here.
 
 [NOTE]
 .Transformation runs before interceptors
@@ -89,8 +70,7 @@ Register transformations in version order so each hop hands off to the one after
 
 [source,java]
 ----
-.register(CoursePublishedV1ToV2.build())   // 1.0.0 -> 2.0.0
-.register(CoursePublishedV2ToV3.build())   // 2.0.0 -> 3.0.0
+include::example$messagetransformation/configuringtransformations/Ordering.java[tag=ordering,indent=0]
 ----
 
 A stored v1 `CoursePublished` is lifted to v2 by the first transformation, then that result is lifted to v3 by the second, so your handler always receives the current shape.
@@ -121,24 +101,7 @@ Suppose every `0.x` beta `WelcomeMessageSent` folds up to `1.0.0`, but the `0.9.
 
 [source,java]
 ----
-QualifiedName welcomeMessageSent = new QualifiedName("coursecatalog.WelcomeMessageSent");
-MessageType v1 = new MessageType(welcomeMessageSent, "1.0.0");
-
-EventTransformation betaCleanup =                                       // <1>
-        EventTransformation.from(type -> type.version().startsWith("0."))
-                           .declaringFromTypes(welcomeMessageSent)
-                           .to(v1)
-                           .transform(JsonNode.class, WelcomeMessageBetaCleanup::map);
-
-EventTransformation beta090ToV1 =                                       // <2>
-        EventTransformation.from(new MessageType(welcomeMessageSent, "0.9.0"))
-                           .to(v1)
-                           .transform(JsonNode.class, WelcomeMessage090ToV1::map);
-
-EventTransformerChain.builder()
-                     .register(betaCleanup)
-                     .register(beta090ToV1)
-                     .build();
+include::example$messagetransformation/configuringtransformations/OverlapResolution.java[tag=matching-precedence,indent=0]
 ----
 <1> A broad predicate matching every `0.x` version (`0.x` -> `1.0.0`) with `from(Predicate)`, scoped to `WelcomeMessageSent` via `declaringFromTypes(...)`.
 <2> An exact transformation for just the `0.9.0` version (`0.9.0` -> `1.0.0`) with `from(MessageType)`, which therefore wins for a stored `0.9.0` event.
@@ -175,15 +138,7 @@ The xref:message-transformation:demo.adoc[course catalog example] does this with
 
 [source,java]
 ----
-TransformationTester.forTransformation(CoursePublishedV1ToV2.build())        // <1>
-                    .given()
-                    .messageType(COURSE_PUBLISHED, "1.0.0")                  // <2>
-                    .payloadFromResource("/transformations/coursepublished/v1.json")
-                    .when()
-                    .then()
-                    .success()
-                    .outputType(new MessageType(COURSE_PUBLISHED, "2.0.0"))  // <3>
-                    .outputPayloadFromResource("/transformations/coursepublished/v2.json");
+include::example$messagetransformation/configuringtransformations/TransformationTesterExample.java[tag=testing-transformation,indent=0]
 ----
 <1> The transformation under test, built from its `from`/`to`/`transform` definition.
 <2> The stored event to feed in: qualified name, version, and payload.

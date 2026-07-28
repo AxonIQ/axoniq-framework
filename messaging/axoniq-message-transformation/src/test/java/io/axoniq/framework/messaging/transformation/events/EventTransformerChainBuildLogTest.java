@@ -19,16 +19,16 @@
 
 package io.axoniq.framework.messaging.transformation.events;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.test.appender.ListAppender;
 import org.axonframework.messaging.core.MessageType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
@@ -45,21 +45,21 @@ final class EventTransformerChainBuildLogTest {
 
     private Logger chainLogger;
     private Level previousLevel;
-    private ListAppender<ILoggingEvent> appender;
+    private ListAppender appender;
 
     @BeforeEach
     void attachAppender() {
-        chainLogger = (Logger) LoggerFactory.getLogger(EventTransformerChain.class);
+        chainLogger = (Logger) LogManager.getLogger(EventTransformerChain.class);
         previousLevel = chainLogger.getLevel();
         chainLogger.setLevel(Level.DEBUG);
-        appender = new ListAppender<>();
+        appender = new ListAppender("EventTransformerChainBuildLog");
         appender.start();
         chainLogger.addAppender(appender);
     }
 
     @AfterEach
     void detachAppender() {
-        chainLogger.detachAppender(appender);
+        chainLogger.removeAppender(appender);
         appender.stop();
         chainLogger.setLevel(previousLevel);
     }
@@ -71,13 +71,13 @@ final class EventTransformerChainBuildLogTest {
 
         EventTransformerChain.builder().register(v1ToV2).build();
 
-        List<ILoggingEvent> debugEvents = appender.list.stream()
+        List<LogEvent> debugEvents = appender.getEvents().stream()
                 .filter(event -> event.getLevel() == Level.DEBUG)
                 .toList();
         assertThat(debugEvents)
                 .as("exactly one DEBUG entry MUST be emitted per chain build")
                 .hasSize(1);
-        String formatted = debugEvents.getFirst().getFormattedMessage();
+        String formatted = debugEvents.getFirst().getMessage().getFormattedMessage();
         assertThat(formatted)
                 .contains("EventTransformerChain built with 1 transformation(s)")
                 .contains(V1.toString())
@@ -88,11 +88,11 @@ final class EventTransformerChainBuildLogTest {
     void buildEmitsADedicatedNoOpEntryWhenZeroTransformationsAreRegistered() {
         EventTransformerChain.builder().build();
 
-        List<ILoggingEvent> debugEvents = appender.list.stream()
+        List<LogEvent> debugEvents = appender.getEvents().stream()
                 .filter(event -> event.getLevel() == Level.DEBUG)
                 .toList();
         assertThat(debugEvents).hasSize(1);
-        assertThat(debugEvents.getFirst().getFormattedMessage())
+        assertThat(debugEvents.getFirst().getMessage().getFormattedMessage())
                 .contains("0 transformations")
                 .contains("no-op pass-through");
     }
@@ -105,6 +105,6 @@ final class EventTransformerChainBuildLogTest {
 
         EventTransformerChain.builder().register(v1ToV2).build();
 
-        assertThat(appender.list).isEmpty();
+        assertThat(appender.getEvents()).isEmpty();
     }
 }

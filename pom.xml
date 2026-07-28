@@ -65,7 +65,7 @@
         <maven-failsafe.version>3.5.6</maven-failsafe.version>
         <maven-gpg.version>3.2.8</maven-gpg.version>
         <maven-install.version>3.1.4</maven-install.version>
-        <maven-jar.version>3.5.0</maven-jar.version>
+        <maven-jar.version>3.5.1</maven-jar.version>
         <maven-javadoc.version>3.12.0</maven-javadoc.version>
         <maven-release.version>3.3.1</maven-release.version>
         <maven-source.version>3.4.0</maven-source.version>
@@ -88,10 +88,13 @@
         <module>messaging/axoniq-distributed-messaging</module>
         <module>messaging/axoniq-event-streaming</module>
         <module>messaging/axoniq-message-transformation</module>
+        <module>messaging/axoniq-multi-tenancy</module>
 
+        <module>testing/axoniq-test-logging</module>
         <module>testing/axoniq-testcontainer</module>
 
         <module>tracing/axoniq-tracing-micrometer</module>
+        <module>docs/_samples</module>
     </modules>
 
     <inceptionYear>2026</inceptionYear>
@@ -201,7 +204,10 @@
                 <extensions>true</extensions>
                 <configuration>
                     <publishingServerId>central</publishingServerId>
-                    <excludeArtifacts>axoniq-integrationtests</excludeArtifacts>
+                    <excludeArtifacts>
+                        <excludeArtifact>axoniq-integrationtests</excludeArtifact>
+                        <excludeArtifact>axoniq-docs-samples</excludeArtifact>
+                    </excludeArtifacts>
                 </configuration>
             </plugin>
 
@@ -212,7 +218,7 @@
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>flatten-maven-plugin</artifactId>
-                <version>1.7.3</version>
+                <version>1.8.0</version>
                 <configuration>
                     <updatePomFile>true</updatePomFile>
                     <flattenMode>resolveCiFriendliesOnly</flattenMode>

@@ -5,7 +5,7 @@ When an event's stored structure no longer matches what your handlers and projec
 The stored events stay exactly as they were written.
 The transformation runs every time those events are read, handing each handler the shape it expects.
 
-A transformation is the tool for the structural changes that xref:events:event-versioning.adoc[payload conversion] cannot express on its own: combining two fields into one, wrapping values in a new object, lifting a historic event onto a new version, or renaming an event whose identity changed.
+A transformation is the tool for the structural changes that xref:events:event-versioning.adoc[payload conversion] cannot express on its own: combining two fields into one, wrapping values in a new object, lifting a historic event onto a new version, renaming an event whose identity changed, or splitting one bundled event into several.
 
 == When to reach for a transformation
 
@@ -36,10 +36,7 @@ A single transformation looks like this:
 
 [source,java]
 ----
-EventTransformation transformation =
-        EventTransformation.from(new MessageType("coursecatalog.CoursePublished", "1.0.0")) // <1>
-                           .to(new MessageType("coursecatalog.CoursePublished", "2.0.0"))   // <2>
-                           .transform(JsonNode.class, CoursePublishedV1ToV2::map);          // <3>
+include::example$messagetransformation/index/WhatTransformationLooksLike.java[tag=single-transformation-overview,indent=0]
 ----
 <1> `from(...)` selects the stored event identity to match.
 <2> `to(...)` declares the identity the transformation produces: same name, new version.
@@ -52,7 +49,7 @@ The structural form needs no extra classes, the typed form gives compile-time sa
 
 From here:
 
-* xref:message-transformation:defining-transformations.adoc[] shows how to write the individual transformations, map straight to a typed event, work with generic payloads, match several event versions, rename an event, and drop one entirely.
+* xref:message-transformation:defining-transformations.adoc[] shows how to write the individual transformations, map straight to a typed event, work with generic payloads, match several event versions, rename an event, split one into several, and drop one entirely.
 * xref:message-transformation:configuring-transformations.adoc[] shows how to assemble them into a chain, register it, and test it.
 * xref:message-transformation:demo.adoc[] is a runnable example that exercises every technique on a course catalog end to end.
 

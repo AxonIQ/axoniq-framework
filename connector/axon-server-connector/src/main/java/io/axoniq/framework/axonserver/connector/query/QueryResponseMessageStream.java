@@ -72,4 +72,9 @@ public class QueryResponseMessageStream extends AbstractQueryResponseMessageStre
     protected boolean isError(QueryResponse queryResponse) {
         return queryResponse.hasErrorMessage();
     }
+
+    @Override
+    protected boolean isEmptyResult(QueryResponse queryResponse) {
+        return QueryConverter.EMPTY_PAYLOAD_TYPE.equalsIgnoreCase(queryResponse.getPayload().getType());
+    }
 }

@@ -61,11 +61,16 @@ public abstract class AbstractQueryResponseMessageStream<T> extends AbstractMess
 
     @Override
     protected FetchResult<Entry<QueryResponseMessage>> fetchNext() {
-        T next = stream.nextIfAvailable();
-
-        if (next != null) {
+        T next;
+        while ((next = stream.nextIfAvailable()) != null) {
             if (isError(next)) {
                 return FetchResult.error(createAxonException(next));
+            }
+
+            if (isEmptyResult(next)) {
+                // No payload was produced for this entry (e.g. a null/Optional.empty() query result) — skip it
+                // instead of surfacing it as an element, so the resulting MessageStream stays empty.
+                continue;
             }
 
             return FetchResult.of(new SimpleEntry<>(buildResponseMessage(next), Context.empty()));
@@ -90,4 +95,17 @@ public abstract class AbstractQueryResponseMessageStream<T> extends AbstractMess
     abstract AxonException createAxonException(T t);
 
     protected abstract boolean isError(T t);
+
+    /**
+     * Whether the given {@code t} represents an entry that carries no payload and should be skipped rather than
+     * surfaced as a {@link MessageStream} entry.
+     *
+     * @param t the entry to check
+     * @return {@code true} if {@code t} carries no payload, {@code false} otherwise
+     * @deprecated as this method purely exists for interoperability between Axon Framework 4 and Axon Framework 5
+     */
+    @Deprecated(forRemoval = true, since = "5.2.1")
+    protected boolean isEmptyResult(T t) {
+        return false;
+    }
 }
