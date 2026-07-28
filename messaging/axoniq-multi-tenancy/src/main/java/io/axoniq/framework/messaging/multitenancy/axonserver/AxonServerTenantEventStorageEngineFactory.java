@@ -24,7 +24,6 @@ import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
-import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
@@ -39,10 +38,9 @@ import java.util.function.Function;
  * Axon Server implementation of the {@link TenantEventStorageEngineFactory}, building one {@link EventStorageEngine}
  * per tenant against that tenant's Axon Server context.
  * <p>
- * Axon Server's engine is not its own {@link SnapshotStore}, so each tenant's engine is
- * {@link TenantEventStorageEngineFactory#snapshotCapable(EventStorageEngine, SnapshotStore) complemented} with
- * that tenant's snapshot store while it is created. Snapshot resolution therefore happens per tenant, below the routing
- * engine.
+ * Axon Server's engine is not its own {@link SnapshotStore} and does not resolve snapshots while sourcing, so
+ * {@link io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorage} complements it with that tenant's
+ * snapshot store. This factory only builds the engine.
  * <p>
  * Engines are created lazily and cached, and evicted on tenant removal, by a {@link TenantScopedCache} this factory
  * holds. Following the tenant lifecycle is delegated to that cache through {@link MultiTenantAwareComponent}. The
@@ -63,13 +61,11 @@ public class AxonServerTenantEventStorageEngineFactory
      * Constructs an {@code AxonServerTenantEventStorageEngineFactory} building per-tenant engines from the given
      * {@code configuration}.
      *
-     * @param configuration the configuration used to construct each tenant's Axon Server event storage engine and to
-     *                      resolve the {@link TenantSnapshotStoreFactory} providing each tenant's snapshot store
+     * @param configuration the configuration used to construct each tenant's Axon Server event storage engine
      */
     public AxonServerTenantEventStorageEngineFactory(Configuration configuration) {
         Objects.requireNonNull(configuration, "The configuration must not be null");
-        this.engineCache = new TenantScopedCache<>(perTenantEngine(
-                configuration, configuration.getComponent(TenantSnapshotStoreFactory.class)));
+        this.engineCache = new TenantScopedCache<>(perTenantEngine(configuration));
     }
 
     @Override
@@ -92,11 +88,7 @@ public class AxonServerTenantEventStorageEngineFactory
         descriptor.describeProperty("engineCache", engineCache);
     }
 
-    private static Function<TenantDescriptor, EventStorageEngine> perTenantEngine(
-            Configuration configuration, TenantSnapshotStoreFactory snapshotStoreFactory) {
-        Objects.requireNonNull(snapshotStoreFactory, "The tenant snapshot store factory must not be null");
-        return tenant -> TenantEventStorageEngineFactory.snapshotCapable(
-                AxonServerEventStorageEngineFactory.constructForContext(tenant.tenantId(), configuration),
-                snapshotStoreFactory.storeFor(tenant));
+    private static Function<TenantDescriptor, EventStorageEngine> perTenantEngine(Configuration configuration) {
+        return tenant -> AxonServerEventStorageEngineFactory.constructForContext(tenant.tenantId(), configuration);
     }
 }

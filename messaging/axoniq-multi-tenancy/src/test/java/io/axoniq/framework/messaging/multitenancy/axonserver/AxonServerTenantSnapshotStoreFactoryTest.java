@@ -20,6 +20,7 @@
 package io.axoniq.framework.messaging.multitenancy.axonserver;
 
 import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
+import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingAxonServerConnectionManager;
 import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.conversion.Converter;
@@ -27,7 +28,9 @@ import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.junit.jupiter.api.*;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
+import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AxonServerTenantSnapshotStoreFactoryTest {
 
@@ -35,6 +38,11 @@ class AxonServerTenantSnapshotStoreFactoryTest {
     private final Converter converter = new ChainingContentTypeConverter();
     private final AxonServerTenantSnapshotStoreFactory testSubject =
             new AxonServerTenantSnapshotStoreFactory(connectionManager, converter);
+
+    @BeforeEach
+    void registerTenant() {
+        testSubject.registerTenant(TENANT_A);
+    }
 
     @Test
     void buildsAnAxonServerSnapshotStoreAgainstTheTenantConnection() {
@@ -50,12 +58,21 @@ class AxonServerTenantSnapshotStoreFactoryTest {
         assertThat(connectionManager.requestedContexts()).containsExactly(TENANT_A.tenantId());
     }
 
+    @Test
+    void rejectsATenantThatIsNotRegistered() {
+        assertThatThrownBy(() -> testSubject.storeFor(TENANT_B))
+                .isInstanceOf(TenantNotResolvedException.class)
+                .hasMessageContaining(TENANT_B.tenantId());
+        assertThat(connectionManager.requestedContexts()).isEmpty();
+    }
+
     // The connection manager disconnects a removed tenant's connection, so a cached store bound to it must be dropped.
     @Test
     void aReAddedTenantGetsAFreshStoreAgainstANewConnection() {
         SnapshotStore before = testSubject.storeFor(TENANT_A);
 
         assertThat(testSubject.registerTenant(TENANT_A).cancel()).isTrue();
+        testSubject.registerTenant(TENANT_A);
 
         assertThat(testSubject.storeFor(TENANT_A)).isNotSameAs(before);
         assertThat(connectionManager.requestedContexts())
@@ -67,6 +84,7 @@ class AxonServerTenantSnapshotStoreFactoryTest {
         SnapshotStore before = testSubject.storeFor(TENANT_A);
 
         assertThat(testSubject.registerAndStartTenant(TENANT_A).cancel()).isTrue();
+        testSubject.registerAndStartTenant(TENANT_A);
 
         assertThat(testSubject.storeFor(TENANT_A)).isNotSameAs(before);
     }

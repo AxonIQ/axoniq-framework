@@ -30,10 +30,8 @@ import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
  * The multi-tenant snapshot store calls this factory to obtain the store to route a tenant's snapshot load and store
  * operations to. Implementations are expected to create the per-tenant store lazily and cache it.
  * <p>
- * When a tenant's {@link EventStorageEngine engine} resolves snapshots natively, being its own {@link SnapshotStore},
- * this factory has to return that very instance for the same tenant. That is what
- * {@link TenantEventStorageEngineFactory#snapshotCapable(EventStorageEngine, SnapshotStore) snapshotCapable} compares,
- * so returning a separate store that reads the same snapshots instead costs the engine its single round trip.
+ * A tenant whose {@link EventStorageEngine engine} resolves snapshots itself never reaches this factory while sourcing:
+ * {@link TenantEventStorage} only asks for a snapshot store when the tenant's engine needs one.
  *
  * @author Stefan Dragisic
  * @author Laura Devriendt

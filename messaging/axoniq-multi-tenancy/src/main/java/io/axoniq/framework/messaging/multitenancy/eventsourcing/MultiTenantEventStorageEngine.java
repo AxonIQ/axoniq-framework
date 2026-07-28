@@ -28,10 +28,7 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
-import org.axonframework.eventsourcing.snapshot.api.Snapshot;
-import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -46,18 +43,19 @@ import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedEx
 import static java.util.Objects.requireNonNull;
 
 /**
- * Tenant-routing {@link EventStorageEngine} and {@link SnapshotStore}. Writes, sourcing, and snapshot operations are
- * routed to the components of the one tenant resolved from the {@link ProcessingContext}, so each tenant's events and
- * snapshots live in its own store.
+ * Tenant-routing {@link EventStorageEngine}. Appends and sourcing are routed to the engine of the one tenant resolved
+ * from the {@link ProcessingContext}, so each tenant's events live in its own store. Routing is all this engine does:
+ * the engine it routes to is provided, complete, by {@link TenantEventStorage}.
  * <p>
- * Snapshot load and store are routed like the rest, and require a tenant-carrying processing context. When none is
- * available, or the tenant cannot be resolved from it, the operation completes exceptionally.
+ * A tenant-carrying processing context is required. When none is available, or the tenant cannot be resolved from it,
+ * the operation fails. An append without a context resolves its tenant from the events instead, which must then all
+ * belong to the same tenant.
  * <p>
- * Being the snapshot store as well as the engine is what keeps snapshot resolution below the tenant fan-out. The event
- * sourcing defaults complement an engine that is not the configured snapshot store, and above this engine such a
- * complement would resolve snapshots before a tenant is known. Registering this one component under both types leaves
- * the {@link SourcingStrategy.Snapshot snapshot sourcing strategy} intact, so it reaches the tenant's own engine, which
- * the {@link TenantEventStorageEngineFactory} already built to resolve that tenant's snapshots.
+ * The {@link SourcingCondition} is routed unchanged, so a {@link SourcingStrategy.Snapshot snapshot sourcing strategy}
+ * reaches the tenant's own engine rather than being resolved above the fan-out, where no tenant is known yet. Keeping
+ * it intact requires the application-wide snapshot composition to be switched off. {@link TenantEventStorage} composes
+ * each tenant's engine with that tenant's own snapshot store instead. Snapshot writes are routed separately, by
+ * {@link MultiTenantSnapshotStore}.
  * <p>
  * The read-side methods ({@link #stream}, {@link #firstToken}, {@link #latestToken}, {@link #tokenAt}) currently
  * throw an {@link UnsupportedOperationException}. Reading across all tenants is added together with the multi-tenant
@@ -69,25 +67,21 @@ import static java.util.Objects.requireNonNull;
  * @since 5.3.0
  */
 @Internal
-public class MultiTenantEventStorageEngine implements EventStorageEngine, SnapshotStore {
+public class MultiTenantEventStorageEngine implements EventStorageEngine {
 
-    private final TenantEventStorageEngineFactory engineFactory;
-    private final MultiTenantSnapshotStore snapshotStore;
+    private final TenantEventStorage tenantEventStorage;
     private final TenantRouter tenantRouter;
 
     /**
      * Constructs a {@code MultiTenantEventStorageEngine}.
      *
-     * @param engineFactory        the factory providing each tenant's {@link EventStorageEngine}
-     * @param snapshotStoreFactory the factory providing each tenant's {@link SnapshotStore}
-     * @param tenantRouter         the router deciding which tenant an operation is routed to
+     * @param tenantEventStorage the storage providing each tenant's {@link EventStorageEngine}
+     * @param tenantRouter       the router deciding which tenant an operation is routed to
      */
-    public MultiTenantEventStorageEngine(TenantEventStorageEngineFactory engineFactory,
-                                         TenantSnapshotStoreFactory snapshotStoreFactory,
+    public MultiTenantEventStorageEngine(TenantEventStorage tenantEventStorage,
                                          TenantRouter tenantRouter) {
-        this.engineFactory = requireNonNull(engineFactory, "The tenant event storage engine factory must not be null");
+        this.tenantEventStorage = requireNonNull(tenantEventStorage, "The tenant event storage must not be null");
         this.tenantRouter = requireNonNull(tenantRouter, "The tenant router must not be null");
-        this.snapshotStore = new MultiTenantSnapshotStore(snapshotStoreFactory, tenantRouter);
     }
 
     @Override
@@ -96,7 +90,7 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, Snapsh
                                                                 List<TaggedEventMessage<?>> events) {
         try {
             TenantDescriptor tenant = tenantForAppend(context, events);
-            return engineFactory.engineFor(tenant).appendEvents(condition, context, events);
+            return tenantEventStorage.engineFor(tenant).appendEvents(condition, context, events);
         } catch (RuntimeException failure) {
             return CompletableFuture.failedFuture(failure);
         }
@@ -105,22 +99,10 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, Snapsh
     @Override
     public MessageStream<EventMessage> source(SourcingCondition condition, @Nullable ProcessingContext context) {
         try {
-            return engineFactory.engineFor(tenantFor(context)).source(condition, context);
+            return tenantEventStorage.engineFor(tenantFor(context)).source(condition, context);
         } catch (RuntimeException failure) {
             return MessageStream.failed(failure);
         }
-    }
-
-    @Override
-    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
-                                         @Nullable ProcessingContext context) {
-        return snapshotStore.store(qualifiedName, identifier, snapshot, context);
-    }
-
-    @Override
-    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
-                                                      @Nullable ProcessingContext context) {
-        return snapshotStore.load(qualifiedName, identifier, context);
     }
 
     private TenantDescriptor tenantForAppend(@Nullable ProcessingContext context, List<TaggedEventMessage<?>> events) {
@@ -168,8 +150,7 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, Snapsh
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
-        descriptor.describeProperty("engineFactory", engineFactory);
-        descriptor.describeProperty("snapshotStore", snapshotStore);
+        descriptor.describeProperty("tenantEventStorage", tenantEventStorage);
         descriptor.describeProperty("tenantRouter", tenantRouter);
     }
 }

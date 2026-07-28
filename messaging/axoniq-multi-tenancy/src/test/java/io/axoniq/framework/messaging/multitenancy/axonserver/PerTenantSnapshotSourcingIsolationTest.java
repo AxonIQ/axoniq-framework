@@ -26,13 +26,15 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
-import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorage;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
+import org.axonframework.eventsourcing.configuration.SnapshotSourcingConfigurationEnhancer;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
@@ -86,15 +88,14 @@ class PerTenantSnapshotSourcingIsolationTest {
 
     @BeforeEach
     void setUp() {
-        // Per-tenant engines that are not their own snapshot store, complemented while they are built, exactly as
-        // AxonServerTenantEventStorageEngineFactory does for a real Axon Server engine.
-        tenantEngines.entry(TENANT_A, complementedEngineFor(TENANT_A));
-        tenantEngines.entry(TENANT_B, complementedEngineFor(TENANT_B));
-        MetadataBasedTenantResolver tenantResolver = new MetadataBasedTenantResolver();
+        // Per-tenant engines that resolve no snapshots of their own, as a real Axon Server engine does not.
+        tenantEngines.entry(TENANT_A, new RecordingEventStorageEngine());
+        tenantEngines.entry(TENANT_B, new RecordingEventStorageEngine());
+        TenantRouter tenantRouter = new TenantRouter(new MetadataBasedTenantResolver(), tenantEngines);
         routingEngine = new MultiTenantEventStorageEngine(
-                tenantEngines::apply,
-                tenantSnapshotStores::apply,
-                new TenantRouter(tenantResolver, tenantEngines));
+                new TenantEventStorage(tenantEngines::apply, tenantSnapshotStores::apply), tenantRouter);
+        MultiTenantSnapshotStore routingSnapshotStore =
+                new MultiTenantSnapshotStore(tenantSnapshotStores::apply, tenantRouter);
 
         StubTenantProvider tenantProvider = new StubTenantProvider();
         tenantProvider.addTenant(TENANT_A);
@@ -104,13 +105,15 @@ class PerTenantSnapshotSourcingIsolationTest {
                 .create()
                 .componentRegistry(registry -> {
                     MultiTenancyEnabled.enableMultiTenancyEnhancer(registry);
-                    // Register the routing engine under both types as the Axon Server defaults do, but backed by
-                    // recording per-tenant doubles and without reaching a real Axon Server.
+                    // Register the routing components as the Axon Server defaults do, but backed by recording
+                    // per-tenant doubles and without reaching a real Axon Server.
                     registry.disableEnhancer(AxonServerConfigurationEnhancer.class)
                             .disableEnhancer(AxonServerMultiTenancyConfigurationDefaults.class)
+                            // what AxonServerMultiTenancyConfigurationDefaults does for a real multi-tenant application
+                            .disableEnhancer(SnapshotSourcingConfigurationEnhancer.class)
                             .registerComponent(TenantProvider.class, config -> tenantProvider)
                             .registerComponent(EventStorageEngine.class, config -> routingEngine)
-                            .registerComponent(SnapshotStore.class, config -> routingEngine);
+                            .registerComponent(SnapshotStore.class, config -> routingSnapshotStore);
                 })
                 .build();
         configuration.start();
@@ -124,22 +127,17 @@ class PerTenantSnapshotSourcingIsolationTest {
         }
     }
 
-    private EventStorageEngine complementedEngineFor(TenantDescriptor tenant) {
-        return TenantEventStorageEngineFactory.snapshotCapable(new RecordingEventStorageEngine(),
-                                                               tenantSnapshotStores.apply(tenant));
-    }
-
     @Test
-    void theRoutingEngineIsRegisteredUndecorated() {
-        // being the snapshot store as well keeps the framework from complementing the routing engine, which would
-        // resolve the snapshot before a tenant is known
+    void theRoutingEngineIsRegisteredUndecoratedDespiteADifferentSnapshotStore() {
+        // disabling the application-wide snapshot composition keeps the framework from decorating the routing engine
+        // even though another SnapshotStore is registered, which would resolve the snapshot before a tenant is known
         assertThat(sourcingEngine).isSameAs(routingEngine)
                                   .isNotInstanceOf(SnapshotCapableEventStorageEngine.class);
     }
 
     @Test
     void snapshotsAreStoredInAndLoadedFromTheSourcedTenantsOwnStore() {
-        // the store side travels through the registered SnapshotStore, which is the routing engine itself
+        // the store side travels through the registered SnapshotStore, which routes per tenant as well
         SnapshotStore snapshotStore = configuration.getComponent(SnapshotStore.class);
         Snapshot snapshotA = snapshot("snapshot-a");
 

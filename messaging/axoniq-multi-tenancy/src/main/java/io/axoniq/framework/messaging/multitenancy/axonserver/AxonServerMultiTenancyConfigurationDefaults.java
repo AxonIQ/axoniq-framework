@@ -29,6 +29,8 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorage;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
 import org.axonframework.common.AxonConfigurationException;
@@ -43,6 +45,7 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.SearchScope;
 import org.axonframework.common.lifecycle.Phase;
+import org.axonframework.eventsourcing.configuration.SnapshotSourcingConfigurationEnhancer;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.conversion.MessageConverter;
@@ -58,11 +61,14 @@ import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTena
  * <ul>
  *     <li>the {@link TenantProvider} which is responsible for managing tenants and lifecycle, backed by {@link AxonServerTenantProvider}</li>
  *     <li>the {@link MultiTenantAxonServerCommandBusConnector} which fans out commands to a connector per tenant</li>
- *     <li>the {@link MultiTenantEventStorageEngine}, registered as both the {@link EventStorageEngine} and the
- *     {@link SnapshotStore}, routing writes, sourcing, and snapshots to each tenant's own components</li>
+ *     <li>the {@link MultiTenantEventStorageEngine} as the {@link EventStorageEngine}, routing appends and sourcing to
+ *     each tenant's own engine, and the {@link MultiTenantSnapshotStore} as the {@link SnapshotStore}, routing snapshot
+ *     writes the same way</li>
  *     <li>the {@link TenantEventStorageEngineFactory} and {@link TenantSnapshotStoreFactory} building those per-tenant
  *     components against the tenant's Axon Server context</li>
  * </ul>
+ * It also disables the {@link SnapshotSourcingConfigurationEnhancer}, since snapshot sourcing is composed per tenant by
+ * the {@link TenantEventStorage} rather than once for the application.
  *
  * @author Jan Galinski
  * @author Laura Devriendt
@@ -100,8 +106,7 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
         // Register the MultiTenantAxonServerCommandBusConnector
         componentRegistry.registerIfNotPresent(multiTenantCommandBusConnector(), SearchScope.ALL);
 
-        // Register the multi-tenant EventStorageEngine, routing writes, sourcing, and snapshots to each tenant's own
-        // engine and snapshot store.
+        // Register the tenant-routing event storage components, and take over snapshot composition from the framework.
         registerMultiTenantEventStorageEngine(componentRegistry);
     }
 
@@ -176,20 +181,27 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
     }
 
     /**
-     * Registers the {@link MultiTenantEventStorageEngine} as both the {@link EventStorageEngine} and the
-     * {@link SnapshotStore}, backed by a {@link TenantEventStorageEngineFactory} and a
-     * {@link TenantSnapshotStoreFactory} that are subscribed to the {@link TenantProvider} so per-tenant engines and
-     * snapshot stores are evicted when a tenant is removed. Registered before the Axon Server enhancer, whose
-     * {@code registerIfNotPresent} for both types then backs off.
+     * Registers the {@link MultiTenantEventStorageEngine} as the {@link EventStorageEngine} and the
+     * {@link MultiTenantSnapshotStore} as the {@link SnapshotStore}, backed by a
+     * {@link TenantEventStorageEngineFactory} and a {@link TenantSnapshotStoreFactory} that are subscribed to the
+     * {@link TenantProvider} so per-tenant engines and snapshot stores are evicted when a tenant is removed. Registered
+     * before the Axon Server enhancer, whose {@code registerIfNotPresent} for both types then backs off.
      * <p>
-     * Both types resolve to the <em>same</em> instance on purpose. The event sourcing defaults leave an engine
-     * undecorated only when it is the registered {@link SnapshotStore} itself, compared by identity. Any other
-     * {@link SnapshotStore} would have them complement the routing engine above the tenant fan-out, resolving snapshots
-     * before a tenant is known, which is why a {@link SnapshotStore} registered elsewhere is rejected here.
+     * Also disables the {@link SnapshotSourcingConfigurationEnhancer}, taking over snapshot composition, and rejects a
+     * {@link SnapshotStore} registered by the application.
+     * <p>
+     * Both components stay lazy, built on first use rather than at startup, since building them pulls in the per-tenant
+     * factories.
      *
-     * @param componentRegistry the registry to register the routing engine and its factories with
+     * @param componentRegistry the registry to register the routing components and their factories with
+     * @throws AxonConfigurationException if a {@link SnapshotStore} is already registered
      */
     static void registerMultiTenantEventStorageEngine(ComponentRegistry componentRegistry) {
+        rejectForeignSnapshotStore(componentRegistry);
+        // Snapshots are composed per tenant by the TenantEventStorage, so the application-wide composition steps aside.
+        // Applied above the tenant fan-out it would resolve snapshots before a tenant is known, leaving every tenant's
+        // engine without the snapshot sourcing strategy.
+        componentRegistry.disableEnhancer(SnapshotSourcingConfigurationEnhancer.class);
         componentRegistry.registerIfNotPresent(
                 subscribedFactory(TenantSnapshotStoreFactory.class,
                                   AxonServerTenantSnapshotStoreFactory::new),
@@ -198,50 +210,46 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                 subscribedFactory(TenantEventStorageEngineFactory.class,
                                   AxonServerTenantEventStorageEngineFactory::new),
                 SearchScope.ALL);
-
-        // The EventStorageEngine and the SnapshotStore have to resolve to the same instance, because the event sourcing
-        // defaults leave an engine undecorated only when it is the registered SnapshotStore itself, compared by
-        // identity. The routing engine is therefore built as the SnapshotStore, and the EventStorageEngine resolves
-        // that one component. Only this direction works: the engine's own decorator asks for the SnapshotStore while
-        // the engine is being resolved, so aliasing the SnapshotStore to the engine re-enters that resolution.
-        //
-        // Both stay lazy, built on first use rather than at startup, since resolving them pulls in the per-tenant
-        // factories. Resolving the engine therefore also verifies the two are one instance.
         componentRegistry.registerIfNotPresent(
                 ComponentDefinition.ofType(SnapshotStore.class)
-                                   .withBuilder(AxonServerMultiTenancyConfigurationDefaults::routingEngine),
+                                   .withBuilder(AxonServerMultiTenancyConfigurationDefaults::routingSnapshotStore),
                 SearchScope.ALL);
         componentRegistry.registerIfNotPresent(
                 ComponentDefinition.ofType(EventStorageEngine.class)
-                                   .withBuilder(AxonServerMultiTenancyConfigurationDefaults
-                                                        ::routingEngineRegisteredAsSnapshotStore),
+                                   .withBuilder(AxonServerMultiTenancyConfigurationDefaults::routingEngine),
                 SearchScope.ALL);
     }
 
-    private static MultiTenantEventStorageEngine routingEngine(Configuration config) {
-        return new MultiTenantEventStorageEngine(config.getComponent(TenantEventStorageEngineFactory.class),
-                                                config.getComponent(TenantSnapshotStoreFactory.class),
-                                                config.getComponent(TenantRouter.class));
+    /**
+     * Rejects a {@link SnapshotStore} that is already registered when multi-tenancy activates.
+     * <p>
+     * Such a store serves every tenant from one place, while sourcing still reads each tenant's snapshots from that
+     * tenant's own store. Snapshots would then be written and read in different places, so this fails rather than
+     * silently giving up isolation.
+     *
+     * @param componentRegistry the registry to check for an already registered {@link SnapshotStore}
+     * @throws AxonConfigurationException if a {@link SnapshotStore} is already registered
+     */
+    private static void rejectForeignSnapshotStore(ComponentRegistry componentRegistry) {
+        if (componentRegistry.hasComponent(SnapshotStore.class, SearchScope.ALL)) {
+            throw new AxonConfigurationException("""
+                    A multi-tenant application resolves snapshots per tenant, so it cannot use a SnapshotStore that \
+                    serves every tenant from one place, but one is already registered. Register a \
+                    TenantSnapshotStoreFactory to control how each tenant's snapshot store is built, instead of \
+                    registering a SnapshotStore of your own.""");
+        }
     }
 
-    /**
-     * Resolves the routing engine through the {@link SnapshotStore} it is registered as, so the
-     * {@link EventStorageEngine} is that same instance rather than a second one.
-     *
-     * @param config the configuration to resolve the {@link SnapshotStore} from
-     * @return the routing engine registered as the {@link SnapshotStore}
-     * @throws AxonConfigurationException if the registered {@link SnapshotStore} is not the routing engine
-     */
-    private static MultiTenantEventStorageEngine routingEngineRegisteredAsSnapshotStore(Configuration config) {
-        SnapshotStore snapshotStore = config.getComponent(SnapshotStore.class);
-        if (snapshotStore instanceof MultiTenantEventStorageEngine routingEngine) {
-            return routingEngine;
-        }
-        throw new AxonConfigurationException("""
-                A multi-tenant application requires the SnapshotStore to be the multi-tenant routing engine, so \
-                snapshots are resolved per tenant rather than from one store shared by every tenant, but it resolved \
-                to [%s]. Register a TenantSnapshotStoreFactory to control how each tenant's snapshot store is built, \
-                instead of replacing the SnapshotStore itself.""".formatted(snapshotStore.getClass().getName()));
+    private static MultiTenantEventStorageEngine routingEngine(Configuration config) {
+        TenantEventStorage tenantEventStorage =
+                new TenantEventStorage(config.getComponent(TenantEventStorageEngineFactory.class),
+                                       config.getComponent(TenantSnapshotStoreFactory.class));
+        return new MultiTenantEventStorageEngine(tenantEventStorage, config.getComponent(TenantRouter.class));
+    }
+
+    private static MultiTenantSnapshotStore routingSnapshotStore(Configuration config) {
+        return new MultiTenantSnapshotStore(config.getComponent(TenantSnapshotStoreFactory.class),
+                                            config.getComponent(TenantRouter.class));
     }
 
     /**

@@ -34,6 +34,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
@@ -43,6 +44,7 @@ import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.junit.jupiter.api.*;
@@ -123,18 +125,22 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
 
         @Test
         void registersTheMultiTenantEventStorageEngineAsTheEventStorageEngine() {
-            // the routing engine resolves snapshots itself, so the framework registers it undecorated
             assertThat(configuration.getComponent(EventStorageEngine.class))
                     .isInstanceOf(MultiTenantEventStorageEngine.class);
         }
 
         @Test
-        void registersTheSameRoutingEngineInstanceAsTheSnapshotStore() {
-            // the same instance under both types, so the framework does not complement the routing engine with a
-            // snapshot store above the fan-out
+        void registersTheMultiTenantSnapshotStoreAsTheSnapshotStore() {
             assertThat(configuration.getComponent(SnapshotStore.class))
-                    .isInstanceOf(MultiTenantEventStorageEngine.class)
-                    .isSameAs(configuration.getComponent(EventStorageEngine.class));
+                    .isInstanceOf(MultiTenantSnapshotStore.class);
+        }
+
+        @Test
+        void leavesTheRoutingEngineUndecoratedSoSnapshotSourcingReachesEachTenantsOwnEngine() {
+            // the application-wide snapshot composition is disabled, so the framework does not decorate the routing
+            // engine with the snapshot store above the tenant fan-out
+            assertThat(configuration.getComponent(EventStorageEngine.class))
+                    .isNotInstanceOf(SnapshotCapableEventStorageEngine.class);
         }
 
         @Test
@@ -151,20 +157,19 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
     @Nested
     class ForeignSnapshotStoreRejection {
 
-        // A SnapshotStore registered elsewhere would be complemented onto the routing engine above the tenant fan-out,
-        // resolving snapshots before a tenant is known. That has to fail loudly rather than degrade isolation silently.
-        // Detected when the engine is first resolved, because both components stay lazy.
+        // A SnapshotStore registered elsewhere serves every tenant from one place, while sourcing keeps reading each
+        // tenant's snapshots from that tenant's own store. That has to fail loudly rather than write and read snapshots
+        // in different places.
         @Test
         void rejectsASnapshotStoreRegisteredByTheApplication() {
             SnapshotStore singleTenantStore = new RecordingSnapshotStore();
-            AxonConfiguration configuration =
+            MessagingConfigurer configurer =
                     MessagingConfigurer.create()
                                        .componentRegistry(registry -> registry.registerComponent(
                                                SnapshotStore.class, config -> singleTenantStore))
-                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
-                                       .build();
+                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer);
 
-            assertThatThrownBy(() -> configuration.getComponent(EventStorageEngine.class))
+            assertThatThrownBy(configurer::build)
                     .isInstanceOf(AxonConfigurationException.class)
                     .hasMessageContaining("SnapshotStore")
                     .hasMessageContaining("TenantSnapshotStoreFactory");

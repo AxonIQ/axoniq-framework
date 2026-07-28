@@ -43,9 +43,9 @@ import static java.util.Objects.requireNonNull;
  * Snapshot operations therefore require a tenant-carrying processing context. When none is available, or the tenant
  * cannot be resolved from it, the operation completes exceptionally.
  * <p>
- * Held by {@link MultiTenantEventStorageEngine}, which exposes it as its own {@link SnapshotStore}. It is not
- * registered as a component of its own, because the event sourcing defaults would then decorate the routing engine
- * with it above the tenant fan-out, resolving snapshots before a tenant is known.
+ * Registered as the application's {@link SnapshotStore}, so snapshots written for an entity land in the store of the
+ * tenant the entity belongs to. Snapshot reads while sourcing do not travel through here: those stay with
+ * {@link MultiTenantEventStorageEngine}, which routes them to the tenant's own engine.
  *
  * @author Jakob Hatzl
  * @author Laura Devriendt
@@ -63,7 +63,7 @@ public class MultiTenantSnapshotStore implements SnapshotStore, DescribableCompo
      * @param snapshotStoreFactory the factory providing each tenant's {@link SnapshotStore}
      * @param tenantRouter         the router deciding which tenant a snapshot operation is routed to
      */
-    MultiTenantSnapshotStore(TenantSnapshotStoreFactory snapshotStoreFactory, TenantRouter tenantRouter) {
+    public MultiTenantSnapshotStore(TenantSnapshotStoreFactory snapshotStoreFactory, TenantRouter tenantRouter) {
         this.snapshotStoreFactory = requireNonNull(snapshotStoreFactory, "The snapshot store factory must not be null");
         this.tenantRouter = requireNonNull(tenantRouter, "The tenant router must not be null");
     }

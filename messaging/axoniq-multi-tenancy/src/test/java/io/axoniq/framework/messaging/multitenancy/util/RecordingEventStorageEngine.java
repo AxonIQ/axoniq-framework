@@ -22,14 +22,11 @@ package io.axoniq.framework.messaging.multitenancy.util;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
-import org.axonframework.eventsourcing.eventstore.SnapshotEventMessage;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
-import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -39,22 +36,19 @@ import org.jspecify.annotations.Nullable;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 /**
- * An {@link EventStorageEngine} test double that records how often it was written to and sourced from, so tests can
- * assert which tenant's engine a routing engine delegated to.
+ * An {@link EventStorageEngine} test double that resolves no snapshots of its own, standing in for an engine such as
+ * {@code AxonServerEventStorageEngine}.
  * <p>
- * It is also a {@link SnapshotStore}, backed by a {@link RecordingSnapshotStore}, so it stands in for an engine that
- * resolves snapshots natively. When sourced with the {@link SourcingStrategy.Snapshot} strategy it reads the snapshot
- * of the requested identifier and leads its stream with a {@link SnapshotEventMessage}, the way
- * {@code PostgresqlEventStorageEngine} does. {@link #sourcedWithSnapshotStrategy()} tells whether that strategy reached
- * this engine at all, which is what proves it was not consumed above the tenant fan-out. Read operations are otherwise
- * inert.
+ * It is not a {@link SnapshotStore}, so it has to be decorated with a snapshot store to serve a
+ * {@link SourcingStrategy.Snapshot} strategy. It records how often it was written to and sourced from, so tests can
+ * assert which tenant's engine a routing engine delegated to. Read operations are otherwise inert.
+ * <p>
+ * Use {@link RecordingSnapshotResolvingEventStorageEngine} for an engine that resolves snapshots within its own
+ * {@link #source(SourcingCondition, ProcessingContext) source} call.
  */
-public class RecordingEventStorageEngine implements EventStorageEngine, SnapshotStore {
-
-    private final RecordingSnapshotStore snapshots = new RecordingSnapshotStore();
+public class RecordingEventStorageEngine implements EventStorageEngine {
 
     private int appendCount;
     private int sourceCount;
@@ -72,21 +66,6 @@ public class RecordingEventStorageEngine implements EventStorageEngine, Snapshot
      */
     public int sourceCount() {
         return sourceCount;
-    }
-
-    /**
-     * @return how often a snapshot was read, whether through {@link #load(QualifiedName, Object, ProcessingContext)} or
-     * within a snapshot sourcing
-     */
-    public int loadCount() {
-        return snapshots.loadCount();
-    }
-
-    /**
-     * @return how often {@link #store(QualifiedName, Object, Snapshot, ProcessingContext)} was called
-     */
-    public int storeCount() {
-        return snapshots.storeCount();
     }
 
     /**
@@ -110,30 +89,10 @@ public class RecordingEventStorageEngine implements EventStorageEngine, Snapshot
     @Override
     public MessageStream<EventMessage> source(SourcingCondition condition, @Nullable ProcessingContext context) {
         sourceCount++;
-        if (condition.strategy() instanceof SourcingStrategy.Snapshot snapshotStrategy) {
+        if (condition.strategy() instanceof SourcingStrategy.Snapshot) {
             sourcedWithSnapshotStrategy = true;
-            Snapshot snapshot = snapshots.load(snapshotStrategy.qualifiedName(),
-                                              snapshotStrategy.identifier(),
-                                              context)
-                                         .orTimeout(5, TimeUnit.SECONDS)
-                                         .join();
-            if (snapshot != null) {
-                return MessageStream.<EventMessage>just(new SnapshotEventMessage(snapshot));
-            }
         }
         return MessageStream.empty().cast();
-    }
-
-    @Override
-    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
-                                         @Nullable ProcessingContext context) {
-        return snapshots.store(qualifiedName, identifier, snapshot, context);
-    }
-
-    @Override
-    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
-                                                      @Nullable ProcessingContext context) {
-        return snapshots.load(qualifiedName, identifier, context);
     }
 
     @Override
