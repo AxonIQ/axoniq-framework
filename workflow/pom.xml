@@ -36,8 +36,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <kotlin.version>2.4.0</kotlin.version>
         <archunit.version>1.4.2</archunit.version>
-        <axon.version>5.2.0-SNAPSHOT</axon.version>
-        <axoniq.version>5.2.0-SNAPSHOT</axoniq.version>
+        <axon.version>5.3.0-SNAPSHOT</axon.version>
+        <axoniq.version>5.3.0-SNAPSHOT</axoniq.version>
         <junit.version>6.1.2</junit.version>
         <!-- Build / Plugin -->
         <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
