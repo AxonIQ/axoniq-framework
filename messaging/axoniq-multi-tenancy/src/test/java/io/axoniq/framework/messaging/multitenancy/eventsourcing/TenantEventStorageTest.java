@@ -175,7 +175,7 @@ class TenantEventStorageTest {
     // A tenant's engine and snapshot store are gone once the tenant is removed, so a composed engine holding them must
     // not survive it, and composing is not repeated per operation while the tenant is there.
     @Test
-    void composesOncePerTenantAndEvictsOnTenantRemoval() {
+    void composesOncePerTenantAndAgainAfterTheTenantIsReAdded() {
         RecordingEventStorageEngine tenantEngine = new RecordingEventStorageEngine();
         TenantEventStorage testSubject =
                 new TenantEventStorage(tenant -> tenantEngine, tenant -> tenantSnapshotStore);
@@ -188,6 +188,12 @@ class TenantEventStorageTest {
 
         assertThatThrownBy(() -> testSubject.engineFor(TENANT_A))
                 .isInstanceOf(TenantNotResolvedException.class);
+
+        // A re-added tenant never continues with the engine composed under its previous registration. That the previous
+        // engine is also let go of is not observable here, since this composer only drops its reference to it. The
+        // eviction itself is asserted where the callback exists, in TenantScopedCacheTest.
+        testSubject.registerTenant(TENANT_A);
+        assertThat(testSubject.engineFor(TENANT_A)).isNotSameAs(composed);
     }
 
     @Test

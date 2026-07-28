@@ -77,6 +77,9 @@ public class AxonServerTenantProvider implements TenantProvider {
     private static final Logger logger = LoggerFactory.getLogger(AxonServerTenantProvider.class);
 
     private final Set<TenantDescriptor> tenantDescriptors = ConcurrentHashMap.newKeySet();
+    // Refreshed whenever a tenant is added or removed, so resolving the tenant of a message does not allocate a copy of
+    // the tenants on every message. Both mutation sites hold this provider's monitor, so the last write wins.
+    private volatile List<TenantDescriptor> tenantsView = List.of();
 
     private final TenantConnectPredicate tenantConnectPredicate;
     private final AxonServerConnectionManager axonServerConnectionManager;
@@ -187,7 +190,7 @@ public class AxonServerTenantProvider implements TenantProvider {
 
     @Override
     public List<TenantDescriptor> tenants() {
-        return List.copyOf(tenantDescriptors);
+        return tenantsView;
     }
 
     @Override
@@ -207,6 +210,7 @@ public class AxonServerTenantProvider implements TenantProvider {
         if (closed || !tenantDescriptors.add(tenantDescriptor)) {
             return;
         }
+        refreshTenantsView();
         tenantAwareComponents.forEach(component -> registrations.add(new TenantRegistration(
                 tenantDescriptor, component, component.registerAndStartTenant(tenantDescriptor)
         )));
@@ -229,10 +233,16 @@ public class AxonServerTenantProvider implements TenantProvider {
         }
     }
 
+    // Called while holding this provider's monitor, so the view it publishes is the tenants as of that mutation.
+    private void refreshTenantsView() {
+        this.tenantsView = List.copyOf(tenantDescriptors);
+    }
+
     private synchronized boolean deregisterTenant(TenantDescriptor tenantDescriptor) {
         if (!tenantDescriptors.remove(tenantDescriptor)) {
             return false;
         }
+        refreshTenantsView();
         cancelRegistrationsMatching(registration -> registration.tenant().equals(tenantDescriptor));
         return true;
     }

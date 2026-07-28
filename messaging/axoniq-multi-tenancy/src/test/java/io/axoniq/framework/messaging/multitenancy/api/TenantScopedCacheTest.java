@@ -40,8 +40,8 @@ import java.util.stream.IntStream;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 class TenantScopedCacheTest {
 
@@ -254,8 +254,8 @@ class TenantScopedCacheTest {
             assertThat(evicted).isEmpty();
         }
 
-        // A component created while its tenant is being unregistered must not outlive that registration, so the
-        // creating thread discards it and hands it over. This is the third eviction path, and the cache owns it.
+        // A component created while its tenant is being unregistered must not outlive that registration. Whichever of
+        // the two threads removes it hands it over, and only one of them can, so it is released exactly once.
         @Test
         void evictsAComponentCreatedWhileItsTenantIsBeingUnregistered() throws Exception {
             AtomicReference<TenantScopedCache<String>> cacheRef = new AtomicReference<>();

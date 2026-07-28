@@ -35,6 +35,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorage;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
@@ -241,6 +242,22 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
             configuration.shutdown();
 
             assertThat(tenantProvider.subscribedComponents()).doesNotContain(factory);
+        }
+
+        @Test
+        void subscribesTheTenantEventStorageToTheTenantProviderAtStartup() {
+            TenantEventStorage tenantEventStorage = configuration.getComponent(TenantEventStorage.class);
+
+            assertThat(tenantProvider.subscribedComponents()).contains(tenantEventStorage);
+        }
+
+        @Test
+        void cancelsTheTenantEventStorageSubscriptionOnShutdown() {
+            TenantEventStorage tenantEventStorage = configuration.getComponent(TenantEventStorage.class);
+
+            configuration.shutdown();
+
+            assertThat(tenantProvider.subscribedComponents()).doesNotContain(tenantEventStorage);
         }
 
         @Test

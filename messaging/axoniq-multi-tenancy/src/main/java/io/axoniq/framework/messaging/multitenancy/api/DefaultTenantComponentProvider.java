@@ -74,9 +74,9 @@ class DefaultTenantComponentProvider<T> implements TenantComponentProvider<T> {
         this.componentType = Objects.requireNonNull(componentType, "The component type must not be null");
         Objects.requireNonNull(factory, "The factory must not be null");
         this.componentCache = new TenantScopedCache<>(factory::create,
-                                                     factory::destroy,
-                                                     "the component provider for type ["
-                                                             + componentType.getName() + "]");
+                                                      factory::destroy,
+                                                      "the component provider for type ["
+                                                              + componentType.getName() + "]");
     }
 
     @Override

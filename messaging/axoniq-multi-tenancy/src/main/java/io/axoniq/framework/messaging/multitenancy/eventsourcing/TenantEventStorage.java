@@ -32,7 +32,6 @@ import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 
 import static java.util.Objects.requireNonNull;
 
-
 /**
  * Provides the complete {@link EventStorageEngine} of a single tenant: the tenant's engine, able to resolve that
  * tenant's snapshots.
@@ -72,9 +71,9 @@ public class TenantEventStorage implements MultiTenantAwareComponent {
     public TenantEventStorage(TenantEventStorageEngineFactory engineFactory,
                               TenantSnapshotStoreFactory snapshotStoreFactory) {
         this.engineFactory = requireNonNull(engineFactory,
-                                                   "The tenant event storage engine factory must not be null");
+                                            "The tenant event storage engine factory must not be null");
         this.snapshotStoreFactory = requireNonNull(snapshotStoreFactory,
-                                                           "The tenant snapshot store factory must not be null");
+                                                   "The tenant snapshot store factory must not be null");
         this.composedEngines = new TenantScopedCache<>(this::compose);
     }
 

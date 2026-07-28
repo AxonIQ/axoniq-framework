@@ -232,7 +232,13 @@ class TenantComponentProviderTest {
                 assertThat(allReady.await(5, TimeUnit.SECONDS)).isTrue();
                 startTogether.countDown();
 
-                assertThat(accesses.stream().map(TenantComponentProviderTest::instanceOf).distinct()).hasSize(1);
+                List<TestComponent> components = accesses.stream()
+                                                         .map(TenantComponentProviderTest::instanceOf)
+                                                         .toList();
+                // Compared by identity: every TestComponent of one tenant is equal to every other, so equality would
+                // hold even if each thread got its own instance.
+                TestComponent sharedComponent = components.getFirst();
+                assertThat(components).allSatisfy(component -> assertThat(component).isSameAs(sharedComponent));
             }
             assertThat(factory.createCount(TENANT_A)).isEqualTo(1);
             assertThat(factory.destroyed()).isEmpty();
