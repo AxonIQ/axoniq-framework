@@ -23,6 +23,7 @@ import org.axonframework.common.Registration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.junit.jupiter.api.*;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -32,12 +33,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.IntStream;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class TenantScopedCacheTest {
@@ -214,11 +217,12 @@ class TenantScopedCacheTest {
 
         // Re-registering supersedes, so the superseded registration's component is handed over there and then: its own
         // Registration may never be cancelled, leaving nothing else to reclaim it.
+        private final List<String> evicted = new CopyOnWriteArrayList<>();
+        private final TenantScopedCache<String> evictionRecording =
+                new TenantScopedCache<>(countingFactory, (tenant, component) -> evicted.add(component), "a cache");
+
         @Test
         void reRegisteringATenantEvictsTheSupersededComponent() {
-            List<String> evicted = new CopyOnWriteArrayList<>();
-            TenantScopedCache<String> evictionRecording =
-                    new TenantScopedCache<>(countingFactory, (tenant, component) -> evicted.add(component), "a cache");
             evictionRecording.registerTenant(TENANT_A);
             String supersededComponent = evictionRecording.componentFor(TENANT_A);
 
@@ -231,9 +235,6 @@ class TenantScopedCacheTest {
         // Whoever owns the component's lifecycle gets it back on eviction, so it can be released.
         @Test
         void cancellingATenantRegistrationHandsTheComponentToTheEvictionCallback() {
-            List<String> evicted = new CopyOnWriteArrayList<>();
-            TenantScopedCache<String> evictionRecording =
-                    new TenantScopedCache<>(countingFactory, (tenant, component) -> evicted.add(component), "a cache");
             Registration registration = evictionRecording.registerTenant(TENANT_A);
             String component = evictionRecording.componentFor(TENANT_A);
 
@@ -244,14 +245,43 @@ class TenantScopedCacheTest {
 
         @Test
         void cancellingATenantRegistrationWithoutAComponentEvictsNothing() {
-            List<String> evicted = new CopyOnWriteArrayList<>();
-            TenantScopedCache<String> evictionRecording =
-                    new TenantScopedCache<>(countingFactory, (tenant, component) -> evicted.add(component), "a cache");
             Registration registration = evictionRecording.registerTenant(TENANT_A);
 
             assertThat(registration.cancel()).isTrue();
 
             assertThat(evicted).isEmpty();
+        }
+
+        // A component created while its tenant is being unregistered must not outlive that registration, so the
+        // creating thread discards it and hands it over. This is the third eviction path, and the cache owns it.
+        @Test
+        void evictsAComponentCreatedWhileItsTenantIsBeingUnregistered() throws Exception {
+            AtomicReference<TenantScopedCache<String>> cacheRef = new AtomicReference<>();
+            AtomicReference<Registration> registration = new AtomicReference<>();
+            AtomicReference<Thread> unregistration = new AtomicReference<>();
+            TenantScopedCache<String> cache = new TenantScopedCache<>(
+                    tenant -> {
+                        Thread cancelling = new Thread(() -> registration.get().cancel());
+                        unregistration.set(cancelling);
+                        cancelling.start();
+                        // Waits for the registration to be gone, not for the whole cancellation, which cannot finish
+                        // while this creation holds the cache entry being written.
+                        await().atMost(Duration.ofSeconds(5))
+                               .until(() -> !cacheRef.get().tenants().contains(tenant));
+                        return tenant.tenantId() + "-created-late";
+                    },
+                    (tenant, component) -> evicted.add(component),
+                    "a cache");
+            cacheRef.set(cache);
+            registration.set(cache.registerTenant(TENANT_A));
+
+            assertThatThrownBy(() -> cache.componentFor(TENANT_A))
+                    .isInstanceOf(TenantNotResolvedException.class);
+
+            unregistration.get().join(TimeUnit.SECONDS.toMillis(5));
+            assertThat(unregistration.get().isAlive()).isFalse();
+            assertThat(evicted).containsExactly(TENANT_A.tenantId() + "-created-late");
+            assertThat(cache.tenants()).isEmpty();
         }
 
         // Tenant removals reach a component through retained registrations, so a stale one can be cancelled after its

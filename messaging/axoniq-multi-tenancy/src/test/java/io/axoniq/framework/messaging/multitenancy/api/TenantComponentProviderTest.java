@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.messaging.multitenancy.api;
 
-import io.axoniq.framework.messaging.multitenancy.util.TestFixtures;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.junit.jupiter.api.Nested;

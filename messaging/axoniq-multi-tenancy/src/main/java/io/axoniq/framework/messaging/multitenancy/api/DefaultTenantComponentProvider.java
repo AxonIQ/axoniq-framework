@@ -40,9 +40,11 @@ import java.util.Objects;
  * tenants on, nor request components from, this provider on the creating thread.
  * <p>
  * Re-registering a tenant supersedes its previous registration, and cancelling a registration affects only the
- * instance created under it, so a stale cancellation never disturbs a newer registration of the same tenant. The
- * registration bookkeeping this rests on is {@link TenantScopedCache}, which this provider adds the component type and
- * the {@link TenantComponentFactory#destroy(TenantDescriptor, Object) destroy} half of the lifecycle to.
+ * instance created under it, so a stale cancellation never disturbs a newer registration of the same tenant.
+ * <p>
+ * {@link TenantScopedCache} holds that registration bookkeeping. This provider adds the component type it is matched on
+ * and wires in {@link TenantComponentFactory#destroy(TenantDescriptor, Object) destroy}, so an evicted instance is
+ * released rather than only dropped.
  * <p>
  * Internal, because users obtain this provider through
  * {@link TenantComponentProvider#withFactory(Class, TenantComponentFactory)} rather than constructing it directly.
@@ -57,7 +59,7 @@ import java.util.Objects;
 class DefaultTenantComponentProvider<T> implements TenantComponentProvider<T> {
 
     private final Class<T> componentType;
-    private final TenantScopedCache<T> instances;
+    private final TenantScopedCache<T> componentCache;
 
     /**
      * Constructs a provider for the given {@code componentType}, using the given {@code factory} to build and destroy
@@ -71,14 +73,15 @@ class DefaultTenantComponentProvider<T> implements TenantComponentProvider<T> {
                                    TenantComponentFactory<T> factory) {
         this.componentType = Objects.requireNonNull(componentType, "The component type must not be null");
         Objects.requireNonNull(factory, "The factory must not be null");
-        this.instances = new TenantScopedCache<>(factory::create,
-                                                 factory::destroy,
-                                                 "the component provider for type [" + componentType.getName() + "]");
+        this.componentCache = new TenantScopedCache<>(factory::create,
+                                                     factory::destroy,
+                                                     "the component provider for type ["
+                                                             + componentType.getName() + "]");
     }
 
     @Override
     public T componentFor(TenantDescriptor tenant) {
-        return instances.componentFor(tenant);
+        return componentCache.componentFor(tenant);
     }
 
     @Override
@@ -88,22 +91,23 @@ class DefaultTenantComponentProvider<T> implements TenantComponentProvider<T> {
 
     @Override
     public List<TenantDescriptor> tenants() {
-        return instances.tenants();
+        return componentCache.tenants();
     }
 
     @Override
     public Registration registerTenant(TenantDescriptor tenantDescriptor) {
-        return instances.registerTenant(tenantDescriptor);
+        return componentCache.registerTenant(tenantDescriptor);
     }
 
     @Override
     public Registration registerAndStartTenant(TenantDescriptor tenantDescriptor) {
-        return instances.registerAndStartTenant(tenantDescriptor);
+        return componentCache.registerAndStartTenant(tenantDescriptor);
     }
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("componentType", componentType.getName());
-        descriptor.describeProperty("tenants", instances.tenants());
+        // Delegated, so the tenants property cannot drift from how the cache describes it.
+        componentCache.describeTo(descriptor);
     }
 }
