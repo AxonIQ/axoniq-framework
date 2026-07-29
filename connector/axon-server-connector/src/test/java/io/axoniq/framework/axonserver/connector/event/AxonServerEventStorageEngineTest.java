@@ -194,6 +194,50 @@ class AxonServerEventStorageEngineTest {
                     .hasRootCause(cancellation);
         }
 
+        @Test
+        void conditionNotMetIsRecognisedWhenReportedDeeperInTheCauseChain() {
+            // given the same rejection, wrapped by a layer that reports it as the cause rather than throwing it itself
+            Throwable serverFailure = Status.CANCELLED
+                    .withDescription("io.axoniq.axonserver.eventstore.api.ConsistencyConditionException: "
+                                             + "Consistency condition is not met.")
+                    .asRuntimeException();
+            Throwable wrapped = new IllegalStateException("Append transaction failed.",
+                                                          new IllegalStateException("Commit failed.", serverFailure));
+            when(serverTransaction.commit()).thenReturn(CompletableFuture.failedFuture(wrapped));
+
+            // when
+            CompletableFuture<AppendEventsResponse> result = commit();
+
+            // then the rejection is still recognised, two causes down
+            assertThatThrownBy(() -> result.orTimeout(5, TimeUnit.SECONDS).join())
+                    .hasCauseInstanceOf(AppendEventsTransactionRejectedException.class)
+                    .rootCause()
+                    .isSameAs(serverFailure);
+        }
+
+        @Test
+        void aTransportFailureCarryingAnEarlierRejectionAsItsCauseIsNotReportedAsAConsistencyRejection() {
+            // given a lost connection whose cause chain happens to carry an earlier rejection, so the marker is
+            // present even though this append was never decided on
+            Throwable earlierRejection = Status.CANCELLED
+                    .withDescription("io.axoniq.axonserver.eventstore.api.ConsistencyConditionException: "
+                                             + "Consistency condition is not met.")
+                    .asRuntimeException();
+            Throwable transportFailure = Status.UNAVAILABLE.withDescription("io exception")
+                                                           .withCause(earlierRejection)
+                                                           .asRuntimeException();
+            when(serverTransaction.commit()).thenReturn(CompletableFuture.failedFuture(transportFailure));
+
+            // when
+            CompletableFuture<AppendEventsResponse> result = commit();
+
+            // then the failure that terminated the call decides the outcome, so it is undetermined
+            assertThatThrownBy(() -> result.orTimeout(5, TimeUnit.SECONDS).join())
+                    .cause()
+                    .isNotInstanceOf(AppendEventsTransactionRejectedException.class)
+                    .isInstanceOf(EventStoreException.class);
+        }
+
         @SuppressWarnings("unchecked")
         private CompletableFuture<AppendEventsResponse> commit() {
             EventMessage event = new GenericEventMessage(new MessageType(EVENT_NAME, "0.0.1"), "payload");
