@@ -8,21 +8,20 @@ A tenant is represented by a `TenantDescriptor`, identified by its `tenantId`, w
 
 == Enabling multi-tenancy
 
-Multi-tenancy is opt-in through the Configuration API.
-In a Spring Boot application it is auto-configured: with the `axoniq-multi-tenancy` module on the classpath it is active by default, and no code is needed to switch it on.
-When it is not active, the application behaves as a single-tenant application.
+Multi-tenancy is active by default: with the `axoniq-multi-tenancy` module on the classpath, no code or configuration is needed to switch it on.
+Should you want to opt out — for instance because the module is inherited transitively while the application runs single-tenant — you can disable it, after which the application behaves as a single-tenant application.
 
 [tabs]
 ====
 Declarative - Configuration API::
 +
 --
-Register the `MultiTenancyEnabled` component on the configurer to activate multi-tenancy:
+Disable multi-tenancy on the configurer:
 
 [source,java]
 ----
-public void enableMultiTenancy(MessagingConfigurer configurer) {
-    configurer.componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer);
+public void disableMultiTenancy(MessagingConfigurer configurer) {
+    configurer.componentRegistry(MultiTenancyConfigurationUtils::disableMultiTenancy);
 }
 ----
 --

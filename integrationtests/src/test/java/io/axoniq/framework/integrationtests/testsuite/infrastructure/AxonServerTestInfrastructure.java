@@ -20,6 +20,7 @@
 package io.axoniq.framework.integrationtests.testsuite.infrastructure;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
 import org.axonframework.common.configuration.ComponentRegistry;
@@ -76,6 +77,7 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
     }
 
     private final List<Consumer<ComponentRegistry>> infrastructureConfigurators;
+    private final boolean multiTenancyEnabled;
 
     public AxonServerTestInfrastructure() {
         this(Collections.emptyList());
@@ -100,7 +102,32 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
      *                                    called.
      */
     public AxonServerTestInfrastructure(List<Consumer<ComponentRegistry>> infrastructureConfigurators) {
+        this(infrastructureConfigurators, false);
+    }
+
+    private AxonServerTestInfrastructure(List<Consumer<ComponentRegistry>> infrastructureConfigurators,
+                                         boolean multiTenancyEnabled) {
         this.infrastructureConfigurators = infrastructureConfigurators;
+        this.multiTenancyEnabled = multiTenancyEnabled;
+    }
+
+    /**
+     * Creates a new {@code AxonServerTestInfrastructure} instance that leaves multi-tenancy active.
+     * <p>
+     * This module carries {@code axoniq-multi-tenancy} on its classpath, so its enhancers reach every configuration
+     * built here through the {@link java.util.ServiceLoader}. Tests that are not about multi-tenancy get it switched
+     * off, keeping their configuration free of components they do not exercise. Multi-tenancy tests use this factory
+     * to keep it.
+     *
+     * @param infrastructureConfigurators to be executed when {@link #configureInfrastructure(ComponentRegistry)} is
+     *                                    called.
+     * @return an {@code AxonServerTestInfrastructure} that keeps multi-tenancy active
+     */
+    @SafeVarargs
+    public static AxonServerTestInfrastructure multiTenant(
+            Consumer<ComponentRegistry>... infrastructureConfigurators
+    ) {
+        return new AxonServerTestInfrastructure(List.of(infrastructureConfigurators), true);
     }
 
     @Override
@@ -119,6 +146,9 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
                 .servers(CONTAINER.getHost() + ":" + CONTAINER.getGrpcPort());
 
         registry.registerComponent(AxonServerConfiguration.class, c -> builder.build());
+        if (!multiTenancyEnabled) {
+            MultiTenancyConfigurationUtils.disableMultiTenancy(registry);
+        }
         infrastructureConfigurators.forEach(configurator -> configurator.accept(registry));
     }
 

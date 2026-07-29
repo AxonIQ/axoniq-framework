@@ -34,7 +34,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantProvider;
 import io.axoniq.framework.messaging.multitenancy.axonserver.commandhandling.MultiTenantAxonServerCommandBusConnector;
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
+import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
@@ -68,8 +68,8 @@ import static org.mockito.Mockito.*;
 
 /**
  * Verifies the {@link AxonServerMultiTenancyConfigurationDefaults} against a real {@link MessagingConfigurer}: the
- * Axon Server-backed multi-tenancy components are wired for a given configuration, and the enhancer only acts when
- * multi-tenancy is enabled.
+ * Axon Server-backed multi-tenancy components are wired for a given configuration out of the box, and stay away once
+ * multi-tenancy is disabled.
  *
  * @author Jan Galinski
  * @author Jakob Hatzl
@@ -83,9 +83,12 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
     }
 
     @Test
-    void enhanceIsANoOpWhenMultiTenancyIsNotEnabled() {
+    void enhanceIsANoOpWhenMultiTenancyIsDisabled() {
         // when
-        AxonConfiguration configuration = MessagingConfigurer.create().build();
+        AxonConfiguration configuration =
+                MessagingConfigurer.create()
+                                   .componentRegistry(MultiTenancyConfigurationUtils::disableMultiTenancy)
+                                   .build();
 
         // then none of the Axon Server-backed multi-tenancy defaults were registered
         assertThat(configuration.hasComponent(TenantProvider.class)).isFalse();
@@ -105,7 +108,6 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         @BeforeEach
         void buildConfiguration() {
             configuration = MessagingConfigurer.create()
-                                               .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                                .componentRegistry(registry -> registry.registerComponent(
                                                        TenantComponentProvider.class,
                                                        config -> componentProvider))
@@ -168,8 +170,7 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
             MessagingConfigurer configurer =
                     MessagingConfigurer.create()
                                        .componentRegistry(registry -> registry.registerComponent(
-                                               SnapshotStore.class, config -> singleTenantStore))
-                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer);
+                                               SnapshotStore.class, config -> singleTenantStore));
 
             assertThatThrownBy(configurer::build)
                     .isInstanceOf(AxonConfigurationException.class)
@@ -191,7 +192,6 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         void buildAndStartConfiguration() {
             tenantProvider.addTenant(TENANT_A);
             configuration = MessagingConfigurer.create()
-                                               .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                                .componentRegistry(registry -> registry
                                                        .registerComponent(TenantProvider.class,
                                                                           config -> tenantProvider)
@@ -322,7 +322,6 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
             when(adminChannel.subscribeToContextUpdates()).thenReturn(contextUpdates);
 
             configuration = MessagingConfigurer.create()
-                                               .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                                .componentRegistry(registry -> registry
                                                        .registerComponent(AxonServerConnectionManager.class,
                                                                           config -> connectionManager)

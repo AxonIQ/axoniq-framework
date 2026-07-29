@@ -25,7 +25,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
@@ -45,9 +44,7 @@ import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 import org.axonframework.modelling.annotation.InjectEntity;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.concurrent.TimeUnit;
 
@@ -65,7 +62,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>
  * The engine's routing given a resolved tenant is covered by
  * {@link io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngineTest}, and the Axon
- * Server wiring that registers the engine by {@link AxonServerMultiTenancyConfigurationDefaultsTest}. This
+ * Server wiring that registers the engine by {@code AxonServerMultiTenancyConfigurationDefaultsTest}. This
  * test closes the gap between them by driving a real {@link CommandGateway} through the whole write path: a course
  * filled in one tenant must not make the same course identifier appear full in another. Each tenant is backed by its
  * own {@link InMemoryEventStorageEngine}, so a routing leak would source another tenant's events and fail the test.
@@ -108,7 +105,6 @@ class PerTenantEventStorageIsolationTest {
                                              .commandHandlers()
                                              .autodetectedCommandHandlingComponent(config -> new CourseCommandHandler()))
                 .componentRegistry(registry -> {
-                    MultiTenancyEnabled.enableMultiTenancyEnhancer(registry);
                     // Keep the whole flow in memory: no Axon Server command bus or event store, so the routing engine
                     // registered below is the one the command handling exercises.
                     registry.disableEnhancer(AxonServerConfigurationEnhancer.class)

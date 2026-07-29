@@ -22,6 +22,7 @@ package io.axoniq.framework.postgresql;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
+import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils;
 import io.axoniq.license.entitlement.EnforcingEntitlementManager;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.eventsourcing.SnapshottingEntityLifecycleHandlerTestSuite;
@@ -90,6 +91,9 @@ class PostgresqlBackedSnapshotterIT extends SnapshottingEntityLifecycleHandlerTe
         // Axon Server connector is on the classpath in this module; disable its enhancer so it
         // doesn't register an AxonServerConnectionManager that attempts to reach a non-existent server.
         registry.disableEnhancer(AxonServerConfigurationEnhancer.class);
+        // Multi-tenancy is on the classpath too, and is Axon Server-backed; disable its enhancers for the
+        // same reason.
+        MultiTenancyConfigurationUtils.disableMultiTenancy(registry);
 
         registry.registerComponent(
                 EventStorageEngine.class,

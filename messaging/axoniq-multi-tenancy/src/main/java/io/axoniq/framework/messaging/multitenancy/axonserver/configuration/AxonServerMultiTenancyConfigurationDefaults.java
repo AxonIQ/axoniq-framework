@@ -57,8 +57,6 @@ import org.jspecify.annotations.Nullable;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
-import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled.isEnabled;
-
 /**
  * {@link ConfigurationEnhancer} registering the default Axon Server-backed multi-tenancy components:
  * <ul>
@@ -72,6 +70,11 @@ import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTena
  * </ul>
  * It also disables the {@link SnapshotSourcingConfigurationEnhancer}, since snapshot sourcing is composed per tenant by
  * the routing engine rather than once for the application.
+ * <p>
+ * Contributed through the {@link java.util.ServiceLoader}, so multi-tenancy is active as soon as the
+ * {@code axoniq-multi-tenancy} module is on the classpath. Use
+ * {@link io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils#disableMultiTenancy(ComponentRegistry)}
+ * to opt out, for instance when running against an infrastructure without Axon Server.
  *
  * @author Jan Galinski
  * @author Laura Devriendt
@@ -98,11 +101,6 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
 
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
-        // TODO: see #258 - find a way that is not user facing but only needed for our mixed-scope itests.
-        if (!isEnabled(componentRegistry)) {
-            return;
-        }
-
         // Register the Axon Server TenantProvider, which is the default implementation for multi-tenancy in Axon Server.
         componentRegistry.registerIfNotPresent(axonServerTenantProvider(), SearchScope.ALL);
 

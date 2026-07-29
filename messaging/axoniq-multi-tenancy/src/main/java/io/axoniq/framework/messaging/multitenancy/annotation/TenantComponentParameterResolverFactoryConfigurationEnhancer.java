@@ -27,12 +27,30 @@ import org.axonframework.messaging.core.configuration.reflection.ParameterResolv
 /**
  * Configuration enhancer that registers the {@link TenantComponentParameterResolverFactory} to the
  * {@link ComponentRegistry} of the {@link org.axonframework.common.configuration.Configuration}
+ * <p>
+ * Contributed through the {@link java.util.ServiceLoader}, so multi-tenancy is active as soon as the
+ * {@code axoniq-multi-tenancy} module is on the classpath. Use
+ * {@link io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils#disableMultiTenancy(ComponentRegistry)}
+ * to opt out.
  *
  * @author Jakob Hatzl
  * @since 5.3.0
  */
 @Internal
 public class TenantComponentParameterResolverFactoryConfigurationEnhancer implements ConfigurationEnhancer {
+
+    /**
+     * The order of {@code this} enhancer compared to others.
+     * <p>
+     * Runs in the same early block as the other multi-tenancy enhancers, so all multi-tenancy defaults are in place
+     * before other enhancers and user registrations that build on them.
+     */
+    public static final int ENHANCER_ORDER = Integer.MIN_VALUE + 6;
+
+    @Override
+    public int order() {
+        return ENHANCER_ORDER;
+    }
 
     @Override
     public void enhance(ComponentRegistry registry) {

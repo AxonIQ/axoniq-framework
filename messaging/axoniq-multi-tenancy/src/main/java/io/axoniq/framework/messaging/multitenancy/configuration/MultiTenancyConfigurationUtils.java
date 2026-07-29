@@ -22,10 +22,10 @@ package io.axoniq.framework.messaging.multitenancy.configuration;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import org.axonframework.common.configuration.ComponentRegistry;
+import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.core.Message;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -36,42 +36,42 @@ import java.util.function.Consumer;
  */
 public final class MultiTenancyConfigurationUtils {
 
-    private static final Logger logger = LoggerFactory.getLogger(MultiTenancyConfigurationUtils.class);
+    /**
+     * Fully qualified class names of the multi-tenancy {@link ConfigurationEnhancer ConfigurationEnhancers} living
+     * outside this package, referenced as {@code String} rather than as class literals to keep this package free of
+     * dependencies on the packages that already depend on it. The
+     * {@link ComponentRegistry#disableEnhancer(String)} overload accepts exactly this form.
+     * <p>
+     * The end-to-end disabling behaviour is covered by the tests of the individual enhancers, so a rename that is not
+     * reflected here does not pass unnoticed.
+     */
+    private static final List<String> EXTERNAL_ENHANCER_CLASS_NAMES = List.of(
+            "io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults",
+            "io.axoniq.framework.messaging.multitenancy.annotation.TenantComponentParameterResolverFactoryConfigurationEnhancer"
+    );
 
     /**
-     * To selectively enable the {@link MultiTenancyConfigurationDefaults} enhancer in a {@link ComponentRegistry}, use
-     * this enum to indicate whether multi-tenancy is enabled or disabled.
-     * TODO: We need a more general approach to control this, see issue #258.
+     * Switches multi-tenancy off for the given {@code componentRegistry}.
+     * <p>
+     * Multi-tenancy is active as soon as the {@code axoniq-multi-tenancy} module is on the classpath, since its
+     * {@link ConfigurationEnhancer ConfigurationEnhancers} are contributed through the {@link java.util.ServiceLoader}.
+     * Use this method to opt out, for instance in an application that carries the module transitively but runs
+     * single-tenant:
+     * <pre>{@code
+     * MessagingConfigurer.create()
+     *                    .componentRegistry(MultiTenancyConfigurationUtils::disableMultiTenancy);
+     * }</pre>
+     * <p>
+     * Disabling only takes effect as long as the multi-tenancy enhancers have not run yet. Applying this method
+     * directly to a {@code ComponentRegistry} is therefore always safe, as enhancers run at build time. Applying it
+     * from within another {@link ConfigurationEnhancer} requires that enhancer to have a lower
+     * {@link ConfigurationEnhancer#order()} than {@link MultiTenancyConfigurationDefaults#ENHANCER_ORDER}.
+     *
+     * @param componentRegistry the {@link ComponentRegistry} to disable multi-tenancy in
      */
-    public enum MultiTenancyEnabled {
-        /**
-         * Indicates that multi-tenancy is enabled in the {@link ComponentRegistry}.
-         */
-        ENABLED;
-
-        /**
-         * Enables the {@link MultiTenancyConfigurationDefaults} enhancer in a {@link ComponentRegistry}.
-         *
-         * @param componentRegistry the {@link ComponentRegistry} to enable the enhancer in
-         */
-        public static void enableMultiTenancyEnhancer(ComponentRegistry componentRegistry) {
-            componentRegistry.registerIfNotPresent(MultiTenancyEnabled.class, c -> MultiTenancyEnabled.ENABLED);
-        }
-
-        /**
-         * Checks whether multi-tenancy is enabled in a {@link ComponentRegistry}.
-         *
-         * @param componentRegistry the {@link ComponentRegistry} to check
-         * @return {@code true} if multi-tenancy is enabled, {@code false} otherwise
-         */
-        public static boolean isEnabled(ComponentRegistry componentRegistry) {
-            if (componentRegistry.hasComponent(MultiTenancyEnabled.class)) {
-                return true;
-            }
-            logger.info(
-                    "Multi-tenancy is disabled. To enable it, register the MultiTenancyEnabled component in the ComponentRegistry.");
-            return false;
-        }
+    public static void disableMultiTenancy(ComponentRegistry componentRegistry) {
+        componentRegistry.disableEnhancer(MultiTenancyConfigurationDefaults.class);
+        EXTERNAL_ENHANCER_CLASS_NAMES.forEach(componentRegistry::disableEnhancer);
     }
 
     /**

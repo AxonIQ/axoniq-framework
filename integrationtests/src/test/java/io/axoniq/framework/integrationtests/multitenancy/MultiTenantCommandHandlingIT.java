@@ -26,7 +26,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.DefaultAxonApplication;
 import org.axonframework.messaging.commandhandling.CommandMessage;
@@ -67,7 +66,7 @@ import static org.awaitility.Awaitility.await;
 @ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
 class MultiTenantCommandHandlingIT {
 
-    private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
+    private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
     private static final String TENANT_A = "tenant-A";
     private static final String TENANT_B = "tenant-B";
 
@@ -96,7 +95,6 @@ class MultiTenantCommandHandlingIT {
 
         application = new DefaultAxonApplication()
                 .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                 .componentRegistry(registerTenantResolver(new MetadataBasedTenantResolver()))
                 .componentRegistry(registerTenantConnectPredicate(d -> !Set.of(ADMIN_CONTEXT, DEFAULT_CONTEXT)
                                                                            .contains(d.tenantId())))

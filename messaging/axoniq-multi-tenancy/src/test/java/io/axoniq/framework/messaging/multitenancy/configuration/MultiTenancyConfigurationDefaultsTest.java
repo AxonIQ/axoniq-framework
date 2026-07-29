@@ -27,11 +27,9 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
-import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.interception.HandlerInterceptorRegistry;
@@ -46,8 +44,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Verifies the {@link MultiTenancyConfigurationDefaults} against a real {@link MessagingConfigurer}: the generic,
- * backend-agnostic multi-tenancy components are wired for a given configuration, and the enhancer only acts when
- * multi-tenancy is enabled.
+ * backend-agnostic multi-tenancy components are wired for a given configuration out of the box, and stay away once
+ * multi-tenancy is disabled.
  *
  * @author Jan Galinski
  * @author Jakob Hatzl
@@ -61,9 +59,12 @@ class MultiTenancyConfigurationDefaultsTest {
     }
 
     @Test
-    void enhanceIsANoOpWhenMultiTenancyIsNotEnabled() {
+    void enhanceIsANoOpWhenMultiTenancyIsDisabled() {
         // when
-        AxonConfiguration configuration = MessagingConfigurer.create().build();
+        AxonConfiguration configuration =
+                MessagingConfigurer.create()
+                                   .componentRegistry(MultiTenancyConfigurationUtils::disableMultiTenancy)
+                                   .build();
 
         // then none of the multi-tenancy defaults were registered
         assertThat(configuration.hasComponent(TenantResolver.class)).isFalse();
@@ -73,6 +74,31 @@ class MultiTenancyConfigurationDefaultsTest {
                 .noneMatch(RegisterTenantDescriptorHandlerInterceptor.class::isInstance);
         assertThat(interceptorRegistry.queryInterceptors(configuration, TenantAwareQueryHandler.class, "handle"))
                 .noneMatch(RegisterTenantDescriptorHandlerInterceptor.class::isInstance);
+    }
+
+    @Test
+    void disablingMultiTenancyAlsoDisablesTheEnhancersOutsideThisPackage() throws Exception {
+        // given a tenant-scoped component that would be resolvable while multi-tenancy is active
+        TenantComponentProvider<CourseRepository> componentProvider =
+                TenantComponentProvider.withFactory(CourseRepository.class, CourseRepository::new);
+
+        // when
+        AxonConfiguration configuration =
+                MessagingConfigurer.create()
+                                   .componentRegistry(MultiTenancyConfigurationUtils::disableMultiTenancy)
+                                   .componentRegistry(registry -> registry.registerComponent(
+                                           TenantComponentProvider.class,
+                                           config -> componentProvider))
+                                   .build();
+
+        // then the Axon Server-backed tenant provider is absent...
+        assertThat(configuration.hasComponent(TenantProvider.class)).isFalse();
+        // ...and nothing resolves the tenant-scoped handler parameter anymore
+        ParameterResolverFactory factory = configuration.getComponent(ParameterResolverFactory.class);
+        Method handler = TenantAwareCommandHandler.class.getDeclaredMethod("handle",
+                                                                           String.class,
+                                                                           CourseRepository.class);
+        assertThat(factory.createInstance(handler, handler.getParameters(), 1)).isNull();
     }
 
     @Nested
@@ -86,7 +112,6 @@ class MultiTenancyConfigurationDefaultsTest {
         @BeforeEach
         void buildConfiguration() {
             configuration = MessagingConfigurer.create()
-                                               .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                                .componentRegistry(registry -> registry.registerComponent(
                                                        TenantComponentProvider.class,
                                                        config -> componentProvider))
@@ -108,21 +133,6 @@ class MultiTenancyConfigurationDefaultsTest {
         void registersTheTenantComponentProviderSubscriber() {
             assertThat(configuration.getComponent(TenantComponentProviderSubscriber.class)).isNotNull();
         }
-
-        @Test
-        void registersAParameterResolverFactoryThatResolvesTenantScopedComponentParameters() throws Exception {
-            // given
-            ParameterResolverFactory factory = configuration.getComponent(ParameterResolverFactory.class);
-            Method handler = SampleHandlers.class.getDeclaredMethod("handle", CourseRepository.class);
-
-            // when
-            ParameterResolver<?> resolver = factory.createInstance(handler, handler.getParameters(), 0);
-
-            // then
-            assertThat(resolver)
-                    .extracting("provider")
-                    .isInstanceOf(TenantComponentProvider.class);
-        }
     }
 
     @Nested
@@ -138,7 +148,6 @@ class MultiTenancyConfigurationDefaultsTest {
         void buildAndStartConfiguration() {
             tenantProvider.addTenant(TENANT_A);
             configuration = MessagingConfigurer.create()
-                                               .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                                .componentRegistry(registry -> registry
                                                        .registerComponent(TenantProvider.class,
                                                                           config -> tenantProvider)
@@ -192,7 +201,6 @@ class MultiTenancyConfigurationDefaultsTest {
         void buildAndStartConfiguration() {
             tenantProvider.addTenant(TENANT_A);
             configuration = MessagingConfigurer.create()
-                                               .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                                .componentRegistry(registry -> registry
                                                        .registerComponent(TenantProvider.class,
                                                                           config -> tenantProvider)
@@ -226,8 +234,9 @@ class MultiTenancyConfigurationDefaultsTest {
 
     @SuppressWarnings("unused")
     private static final class SampleHandlers {
+
         void handle(@TenantScoped CourseRepository repository) {
-            // Reflection target only. The parameter type drives the matching under test.
+            // Reflection target only, for a handler that is neither a command nor a query handler.
         }
     }
 

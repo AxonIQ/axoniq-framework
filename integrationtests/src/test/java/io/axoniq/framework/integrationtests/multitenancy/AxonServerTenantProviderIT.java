@@ -26,7 +26,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantProvider;
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingTenantAwareComponent;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.DefaultAxonApplication;
@@ -45,9 +44,7 @@ import static org.awaitility.Awaitility.await;
 @Timeout(60)
 class AxonServerTenantProviderIT {
 
-    private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure(
-            MultiTenancyEnabled::enableMultiTenancyEnhancer
-    );
+    private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
 
     private AxonServerTestInfrastructure.ContextManager contextManager;
 
