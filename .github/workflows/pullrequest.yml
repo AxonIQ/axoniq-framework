@@ -9,6 +9,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   build:
     name: Test and Build on JDK ${{ matrix.java-version }}
@@ -22,6 +26,11 @@ jobs:
             sonar-enabled: false
           - java-version: 25
             sonar-enabled: false
+
+    env:
+      # Cap the Maven JVM's own heap so it, plus the two surefire/failsafe forks, don't collectively
+      # over-commit the runner's memory and get OOM-killed.
+      MAVEN_OPTS: -Xmx768m -XX:MaxMetaspaceSize=256m
 
     steps:
       - name: Checkout code
@@ -45,6 +54,12 @@ jobs:
           echo "License file size: $(wc -c < integrationtests/src/test/resources/axon-server-test.license) bytes"
         env:
           AXON_SERVER_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
+
+      - name: Start memory monitor
+        run: |
+          mkdir -p /tmp/memlog
+          bash .github/scripts/memory-monitor.sh /tmp/memlog/memory.csv 5 >> /tmp/memlog/monitor-debug.log 2>&1 &
+          echo $! > /tmp/memlog/monitor.pid
 
       - name: Regular Build
         if: ${{ !matrix.sonar-enabled }}
@@ -77,3 +92,59 @@ jobs:
           paths: "**/target/surefire-reports/TEST-*.xml"
           show: "fail, skip"
         if: always() # This allows the build step to fail -- due to failing tests -- but still produce a test summary.
+
+      - name: Stop memory monitor
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f /tmp/memlog/monitor.pid ]; then
+            kill "$(cat /tmp/memlog/monitor.pid)" 2>/dev/null || true
+          fi
+
+      - name: Set up Python for memory report
+        if: ${{ !cancelled() }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      - name: Generate memory report
+        if: ${{ !cancelled() }}
+        run: |
+          if [ ! -f /tmp/memlog/memory.csv ]; then
+            mkdir -p /tmp/memlog
+            echo "timestamp,metric,name,value_mib,limit_mib,detail" > /tmp/memlog/memory.csv
+          fi
+          pip install --quiet matplotlib
+          python .github/scripts/plot_memory.py \
+            --csv /tmp/memlog/memory.csv \
+            --out-chart /tmp/memlog/memory-chart.png \
+            --out-comment /tmp/memlog/comment.md \
+            --jdk ${{ matrix.java-version }} \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Post memory report comment
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MARKER="<!-- memory-report:jdk-${{ matrix.java-version }} -->"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          REPO="${{ github.repository }}"
+          EXISTING_ID=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" | head -1)
+          if [ -n "$EXISTING_ID" ]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${EXISTING_ID}" -F body=@/tmp/memlog/comment.md
+          else
+            gh api -X POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -F body=@/tmp/memlog/comment.md
+          fi
+
+      - name: Upload memory usage log
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: memory-report-jdk${{ matrix.java-version }}
+          path: |
+            /tmp/memlog/memory.csv
+            /tmp/memlog/memory-chart.png
+            /tmp/memlog/monitor-debug.log
+          retention-days: 7
+          if-no-files-found: warn

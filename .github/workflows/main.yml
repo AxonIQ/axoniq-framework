@@ -24,6 +24,11 @@ jobs:
             sonar-enabled: false
             deploy-enabled: false
 
+    env:
+      # Cap the Maven JVM's own heap so it, plus the two surefire/failsafe forks, don't collectively
+      # over-commit the runner's memory and get OOM-killed.
+      MAVEN_OPTS: -Xmx768m -XX:MaxMetaspaceSize=256m
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v7

@@ -49,6 +49,11 @@
             -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar
         </mockito.agent.argLine>
 
+        <!-- Explicit heap/metaspace caps for forked test JVMs, so total memory use across concurrent forks is
+             predictable instead of relying on each JVM's default ergonomics (25% of visible host memory). -->
+        <surefire.jvm.argLine>-Xmx1536m -XX:MaxMetaspaceSize=512m</surefire.jvm.argLine>
+        <failsafe.jvm.argLine>-Xmx1536m -XX:MaxMetaspaceSize=512m</failsafe.jvm.argLine>
+
         <!-- Database -->
         <c3p0.version>0.9.1.2</c3p0.version>
         <hikari.version>7.1.0</hikari.version>
@@ -624,7 +629,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire.version}</version>
                 <configuration>
-                    <argLine>${mockito.agent.argLine} -Djava.awt.headless=true</argLine>
+                    <argLine>${surefire.jvm.argLine} ${mockito.agent.argLine} -Djava.awt.headless=true</argLine>
                     <systemPropertyVariables>
                         <slf4j.version>${slf4j.version}</slf4j.version>
                         <log4j.version>${log4j.version}</log4j.version>
@@ -710,7 +715,7 @@
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
                             <!--suppress MavenModelInspection -->
-                            <argLine>-Djava.awt.headless=true ${surefireArgLine} ${mockito.agent.argLine}</argLine>
+                            <argLine>-Djava.awt.headless=true ${surefire.jvm.argLine} ${surefireArgLine} ${mockito.agent.argLine}</argLine>
                         </configuration>
                     </plugin>
                 </plugins>
@@ -758,7 +763,7 @@
                                 </goals>
                                 <configuration>
                                     <!--suppress MavenModelInspection -->
-                                    <argLine>-Djava.awt.headless=true ${failsafeArgLine} ${mockito.agent.argLine}
+                                    <argLine>-Djava.awt.headless=true ${failsafe.jvm.argLine} ${failsafeArgLine} ${mockito.agent.argLine}
                                     </argLine>
                                     <systemPropertyVariables>
                                         <test.forkNumber>${surefire.forkNumber}</test.forkNumber>
