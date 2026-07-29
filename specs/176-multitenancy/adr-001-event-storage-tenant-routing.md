@@ -41,7 +41,7 @@ Verified against Axon Framework `main` (`5fca18d34e`). The `appendEvents` and `s
 
 This drops the separate `MultiTenantStreamableEventSource`, the engine-to-source adapter, and `DynamicSourcesTrackingToken`. That wrapper token only existed because `MultiStreamableEventSource.open()` rejects any token that is not a `MultiSourceTrackingToken`. Merging natively removes the constraint.
 
-The token must still be union-tolerant. A source that only one side knows is treated as at its beginning, because the processor's coordinator compares persisted tokens outside the engine. That tolerance is confined to this module-owned token, so the shared `MultiSourceTrackingToken` guardrail stays intact (the reasoning is in the [ADR 002 addendum](adr-002-addendum-dynamic-sources-token.md)). Its class name lands in customer token stores, so a later rename needs a legacy type mapping.
+The token must still be union-tolerant. A source that only one side knows is treated as at its beginning, because the processor's coordinator compares persisted tokens outside the engine. That tolerance is confined to this module-owned token, so the shared `MultiSourceTrackingToken` guardrail stays intact (the reasoning is in the [ADR 002 addendum](adr-002-addendum-multi-tenant-token.md)). Its class name lands in customer token stores, so a later rename needs a legacy type mapping.
 
 ## Snapshots
 

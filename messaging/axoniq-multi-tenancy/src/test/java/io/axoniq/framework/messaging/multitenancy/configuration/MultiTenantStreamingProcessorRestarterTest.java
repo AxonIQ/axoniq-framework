@@ -1,0 +1,320 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+
+package io.axoniq.framework.messaging.multitenancy.configuration;
+
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
+import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.util.RecordingStreamingEventProcessor;
+import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
+import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.common.configuration.ComponentRegistry;
+import org.axonframework.common.infra.MockComponentDescriptor;
+import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+
+import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
+import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+/**
+ * Tests that {@link MultiTenantStreamingProcessorRestarter} restarts running streaming event processors on tenant
+ * changes, coalesces bursts, isolates a failing processor from the rest, and stops cleanly.
+ *
+ * @author Laura Devriendt
+ */
+class MultiTenantStreamingProcessorRestarterTest {
+
+    private final StubTenantProvider tenantProvider = new StubTenantProvider();
+    private final RecordingStreamingEventProcessor runningProcessor =
+            new RecordingStreamingEventProcessor("running-processor", true);
+    private final RecordingStreamingEventProcessor stoppedProcessor =
+            new RecordingStreamingEventProcessor("stopped-processor", false);
+
+    private AxonConfiguration configuration;
+    private MultiTenantStreamingProcessorRestarter testSubject;
+
+    @BeforeEach
+    void setUp() {
+        configuration = configurationWith(registry -> registry
+                .registerComponent(StreamingEventProcessor.class, runningProcessor.name(), config -> runningProcessor)
+                .registerComponent(StreamingEventProcessor.class, stoppedProcessor.name(), config -> stoppedProcessor));
+        configuration.start();
+        testSubject = new MultiTenantStreamingProcessorRestarter(configuration);
+    }
+
+    @AfterEach
+    void tearDown() {
+        testSubject.stop();
+        configuration.shutdown();
+    }
+
+    private AxonConfiguration configurationWith(Consumer<ComponentRegistry> components) {
+        return MessagingConfigurer.create()
+                                  .componentRegistry(registry -> {
+                                      registry.disableEnhancerScanning()
+                                              .registerComponent(TenantProvider.class, config -> tenantProvider)
+                                              .registerComponent(MultiTenantProcessorRestartConfiguration.class,
+                                                                 config -> MultiTenantProcessorRestartConfiguration.DEFAULT);
+                                      components.accept(registry);
+                                  })
+                                  .build();
+    }
+
+    private static long restartCount(MultiTenantStreamingProcessorRestarter restarter) {
+        MockComponentDescriptor descriptor = new MockComponentDescriptor();
+        restarter.describeTo(descriptor);
+        return (long) descriptor.getDescribedProperties().get("restartCount");
+    }
+
+    @Nested
+    class RestartTriggering {
+
+        @Test
+        void restartsRunningProcessorWhenTenantAddedAtRuntime() {
+            testSubject.start();
+
+            tenantProvider.addTenant(TENANT_A);
+
+            await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> {
+                assertThat(runningProcessor.shutdownCount()).isGreaterThanOrEqualTo(1);
+                assertThat(runningProcessor.startCount()).isGreaterThanOrEqualTo(1);
+            });
+            assertThat(runningProcessor.isRunning()).isTrue();
+        }
+
+        @Test
+        void doesNotRestartAProcessorThatIsNotRunning() {
+            testSubject.start();
+
+            tenantProvider.addTenant(TENANT_A);
+
+            // the running processor is restarted, proving the restart cycle ran and iterated all processors
+            await().atMost(Duration.ofSeconds(2))
+                   .untilAsserted(() -> assertThat(runningProcessor.startCount()).isGreaterThanOrEqualTo(1));
+            // while the stopped processor was left untouched
+            assertThat(stoppedProcessor.startCount()).isZero();
+            assertThat(stoppedProcessor.shutdownCount()).isZero();
+        }
+
+        @Test
+        void doesNotRestartWhenATenantChangesBeforeStart() {
+            // no start(), so the restarter is not subscribed and ignores tenant changes
+            tenantProvider.addTenant(TENANT_A);
+
+            assertThat(runningProcessor.startCount()).isZero();
+            assertThat(runningProcessor.shutdownCount()).isZero();
+        }
+    }
+
+    @Nested
+    class Coalescing {
+
+        @Test
+        void coalescesABurstOfTenantChangesIntoFarFewerRestartsThanChanges() throws InterruptedException {
+            // The first restart blocks inside the processor shutdown until released, so a burst of changes arrives
+            // while a cycle is already running and can only collapse into a single follow-up cycle.
+            CountDownLatch firstRestartReached = new CountDownLatch(1);
+            CountDownLatch releaseFirstRestart = new CountDownLatch(1);
+            AtomicBoolean firstShutdown = new AtomicBoolean(true);
+            RecordingStreamingEventProcessor gatedProcessor = new RecordingStreamingEventProcessor("gated", true) {
+                @Override
+                public CompletableFuture<Void> shutdown() {
+                    if (firstShutdown.compareAndSet(true, false)) {
+                        firstRestartReached.countDown();
+                        awaitUninterruptibly(releaseFirstRestart);
+                    }
+                    return super.shutdown();
+                }
+            };
+            AxonConfiguration gatedConfiguration = configurationWith(registry -> registry.registerComponent(
+                    StreamingEventProcessor.class, gatedProcessor.name(), config -> gatedProcessor));
+            gatedConfiguration.start();
+            MultiTenantStreamingProcessorRestarter gatedSubject =
+                    new MultiTenantStreamingProcessorRestarter(gatedConfiguration);
+            gatedSubject.start();
+            try {
+                tenantProvider.addTenant(TENANT_A);
+                assertThat(firstRestartReached.await(2, TimeUnit.SECONDS)).isTrue();
+
+                int burst = 8;
+                for (int index = 0; index < burst; index++) {
+                    tenantProvider.addTenant(new TenantDescriptor("burst-tenant-" + index));
+                }
+                releaseFirstRestart.countDown();
+
+                // The blocked cycle and the single coalesced follow-up each restart the processor once, so its second
+                // start marks the burst as fully drained.
+                await().atMost(Duration.ofSeconds(2))
+                       .untilAsserted(() -> assertThat(gatedProcessor.startCount()).isGreaterThanOrEqualTo(2));
+                // Two restarts in total, far fewer than the nine tenant changes that each requested one.
+                assertThat(restartCount(gatedSubject)).isGreaterThanOrEqualTo(2).isLessThan(1 + burst);
+            } finally {
+                gatedSubject.stop();
+                gatedConfiguration.shutdown();
+            }
+        }
+    }
+
+    @Nested
+    class FailureIsolation {
+
+        @Test
+        void aFailingProcessorDoesNotSkipTheOthersInTheSameCycle() {
+            // Both processors fail their restart. A single tenant change is a single cycle iterating both. Without
+            // per-processor isolation the first failure would abort the cycle and the other would never be attempted,
+            // so asserting both are attempted proves the isolation regardless of the order they are iterated in.
+            AtomicInteger firstShutdowns = new AtomicInteger();
+            AtomicInteger secondShutdowns = new AtomicInteger();
+            StreamingEventProcessor firstFailing = failingProcessor("failing-one", firstShutdowns);
+            StreamingEventProcessor secondFailing = failingProcessor("failing-two", secondShutdowns);
+            AxonConfiguration mixedConfiguration = configurationWith(registry -> registry
+                    .registerComponent(StreamingEventProcessor.class, firstFailing.name(), config -> firstFailing)
+                    .registerComponent(StreamingEventProcessor.class, secondFailing.name(), config -> secondFailing));
+            mixedConfiguration.start();
+            MultiTenantStreamingProcessorRestarter mixedSubject =
+                    new MultiTenantStreamingProcessorRestarter(mixedConfiguration);
+            mixedSubject.start();
+            try {
+                tenantProvider.addTenant(TENANT_A);
+
+                await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> {
+                    assertThat(firstShutdowns.get()).isGreaterThanOrEqualTo(1);
+                    assertThat(secondShutdowns.get()).isGreaterThanOrEqualTo(1);
+                });
+            } finally {
+                mixedSubject.stop();
+                mixedConfiguration.shutdown();
+            }
+        }
+
+        @Test
+        void keepsProcessingLaterTenantChangesAfterAProcessorFailsToRestart() {
+            AtomicInteger shutdownAttempts = new AtomicInteger();
+            StreamingEventProcessor failingProcessor = failingProcessor("failing", shutdownAttempts);
+            AxonConfiguration failingConfiguration = configurationWith(registry -> registry.registerComponent(
+                    StreamingEventProcessor.class, failingProcessor.name(), config -> failingProcessor));
+            failingConfiguration.start();
+            MultiTenantStreamingProcessorRestarter failingSubject =
+                    new MultiTenantStreamingProcessorRestarter(failingConfiguration);
+            failingSubject.start();
+            try {
+                tenantProvider.addTenant(TENANT_A);
+                await().atMost(Duration.ofSeconds(2))
+                       .untilAsserted(() -> assertThat(shutdownAttempts.get()).isGreaterThanOrEqualTo(1));
+
+                // a later change is still processed, so a failing restart does not wedge the restarter
+                tenantProvider.addTenant(TENANT_B);
+                await().atMost(Duration.ofSeconds(2))
+                       .untilAsserted(() -> assertThat(shutdownAttempts.get()).isGreaterThanOrEqualTo(2));
+            } finally {
+                failingSubject.stop();
+                failingConfiguration.shutdown();
+            }
+        }
+    }
+
+    @Nested
+    class Lifecycle {
+
+        @Test
+        void stopUnsubscribesFromTheTenantProvider() {
+            testSubject.start();
+            assertThat(tenantProvider.subscribedComponents()).contains(testSubject);
+
+            testSubject.stop();
+
+            assertThat(tenantProvider.subscribedComponents()).doesNotContain(testSubject);
+        }
+    }
+
+    @Nested
+    class Describing {
+
+        @Test
+        void describesWhetherItIsRunning() {
+            testSubject.start();
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+
+            testSubject.describeTo(descriptor);
+
+            assertThat(descriptor.getDescribedProperties()).containsEntry("running", true);
+        }
+
+        @Test
+        void appliesTheDefaultRestartTimeout() {
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+
+            testSubject.describeTo(descriptor);
+
+            assertThat(descriptor.getDescribedProperties())
+                    .containsEntry("restartTimeout", MultiTenantProcessorRestartConfiguration.DEFAULT.restartTimeout());
+        }
+
+        @Test
+        void appliesARegisteredRestartTimeoutOverride() {
+            Duration override = Duration.ofSeconds(120);
+            AxonConfiguration overriddenConfiguration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry
+                                               .disableEnhancerScanning()
+                                               .registerComponent(
+                                                       MultiTenantProcessorRestartConfiguration.class,
+                                                       config -> new MultiTenantProcessorRestartConfiguration(override)))
+                                       .build();
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+
+            new MultiTenantStreamingProcessorRestarter(overriddenConfiguration).describeTo(descriptor);
+
+            assertThat(descriptor.getDescribedProperties()).containsEntry("restartTimeout", override);
+        }
+    }
+
+    private static StreamingEventProcessor failingProcessor(String name, AtomicInteger shutdownAttempts) {
+        return new RecordingStreamingEventProcessor(name, true) {
+            @Override
+            public CompletableFuture<Void> shutdown() {
+                shutdownAttempts.incrementAndGet();
+                return CompletableFuture.failedFuture(new IllegalStateException("cannot stop"));
+            }
+        };
+    }
+
+    private static void awaitUninterruptibly(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for the restart gate", interrupted);
+        }
+    }
+}

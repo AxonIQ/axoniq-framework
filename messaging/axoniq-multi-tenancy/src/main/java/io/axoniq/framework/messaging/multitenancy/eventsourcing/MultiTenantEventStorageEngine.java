@@ -23,6 +23,7 @@ import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
+import io.axoniq.framework.messaging.multitenancy.eventstreaming.MultiTenantTrackingToken;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -33,16 +34,25 @@ import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
+import org.axonframework.messaging.core.DelayedMessageStream;
+import org.axonframework.messaging.core.DelegatingMessageStream;
+import org.axonframework.messaging.core.MergedMessageStream;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException.tenantNotResolved;
 import static java.util.Objects.requireNonNull;
@@ -67,18 +77,18 @@ import static java.util.Objects.requireNonNull;
  * snapshot sourcing strategy within one call and is left untouched. Any other engine is decorated with that tenant's
  * snapshot store, resolving the snapshot first and sourcing the events following it. Both stay within one tenant.
  * <p>
- * A tenant-carrying processing context is required. When none is available, or the tenant cannot be resolved from it,
- * the operation fails. An append without a context resolves its tenant from the events instead, which must then all
- * belong to the same tenant.
+ * A tenant-carrying processing context is required for appends and sourcing. When none is available, or the tenant
+ * cannot be resolved from it, the operation fails. An append without a context resolves its tenant from the events
+ * instead, which must then all belong to the same tenant.
  * <p>
  * As a {@link MultiTenantAwareComponent} this engine follows the
  * {@link io.axoniq.framework.messaging.multitenancy.api.TenantProvider TenantProvider}: a tenant added at runtime gets
  * its engine on first use, and a removed tenant's composed engine is evicted.
  * <p>
- * The read-side methods ({@link #stream}, {@link #firstToken}, {@link #latestToken}, {@link #tokenAt}) currently
- * throw an {@link UnsupportedOperationException}. Reading across all tenants is added together with the multi-tenant
- * pooled-streaming support, which merges the per-tenant streams behind these same methods.
- * TODO read-side methods will be resolved with #210
+ * The read side ({@link #stream}, {@link #firstToken}, {@link #latestToken}, {@link #tokenAt}) carries no context and
+ * spans all current tenants. It merges the per-tenant streams, tags every event with its tenant, and positions the
+ * merged stream with a {@link MultiTenantTrackingToken} holding one position per tenant. A tenant added while a
+ * processor runs streams from its beginning once the processor re-opens the stream.
  *
  * @author Jakob Hatzl
  * @author Laura Devriendt
@@ -86,6 +96,9 @@ import static java.util.Objects.requireNonNull;
  */
 @Internal
 public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiTenantAwareComponent {
+
+    private static final Comparator<MessageStream.Entry<EventMessage>> OLDEST_FIRST =
+            Comparator.comparing(entry -> entry.message().timestamp());
 
     private final TenantEventStorageEngineFactory engineFactory;
     private final TenantSnapshotStoreFactory snapshotStoreFactory;
@@ -186,30 +199,103 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiT
 
     @Override
     public MessageStream<EventMessage> stream(StreamingCondition condition) {
-        throw streamingAcrossTenantsNotYetSupported();
+        List<TenantDescriptor> currentTenants = tenants();
+        if (currentTenants.isEmpty()) {
+            return MessageStream.empty();
+        }
+        MultiTenantTrackingToken startToken = MultiTenantTrackingToken.from(condition.position());
+        return DelayedMessageStream.create(
+                resolveStartToken(startToken, currentTenants)
+                        .thenApply(openFrom -> merge(startToken, openFrom, currentTenants, condition.criteria())));
     }
 
+    /**
+     * Fills in a per-tenant beginning position for every current tenant absent from the {@code startToken}, so a
+     * tenant added since the token was written streams from its beginning rather than being skipped.
+     */
+    private CompletableFuture<MultiTenantTrackingToken> resolveStartToken(MultiTenantTrackingToken startToken,
+                                                                          List<TenantDescriptor> currentTenants) {
+        CompletableFuture<MultiTenantTrackingToken> resolved = CompletableFuture.completedFuture(startToken);
+        for (TenantDescriptor tenant : currentTenants) {
+            if (startToken.tokenForTenant(tenant.tenantId()) == null) {
+                resolved = resolved.thenCombine(
+                        engineFor(tenant).firstToken(),
+                        (token, firstToken) -> token.advancedTo(tenant.tenantId(), firstToken));
+            }
+        }
+        return resolved;
+    }
+
+    /**
+     * Merges the per-tenant streams, opening each from {@code openFrom} but positioning the merged entries from
+     * {@code carriedToken}.
+     * <p>
+     * The two differ for a tenant that has no position yet: {@code openFrom} holds the beginning of that tenant's store
+     * so its stream opens there, while {@code carriedToken} leaves it out. Absent already means "nothing consumed", so
+     * leaving it out loses nothing, and it keeps a position the processor never reached out of the emitted tokens.
+     * <p>
+     * That matters because a streaming processor compares a stored token against an emitted one to recognize an event it
+     * already handled. Naming a tenant that the stored token predates makes every such comparison fail, and the
+     * processor hands events it had already handled to its handlers a second time.
+     */
+    private MessageStream<EventMessage> merge(MultiTenantTrackingToken carriedToken,
+                                              MultiTenantTrackingToken openFrom,
+                                              List<TenantDescriptor> currentTenants,
+                                              EventCriteria criteria) {
+        Iterator<TenantDescriptor> tenantIterator = currentTenants.iterator();
+        MessageStream<EventMessage> merged = openTenantStream(tenantIterator.next(), openFrom, criteria);
+        while (tenantIterator.hasNext()) {
+            MessageStream<EventMessage> tenantStream = openTenantStream(tenantIterator.next(), openFrom, criteria);
+            merged = new MergedMessageStream<>(OLDEST_FIRST, merged, tenantStream);
+        }
+        return new TenantPositioningStream(carriedToken, merged);
+    }
+
+    private MessageStream<EventMessage> openTenantStream(TenantDescriptor tenant,
+                                                         MultiTenantTrackingToken openFrom,
+                                                         EventCriteria criteria) {
+        StreamingCondition tenantCondition =
+                StreamingCondition.conditionFor(openFrom.tokenForTenant(tenant.tenantId()), criteria);
+        return engineFor(tenant)
+                .stream(tenantCondition)
+                .map(entry -> entry.withResource(TenantDescriptor.RESOURCE_KEY, tenant));
+    }
+
+    /**
+     * The beginning of every tenant's store, which is a token holding no position at all.
+     * <p>
+     * A tenant absent from a token has consumed nothing, so {@link #stream(StreamingCondition) stream} opens it at the
+     * beginning of its own store. Naming each tenant at position zero would say the same thing, but it would also make
+     * the token disagree with any token written before that tenant existed, and a streaming processor compares those two
+     * to recognize an event it has already handled. Leaving them out keeps that comparison meaningful, and lets one
+     * token mean "from the beginning" whatever the set of tenants turns out to be when it is used.
+     */
     @Override
     public CompletableFuture<TrackingToken> firstToken() {
-        throw streamingAcrossTenantsNotYetSupported();
+        return CompletableFuture.completedFuture(MultiTenantTrackingToken.empty());
     }
 
     @Override
     public CompletableFuture<TrackingToken> latestToken() {
-        throw streamingAcrossTenantsNotYetSupported();
+        return composeToken(EventStorageEngine::latestToken);
     }
 
     @Override
     public CompletableFuture<TrackingToken> tokenAt(Instant at) {
-        throw streamingAcrossTenantsNotYetSupported();
+        return composeToken(engine -> engine.tokenAt(at));
     }
 
-    private static UnsupportedOperationException streamingAcrossTenantsNotYetSupported() {
-        return new UnsupportedOperationException("""
-                Streaming across tenants is not supported yet. \
-                It arrives with the multi-tenant pooled streaming support, \
-                which merges the per-tenant streams behind this method.\
-                """);
+    private CompletableFuture<TrackingToken> composeToken(
+            Function<EventStorageEngine, CompletableFuture<TrackingToken>> tokenLookup) {
+        CompletableFuture<MultiTenantTrackingToken> composed =
+                CompletableFuture.completedFuture(MultiTenantTrackingToken.empty());
+        for (TenantDescriptor tenant : tenants()) {
+            composed = composed.thenCombine(
+                    tokenLookup.apply(engineFor(tenant)),
+                    (token, resolved) -> token.advancedTo(tenant.tenantId(), resolved));
+        }
+        // Upcast CompletableFuture<MultiTenantTrackingToken> to the CompletableFuture<TrackingToken> return type.
+        return composed.thenApply(TrackingToken.class::cast);
     }
 
     @Override
@@ -218,5 +304,41 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiT
         descriptor.describeProperty("snapshotStoreFactory", snapshotStoreFactory);
         descriptor.describeProperty("tenantRouter", tenantRouter);
         composedEngines.describeTo(descriptor);
+    }
+
+    /**
+     * Wraps the merged per-tenant stream to position each entry with a {@link MultiTenantTrackingToken}, advancing the
+     * emitting tenant to the position its own engine put on the entry.
+     */
+    private static class TenantPositioningStream extends DelegatingMessageStream<EventMessage, EventMessage> {
+
+        private final AtomicReference<MultiTenantTrackingToken> currentToken;
+
+        private TenantPositioningStream(MultiTenantTrackingToken startToken, MessageStream<EventMessage> delegate) {
+            super(delegate);
+            this.currentToken = new AtomicReference<>(startToken);
+        }
+
+        @Override
+        public Optional<Entry<EventMessage>> next() {
+            return delegate().next().map(entry -> entry.withResource(
+                    TrackingToken.RESOURCE_KEY,
+                    currentToken.updateAndGet(token -> advance(token, entry))));
+        }
+
+        @Override
+        public Optional<Entry<EventMessage>> peek() {
+            return delegate().peek().map(entry -> entry.withResource(
+                    TrackingToken.RESOURCE_KEY,
+                    advance(currentToken.get(), entry)));
+        }
+
+        private static MultiTenantTrackingToken advance(MultiTenantTrackingToken token, Entry<EventMessage> entry) {
+            TenantDescriptor tenant = requireNonNull(entry.getResource(TenantDescriptor.RESOURCE_KEY),
+                                                     "The merged entry must carry its tenant");
+            TrackingToken tenantToken = requireNonNull(entry.getResource(TrackingToken.RESOURCE_KEY),
+                                                       "The merged entry must carry its tenant's position");
+            return token.advancedTo(tenant.tenantId(), tenantToken);
+        }
     }
 }

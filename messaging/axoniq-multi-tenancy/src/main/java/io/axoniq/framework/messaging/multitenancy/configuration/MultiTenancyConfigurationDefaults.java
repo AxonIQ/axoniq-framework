@@ -48,6 +48,7 @@ import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTena
  *     <li>the {@link TenantComponentParameterResolverFactory} to inject tenant-scoped components into message handlers</li>
  *     <li>the {@link TenantComponentProviderSubscriber} to subscribe every {@link TenantComponentProvider} to the {@link TenantProvider} at startup</li>
  *     <li>the {@link RegisterTenantDescriptorHandlerInterceptor} which takes the resolved {@link TenantDescriptor} from the message and stores it in the {@link ProcessingContext}</li>
+ *     <li>the {@link MultiTenantStreamingProcessorRestarter} to restart the running streaming event processors when the set of tenants changes</li>
  * </ul>
  *
  * @author Stefan Dragisic
@@ -122,6 +123,9 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
         // Keep every TenantComponentProvider in sync with the tenants known to the TenantProvider.
         registerTenantComponentProviderSubscription(componentRegistry);
 
+        // Restart the running streaming event processors whenever the set of tenants changes.
+        registerStreamingProcessorRestarter(componentRegistry);
+
         // Register HandlerInterceptor that puts a ResourceKey with the resolved TenantDescriptor into {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}.
         registerTenantDescriptorInterceptor(componentRegistry);
     }
@@ -144,6 +148,26 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
                                  TenantComponentProviderSubscriber::subscribeProviders)
                         .onShutdown(TENANT_COMPONENT_SUBSCRIBER_PHASE,
                                     TenantComponentProviderSubscriber::cancelSubscriptions)
+        );
+    }
+
+    /**
+     * Registers the {@link MultiTenantStreamingProcessorRestarter}, subscribing it to the {@link TenantProvider} at
+     * startup so a change in the set of tenants restarts the running streaming event processors, and cancelling that
+     * subscription at shutdown.
+     *
+     * @param componentRegistry the registry to register the restarter with
+     */
+    static void registerStreamingProcessorRestarter(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(MultiTenantProcessorRestartConfiguration.class,
+                                               c -> MultiTenantProcessorRestartConfiguration.DEFAULT,
+                                               SearchScope.ALL);
+        componentRegistry.registerComponent(
+                ComponentDefinition
+                        .ofType(MultiTenantStreamingProcessorRestarter.class)
+                        .withBuilder(MultiTenantStreamingProcessorRestarter::new)
+                        .onStart(TENANT_COMPONENT_SUBSCRIBER_PHASE, MultiTenantStreamingProcessorRestarter::start)
+                        .onShutdown(TENANT_COMPONENT_SUBSCRIBER_PHASE, MultiTenantStreamingProcessorRestarter::stop)
         );
     }
 

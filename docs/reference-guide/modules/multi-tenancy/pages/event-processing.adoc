@@ -1,0 +1,62 @@
+[.axoniq-feature]
+= Tenant-Aware Event Processing
+:navtitle: Event processing
+:reftext: Event processing
+
+Tenant-aware event processing covers how a streaming event processor consumes the events of every tenant while keeping each tenant's projection separated.
+With multi-tenancy enabled, a pooled streaming event processor consumes all tenants automatically.
+You configure an ordinary processor, and the multi-tenant behaviour is applied for you.
+
+== How it works
+
+Each tenant keeps its events in its own event store, as described in xref:multi-tenancy:tenant-event-storage.adoc[tenant-aware event storage].
+When a processor streams events, the per-tenant streams are merged into a single stream, ordered by event timestamp.
+Every event on that stream carries the tenant it originates from, and that tenant is available on the processing context while the event is handled.
+
+The processor tracks one position per tenant in a single token.
+A tenant that has no position yet, because it was added after the token was written, streams from the beginning of its store.
+
+== Handling events per tenant
+
+Write an ordinary event handler.
+During handling, the tenant of the event is available on the processing context, so the handler writes to the projection of the tenant the event belongs to.
+
+The tenant is determined by which tenant's event store the event was streamed from, not by the event's metadata.
+No tenant information has to be present in the stored event for a handler to determine its tenant.
+
+[IMPORTANT]
+====
+Write the handler so that handling the same event twice has the same effect as handling it once.
+
+Events are delivered at least once, as they are for any streaming event processor. On a multi-tenant stream a duplicate is more likely, because adding or removing a tenant re-opens the stream and the processor cannot always tell that an event of another tenant was already handled. That makes a duplicate follow an ordinary tenant change, not only a failure.
+
+In practice this means deriving a projection from the identifiers in the event rather than counting. Recording an enrollment as `enrolledStudents.add(studentId)` is safe to repeat, while `enrollments = enrollments + 1` is not.
+====
+
+See xref:multi-tenancy:tenant-scoped-components.adoc[Tenant-scoped components] for injecting a tenant's own instance of a resource, such as a per-tenant read-model repository, and xref:multi-tenancy:tenant-management.adoc#tenant-resolution[tenant resolution] for how the tenant of a message is determined.
+
+== Adding and removing tenants
+
+Adding or removing a tenant re-opens the merged stream so the current set of tenants takes effect.
+Because a running stream cannot change its set of tenants, the running streaming event processors are restarted, which briefly pauses processing for all tenants.
+A tenant that is added starts from the beginning of its store. A tenant that is removed is no longer read.
+Re-opening the stream can also hand an already-handled event of another tenant to the handlers again, which is why a handler has to be idempotent.
+Renaming a tenant's context is seen as removing one tenant and adding another, so its events replay from the beginning under the new name.
+This happens automatically and requires no configuration.
+
+Each restart is bounded by a safety-net timeout, so a processor that never finishes stopping or starting cannot block later restarts.
+It defaults to 30 seconds.
+A deployment whose processors are slow to stop and start can raise it by registering a `MultiTenantProcessorRestartConfiguration` with a longer timeout:
+
+[source,java]
+----
+public void raiseRestartTimeout(MessagingConfigurer configurer) {
+    configurer.componentRegistry(registry ->
+        registry.registerComponent(
+                MultiTenantProcessorRestartConfiguration.class,
+                config -> MultiTenantProcessorRestartConfiguration.DEFAULT.restartTimeout(Duration.ofMinutes(2)) // <1>
+        )
+    );
+}
+----
+<1> The bound applied to each processor's shutdown-and-start during a restart, raised here from the 30-second default.

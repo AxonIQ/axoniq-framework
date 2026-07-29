@@ -110,6 +110,11 @@ class MultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
+        void registersTheStreamingProcessorRestarter() {
+            assertThat(configuration.getComponent(MultiTenantStreamingProcessorRestarter.class)).isNotNull();
+        }
+
+        @Test
         void registersAParameterResolverFactoryThatResolvesTenantScopedComponentParameters() throws Exception {
             // given
             ParameterResolverFactory factory = configuration.getComponent(ParameterResolverFactory.class);
@@ -205,6 +210,17 @@ class MultiTenancyConfigurationDefaultsTest {
         @AfterEach
         void shutdownConfiguration() {
             configuration.shutdown();
+        }
+
+        @Test
+        void subscribesTheStreamingProcessorRestarterToTheTenantProviderAndCancelsItOnShutdown() {
+            assertThat(tenantProvider.subscribedComponents())
+                    .anyMatch(MultiTenantStreamingProcessorRestarter.class::isInstance);
+
+            configuration.shutdown();
+
+            assertThat(tenantProvider.subscribedComponents())
+                    .noneMatch(MultiTenantStreamingProcessorRestarter.class::isInstance);
         }
 
         @Test
