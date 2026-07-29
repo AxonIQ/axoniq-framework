@@ -30,6 +30,7 @@ import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -202,9 +203,13 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     ) {
         return determineResetToken(eventSource, safePointStore)
                 .thenCompose(resetToken -> unitOfWorkFactory.create(moduleName + "WorkflowRehydration")
-                                        .executeWithResult(context -> {
-                                            workflowEngine.start(resetToken, context);
-                                            return completedFuture(null);
+                                        .executeWithResult(sourcingContext -> {
+                                            var executionUnitOfWork = new SimpleUnitOfWorkFactory(sourcingContext)
+                                                    .create(moduleName + "WorkflowExecutionContext");
+                                            return executionUnitOfWork.executeWithResult(executionContext -> {
+                                                workflowEngine.start(resetToken, sourcingContext, executionContext);
+                                                return completedFuture(null);
+                                            });
                                         })
                                         .thenCompose(ignored -> switchToLiveOrReplay(
                                                 processor,

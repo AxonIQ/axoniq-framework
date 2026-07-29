@@ -270,13 +270,30 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
 
     /**
      * Starts the engine from its replay safe point and restores active workflow executions.
+     * <p>
+     * Restoration has two deliberately separate processing contexts. The sourcing context belongs to the startup unit
+     * of work and is used only while reading the event-sourced workflow state. The execution context becomes the parent
+     * context of each restored workflow body and is retained after startup for the workflow's lifetime.
      *
      * @param safePoint         replay safe point for restored workflow executions
-     * @param processingContext context used to restore and start live workflow executions
+     * @param sourcingContext   context of the short-lived startup unit of work used to load durable workflow state; it
+     *                          may carry event-store transactions and lifecycle handlers and must not be retained by a
+     *                          restored workflow
+     * @param executionContext  independent context used as the parent of restored workflow executions; it provides the
+     *                          same application components while keeping workflow-body resources and lifecycle work
+     *                          separate from startup
+     *                          <p>
+     *                          Reusing {@code sourcingContext} here is invalid because restored workflow bodies run
+     *                          asynchronously and can outlive startup. If such a body appends an event after the startup
+     *                          unit of work has entered {@code COMMIT}, Axon can no longer register the required
+     *                          {@code PREPARE_COMMIT} handler. The append operation then fails, and the workflow cannot
+     *                          persist its resumed, timed-out, or terminal state
      */
-    public void start(@Nullable TrackingToken safePoint, @Nonnull ProcessingContext processingContext) {
+    public void start(@Nullable TrackingToken safePoint,
+                      @Nonnull ProcessingContext sourcingContext,
+                      @Nonnull ProcessingContext executionContext) {
         initializeSafePoint(safePoint);
-        loadRunningWorkflows(processingContext);
+        loadRunningWorkflows(sourcingContext, executionContext);
         startExecutions();
     }
 
@@ -301,9 +318,10 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         workflowExecutionRepository.clear();
     }
 
-    private void loadRunningWorkflows(@Nonnull ProcessingContext processingContext) {
-        initializeRestoreProcessingContext(processingContext);
-        var runningWorkflows = workflowStore.loadRunningWorkflows(processingContext).join();
+    private void loadRunningWorkflows(@Nonnull ProcessingContext sourcingContext,
+                                      @Nonnull ProcessingContext executionContext) {
+        initializeRestoreProcessingContext(executionContext);
+        var runningWorkflows = workflowStore.loadRunningWorkflows(sourcingContext).join();
         if (runningWorkflows.workflowIds().isEmpty()) {
             logger.debug("No running workflows to rehydrate.");
             return;
@@ -311,7 +329,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         logger.debug("Rehydrating {} running workflow execution(s) from event-sourced state.",
                      runningWorkflows.workflowIds().size());
         for (var workflowId : runningWorkflows.workflowIds()) {
-            var state = workflowStore.loadWorkflow(workflowId, processingContext).join();
+            var state = workflowStore.loadWorkflow(workflowId, sourcingContext).join();
             var workflowConfiguration = workflowConfigurationRegistry
                     .getWorkflowConfiguration(state.workflowDefinitionId())
                     .orElseThrow(() -> new IllegalStateException(
@@ -321,7 +339,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
             var workflowContext = workflowConfiguration.workflowContextFactory().createContext(
                     state.payload(),
                     workflowId,
-                    processingContext,
+                    executionContext,
                     workflowConfiguration
             );
             var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);

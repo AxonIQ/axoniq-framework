@@ -65,7 +65,7 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         var tokenCaptor = org.mockito.ArgumentCaptor.forClass(TrackingToken.class);
         verify(processor).resetTokens(tokenCaptor.capture());
         assertSameToken(tokenCaptor.getValue(), storedToken);
-        verify(workflowEngine).start(eq(storedToken), any(ProcessingContext.class));
+        verify(workflowEngine).start(eq(storedToken), any(ProcessingContext.class), any(ProcessingContext.class));
         verifyNoInteractions(eventSource);
         verify(workflowEngine, never()).switchToLiveMode();
     }
@@ -94,7 +94,7 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         var tokenCaptor = org.mockito.ArgumentCaptor.forClass(TrackingToken.class);
         verify(processor).resetTokens(tokenCaptor.capture());
         assertSameToken(tokenCaptor.getValue(), firstToken);
-        verify(workflowEngine).start(eq(firstToken), any(ProcessingContext.class));
+        verify(workflowEngine).start(eq(firstToken), any(ProcessingContext.class), any(ProcessingContext.class));
         verify(workflowEngine, never()).switchToLiveMode();
     }
 
@@ -118,7 +118,7 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
                                          latestToken)
                 .join();
 
-        verify(workflowEngine).start(eq(latestToken), any(ProcessingContext.class));
+        verify(workflowEngine).start(eq(latestToken), any(ProcessingContext.class), any(ProcessingContext.class));
         verify(workflowEngine).switchToLiveMode();
         verify(processor, never()).resetTokens(any(TrackingToken.class));
         verifyNoInteractions(eventSource);

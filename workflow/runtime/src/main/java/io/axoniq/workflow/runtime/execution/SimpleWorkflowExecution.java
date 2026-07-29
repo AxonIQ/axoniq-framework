@@ -79,7 +79,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     private static final Logger logger = LoggerFactory.getLogger(SimpleWorkflowExecution.class);
 
     // State variables
-    private io.axoniq.workflow.runtime.api.execution.state.WorkflowState workflowState;
+    private WorkflowState workflowState;
     @Nullable
     private final TrackingToken restartToken;
     private final WorkflowConfiguration<?> workflowConfiguration;
@@ -365,7 +365,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     @Override
     public void awaitStateChange(
-            @Nonnull Predicate<io.axoniq.workflow.runtime.api.execution.state.WorkflowState> predicate
+            @Nonnull Predicate<WorkflowState> predicate
     ) throws InterruptedException {
         do {
             var taken = taskQueue.take();
@@ -450,7 +450,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
             if (cancelledSteps.isEmpty()) {
                 return;
             }
-            Predicate<io.axoniq.workflow.runtime.api.execution.state.WorkflowState> allTerminal = workflowState -> cancelledSteps
+            Predicate<WorkflowState> allTerminal = workflowState -> cancelledSteps
                     .stream()
                     .allMatch(stepName -> workflowState.containsStep(stepName)
                             && workflowState.getStep(stepName).status().isTerminal());
@@ -548,7 +548,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     @Override
     @Nonnull
-    public io.axoniq.workflow.runtime.api.execution.state.WorkflowState state() {
+    public WorkflowState state() {
         return workflowState;
     }
 
