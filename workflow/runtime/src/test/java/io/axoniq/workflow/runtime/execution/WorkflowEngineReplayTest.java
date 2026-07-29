@@ -146,8 +146,8 @@ class WorkflowEngineReplayTest {
 
         workflowEngine.replayStatusChangedHandler().handle(replayStatusChanged, context);
 
-        // Verify terminal execution removed
-        verify(workflowExecutionRepository).remove("terminalId");
+        verify(workflowExecutionRepository).removeAll(any());
+        assertThat(workflowExecutionRepository.findById("terminalId")).isEmpty();
 
         verify(runningExecution, times(1)).execute(any());
         verify(terminalExecution, never()).execute(any()); //
@@ -229,6 +229,7 @@ class WorkflowEngineReplayTest {
         when(contextFactory.createContext(anyMap(), eq(workflowId), any(ProcessingContext.class), eq(configuration)))
                 .thenReturn(workflowContext);
         var restoredExecution = mock(WorkflowExecution.class);
+        when(restoredExecution.state()).thenReturn(restoredState);
         when(restoredExecution.isRunning()).thenReturn(true);
         when(executionFactory.create(workflowContext)).thenReturn(restoredExecution);
 

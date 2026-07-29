@@ -29,6 +29,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -59,8 +60,8 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
 
     @Nonnull
     @Override
-    public Set<WorkflowExecution> findAll() {
-        return Set.copyOf(workflowExecutions.values());
+    public Set<WorkflowExecution> findAll(@Nonnull Predicate<WorkflowExecution> predicate) {
+        return Set.copyOf(workflowExecutions.values().stream().filter(predicate).toList());
     }
 
     @Nonnull
@@ -74,6 +75,11 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
     @Override
     public WorkflowExecution remove(@Nonnull String workflowId) {
         return workflowExecutions.remove(workflowId);
+    }
+
+    @Override
+    public void removeAll(@Nonnull Predicate<WorkflowExecution> predicate) {
+        workflowExecutions.values().removeIf(predicate);
     }
 
     @Override

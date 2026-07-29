@@ -27,7 +27,6 @@ import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -78,7 +77,13 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
         this.workflowExecutionRepository = workflowExecutionRepository;
         this.workflowStore = workflowStore;
-        this.replaySupport = new WorkflowEngineReplaySupport(this::onLiveModeActivated);
+        this.replaySupport = new WorkflowEngineReplaySupport(
+                () -> {
+                    WorkflowEngine.this.workflowConfigurationRegistry.warnAboutSameVersionDuplicates();
+                    logger.info("Workflow instance replay finished. Switching to live mode.");
+                    removeTerminalAndStartRestoredWorkflowExecutions("after replay catch-up");
+                }
+        );
         this.checkpointingSupport = new WorkflowEngineCheckpointingAdvancingSupport(
                 new WorkflowEngineCheckpointingAdvancingSupport.Host() {
                     @Override
@@ -121,8 +126,6 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
             checkAndCreateNewWorkflow(eventMessage, processingContext);
             // route external events to workflows waiting for them
             for (var execution : workflowExecutionRepository.findAll()) {
-                // TODO: discussion regarding hibernating workflows ->
-                // TODO: is it safe to put an eventMessage in the queue?
                 execution.onEvent(eventMessage, processingContext);
             }
         }
@@ -268,7 +271,7 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
                       @Nonnull ProcessingContext executionContext) {
         replaySupport.initializeProcessorTokenIfAbsent(processorToken);
         loadRunningWorkflows(sourcingContext, executionContext);
-        startCheckpointCatchUp();
+        removeTerminalAndStartRestoredWorkflowExecutions("before replay catch-up");
     }
 
     /**
@@ -290,7 +293,6 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
         }
         workflowExecutionRepository.clear();
     }
-
 
     private void loadRunningWorkflows(@Nonnull ProcessingContext sourcingContext,
                                       @Nonnull ProcessingContext executionContext) {
@@ -324,62 +326,33 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
     }
 
     /**
-     * Starts restored workflow executions before processor replay resumes so transient wait registrations are rebuilt.
+     * Removes terminal workflow executions and starts the remaining restored executions.
+     *
+     * @param phase startup phase in which the executions are started
      */
-    private void startCheckpointCatchUp() {
-        var executionsToStart = workflowExecutionRepository
-                .findAll()
-                .stream()
-                .filter(execution -> !execution.isRunning())
-                .filter(execution -> !execution.state().workflowStatus().isTerminal())
-                .toList();
+    private void removeTerminalAndStartRestoredWorkflowExecutions(@Nonnull String phase) {
+        workflowExecutionRepository.removeAll(execution -> execution.state().workflowStatus().isTerminal());
+        var executionsToStart = workflowExecutionRepository.findAll(execution -> !execution.isRunning());
         if (executionsToStart.isEmpty()) {
+            logger.info("No restored workflow executions require startup {}.", phase);
             return;
         }
-        logger.info("Starting {} workflow execution(s) before replay catch-up.", executionsToStart.size());
+        logger.info("Starting {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
         for (var execution : executionsToStart) {
             execute(execution);
         }
-    }
-
-    private void onLiveModeActivated() {
-        workflowConfigurationRegistry.warnAboutSameVersionDuplicates();
-        logger.info("Workflow instance replay finished. Switching to live mode.");
-        workflowExecutionRepository
-                .findAll()
-                .stream()
-                .filter(e -> e.state().workflowStatus().isTerminal())
-                .map(WorkflowExecution::workflowId)
-                .forEach(workflowExecutionRepository::remove);
-
-        var allExecution = workflowExecutionRepository.findAll();
-        if (allExecution.isEmpty()) {
-            logger.info("No running workflow instances found.");
-        } else {
-            var executionsToStart = allExecution.stream()
-                                                .filter(execution -> !execution.isRunning())
-                                                .toList();
-            logger.info("Restored {} running workflow instances, starting {} workflow execution(s).",
-                        allExecution.size(),
-                        executionsToStart.size());
-            for (var execution : executionsToStart) {
-                execute(execution);
-            }
-            logger.info("All workflow instances started.");
-        }
+        logger.info("Started {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
     }
 
     private boolean hasPendingCheckpointWork() {
-        return WorkflowEngine.this.workflowExecutionRepository
-                .findAll().stream()
-                .anyMatch(WorkflowExecution::hasPendingCheckpointWork);
+        return !workflowExecutionRepository.findAll(WorkflowExecution::hasPendingCheckpointWork).isEmpty();
     }
 
     private boolean scheduleCheckpointIntent(@NonNull Runnable onDrained) {
         var scheduledWorkflowIds = new HashSet<String>();
         var scheduled = false;
-        for (var execution : WorkflowEngine.this.workflowExecutionRepository.findAll()) {
-            if (!execution.hasPendingCheckpointWork() || !scheduledWorkflowIds.add(execution.workflowId())) {
+        for (var execution : workflowExecutionRepository.findAll(WorkflowExecution::hasPendingCheckpointWork)) {
+            if (!scheduledWorkflowIds.add(execution.workflowId())) {
                 continue;
             }
             execution.appendCheckpointIntent(onDrained);
