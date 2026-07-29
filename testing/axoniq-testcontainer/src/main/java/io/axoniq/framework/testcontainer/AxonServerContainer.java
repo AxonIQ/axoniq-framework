@@ -64,6 +64,13 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
     private static final String AXONIQ_AXONSERVER_INTERNAL_HOSTNAME = "AXONIQ_AXONSERVER_INTERNAL_HOSTNAME";
     private static final String AXONIQ_AXONSERVER_HOSTNAME = "AXONIQ_AXONSERVER_HOSTNAME";
     private static final String AXONIQ_AXONSERVER_DEVMODE_ENABLED = "AXONIQ_AXONSERVER_DEVMODE_ENABLED";
+    private static final String AXONIQ_AXONSERVER_PLUGINS_ENABLED = "AXONIQ_AXONSERVER_PLUGINS_ENABLED";
+    private static final String AXONIQ_AXONSERVER_REPLICATION_MIN_ELECTION_TIMEOUT =
+            "AXONIQ_AXONSERVER_REPLICATION_MIN_ELECTION_TIMEOUT";
+    private static final String AXONIQ_AXONSERVER_REPLICATION_MAX_ELECTION_TIMEOUT =
+            "AXONIQ_AXONSERVER_REPLICATION_MAX_ELECTION_TIMEOUT";
+    private static final String AXONIQ_AXONSERVER_REPLICATION_HEARTBEAT_TIMEOUT =
+            "AXONIQ_AXONSERVER_REPLICATION_HEARTBEAT_TIMEOUT";
 
     private static final String AXON_SERVER_ADDRESS_TEMPLATE = "%s:%s";
 
@@ -120,6 +127,13 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
         withExposedPorts(AXON_SERVER_HTTP_PORT, AXON_SERVER_GRPC_PORT)
                 .withEnv("TESTCONTAINERS_FORK_NUMBER", "" + System.getProperty("test.forkNumber", "0"))
                 .withEnv(AXONIQ_LICENSE, LICENCE_DEFAULT_LOCATION)
+                // Skip OSGi plugin loading entirely: framework tests never install plugins.
+                .withEnv(AXONIQ_AXONSERVER_PLUGINS_ENABLED, "false")
+                // Shrink Raft election/heartbeat timeouts: safe for the single-member replication groups
+                // test containers run (no real quorum risk), and shaves a guaranteed 1-2s+ off every boot.
+                .withEnv(AXONIQ_AXONSERVER_REPLICATION_MIN_ELECTION_TIMEOUT, "50")
+                .withEnv(AXONIQ_AXONSERVER_REPLICATION_MAX_ELECTION_TIMEOUT, "200")
+                .withEnv(AXONIQ_AXONSERVER_REPLICATION_HEARTBEAT_TIMEOUT, "50")
                 .waitingFor(Wait.forLogMessage(WAIT_FOR_LOG_MESSAGE, 1).withStartupTimeout(STARTUP_TIMEOUT))
                 .waitingFor(Wait.forHttp(HEALTH_ENDPOINT)
                                 .forPort(AXON_SERVER_HTTP_PORT)
