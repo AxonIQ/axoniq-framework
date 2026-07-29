@@ -47,6 +47,8 @@ import org.axonframework.messaging.queryhandling.gateway.QueryGateway;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
+import org.junit.jupiter.params.ParameterizedClass;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
 import java.util.Map;
@@ -66,11 +68,16 @@ import static org.awaitility.Awaitility.await;
  * Integration test for the multi-tenancy feature exercising queries through the {@link QueryGateway} and
  * subscription queries of the {@link QueryBus} against a multi-context Axon Server, mirroring
  * {@link MultiTenantCommandHandlingIT}.
+ * <p>
+ * Every test runs twice: once with {@link DistributedQueryBusConfiguration#preferLocalQueryHandler()} enabled, so
+ * queries with a locally registered handler are served from the local segment, and once with it disabled, so every
+ * query is dispatched through the multi-tenant connector. Tenant routing and isolation must hold in both setups.
  *
  * @author Jan Galinski
  * @author Jakob Hatzl
- * @since 5.3.0
  */
+@ParameterizedClass(name = "preferLocalQueryHandler = {0}")
+@ValueSource(booleans = {false, true})
 @ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
 class MultiTenantQueryHandlingIT {
 
@@ -78,10 +85,16 @@ class MultiTenantQueryHandlingIT {
     private static final String TENANT_A = "tenant-A";
     private static final String TENANT_B = "tenant-B";
 
+    private final boolean preferLocalQueryHandler;
+
     private AxonServerTestInfrastructure.ContextManager contextManager;
     private AxonConfiguration application;
     private final Map<String, QueryUpdateEmitter> capturedEmitters = new ConcurrentHashMap<>();
     private TenantProvider tenantDescriptors;
+
+    MultiTenantQueryHandlingIT(boolean preferLocalQueryHandler) {
+        this.preferLocalQueryHandler = preferLocalQueryHandler;
+    }
 
     @BeforeEach
     void setUp() {
@@ -105,11 +118,12 @@ class MultiTenantQueryHandlingIT {
         application = new DefaultAxonApplication()
                 .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
                 .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
-                // Force queries through the multi-tenant connector so tenant routing is exercised, rather than
-                // being served from the local segment (which happens by default when a local handler is present).
+                // Parameterized per class invocation: with the local handler preferred, queries with a local handler
+                // are served from the local segment; without it, every query goes through the multi-tenant connector.
                 .componentRegistry(cr -> cr.registerComponent(
                         DistributedQueryBusConfiguration.class,
-                        cfg -> DistributedQueryBusConfiguration.DEFAULT.preferLocalQueryHandler(false)))
+                        cfg -> DistributedQueryBusConfiguration.DEFAULT
+                                .preferLocalQueryHandler(preferLocalQueryHandler)))
                 .componentRegistry(registerTenantResolver(new MetadataBasedTenantResolver()))
                 .componentRegistry(registerTenantConnectPredicate(d -> !Set.of(ADMIN_CONTEXT, DEFAULT_CONTEXT)
                                                                            .contains(d.tenantId())))

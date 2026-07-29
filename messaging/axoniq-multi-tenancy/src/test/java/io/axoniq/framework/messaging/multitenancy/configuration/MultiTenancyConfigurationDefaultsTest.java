@@ -149,6 +149,9 @@ class MultiTenancyConfigurationDefaultsTest {
                                                                  .componentRegistry(cr -> cr.registerComponent(
                                                                          TenantResolver.class,
                                                                          config -> new MetadataBasedTenantResolver()))
+                                                                 .componentRegistry(cr -> cr.registerComponent(
+                                                                         TenantProvider.class,
+                                                                         config -> new StubTenantProvider()))
                                                                  .componentRegistry(cr -> {
                                                                      MultiTenancyConfigurationDefaults
                                                                              .registerTenantAwareQueryBusDecorator(cr);
