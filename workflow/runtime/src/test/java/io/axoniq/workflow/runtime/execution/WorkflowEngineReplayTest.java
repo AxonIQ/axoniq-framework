@@ -26,6 +26,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
@@ -193,6 +194,29 @@ class WorkflowEngineReplayTest {
         execution.execute(i -> {
         });
         assertThat(execution.isRunning()).isTrue();
+    }
+
+    @Test
+    void replayDoesNotInvokeWorkflowStatusListenersButLiveEventsDo() throws Exception {
+        var replayListener = mock(WorkflowStatusChangeListener.class);
+        var liveListener = mock(WorkflowStatusChangeListener.class);
+        var execution = simpleExecution("listener-workflow", token(18),
+                                       Map.of(WorkflowStatus.STARTED, replayListener,
+                                              WorkflowStatus.COMPLETED, liveListener));
+        var processingContext = execution.processingContext();
+        var definitionId = new MessageType(new QualifiedName("CheckpointWorkflow"), MessageType.DEFAULT_VERSION);
+
+        execution.onEvent(workflowStartedEvent("listener-workflow", definitionId, Map.of()), processingContext);
+
+        assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
+        verifyNoInteractions(replayListener, liveListener);
+
+        markRunning(execution, true);
+        execution.onEvent(workflowStatusEvent("listener-workflow", WorkflowStatus.COMPLETED), processingContext);
+        drainAllTasks(execution);
+
+        verify(liveListener).onWorkflowStatus(eq(WorkflowStatus.COMPLETED), any());
+        verifyNoInteractions(replayListener);
     }
 
     @Test
@@ -568,8 +592,17 @@ class WorkflowEngineReplayTest {
 
     private static SimpleWorkflowExecution simpleExecution(String workflowId,
                                                            TrackingToken restartToken) {
+        return simpleExecution(workflowId, restartToken, Map.of());
+    }
+
+    private static SimpleWorkflowExecution simpleExecution(
+            String workflowId,
+            TrackingToken restartToken,
+            Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners
+    ) {
         ProcessingContext processingContext = processingContext(restartToken);
         when(processingContext.component(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
+        when(processingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
         when(processingContext.component(Clock.class)).thenReturn(Clock.systemUTC());
         when(processingContext.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
         when(processingContext.component(EventSink.class)).thenReturn(mock(EventSink.class));
@@ -582,7 +615,7 @@ class WorkflowEngineReplayTest {
         when(config.workflowName()).thenReturn("CheckpointWorkflow");
         when(config.workflowVersion()).thenReturn(MessageType.DEFAULT_VERSION);
         when(config.eventNameCustomizer()).thenReturn(defaults());
-        when(config.workflowStatusChangeListeners()).thenReturn(Map.of());
+        when(config.workflowStatusChangeListeners()).thenReturn(workflowStatusChangeListeners);
 
         WorkflowContext workflowContext = mock(WorkflowContext.class);
         when(workflowContext.processingContext()).thenReturn(processingContext);
@@ -624,6 +657,15 @@ class WorkflowEngineReplayTest {
         when(eventMessage.type()).thenReturn(new MessageType("RestoredWorkflowStarted", definitionId.version()));
         when(eventMessage.payloadAs(Object.class)).thenReturn(payload);
         when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(payload);
+        when(eventMessage.timestamp()).thenReturn(java.time.Instant.now());
+        return eventMessage;
+    }
+
+    private static EventMessage workflowStatusEvent(String workflowId, WorkflowStatus status) {
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(MetadataUtils.create(workflowId, status));
+        when(eventMessage.type()).thenReturn(new MessageType("Workflow" + status));
+        when(eventMessage.payloadAs(Object.class)).thenReturn(Map.of());
         when(eventMessage.timestamp()).thenReturn(java.time.Instant.now());
         return eventMessage;
     }

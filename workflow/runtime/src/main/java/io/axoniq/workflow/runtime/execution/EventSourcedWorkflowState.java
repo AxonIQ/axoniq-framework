@@ -249,6 +249,21 @@ public class EventSourcedWorkflowState implements WorkflowState {
     public WorkflowState evolve(
             @Nonnull EventMessage eventMessage,
             @Nonnull ProcessingContext processingContext) {
+        return evolve(eventMessage, processingContext, true);
+    }
+
+    /**
+     * Applies an event while optionally notifying workflow status listeners.
+     *
+     * @param eventMessage            event to apply
+     * @param processingContext       context in which the event is applied
+     * @param notifyStatusListeners   whether a workflow status transition notifies its live listeners
+     * @return this evolved workflow state
+     */
+    WorkflowState evolve(
+            @Nonnull EventMessage eventMessage,
+            @Nonnull ProcessingContext processingContext,
+            boolean notifyStatusListeners) {
         logger.trace("Applying event {}", eventMessage.type());
         Object eventPayload = eventMessage.payloadAs(Object.class);
         var metadata = eventMessage.metadata();
@@ -354,7 +369,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                  }
                              }
                          }
-                         setStatus(status, terminationCause);
+                         setStatus(status, terminationCause, notifyStatusListeners);
                      });
         logger.trace("Finished applying event {} in thread {}", eventMessage.type(), Thread.currentThread());
         return this;
@@ -421,11 +436,14 @@ public class EventSourcedWorkflowState implements WorkflowState {
      */
     void setStatus(
             @Nonnull WorkflowStatus workflowStatus,
-            @Nullable Throwable terminationCause
+            @Nullable Throwable terminationCause,
+            boolean notifyStatusListeners
     ) {
         this.status = workflowStatus;
         this.terminationCause = terminationCause;
-        this.listenerSupport.notify(workflowStatus);
+        if (notifyStatusListeners) {
+            this.listenerSupport.notify(workflowStatus);
+        }
     }
 
     /**

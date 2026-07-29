@@ -78,7 +78,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     private static final Logger logger = LoggerFactory.getLogger(SimpleWorkflowExecution.class);
 
     // State variables
-    private WorkflowState workflowState;
+    private EventSourcedWorkflowState workflowState;
     private final WorkflowConfiguration<?> workflowConfiguration;
 
     // Execution
@@ -389,7 +389,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
             appendTask(i -> state().evolve(eventMessage, processingContext));
         } else {
             // replay mode
-            state().evolve(eventMessage, processingContext);
+            // Rehydration reconstructs durable state only. Workflow status listeners are live lifecycle callbacks and
+            // may perform user side effects, so they must not run again for historical events after a restart.
+            workflowState.evolve(eventMessage, processingContext, false);
         }
     }
 

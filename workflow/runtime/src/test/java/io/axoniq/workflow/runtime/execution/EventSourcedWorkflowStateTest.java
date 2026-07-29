@@ -60,7 +60,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void testEvolveStepStarted() {
+    void evolveStepStarted() {
         String stepName = "testStep";
         Object payload = "payload";
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.STARTED);
@@ -84,7 +84,7 @@ class EventSourcedWorkflowStateTest {
                 Map.of("key", "value"),
                 DEFINITION_ID
         );
-        sourcedState.setStatus(WorkflowStatus.STARTED, null);
+        sourcedState.setStatus(WorkflowStatus.STARTED, null, true);
         var workflowContext = mock(WorkflowContext.class);
         var listener = mock(WorkflowStatusChangeListener.class);
 
@@ -98,13 +98,13 @@ class EventSourcedWorkflowStateTest {
         assertThat(rehydratedState.payload()).containsEntry("key", "value");
         assertThat(rehydratedState.workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
 
-        rehydratedState.setStatus(WorkflowStatus.COMPLETED, null);
+        rehydratedState.setStatus(WorkflowStatus.COMPLETED, null, true);
 
         verify(listener).onWorkflowStatus(WorkflowStatus.COMPLETED, workflowContext);
     }
 
     @Test
-    void testEvolveStepTimedOut() {
+    void evolveStepTimedOut() {
         String stepName = "testStep";
         Object payload = "timeout-payload";
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.TIMED_OUT);
@@ -122,7 +122,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void testEvolveStepCompleted() {
+    void evolveStepCompleted() {
         String stepName = "testStep";
         Object payload = "completed-result";
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.COMPLETED);
@@ -140,7 +140,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void testEvolveStepCancelled() {
+    void evolveStepCancelled() {
         String stepName = "testStep";
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.CANCELLED);
         EventMessage eventMessage = mock(EventMessage.class);
@@ -155,7 +155,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void testEvolveStepRetrying() {
+    void evolveStepRetrying() {
         String stepName = "testStep";
         WorkflowError error = WorkflowError.from(new RuntimeException("retry error"));
         StepRetryInfo retryInfo = mock(StepRetryInfo.class);
@@ -180,7 +180,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void testEvolveStepCompletedAndEvolvePayload() {
+    void evolveStepCompletedAndEvolvePayload() {
         String stepName = "testStep";
         Map<String, Object> initialPayload = Map.of("key1", "value1");
         state = new EventSourcedWorkflowState(WORKFLOW_ID, initialPayload, DEFINITION_ID);
@@ -205,7 +205,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void testEvolveStepFailed() {
+    void evolveStepFailed() {
         String stepName = "testStep";
         WorkflowError error = WorkflowError.from(new RuntimeException("Test error"));
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.FAILED);
