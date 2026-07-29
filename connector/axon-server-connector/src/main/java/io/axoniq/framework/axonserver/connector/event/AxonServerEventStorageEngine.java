@@ -28,6 +28,7 @@ import io.axoniq.axonserver.grpc.event.dcb.SourceEventsResponse;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsResponse;
 import org.jspecify.annotations.Nullable;
+import org.axonframework.common.ExceptionUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -38,6 +39,7 @@ import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejecte
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.EmptyAppendTransaction;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.eventstore.EventStoreException;
 import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
@@ -191,16 +193,56 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
             DcbEventChannel.AppendEventsTransaction appendTransaction
     ) implements AppendTransaction<AppendEventsResponse> {
 
+        /**
+         * Marker identifying the failure Axon Server reports when the {@link AppendCondition} of this transaction was
+         * not met. Axon Server closes the append call with the gRPC status {@code CANCELLED} for this outcome, which is
+         * the same status a cancelled or broken call produces, so the reported failure description is the only signal
+         * separating the two.
+         */
+        private static final String CONSISTENCY_CONDITION_FAILURE = "ConsistencyConditionException";
+
+        /**
+         * Commits this transaction, mapping a failure to the exception describing the outcome it really represents.
+         * <p>
+         * A failure reporting that the {@link AppendCondition} was not met is a decision by Axon Server not to append,
+         * and surfaces as an {@link AppendEventsTransactionRejectedException}. Any other failure leaves the outcome
+         * undetermined: the events may or may not have been appended, and it surfaces as an {@link EventStoreException}
+         * instead. Both carry the original failure as their cause.
+         *
+         * @return a {@code CompletableFuture} of the {@link AppendEventsResponse}, failing with an
+         * {@link AppendEventsTransactionRejectedException} when Axon Server decided against the append, and with an
+         * {@link EventStoreException} when the outcome of the append is undetermined
+         */
         @Override
         public CompletableFuture<AppendEventsResponse> commit() {
             logger.debug("Committing append event transaction...");
             return appendTransaction.commit()
-                                    .exceptionallyCompose(throwable -> {
-                                        logger.warn("Committing append transaction failed.", throwable);
-                                        return CompletableFuture.failedFuture(
-                                                new AppendEventsTransactionRejectedException(throwable.getMessage())
-                                        );
-                                    });
+                                    .exceptionallyCompose(AxonServerAppendTransaction::mapCommitFailure);
+        }
+
+        private static CompletableFuture<AppendEventsResponse> mapCommitFailure(Throwable failure) {
+            if (isConsistencyConditionFailure(failure)) {
+                logger.warn("Axon Server rejected the append transaction, as its condition was not met.", failure);
+                AppendEventsTransactionRejectedException rejection =
+                        new AppendEventsTransactionRejectedException(failure.getMessage());
+                rejection.initCause(failure);
+                return CompletableFuture.failedFuture(rejection);
+            }
+            logger.warn("Committing append transaction failed without a decision by Axon Server.", failure);
+            return CompletableFuture.failedFuture(new EventStoreException(
+                    "The outcome of the append transaction is undetermined, as Axon Server did not report a decision "
+                            + "on it. The events may or may not have been appended. Source the criteria of the append "
+                            + "condition to establish the outcome before retrying.",
+                    failure
+            ));
+        }
+
+        private static boolean isConsistencyConditionFailure(Throwable failure) {
+            return ExceptionUtils.findException(
+                    failure,
+                    cause -> cause.getMessage() != null
+                            && cause.getMessage().contains(CONSISTENCY_CONDITION_FAILURE)
+            ).isPresent();
         }
 
         @Override
