@@ -21,18 +21,19 @@ package io.axoniq.framework.axonserver.connector.event;
 
 import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.messaging.core.SubscribableEventSource;
 
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
- * Factory for creating {@link PersistentStreamEventSource} instances.
+ * Factory for creating the {@link SubscribableEventSource} that consumes a persistent stream on Axon Server.
  * <p>
- * Provides a customization point for {@link PersistentStreamEventSource} construction. The default implementation is
- * {@link DefaultPersistentStreamEventSourceFactory}, which additionally tracks stream names and emits a warning when
- * the same Axon Server stream name is used more than once.
+ * Provides the customization point for persistent stream event source construction. The default implementation is
+ * {@link DefaultPersistentStreamEventSourceFactory}, which builds a {@link PersistentStreamEventSource} and
+ * additionally tracks stream names, emitting a warning when the same Axon Server stream name is used more than once.
  * <p>
- * In a Spring Boot application the factory is registered as a {@code @ConditionalOnMissingBean}, so advanced use cases
- * (e.g. multi-tenancy) can replace it by declaring their own bean of this type.
+ * In a Spring Boot application the default factory is registered as a {@code @ConditionalOnMissingBean}, so advanced
+ * use cases can replace it by declaring their own bean of this type.
  *
  * @author Jakob Hatzl
  * @see DefaultPersistentStreamEventSourceFactory
@@ -42,7 +43,7 @@ import java.util.concurrent.ScheduledExecutorService;
 public interface PersistentStreamEventSourceFactory {
 
     /**
-     * Builds a {@link PersistentStreamEventSource} for the given stream parameters.
+     * Builds the {@link SubscribableEventSource} consuming the persistent stream described by the given parameters.
      * <p>
      * The supplied {@link Configuration} provides access to all registered framework components, such as the
      * {@link io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager} and
@@ -54,17 +55,17 @@ public interface PersistentStreamEventSourceFactory {
      * @param scheduler     the scheduled executor to use for this stream's background tasks
      * @param batchSize     the maximum number of events to deliver per batch
      * @param configuration the framework configuration from which additional components can be retrieved
-     * @return a new {@link PersistentStreamEventSource}
+     * @return a new {@link SubscribableEventSource} consuming the described persistent stream
      */
-    PersistentStreamEventSource build(String name,
-                                      PersistentStreamProperties properties,
-                                      ScheduledExecutorService scheduler,
-                                      int batchSize,
-                                      Configuration configuration);
+    SubscribableEventSource build(String name,
+                                  PersistentStreamProperties properties,
+                                  ScheduledExecutorService scheduler,
+                                  int batchSize,
+                                  Configuration configuration);
 
     /**
      * The default {@link PersistentStreamEventSourceFactory} (a {@link DefaultPersistentStreamEventSourceFactory}) to
-     * be used to create {@link PersistentStreamEventSource} instances.
+     * be used to create the {@link SubscribableEventSource} consuming a persistent stream.
      *
      * @return the default {@link PersistentStreamEventSourceFactory}
      */

@@ -103,6 +103,7 @@ public class PersistentStreamConnection {
 
     private final ScheduledExecutorService scheduler;
     private final UnitOfWorkFactory unitOfWorkFactory;
+    private final PersistentStreamContextCustomizer contextCustomizer;
     private final int batchSize;
     private final Map<Integer, SegmentConnection> segments = new ConcurrentHashMap<>();
     private final AtomicInteger retrySeconds = new AtomicInteger(MIN_RETRY_INTERVAL_SECONDS);
@@ -141,12 +142,14 @@ public class PersistentStreamConnection {
              persistentStreamProperties,
              scheduler,
              unitOfWorkFactory,
+             PersistentStreamContextCustomizer.NO_OP,
              batchSize,
              context);
     }
 
     /**
-     * Instantiates a {@code PersistentStreamConnection}.
+     * Instantiates a {@code PersistentStreamConnection} placing additional resources on the
+     * {@link ProcessingContext} of every batch through the given {@code contextCustomizer}.
      *
      * @param streamId                   the unique identifier of the persistent stream
      * @param connectionManager          the Axon Server connection manager
@@ -156,6 +159,9 @@ public class PersistentStreamConnection {
      * @param persistentStreamProperties the properties for the persistent stream
      * @param scheduler                  the scheduler thread pool to schedule tasks
      * @param unitOfWorkFactory          the unit of work factory
+     * @param contextCustomizer          the customizer placing resources on the {@link ProcessingContext} of every
+     *                                   batch, invoked once per batch before any of its events is consumed, returning
+     *                                   the context that batch is consumed with
      * @param batchSize                  the maximum number of events to collect per batch
      * @param context                    the Axon Server context to connect to, or {@code null} to use
      *                                   {@link AxonServerConfiguration#getContext()}
@@ -168,6 +174,7 @@ public class PersistentStreamConnection {
                                       PersistentStreamProperties persistentStreamProperties,
                                       ScheduledExecutorService scheduler,
                                       UnitOfWorkFactory unitOfWorkFactory,
+                                      PersistentStreamContextCustomizer contextCustomizer,
                                       int batchSize,
                                       @Nullable String context) {
         this.streamId = Objects.requireNonNull(streamId, "streamId must not be null");
@@ -179,6 +186,7 @@ public class PersistentStreamConnection {
                                                                  "persistentStreamProperties must not be null");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler must not be null");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "unitOfWorkFactory must not be null");
+        this.contextCustomizer = Objects.requireNonNull(contextCustomizer, "contextCustomizer must not be null");
         if (batchSize <= 0) {
             throw new IllegalArgumentException("batchSize must be positive, but was: " + batchSize);
         }
@@ -413,13 +421,16 @@ public class PersistentStreamConnection {
                 UnitOfWork unitOfWork = unitOfWorkFactory.create();
                 return unitOfWork.executeWithResult(processingContext -> {
                     CompletableFuture<?> result = CompletableFuture.completedFuture(null);
-                    processingContext.putResource(TrackingToken.BATCH_END_RESOURCE_KEY, batchEndToken);
+                    // Applied before the first event is consumed, so every event of this batch observes the
+                    // batch-constant resources, such as the tenant a per-tenant stream belongs to.
+                    ProcessingContext batchContext = contextCustomizer.apply(processingContext);
+                    batchContext.putResource(TrackingToken.BATCH_END_RESOURCE_KEY, batchEndToken);
                     for (PersistentStreamEvent pse : batch) {
                         result = result
                                 .thenCompose(ignored ->
                                                      consumer.get().apply(List.of(convertToMessage(pse)),
                                                                           enrichContextInformation(pse,
-                                                                                                   processingContext)));
+                                                                                                   batchContext)));
                     }
                     return result;
                 }).thenRun(() -> {

@@ -28,6 +28,7 @@ import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.test.appender.ListAppender;
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.messaging.core.SubscribableEventSource;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.AfterEach;
@@ -78,7 +79,7 @@ class DefaultPersistentStreamEventSourceFactoryTest {
         @Test
         void returnsEventSource() {
             // when
-            PersistentStreamEventSource result = factory.build(STREAM_NAME, properties, scheduler, 1, configuration);
+            SubscribableEventSource result = factory.build(STREAM_NAME, properties, scheduler, 1, configuration);
 
             // then
             assertThat(result).isNotNull();
@@ -87,8 +88,8 @@ class DefaultPersistentStreamEventSourceFactoryTest {
         @Test
         void returnsDistinctInstancesForSameName() {
             // when
-            PersistentStreamEventSource first = factory.build(STREAM_NAME, properties, scheduler, 1, configuration);
-            PersistentStreamEventSource second = factory.build(STREAM_NAME, properties, scheduler, 1, configuration);
+            SubscribableEventSource first = factory.build(STREAM_NAME, properties, scheduler, 1, configuration);
+            SubscribableEventSource second = factory.build(STREAM_NAME, properties, scheduler, 1, configuration);
 
             // then
             assertThat(first).isNotSameAs(second);

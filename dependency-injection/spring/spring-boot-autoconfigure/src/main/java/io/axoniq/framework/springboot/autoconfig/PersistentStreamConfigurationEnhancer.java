@@ -30,6 +30,7 @@ import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
+import org.axonframework.messaging.core.SubscribableEventSource;
 import org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessorConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,8 +44,8 @@ import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
- * A {@link ConfigurationEnhancer} that registers a {@link PersistentStreamEventSource} component for each entry in
- * {@link AxonServerConfiguration#getPersistentStreams()}.
+ * A {@link ConfigurationEnhancer} that registers a {@link SubscribableEventSource} component consuming a persistent
+ * stream for each entry in {@link AxonServerConfiguration#getPersistentStreams()}.
  * <p>
  * Each map key of the {@link AxonServerConfiguration.PersistentStreamSettings} becomes the component name (and thus the
  * Spring bean name after being exposed by the
@@ -53,8 +54,7 @@ import java.util.concurrent.ScheduledExecutorService;
  * The resolved Axon Server stream name defaults to the map key but can be overridden via
  * {@link AxonServerConfiguration.PersistentStreamSettings#getName()}.
  * <p>
- * The resulting beans implement {@link org.axonframework.messaging.core.SubscribableEventSource} and can be referenced
- * by subscribing event processors through
+ * The resulting beans can be referenced by subscribing event processors through
  * {@code axon.eventhandling.processors.&lt;processor-name&gt;.source=&lt;stream-name&gt;}.
  * <p>
  * Example configuration:
@@ -76,8 +76,8 @@ import java.util.concurrent.ScheduledExecutorService;
  * }</pre>
  *
  * <p>
- * Actual construction of each {@link PersistentStreamEventSource} is delegated to a
- * {@link PersistentStreamEventSourceFactory} to allow customization if needed.
+ * Actual construction of each source is delegated to a {@link PersistentStreamEventSourceFactory} to allow
+ * customization if needed. The default factory builds a {@link PersistentStreamEventSource}.
  * <p>
  * The {@link PersistentStreamConfigurationEnhancer} also implements {@link DisposableBean} and keeps a reference of all
  * {@link ScheduledExecutorService} instances created during {@link #enhance(ComponentRegistry)} to shut them down again
@@ -109,7 +109,7 @@ public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhan
      *                                 resolved lazily to avoid Spring lifecycle ordering issues with
      *                                 {@link org.axonframework.extension.spring.config.SpringComponentRegistry}
      * @param schedulerBuilder         the builder used to create a per-stream {@link ScheduledExecutorService}
-     * @param eventSourceFactory       the eventSourceFactory used to construct each {@link PersistentStreamEventSource}
+     * @param eventSourceFactory       the eventSourceFactory used to construct each event source
      */
     public PersistentStreamConfigurationEnhancer(
             ObjectProvider<AxonServerConfiguration> axonServerConfigProvider,
@@ -137,7 +137,7 @@ public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhan
                             .forType(SubscribingEventProcessorConfiguration.class)
                             .with((axonConfig, name, delegate) -> {
                                 String desiredStreamName = delegate.processorName() + "-stream";
-                                if (!registry.hasComponent(PersistentStreamEventSource.class, desiredStreamName)) {
+                                if (!registry.hasComponent(SubscribableEventSource.class, desiredStreamName)) {
                                     PersistentStreamProperties properties = toPersistentStreamProperties(
                                             desiredStreamName,
                                             autoPersistentStreamsSettings);
@@ -145,7 +145,7 @@ public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhan
                                             autoPersistentStreamsSettings.getThreadCount(),
                                             desiredStreamName);
                                     schedulers.add(scheduler);
-                                    PersistentStreamEventSource streamSource = factory.build(
+                                    SubscribableEventSource streamSource = factory.build(
                                             desiredStreamName,
                                             properties,
                                             scheduler,
@@ -156,7 +156,7 @@ public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhan
                                     // spring beans, because decoration runs after beans components are exposed to
                                     // the SpringComponentRegistry, but they don't need to be.
                                     registry.registerComponent(
-                                            ComponentDefinition.ofTypeAndName(PersistentStreamEventSource.class,
+                                            ComponentDefinition.ofTypeAndName(SubscribableEventSource.class,
                                                                               desiredStreamName)
                                                                .withBuilder(config -> streamSource)
                                     );
@@ -185,7 +185,7 @@ public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhan
             schedulers.add(scheduler);
 
             registry.registerComponent(
-                    ComponentDefinition.ofTypeAndName(PersistentStreamEventSource.class, beanName)
+                    ComponentDefinition.ofTypeAndName(SubscribableEventSource.class, beanName)
                                        .withBuilder(config -> factory.build(
                                                streamName,
                                                properties,
