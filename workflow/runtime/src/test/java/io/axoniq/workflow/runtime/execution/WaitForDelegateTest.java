@@ -88,7 +88,7 @@ class WaitForDelegateTest {
         when(workflowExecution.workflowId()).thenReturn("wf-123");
         when(workflowExecution.state()).thenReturn(state);
         when(workflowExecution.processingContext()).thenReturn(processingContext);
-        when(workflowExecution.isExecutable()).thenReturn(true);
+        when(workflowExecution.isRunning()).thenReturn(true);
         when(workflowExecution.hasTasks()).thenReturn(true);
         when(state.containsStep("awaitPayment")).thenAnswer(inv -> startedStep.get() != null);
         when(state.getStep("awaitPayment")).thenAnswer(inv -> startedStep.get());

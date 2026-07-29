@@ -187,19 +187,19 @@ class WorkflowEngineReplayTest {
         );
 
         assertSameToken(execution.restartToken(), token(18));
-        // Initially NOT executable (replay mode)
-        assertThat(execution.isExecutable()).isFalse();
+        // Initially not running (replay mode)
+        assertThat(execution.isRunning()).isFalse();
 
         EventMessage event = mock(EventMessage.class);
         when(event.metadata()).thenReturn(Metadata.with("none", "none"));
 
         execution.onEvent(event, pc);
-        assertThat(execution.isExecutable()).isFalse();
+        assertThat(execution.isRunning()).isFalse();
 
-        // Trigger switch to executable (end of replay)
+        // Trigger start after replay
         execution.execute(i -> {
         });
-        assertThat(execution.isExecutable()).isTrue();
+        assertThat(execution.isRunning()).isTrue();
     }
 
     @Test

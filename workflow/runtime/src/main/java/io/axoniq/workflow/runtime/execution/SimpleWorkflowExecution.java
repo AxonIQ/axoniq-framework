@@ -93,7 +93,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     private final RunningSteps runningSteps = new RunningSteps();
     private final Set<String> referencedStepNames = ConcurrentHashMap.newKeySet();
 
-    private boolean executable = false;
+    private boolean running = false;
 
     /**
      * Constructs a new instance.
@@ -143,7 +143,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
      */
     @Override
     public void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler) {
-        this.executable = true;
+        this.running = true;
         // run in a separate thread to avoid blocking the replay status change handler thread ( = WorkPackage)
 
         ProcessingContextUtils
@@ -353,7 +353,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
      * @param terminationHandler termination handler to call.
      */
     private void finishWorkflow(Consumer<WorkflowExecution> terminationHandler) {
-        this.executable = false; // mark we are done and are not executable anymore
+        this.running = false;
         // TODO -> how do we recognize workflow executions which came to this point bit haven't reach the terminal states?
         this.taskQueue.clear();
         this.eventWaitConditions.clear();
@@ -375,7 +375,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     @Override
     public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
-        if (executable) {
+        if (running) {
             // live mode
 
             eventWaitConditions.evaluateAndApply(eventMessage, processingContext, contextDelegate::eventReceived);
@@ -516,8 +516,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
     @Override
-    public boolean isExecutable() {
-        return executable;
+    public boolean isRunning() {
+        return running;
     }
 
     private CompletableFuture<Void> sendWorkflowEvent(
@@ -606,7 +606,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         descriptor.describeProperty("delegate", contextDelegate);
-        descriptor.describeProperty("executable", executable);
+        descriptor.describeProperty("running", running);
         descriptor.describeProperty("state", state());
         eventWaitConditions.describeTo(descriptor);
         runningSteps.describeTo(descriptor);

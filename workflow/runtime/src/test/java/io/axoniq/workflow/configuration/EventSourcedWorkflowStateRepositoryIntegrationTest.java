@@ -18,45 +18,30 @@
  */
 package io.axoniq.workflow.configuration;
 
-import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
-import jakarta.annotation.Nonnull;
-import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.modelling.repository.Repository;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.Map;
 
+import static io.axoniq.workflow.runtime.api.execution.status.StepStatus.COMPLETED;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
-class EventSourcedWorkflowStateRepositoryIntegrationTest {
-
-    private AxonConfiguration configuration;
-
-    @AfterEach
-    void tearDown() {
-        if (configuration != null) {
-            configuration.shutdown();
-        }
-    }
+/**
+ * EventSourcedWorkflowState integration test.
+ *
+ * @author Simon Zambrovski
+ */
+class EventSourcedWorkflowStateRepositoryIntegrationTest extends AbstractEventSourcedEntityRepositoryTestBase {
 
     @Test
     void repositoryRebuildsWorkflowStateFromWorkflowIdTaggedEvents() {
-        configuration = configuration();
+        configuration = configuration("workflow-state-module");
         configuration.start();
 
         var definitionId = new MessageType(new QualifiedName("OrderWorkflow"), "1.0.0");
@@ -80,68 +65,15 @@ class EventSourcedWorkflowStateRepositoryIntegrationTest {
         assertThat(state.workflowDefinitionId()).isEqualTo(definitionId);
         assertThat(state.workflowDefinitionVersion()).isEqualTo("1.0.0");
         assertThat(state.getStep("approveOrder").status())
-                .isEqualTo(io.axoniq.workflow.runtime.api.execution.status.StepStatus.COMPLETED);
-    }
-
-    private AxonConfiguration configuration() {
-        var module = WorkflowModule.defaults("workflow-state-module", TestContext.class)
-                                   .workflowContextFactory(c -> TestContext::new)
-                                   .definition(d -> d
-                                           .declarative(c -> ctx -> {
-                                           })
-                                           .workflowName("workflow-state")
-                                           .on(c -> EventConditions.fromQualifiedName(new QualifiedName("start")))
-                                           .notCustomized()
-                                   );
-
-        var configurer = WorkflowConfigurer.create();
-        configurer.componentRegistry(cr -> cr.registerModule(module));
-        return configurer.build();
-    }
-
-    private void publish(EventMessage eventMessage) {
-        var eventStore = configuration.getComponent(org.axonframework.eventsourcing.eventstore.EventStore.class);
-        var unitOfWorkFactory = configuration.getComponent(UnitOfWorkFactory.class);
-        unitOfWorkFactory.create("publish-workflow-state-test")
-                         .executeWithResult(context -> eventStore.publish(context, eventMessage)
-                                                                 .thenApply(ignored -> eventMessage))
-                         .join();
+                .isEqualTo(COMPLETED);
     }
 
     private EventSourcedWorkflowState load(String workflowId) {
         var unitOfWorkFactory = configuration.getComponent(UnitOfWorkFactory.class);
         return unitOfWorkFactory.create("load-workflow-state-test")
-                                .executeWithResult(context -> repository().loadOrCreate(workflowId, context)
-                                                                          .thenApply(managedEntity -> managedEntity.entity()))
+                                .executeWithResult(context -> repository(EventSourcedWorkflowState.class)
+                                        .loadOrCreate(workflowId, context)
+                                        .thenApply(managedEntity -> managedEntity.entity()))
                                 .join();
-    }
-
-    @SuppressWarnings("unchecked")
-    private Repository<String, EventSourcedWorkflowState> repository() {
-        return configuration.getComponents(Repository.class)
-                            .values()
-                            .stream()
-                            .filter(repository -> repository.entityType().equals(EventSourcedWorkflowState.class))
-                            .map(repository -> (Repository<String, EventSourcedWorkflowState>) repository)
-                            .findFirst()
-                            .orElseThrow();
-    }
-
-    private static WorkflowContext workflowContext(String workflowId, String version) {
-        var context = mock(WorkflowContext.class);
-        when(context.workflowId()).thenReturn(workflowId);
-        when(context.workflowPayload()).thenReturn(Map.of("orderId", workflowId));
-        when(context.workflowVersion()).thenReturn(version);
-        return context;
-    }
-
-    static class TestContext extends AbstractDSLWorkflowContext {
-
-        public TestContext(@Nonnull Map<String, Object> payload,
-                           @Nonnull String workflowId,
-                           @Nonnull ProcessingContext processingContext,
-                           @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
-            super(workflowId, payload, processingContext, workflowConfiguration);
-        }
     }
 }

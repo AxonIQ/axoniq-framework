@@ -171,7 +171,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
                 logger.info("No running workflow instances found.");
             } else {
                 var executionsToStart = allExecution.stream()
-                                                    .filter(execution -> !execution.isExecutable())
+                                                    .filter(execution -> !execution.isRunning())
                                                     .toList();
                 logger.info("Restored {} running workflow instances, starting {} workflow execution(s).",
                             allExecution.size(),
@@ -334,7 +334,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         var executionsToStart = workflowExecutionRepository
                 .findAll()
                 .stream()
-                .filter(execution -> !execution.isExecutable())
+                .filter(execution -> !execution.isRunning())
                 .filter(execution -> !execution.state().workflowStatus().isTerminal())
                 .toList();
         if (executionsToStart.isEmpty()) {
