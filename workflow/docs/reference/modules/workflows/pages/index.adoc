@@ -40,7 +40,7 @@ New to the engine? Start with the xref:axon-workflow-getting-started::index.adoc
 
 == Testing
 
-* *xref:testing-workflows.adoc[Testing Workflows]*: Integration tests with AbstractDeclarativeTestBase
+* *xref:testing-workflows.adoc[Testing Workflows]*: BDD fixture tests and advanced workflow test driver usage
 
 == Code evolution
 

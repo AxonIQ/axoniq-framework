@@ -28,10 +28,10 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 /**
- * Repository for retrieving workflow instances.
+ * Repository for retrieving workflow executions, storing new ones, and removing them.
  * <p>
- * Each workflow instance is identified by a unique workflow identifier and is represented
- * as a {@link WorkflowInstance} bundling configuration, context, and execution state.
+ * Each workflow execution is identified by a unique workflow identifier and is represented
+ * as a {@link WorkflowExecution} bundling configuration, context, and execution state.
  *
  * @author Stefan Dragisic
  * @since 1.0.0

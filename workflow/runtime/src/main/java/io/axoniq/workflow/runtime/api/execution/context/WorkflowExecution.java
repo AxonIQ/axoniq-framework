@@ -93,11 +93,11 @@ public interface WorkflowExecution extends DescribableComponent {
     Consumer<WorkflowExecution> getNextTask();
 
     /**
-     * Returns true if the workflow execution is executable.
+     * Returns whether the workflow execution runtime is running.
      *
-     * @return true if the workflow execution is executable.
+     * @return true if the workflow execution runtime is running
      */
-    boolean isExecutable();
+    boolean isRunning();
 
     /**
      * Returns true if the workflow execution has tasks to execute.
@@ -195,6 +195,13 @@ public interface WorkflowExecution extends DescribableComponent {
      */
     @Nonnull
     WorkflowState state();
+
+    /**
+     * Initializes this newly created execution with a workflow state.
+     *
+     * @param state workflow state loaded from a repository
+     */
+    void initializeState(@Nonnull WorkflowState state);
 
     /**
      * Returns the processing context of the workflow execution.

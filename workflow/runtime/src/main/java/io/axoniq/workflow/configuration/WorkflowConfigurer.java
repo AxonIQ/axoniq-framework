@@ -104,9 +104,24 @@ public class WorkflowConfigurer implements ApplicationConfigurer {
         return this;
     }
 
+
+    /**
+     * Delegates the given {@code configurerTask} to the {@link EventSourcingConfigurer} this
+     * {@code EventSourcingConfigurer} delegates.
+     * <p>
+     * Use this operation to invoke registration methods that only exist on the {@code EventSourcingConfigurer}.
+     *
+     * @param configurerTask Lambda consuming the delegate {@link EventSourcingConfigurer}.
+     * @return The current instance of the {@code Configurer} for a fluent API.
+     */
+    public WorkflowConfigurer eventSourcing(Consumer<EventSourcingConfigurer> configurerTask) {
+        requireNonNull(configurerTask, "The configure task must no be null.").accept(delegate);
+        return this;
+    }
+
     @Override
     public WorkflowConfigurer componentRegistry(Consumer<ComponentRegistry> componentRegistrar) {
-        delegate.componentRegistry(requireNonNull(componentRegistrar, "The configure task must no be null."));
+        delegate.componentRegistry(requireNonNull(componentRegistrar, "The component registrar must no be null."));
         return this;
     }
 

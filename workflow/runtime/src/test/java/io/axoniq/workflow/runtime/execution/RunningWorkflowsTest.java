@@ -20,31 +20,32 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.*;
+import org.junit.jupiter.params.provider.*;
 
+import static io.axoniq.workflow.runtime.execution.WorkflowEventTags.TAG_VALUE_EVENT_TYPE_LIFECYCLE;
+import static io.axoniq.workflow.runtime.execution.WorkflowEventTags.TAG_WORKFLOW_EVENT_TYPE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RunningWorkflowsTest {
 
     @Test
-    void workflowLifecycleEventsSelectLifecycleTaggedEvents() {
-        assertThat(RunningWorkflows.workflowLifecycleEvents()).isEqualTo(
+    void criteriaBuilder() {
+        assertThat(EventSourcedRunningWorkflows.criteriaBuilder()).isEqualTo(
                 EventCriteria.havingTags(Tag.of(
-                        WorkflowEventTagResolver.TAG_WORKFLOW_EVENT_TYPE,
-                        WorkflowEventTagResolver.TAG_VALUE_EVENT_TYPE_LIFECYCLE
+                        TAG_WORKFLOW_EVENT_TYPE,
+                        TAG_VALUE_EVENT_TYPE_LIFECYCLE
                 ))
         );
     }
 
     @Test
     void startedStatusAddsWorkflowIdAndUpdatesContains() {
-        var state = new RunningWorkflows();
+        var state = new EventSourcedRunningWorkflows();
 
         state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
 
@@ -56,7 +57,7 @@ class RunningWorkflowsTest {
     @ParameterizedTest
     @EnumSource(value = WorkflowStatus.class, names = {"COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"})
     void terminalStatusesRemoveWorkflowIds(WorkflowStatus status) {
-        var state = new RunningWorkflows();
+        var state = new EventSourcedRunningWorkflows();
 
         state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
         state.evolve(MetadataUtils.create("wf-123", status));
@@ -67,7 +68,7 @@ class RunningWorkflowsTest {
 
     @Test
     void noneStatusDoesNotChangeRunningWorkflowIds() {
-        var state = new RunningWorkflows();
+        var state = new EventSourcedRunningWorkflows();
 
         state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
         state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.NONE));
@@ -78,7 +79,7 @@ class RunningWorkflowsTest {
 
     @Test
     void metadataWithoutWorkflowStatusDoesNotChangeRunningWorkflowIds() {
-        var state = new RunningWorkflows();
+        var state = new EventSourcedRunningWorkflows();
 
         state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
         state.evolve(MetadataUtils.create("wf-123"));
@@ -88,7 +89,7 @@ class RunningWorkflowsTest {
 
     @Test
     void workflowIdsReturnsImmutableCopy() {
-        var state = new RunningWorkflows();
+        var state = new EventSourcedRunningWorkflows();
 
         state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
 

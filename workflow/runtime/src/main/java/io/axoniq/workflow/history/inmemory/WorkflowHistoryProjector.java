@@ -63,17 +63,20 @@ public class WorkflowHistoryProjector implements EventHandler {
                         new WorkflowHistory(workflowId, history.state().evolve(event, context))
                 );
             }, () -> {
-                historyRepository.save(new WorkflowHistory(workflowId,
-                                                           new EventSourcedWorkflowState(
-                                                                   workflowId,
-                                                                   new HashMap<>()
-                                                                   ,
-                                                                   MetadataUtils.getWorkflowDefinitionId(event.metadata())
-                                                                                .orElseThrow(() -> new IllegalStateException(
-                                                                                        "Workflow history for '%s' cannot be created without workflowDefinitionId metadata."
-                                                                                                .formatted(workflowId)
-                                                                                ))
-                                                           ).evolve(event, context)));
+                var workflowDefinitionId = MetadataUtils.getWorkflowDefinitionId(event.metadata())
+                                                        .orElseThrow(() -> new IllegalStateException(
+                                                                "Workflow history for '%s' cannot be created without workflowDefinitionId metadata."
+                                                                        .formatted(workflowId)
+                                                        ));
+                historyRepository.save(
+                        new WorkflowHistory(workflowId,
+                                            new EventSourcedWorkflowState(
+                                                    workflowId,
+                                                    new HashMap<>(),
+                                                    workflowDefinitionId
+                                            ).evolve(event, context)
+                        )
+                );
             });
         }
         return MessageStream.empty();

@@ -28,7 +28,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
@@ -36,10 +35,12 @@ import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,12 +73,12 @@ import static java.lang.Thread.currentThread;
  * @author Steven van Beelen
  * @since 1.0.0
  */
-public final class SimpleWorkflowExecution implements WorkflowExecution, WorkflowStateRehydratable {
+public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleWorkflowExecution.class);
 
     // State variables
-    private final EventSourcedWorkflowState workflowState;
+    private WorkflowState workflowState;
     private final WorkflowConfiguration<?> workflowConfiguration;
 
     // Execution
@@ -91,7 +92,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final WorkflowExecutionCheckpointSupport checkpointSupport = new WorkflowExecutionCheckpointSupport(new WorkflowExecutionCheckpointSupport.Host() {
         @Override
         public boolean isExecutable() {
-            return executable;
+            return running;
         }
 
         @Override
@@ -104,7 +105,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
             SimpleWorkflowExecution.this.appendTask(task);
         }
     });
-    private boolean executable = false;
+    private boolean running = false;
 
     /**
      * Constructs a new instance.
@@ -123,7 +124,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     ) {
         this.workflowConfiguration = Objects.requireNonNull(workflowConfiguration,
                                                             "Workflow configuration must not be null");
-        var workflowDefinitionId = new WorkflowDefinitionId(
+        var workflowDefinitionId = new MessageType(
                 new QualifiedName(workflowConfiguration.workflowName()),
                 workflowConfiguration.workflowVersion()
         );
@@ -133,25 +134,32 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 this,
                 processingContext
         );
-        this.workflowState = new EventSourcedWorkflowState(
-                Objects.requireNonNull(workflowId, "Workflow id must not be null"),
-                initial,
-                workflowDefinitionId,
-                this.contextDelegate.typedWorkflowContext(),
-                workflowConfiguration.workflowStatusChangeListeners()
+        initializeState(
+                new EventSourcedWorkflowState(
+                        Objects.requireNonNull(workflowId, "Workflow id must not be null"),
+                        initial,
+                        workflowDefinitionId
+                )
         );
     }
 
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * The body runs inside a unit of work spanning the instance's entire lifetime. It is created from the
+     * non-transactional {@link WorkflowContextDelegation#workflowBodyUnitOfWorkFactory()} so that no transactional
+     * resources are held while the instance is parked.
+     */
     @Override
     public void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler) {
-        this.executable = true;
+        this.running = true;
         // run in a separate thread to avoid blocking the replay status change handler thread ( = WorkPackage)
 
         ProcessingContextUtils
                 .executeWithResultInSeparateThread(
                         contextDelegate.workflowId(),
-                        contextDelegate.unitOfWorkFactory(),
+                        contextDelegate.workflowBodyUnitOfWorkFactory(),
                         contextDelegate.executorService(),
                         this.processingContext(),
                         ctx -> {
@@ -355,7 +363,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param terminationHandler termination handler to call.
      */
     private void finishWorkflow(Consumer<WorkflowExecution> terminationHandler) {
-        this.executable = false; // mark we are done and are not executable anymore
+        this.running = false;
         // TODO -> how do we recognize workflow executions which came to this point bit haven't reach the terminal states?
         this.taskQueue.clear();
         this.eventWaitConditions.clear();
@@ -375,7 +383,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     @Override
     public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
-        if (executable) {
+        if (running) {
             // live mode
             eventWaitConditions.evaluateAndApply(eventMessage, processingContext, contextDelegate::eventReceived);
             appendTask(i -> state().evolve(eventMessage, processingContext));
@@ -527,8 +535,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     @Override
-    public boolean isExecutable() {
-        return executable;
+    public boolean isRunning() {
+        return running;
     }
 
     private CompletableFuture<Void> sendWorkflowEvent(
@@ -588,8 +596,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     @Override
-    public void rehydrate(@Nonnull EventSourcedWorkflowState state) {
-        workflowState.restoreFrom(state);
+    public void initializeState(@Nonnull WorkflowState state) {
+        this.workflowState = new EventSourcedWorkflowState(
+                state,
+                this.contextDelegate.typedWorkflowContext(),
+                this.workflowConfiguration.workflowStatusChangeListeners()
+        );
     }
 
     @Override
@@ -607,7 +619,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         descriptor.describeProperty("delegate", contextDelegate);
-        descriptor.describeProperty("executable", executable);
+        descriptor.describeProperty("running", running);
         descriptor.describeProperty("state", state());
         eventWaitConditions.describeTo(descriptor);
         runningSteps.describeTo(descriptor);

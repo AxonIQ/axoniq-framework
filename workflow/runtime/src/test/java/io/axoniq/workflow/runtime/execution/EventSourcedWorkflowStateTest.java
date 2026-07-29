@@ -18,14 +18,17 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowExecutionException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.Metadata;
@@ -44,8 +47,7 @@ import static org.mockito.Mockito.*;
 class EventSourcedWorkflowStateTest {
 
     private static final String WORKFLOW_ID = "workflowId";
-    private static final WorkflowDefinitionId DEFINITION_ID =
-            new WorkflowDefinitionId(new QualifiedName("TestWorkflow"), "0.0.1");
+    private static final MessageType DEFINITION_ID = new MessageType(new QualifiedName("TestWorkflow"), "0.0.1");
 
     private EventSourcedWorkflowState state;
     private ProcessingContext processingContext;
@@ -73,6 +75,32 @@ class EventSourcedWorkflowStateTest {
         WorkflowStep step = state.getStep(stepName);
         assertThat(step.status()).isEqualTo(StepStatus.STARTED);
         assertThat(step.result()).isEqualTo(payload);
+    }
+
+    @Test
+    void rehydratedStateRetainsSourcedDataAndUsesLiveStatusListeners() {
+        var sourcedState = new EventSourcedWorkflowState(
+                WORKFLOW_ID,
+                Map.of("key", "value"),
+                DEFINITION_ID
+        );
+        sourcedState.setStatus(WorkflowStatus.STARTED, null);
+        var workflowContext = mock(WorkflowContext.class);
+        var listener = mock(WorkflowStatusChangeListener.class);
+
+        var rehydratedState = new EventSourcedWorkflowState(
+                sourcedState,
+                workflowContext,
+                Map.of(WorkflowStatus.COMPLETED, listener)
+        );
+
+        assertThat(rehydratedState.workflowId()).isEqualTo(WORKFLOW_ID);
+        assertThat(rehydratedState.payload()).containsEntry("key", "value");
+        assertThat(rehydratedState.workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
+
+        rehydratedState.setStatus(WorkflowStatus.COMPLETED, null);
+
+        verify(listener).onWorkflowStatus(WorkflowStatus.COMPLETED, workflowContext);
     }
 
     @Test
@@ -208,7 +236,7 @@ class EventSourcedWorkflowStateTest {
         // the configured version (not the implicit "0.0.1" default).
         var seeded = new EventSourcedWorkflowState("wf-1",
                                                    Map.of(),
-                                                   new WorkflowDefinitionId(new QualifiedName("OrderWorkflow"), "1.2.3"),
+                                                   new MessageType(new QualifiedName("OrderWorkflow"), "1.2.3"),
                                                    mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowContext.class),
                                                    Map.of());
         assertThat(seeded.workflowDefinitionVersion()).isEqualTo("1.2.3");
@@ -222,7 +250,7 @@ class EventSourcedWorkflowStateTest {
         // route to the matching sibling.
         var seeded = new EventSourcedWorkflowState("wf-1",
                                                    Map.of(),
-                                                   new WorkflowDefinitionId(new QualifiedName("OrderWorkflow"), "2.0.0"),
+                                                   new MessageType(new QualifiedName("OrderWorkflow"), "2.0.0"),
                                                    mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowContext.class),
                                                    Map.of());
 

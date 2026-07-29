@@ -20,7 +20,7 @@
     <parent>
         <groupId>io.axoniq.framework</groupId>
         <artifactId>axoniq-workflow-parent</artifactId>
-        <version>0.1.1-SNAPSHOT</version>
+        <version>0.3.0-SNAPSHOT</version>
     </parent>
 
     <groupId>io.axoniq.framework.examples</groupId>
@@ -39,6 +39,7 @@
     <modules>
         <module>simple</module>
         <module>bike-rental</module>
+        <module>integrationtests</module>
     </modules>
 
     <build>

@@ -37,8 +37,8 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
@@ -113,7 +113,6 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
         }
     }
 
-
     @Override
     public MessageStream.Empty<Message> handle(EventMessage event, ProcessingContext context) {
         logger.debug("Handling event {}", event);
@@ -129,7 +128,6 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
     public boolean supports(QualifiedName eventName) {
         return true;
     }
-
 
     @Override
     public Object sequenceIdentifierFor(EventMessage event,

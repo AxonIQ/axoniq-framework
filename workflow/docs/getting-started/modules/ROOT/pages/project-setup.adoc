@@ -50,7 +50,7 @@ The Axon Workflow Engine consists of four modules:
 
 |`runtime` |Core engine: primitives, combinators, execution, configuration
 |`dsl` |DSL layers for Java (`BaseWorkflowContext` and `SimpleWorkflowContext`) and Kotlin (`WorkflowKontext` and `Kontext`)
-|`test` |Testing utilities: `AbstractDeclarativeTestBase`, `DelayedPublisher`
+|`test` |Testing utilities: `AbstractWorkflowTestBase`, `DelayedPublisher`
 |`example` |Example workflows demonstrating all features
 |===
 

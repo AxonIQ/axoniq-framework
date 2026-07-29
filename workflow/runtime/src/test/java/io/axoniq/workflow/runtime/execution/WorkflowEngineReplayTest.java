@@ -23,7 +23,6 @@ import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointTrigger
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
@@ -49,6 +48,7 @@ import org.axonframework.messaging.eventhandling.replay.ReplayStatus;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
+import org.mockito.ArgumentCaptor;
 
 import java.lang.reflect.Field;
 import java.time.Clock;
@@ -56,6 +56,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -72,17 +73,17 @@ class WorkflowEngineReplayTest {
     private WorkflowEngine workflowEngine;
     private WorkflowExecutionRepository workflowExecutionRepository;
     private WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
-    private WorkflowStateRehydrationSupport workflowStateRehydrationSupport;
+    private WorkflowStore workflowStore;
 
     @BeforeEach
     void setUp() {
         workflowExecutionRepository = spy(new InMemoryWorkflowExecutionRepository());
         workflowConfigurationRegistry = mock(WorkflowConfigurationRegistry.class);
-        workflowStateRehydrationSupport = mock(WorkflowStateRehydrationSupport.class);
+        workflowStore = mock(WorkflowStore.class);
         workflowEngine = new WorkflowEngine(
                 workflowConfigurationRegistry,
                 workflowExecutionRepository,
-                workflowStateRehydrationSupport
+                workflowStore
         );
     }
 
@@ -165,6 +166,8 @@ class WorkflowEngineReplayTest {
         when(pc.component(Clock.class)).thenReturn(Clock.systemUTC());
         when(pc.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
         when(pc.component(EventSink.class)).thenReturn(mock(EventSink.class));
+        when(pc.component(WorkflowScheduler.class)).thenReturn(mock(WorkflowScheduler.class));
+        when(pc.component(ExecuteStepActionResolver.class)).thenReturn(mock(ExecuteStepActionResolver.class));
 
         WorkflowContext workflowContext = mock(WorkflowContext.class);
         when(workflowContext.processingContext()).thenReturn(pc);
@@ -177,49 +180,39 @@ class WorkflowEngineReplayTest {
                 workflowContext
         );
 
-        // Initially NOT executable (replay mode)
-        assertThat(execution.isExecutable()).isFalse();
+        // Initially not running (replay mode)
+        assertThat(execution.isRunning()).isFalse();
 
         EventMessage event = mock(EventMessage.class);
         when(event.metadata()).thenReturn(Metadata.with("none", "none"));
 
         execution.onEvent(event, pc);
-        assertThat(execution.isExecutable()).isFalse();
+        assertThat(execution.isRunning()).isFalse();
 
-        // Trigger switch to executable (end of replay)
+        // Trigger start after replay
         execution.execute(i -> {
         });
-        assertThat(execution.isExecutable()).isTrue();
+        assertThat(execution.isRunning()).isTrue();
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    void rehydrateRunningWorkflowsRestoresExecutionState() {
+    void startRestoresExecutionStateUsingSeparateSourcingAndExecutionContexts() {
         String workflowId = "wf-1";
         TrackingToken checkpointToken = token(30);
-        ProcessingContext restoreContext = processingContext(checkpointToken);
-        ProcessingContext executionContext = processingContext(checkpointToken);
-        when(restoreContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
-        when(restoreContext.component(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
-        when(restoreContext.component(Clock.class)).thenReturn(Clock.systemUTC());
-        when(restoreContext.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
-        when(restoreContext.component(EventSink.class)).thenReturn(mock(EventSink.class));
-        when(executionContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
-        when(executionContext.component(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
-        when(executionContext.component(Clock.class)).thenReturn(Clock.systemUTC());
-        when(executionContext.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
-        when(executionContext.component(EventSink.class)).thenReturn(mock(EventSink.class));
+        ProcessingContext processingContext = processingContext(checkpointToken);
+        when(processingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
 
-        var running = new RunningWorkflows();
+        var running = new EventSourcedRunningWorkflows();
         running.evolve(MetadataUtils.create(workflowId, WorkflowStatus.STARTED));
-        when(workflowStateRehydrationSupport.loadRunningWorkflows(same(restoreContext))).thenReturn(running);
+        when(workflowStore.loadRunningWorkflows(same(processingContext))).thenReturn(CompletableFuture.completedFuture(running));
 
-        var definitionId = new WorkflowDefinitionId(new QualifiedName("RestoredWorkflow"), "1.0.0");
+        var definitionId = new MessageType(new QualifiedName("RestoredWorkflow"), "1.0.0");
         var restoredState = new EventSourcedWorkflowState(workflowId, definitionId);
-        restoredState.evolve(workflowStartedEvent(workflowId, definitionId, Map.of("mode", "wait")), restoreContext);
-        restoredState.evolve(stepStartedEvent(workflowId, "waitForResume"), restoreContext);
-        when(workflowStateRehydrationSupport.loadWorkflowState(eq(workflowId), same(restoreContext)))
-                .thenReturn(restoredState);
+        restoredState.evolve(workflowStartedEvent(workflowId, definitionId, Map.of("mode", "wait")), processingContext);
+        restoredState.evolve(stepStartedEvent(workflowId, "waitForResume"), processingContext);
+        when(workflowStore.loadWorkflow(eq(workflowId), same(processingContext)))
+                .thenReturn(CompletableFuture.completedFuture(restoredState));
 
         WorkflowConfiguration<WorkflowContext> configuration = mock(WorkflowConfiguration.class);
         WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
@@ -233,27 +226,19 @@ class WorkflowEngineReplayTest {
         when(configuration.workflowContextFactory()).thenReturn(contextFactory);
         when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
         when(workflowConfigurationRegistry.getWorkflowConfiguration(definitionId)).thenReturn(Optional.of(configuration));
-        when(contextFactory.createContext(anyMap(), eq(workflowId), same(executionContext), eq(configuration)))
+        when(contextFactory.createContext(anyMap(), eq(workflowId), any(ProcessingContext.class), eq(configuration)))
                 .thenReturn(workflowContext);
-        var restoredExecution = new SimpleWorkflowExecution(
-                workflowId,
-                restoredState.payload(),
-                executionContext,
-                configuration,
-                workflowContext
-        );
+        var restoredExecution = mock(WorkflowExecution.class);
+        when(restoredExecution.isRunning()).thenReturn(true);
         when(executionFactory.create(workflowContext)).thenReturn(restoredExecution);
 
-        workflowEngine.rehydrateRunningWorkflows(restoreContext, executionContext);
+        ProcessingContext executionContext = processingContext(checkpointToken);
+        workflowEngine.start(checkpointToken, processingContext, executionContext);
 
-        var restored = workflowEngine.workflowExecutions().iterator().next();
-        assertThat(restored.workflowId()).isEqualTo(workflowId);
-        assertThat(restored.state().payload()).containsEntry("mode", "wait");
-        assertThat(restored.state().workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
-        assertThat(restored.state().workflowDefinitionVersion()).isEqualTo(definitionId.version());
-        assertThat(restored.state().getStep("waitForResume").status()).isEqualTo(
-                io.axoniq.workflow.runtime.api.execution.status.StepStatus.STARTED
-        );
+        verify(restoredExecution).initializeState(restoredState);
+        var capturedExecutionContext = ArgumentCaptor.forClass(ProcessingContext.class);
+        verify(contextFactory).createContext(anyMap(), eq(workflowId), capturedExecutionContext.capture(), eq(configuration));
+        assertThat(capturedExecutionContext.getValue()).isSameAs(executionContext).isNotSameAs(processingContext);
     }
 
     @Test
@@ -440,7 +425,7 @@ class WorkflowEngineReplayTest {
     @Test
     void checkpointWaitsForWorkflowQueueToDrain() throws Exception {
         var execution = simpleExecution("wf-1", token(18));
-        markExecutable(execution, true);
+        markRunning(execution, true);
         execution.appendTask(ignored -> {
         });
         workflowExecutionRepository.save("wf-1", () -> execution);
@@ -462,7 +447,7 @@ class WorkflowEngineReplayTest {
     @Test
     void checkpointIsRequestedImmediatelyEvenWhenWorkflowQueueHasPendingWork() throws Exception {
         var execution = simpleExecution("wf-1", token(18));
-        markExecutable(execution, true);
+        markRunning(execution, true);
         execution.appendTask(ignored -> {
         });
         workflowExecutionRepository.save("wf-1", () -> execution);
@@ -513,7 +498,7 @@ class WorkflowEngineReplayTest {
     @Test
     void checkpointAdvanceRechecksWhenEarlierTaskAppendsMoreWorkBehindBarrier() throws Exception {
         var execution = simpleExecution("wf-1", token(18));
-        markExecutable(execution, true);
+        markRunning(execution, true);
         execution.appendTask(ignored -> execution.appendTask(next -> {
         }));
         workflowExecutionRepository.save("wf-1", () -> execution);
@@ -537,7 +522,7 @@ class WorkflowEngineReplayTest {
     @Test
     void checkpointIntentCallbacksAreCoalescedIntoSingleQueuedTask() throws Exception {
         var execution = simpleExecution("wf-1", token(18));
-        markExecutable(execution, true);
+        markRunning(execution, true);
         AtomicInteger drainedCallbacks = new AtomicInteger();
 
         execution.appendCheckpointIntent(drainedCallbacks::incrementAndGet);
@@ -587,6 +572,10 @@ class WorkflowEngineReplayTest {
         when(processingContext.component(Clock.class)).thenReturn(Clock.systemUTC());
         when(processingContext.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
         when(processingContext.component(EventSink.class)).thenReturn(mock(EventSink.class));
+        when(processingContext.component(WorkflowScheduler.class)).thenReturn(mock(WorkflowScheduler.class));
+        when(processingContext.component(ExecuteStepActionResolver.class)).thenReturn(
+                mock(ExecuteStepActionResolver.class)
+        );
 
         WorkflowConfiguration<WorkflowContext> config = mock(WorkflowConfiguration.class);
         when(config.workflowName()).thenReturn("CheckpointWorkflow");
@@ -606,10 +595,10 @@ class WorkflowEngineReplayTest {
         );
     }
 
-    private static void markExecutable(SimpleWorkflowExecution execution, boolean executable) throws Exception {
-        Field field = SimpleWorkflowExecution.class.getDeclaredField("executable");
+    private static void markRunning(SimpleWorkflowExecution execution, boolean running) throws Exception {
+        Field field = SimpleWorkflowExecution.class.getDeclaredField("running");
         field.setAccessible(true);
-        field.set(execution, executable);
+        field.set(execution, running);
     }
 
     private static void requestCheckpoint(WorkflowEngine workflowEngine,
@@ -625,7 +614,7 @@ class WorkflowEngineReplayTest {
     }
 
     private static EventMessage workflowStartedEvent(String workflowId,
-                                                     WorkflowDefinitionId definitionId,
+                                                     MessageType definitionId,
                                                      Map<String, Object> payload) {
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(MetadataUtils.create(workflowId, WorkflowStatus.STARTED, definitionId)

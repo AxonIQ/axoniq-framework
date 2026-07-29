@@ -20,11 +20,11 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.workflow.runtime.api.execution.context.Version;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
-import io.axoniq.workflow.runtime.util.Version;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -71,11 +71,12 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
 
     /**
      * Returns the configurations registered for {@code qualifiedName} whose
-     * {@link WorkflowConfiguration#workflowVersion()} is the highest among all registrations (semver-ordered).
-     * Multiple configurations may be returned if duplicates exist at that version (run-in-parallel semantics).
+     * {@link WorkflowConfiguration#workflowVersion()} is the highest among all registrations (semver-ordered). Multiple
+     * configurations may be returned if duplicates exist at that version (run-in-parallel semantics).
      */
     @Nonnull
-    default List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(@Nonnull QualifiedName qualifiedName) {
+    default List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(
+            @Nonnull QualifiedName qualifiedName) {
         var all = getWorkflowsConfigurations(qualifiedName);
         if (all.isEmpty()) {
             return List.of();
@@ -98,8 +99,8 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
 
     /**
      * Returns the configuration registered for {@code qualifiedName} whose
-     * {@link WorkflowConfiguration#workflowVersion()} equals {@code version} (semver-equal).
-     * If multiple are registered at that version, returns the first.
+     * {@link WorkflowConfiguration#workflowVersion()} equals {@code version} (semver-equal). If multiple are registered
+     * at that version, returns the first.
      */
     @Nonnull
     default Optional<WorkflowConfiguration<?>> getByVersion(@Nonnull QualifiedName qualifiedName,
@@ -115,9 +116,9 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
     }
 
     /**
-     * Finds a registered configuration by {@code workflowName} + {@code version} across all qualified names.
-     * Used to route an in-flight workflow's execution to the definition matching the version it was started
-     * under (as read from state, which sourced it from the started event's {@code MessageType.version()}).
+     * Finds a registered configuration by {@code workflowName} + {@code version} across all qualified names. Used to
+     * route an in-flight workflow's execution to the definition matching the version it was started under (as read from
+     * state, which sourced it from the started event's {@code MessageType.version()}).
      *
      * @param workflowName name of the workflow (matches {@link WorkflowConfiguration#workflowName()}).
      * @param version      semver version string to match against {@link WorkflowConfiguration#workflowVersion()}.
@@ -137,7 +138,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      */
     @Nonnull
     default Optional<WorkflowConfiguration<?>> getWorkflowConfiguration(
-            @Nonnull WorkflowDefinitionId workflowDefinitionId
+            @Nonnull MessageType workflowDefinitionId
     ) {
         return findByWorkflowNameAndVersion(
                 workflowDefinitionId.qualifiedName().toString(),
@@ -146,15 +147,14 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
     }
 
     /**
-     * Finds the "best routing match" for a given {@code workflowName} + {@code version}: the registered
-     * configuration whose {@code workflowVersion()} is the <strong>highest version less than or equal to</strong>
-     * the requested {@code version} (semver-ordered). Used to dispatch a workflow whose state version was
-     * bumped mid-flight via {@code ctx.migrateVersion(...)} to a value that no exact sibling is registered for —
-     * e.g. v1.0.0 + v2.0.0 registered, state recorded "1.0.1", we want to route to the v1.0.0 definition,
-     * not jump to v2.0.0.
+     * Finds the "best routing match" for a given {@code workflowName} + {@code version}: the registered configuration
+     * whose {@code workflowVersion()} is the <strong>highest version less than or equal to</strong> the requested
+     * {@code version} (semver-ordered). Used to dispatch a workflow whose state version was bumped mid-flight via
+     * {@code ctx.migrateVersion(...)} to a value that no exact sibling is registered for — e.g. v1.0.0 + v2.0.0
+     * registered, state recorded "1.0.1", we want to route to the v1.0.0 definition, not jump to v2.0.0.
      * <p>
-     * Returns empty when no registered version is {@code <=} the requested one (the workflow's recorded
-     * version is older than anything currently registered).
+     * Returns empty when no registered version is {@code <=} the requested one (the workflow's recorded version is
+     * older than anything currently registered).
      *
      * @param workflowName name of the workflow.
      * @param version      semver state version to route against.
@@ -171,12 +171,12 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
     }
 
     /**
-     * Finds the "next higher" routing match for {@code workflowName} + {@code version}: the registered
-     * configuration whose {@code workflowVersion()} is the <strong>lowest version strictly greater
-     * than</strong> the requested {@code version} (semver-ordered). Used to route an in-flight workflow
-     * forward to a newer definition when the developer bumped {@code @Workflow(workflowVersion=...)}
-     * past the version recorded in the workflow's state — e.g. instances started at "0.0.1" before
-     * the annotation was bumped to "0.0.2" must still find a body to replay against.
+     * Finds the "next higher" routing match for {@code workflowName} + {@code version}: the registered configuration
+     * whose {@code workflowVersion()} is the <strong>lowest version strictly greater than</strong> the requested
+     * {@code version} (semver-ordered). Used to route an in-flight workflow forward to a newer definition when the
+     * developer bumped {@code @Workflow(workflowVersion=...)} past the version recorded in the workflow's state — e.g.
+     * instances started at "0.0.1" before the annotation was bumped to "0.0.2" must still find a body to replay
+     * against.
      * <p>
      * Returns empty when no registered version is {@code >} the requested one.
      *
@@ -195,9 +195,9 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
     }
 
     /**
-     * Returns the registered configurations for {@code workflowName} keyed by their parsed {@link Version}.
-     * Unparseable version strings (legacy streams) are filtered out. The keys are the source of truth used
-     * by {@link Version#closestNotGreaterThan} and {@link Version#closestHigherThan} when routing.
+     * Returns the registered configurations for {@code workflowName} keyed by their parsed {@link Version}. Unparseable
+     * version strings (legacy streams) are filtered out. The keys are the source of truth used by
+     * {@link Version#closestNotGreaterThan} and {@link Version#closestHigherThan} when routing.
      */
     @Nonnull
     private Map<Version, WorkflowConfiguration<?>> parsedVersionsFor(@Nonnull String workflowName) {
@@ -215,10 +215,10 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
     }
 
     /**
-     * Emits a single startup warning per qualified name when multiple workflow definitions are
-     * registered at the same highest version. Same-version duplicates run in parallel only if their
-     * {@code workflowIdProvider}s produce distinct ids; otherwise the second spawn is rejected as a
-     * duplicate. Intended to be called once when the engine transitions to live mode.
+     * Emits a single startup warning per qualified name when multiple workflow definitions are registered at the same
+     * highest version. Same-version duplicates run in parallel only if their {@code workflowIdProvider}s produce
+     * distinct ids; otherwise the second spawn is rejected as a duplicate. Intended to be called once when the engine
+     * transitions to live mode.
      */
     default void warnAboutSameVersionDuplicates() {
         for (var qualifiedName : supportedEvents()) {
@@ -236,8 +236,8 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
     }
 
     /**
-     * Returns all workflow versions registered under {@code workflowName} in semver ascending order.
-     * Used for routing-decision logs.
+     * Returns all workflow versions registered under {@code workflowName} in semver ascending order. Used for
+     * routing-decision logs.
      */
     @Nonnull
     default List<String> registeredVersions(@Nonnull String workflowName) {
@@ -261,8 +261,8 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
     }
 
     /**
-     * Resolves which {@link WorkflowConfiguration} should drive an in-flight workflow's body, picking the
-     * definition that matches the version recorded in state. Five-pass routing:
+     * Resolves which {@link WorkflowConfiguration} should drive an in-flight workflow's body, picking the definition
+     * that matches the version recorded in state. Five-pass routing:
      * <ol>
      *   <li>{@code exact-match-spawn-config} — spawn config matches state version.</li>
      *   <li>{@code exact-match-sibling} — registry has a sibling at the exact state version.</li>
@@ -336,10 +336,10 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
     }
 
     /**
-     * Convenience helper that resolves the {@link WorkflowConfiguration} for an in-flight workflow's body
-     * against the registry available on the given {@link ProcessingContext}. When the registry is
-     * unavailable (e.g. tests that wire the execution directly without a registry component), logs a
-     * {@code [registry-missing]} routing line and falls back to {@code spawnConfig}.
+     * Convenience helper that resolves the {@link WorkflowConfiguration} for an in-flight workflow's body against the
+     * registry available on the given {@link ProcessingContext}. When the registry is unavailable (e.g. tests that wire
+     * the execution directly without a registry component), logs a {@code [registry-missing]} routing line and falls
+     * back to {@code spawnConfig}.
      */
     @Nonnull
     static WorkflowConfiguration<?> resolveOrFallback(
@@ -372,8 +372,11 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
                                decision, reason);
     }
 
-    /** Holder for the SLF4J logger used by routing decisions (interfaces cannot have static loggers directly). */
+    /**
+     * Holder for the SLF4J logger used by routing decisions (interfaces cannot have static loggers directly).
+     */
     final class RoutingLog {
+
         static final Logger LOGGER = LoggerFactory.getLogger(WorkflowConfigurationRegistry.class);
 
         private RoutingLog() {

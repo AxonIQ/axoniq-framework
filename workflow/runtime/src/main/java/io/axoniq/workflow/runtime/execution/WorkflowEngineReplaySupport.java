@@ -96,6 +96,17 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
     }
 
     /**
+     * Seeds the current processor token when replay tracking has not been initialized yet.
+     *
+     * @param processorToken processor token supplied during engine startup
+     */
+    void initializeProcessorTokenIfAbsent(@Nullable TrackingToken processorToken) {
+        if (currentTrackingToken == null) {
+            currentTrackingToken = processorToken;
+        }
+    }
+
+    /**
      * Switches to live mode if it has not happened yet.
      *
      * @return {@code true} if this call performed the transition, otherwise {@code false}

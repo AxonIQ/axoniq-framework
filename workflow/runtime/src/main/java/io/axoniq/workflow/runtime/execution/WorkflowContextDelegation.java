@@ -34,6 +34,7 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -78,8 +79,11 @@ public class WorkflowContextDelegation implements WorkflowContext {
     // Services
     private final EventSink eventSink;
     private final UnitOfWorkFactory unitOfWorkFactory;
+    private final UnitOfWorkFactory workflowBodyUnitOfWorkFactory;
     private final Clock clock;
     private final ExecutorService executorService;
+    private final WorkflowScheduler timeoutScheduler;
+    private final ExecuteStepActionResolver executeStepActionResolver;
 
 
     /**
@@ -95,23 +99,35 @@ public class WorkflowContextDelegation implements WorkflowContext {
             @Nonnull WorkflowExecution workflowExecution,
             @Nonnull ProcessingContext processingContext
     ) {
-        this.workflowExecution = Objects.requireNonNull(workflowExecution,
-                                                        "Workflow execution supplier must not be null");
 
         var stepParent = workflowConfiguration.eventNameCustomizer().forStepInheritance();
-
-        this.processingContext = Objects.requireNonNull(processingContext, "Processing context must not be null");
         this.workflowContext = workflowContext;
 
-        this.unitOfWorkFactory = Objects.requireNonNull(processingContext.component(UnitOfWorkFactory.class),
-                                                        "Could not retrieve UoW factory");
-        this.clock = Objects.requireNonNull(processingContext.component(Clock.class), "Could not retrieve Clock");
-        this.executorService = Objects.requireNonNull(processingContext.component(ExecutorService.class,
-                                                                                  WORKFLOW_ENGINE_EXECUTOR),
-                                                      "Could not retrieve workflow engine executor");
-        this.eventSink = Objects.requireNonNull(processingContext.component(EventSink.class),
-                                                "Could not retrieve EventSink");
-
+        this.workflowExecution = Objects.requireNonNull(
+                workflowExecution,
+                "Workflow execution supplier must not be null");
+        this.processingContext = Objects.requireNonNull(
+                processingContext,
+                "Processing context must not be null");
+        this.unitOfWorkFactory = Objects.requireNonNull(
+                processingContext.component(UnitOfWorkFactory.class),
+                "Could not retrieve UoW factory");
+        this.workflowBodyUnitOfWorkFactory = new SimpleUnitOfWorkFactory(processingContext);
+        this.clock = Objects.requireNonNull(
+                processingContext.component(Clock.class),
+                "Could not retrieve Clock");
+        this.executorService = Objects.requireNonNull(
+                processingContext.component(ExecutorService.class, WORKFLOW_ENGINE_EXECUTOR),
+                "Could not retrieve workflow engine executor");
+        this.eventSink = Objects.requireNonNull(
+                processingContext.component(EventSink.class),
+                "Could not retrieve EventSink");
+        this.timeoutScheduler = Objects.requireNonNull(
+                processingContext.component(WorkflowScheduler.class),
+                "Could not retrieve WorkflowScheduler");
+        this.executeStepActionResolver = Objects.requireNonNull(
+                processingContext.component(ExecuteStepActionResolver.class),
+                "Could not retrieve ExecuteStepActionResolver");
 
         var executeDelegate = new ExecuteDelegate(workflowContext,
                                                   workflowExecution,
@@ -119,7 +135,9 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                   clock,
                                                   unitOfWorkFactory,
                                                   eventSink,
-                                                  executorService);
+                                                  executorService,
+                                                  timeoutScheduler,
+                                                  executeStepActionResolver);
         this.retryableExecuteDelegate = new RetryableExecuteDelegate(executeDelegate,
                                                                      workflowContext,
                                                                      workflowExecution,
@@ -127,14 +145,16 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                                      clock,
                                                                      unitOfWorkFactory,
                                                                      eventSink,
-                                                                     executorService);
+                                                                     executorService,
+                                                                     timeoutScheduler);
         this.waitForDelegate = new WaitForDelegate(workflowContext,
                                                    workflowExecution,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,
                                                    eventSink,
-                                                   executorService);
+                                                   executorService,
+                                                   timeoutScheduler);
         this.terminateDelegate = new TerminateDelegate(workflowContext,
                                                        workflowExecution,
                                                        unitOfWorkFactory,
@@ -146,7 +166,8 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                    clock,
                                                    unitOfWorkFactory,
                                                    eventSink,
-                                                   executorService);
+                                                   executorService,
+                                                   timeoutScheduler);
         this.versionDelegate = new VersionDelegate(workflowContext,
                                                    workflowExecution,
                                                    stepParent,
@@ -279,6 +300,22 @@ public class WorkflowContextDelegation implements WorkflowContext {
     @Nonnull
     public UnitOfWorkFactory unitOfWorkFactory() {
         return this.unitOfWorkFactory;
+    }
+
+    /**
+     * Factory for the unit of work wrapping a workflow instance's body execution.
+     * <p>
+     * The body-wrapper unit of work stays open for the workflow instance's entire lifetime, including any time the
+     * body spends parked at {@code awaitEvent}, {@code sleep}, or retry backoff. It is therefore non-transactional,
+     * as a transaction bound to it would hold its resources per in-flight instance for as long as the instance
+     * lives. Workflow and step events are published in short-lived child units of work created from the
+     * transactional {@link #unitOfWorkFactory()} instead.
+     *
+     * @return the non-transactional unit of work factory used for the workflow-body wrapper.
+     */
+    @Nonnull
+    public UnitOfWorkFactory workflowBodyUnitOfWorkFactory() {
+        return this.workflowBodyUnitOfWorkFactory;
     }
 
     @Nonnull

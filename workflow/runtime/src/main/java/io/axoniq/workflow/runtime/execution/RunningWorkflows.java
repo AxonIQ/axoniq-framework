@@ -18,57 +18,19 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.util.MetadataUtils;
-import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.Metadata;
-import org.axonframework.messaging.eventstreaming.EventCriteria;
-import org.axonframework.messaging.eventstreaming.Tag;
 
-import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Event-sourced state holding the workflow identifiers that are currently running.
+ * Identifies workflow instances that have started and have not yet reached a terminal state.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
  */
 @Internal
-public class RunningWorkflows {
-
-    /**
-     * Singleton identifier of the running-workflows entity.
-     */
-    public static final String ENTITY_ID = "__running-workflows";
-
-    private final Set<String> workflowIds = new HashSet<>();
-
-    /**
-     * Criteria selecting the workflow lifecycle events introduced by ADR-007.
-     *
-     * @return event criteria for workflow lifecycle reconstruction
-     */
-    @Nonnull
-    public static EventCriteria workflowLifecycleEvents() {
-        return EventCriteria.havingTags(Tag.of(
-                                                WorkflowEventTagResolver.TAG_WORKFLOW_EVENT_TYPE,
-                                                WorkflowEventTagResolver.TAG_VALUE_EVENT_TYPE_LIFECYCLE
-                                        )
-        );
-    }
-
-    /**
-     * Evolves the state from workflow lifecycle metadata.
-     *
-     * @param metadata lifecycle event metadata
-     */
-    public void evolve(@Nonnull Metadata metadata) {
-        MetadataUtils.getWorkflowStatus(metadata)
-                     .ifPresent(status -> applyLifecycle(MetadataUtils.getWorkflowId(metadata), status));
-    }
+public interface RunningWorkflows {
 
     /**
      * Returns the current set of running workflow identifiers.
@@ -76,9 +38,7 @@ public class RunningWorkflows {
      * @return immutable set of workflow identifiers
      */
     @Nonnull
-    public Set<String> workflowIds() {
-        return Set.copyOf(workflowIds);
-    }
+    Set<String> workflowIds();
 
     /**
      * Checks whether the given workflow identifier is currently running.
@@ -86,17 +46,5 @@ public class RunningWorkflows {
      * @param workflowId workflow identifier to inspect
      * @return {@code true} if the workflow is running
      */
-    public boolean contains(@Nonnull String workflowId) {
-        return workflowIds.contains(workflowId);
-    }
-
-    private void applyLifecycle(@Nonnull String workflowId, @Nonnull WorkflowStatus status) {
-        switch (status) {
-            case STARTED -> workflowIds.add(workflowId);
-            case COMPLETED, FAILED, TIMED_OUT, CANCELLED -> workflowIds.remove(workflowId);
-            case NONE -> {
-                // not a lifecycle transition
-            }
-        }
-    }
+    boolean contains(@Nonnull String workflowId);
 }

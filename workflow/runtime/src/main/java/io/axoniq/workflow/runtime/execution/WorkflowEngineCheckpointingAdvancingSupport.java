@@ -53,7 +53,7 @@ final class WorkflowEngineCheckpointingAdvancingSupport implements Checkpointing
          *
          * @return {@code true} when checkpoint advancement must wait
          */
-        boolean hasUnsafeCheckpointWork();
+        boolean hasPendingCheckpointWork();
 
         /**
          * Schedules checkpoint barrier tasks across the owned workflow executions.
@@ -111,7 +111,7 @@ final class WorkflowEngineCheckpointingAdvancingSupport implements Checkpointing
     @Override
     public CompletableFuture<TrackingToken> onCheckpointAdvanced(@Nonnull Segment segment,
                                                                  @Nonnull TrackingToken requested) {
-        if (host.hasUnsafeCheckpointWork()) {
+        if (host.hasPendingCheckpointWork()) {
             var result = new CompletableFuture<TrackingToken>();
             var scheduled = host.scheduleCheckpointIntent(() -> {
                 if (result.isDone()) {
@@ -127,7 +127,7 @@ final class WorkflowEngineCheckpointingAdvancingSupport implements Checkpointing
                         });
             });
             if (!scheduled) {
-                if (!host.hasUnsafeCheckpointWork()) {
+                if (!host.hasPendingCheckpointWork()) {
                     return CompletableFuture.completedFuture(requested);
                 }
                 result.completeExceptionally(new IllegalStateException(

@@ -22,7 +22,7 @@ import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
-import io.axoniq.workflow.runtime.test.configuration.PrettyPrintingRecordingEventStore;
+import io.axoniq.workflow.runtime.test.utils.PrettyPrintingRecordingEventStore;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;

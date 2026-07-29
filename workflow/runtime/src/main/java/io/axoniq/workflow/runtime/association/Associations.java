@@ -49,10 +49,10 @@ import java.util.stream.Collectors;
  * <pre>{@code
  * var associations = Associations.associate(
  *         payloadProperty("orderId"),
- *         VariableMatcher("=", workflowOrderId)
+ *         Matcher("=", workflowOrderId)
  * ).and(
  *         payloadProperty("tenantId"),
- *         VariableMatcher("=", tenantId)
+ *         Matcher("=", tenantId)
  * );
  * }</pre>
  * The DSL layer usually wraps this with friendlier helpers such as
@@ -88,7 +88,7 @@ public record Associations(
      * @param retriever value retriever, see {@link PayloadPropertyValueRetriever#payloadProperty(String)} for example.
      * @param operator  operator for value comparison
      * @param value     right side of comparison
-     * @return association builder.
+     * @return an association upon which can be build further, for fluent interface.
      */
     public static Associations associate(
             @Nonnull ValueRetriever retriever,
@@ -106,7 +106,7 @@ public record Associations(
      *
      * @param retriever value retriever, see {@link PayloadPropertyValueRetriever#payloadProperty(String)} for example.
      * @param matcher   variable matcher, see {@link Matcher} for example.
-     * @return fluent builder association utils.
+     * @return an association upon which can be build further, for fluent interface
      */
     public static Associations associate(@Nonnull ValueRetriever retriever,
                                          @Nonnull Matcher matcher) {

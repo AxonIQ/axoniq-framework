@@ -40,10 +40,8 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests interrupt handling while delegates wait for a just-appended STARTED event.
@@ -72,7 +70,7 @@ class DelegateInterruptedAwaitTest {
         parentCustomizer = DefaultEventNameCustomizer.Builder.defaults();
 
         when(workflowExecution.state()).thenReturn(state);
-        when(workflowExecution.isExecutable()).thenReturn(true);
+        when(workflowExecution.isRunning()).thenReturn(true);
         when(workflowExecution.hasTasks()).thenReturn(true);
         when(state.workflowStepNames()).thenReturn(List.of());
         doThrow(new InterruptedException("workflow interrupted"))
@@ -86,7 +84,8 @@ class DelegateInterruptedAwaitTest {
                 Clock.systemUTC(),
                 unitOfWorkFactory,
                 eventSink,
-                executor
+                executor,
+                new DefaultWorkflowScheduler(Clock.systemUTC())
         );
         executeDelegate = new ExecuteDelegate(
                 workflowContext,
@@ -95,7 +94,9 @@ class DelegateInterruptedAwaitTest {
                 Clock.systemUTC(),
                 unitOfWorkFactory,
                 eventSink,
-                executor
+                executor,
+                new DefaultWorkflowScheduler(Clock.systemUTC()),
+                new DefaultExecuteStepActionResolver()
         );
     }
 

@@ -24,14 +24,13 @@ import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
+import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
-import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
-import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
 import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
+import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.junit.jupiter.api.*;
@@ -46,18 +45,14 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.doCallRealMethod;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
- * Tests for the replay-drift guard in {@link ExecuteDelegate}: throws
- * {@link WorkflowReplayDriftException} when state contains terminal steps the current invocation
- * has not referenced, but only when the primitive is about to publish a STARTED event live (cached
- * lookups are exempt).
+ * Tests for the replay-drift guard in {@link ExecuteDelegate}: throws {@link WorkflowReplayDriftException} when state
+ * contains terminal steps the current invocation has not referenced, but only when the primitive is about to publish a
+ * STARTED event live (cached lookups are exempt).
  *
  * @author Stefan Dragisic
  */
@@ -86,13 +81,20 @@ class ExecuteDelegateDriftTest {
         when(workflowExecution.hasUnreferencedTerminalStep()).thenCallRealMethod();
         doCallRealMethod().when(workflowExecution).guardAgainstReplayDrift(anyString());
         // Break out of acceptAllPendingTasksForStep's spin loop — the loop only exits when
-        // (containsStep || hasTasks) AND isExecutable, so the mock must report both.
-        when(workflowExecution.isExecutable()).thenReturn(true);
+        // (containsStep || hasTasks) AND isRunning, so the mock must report both.
+        when(workflowExecution.isRunning()).thenReturn(true);
         when(workflowExecution.hasTasks()).thenReturn(true);
 
         delegate = new ExecuteDelegate(
-                workflowContext, workflowExecution, parent,
-                Clock.systemUTC(), unitOfWorkFactory, eventSink, executor
+                workflowContext,
+                workflowExecution,
+                parent,
+                Clock.systemUTC(),
+                unitOfWorkFactory,
+                eventSink,
+                executor,
+                new DefaultWorkflowScheduler(Clock.systemUTC()),
+                new DefaultExecuteStepActionResolver()
         );
     }
 
@@ -152,8 +154,8 @@ class ExecuteDelegateDriftTest {
     }
 
     /**
-     * Asserts the call does not throw {@link WorkflowReplayDriftException}. Any other exception
-     * (e.g. NPE from incomplete mock setup after the guard) is fine — the guard let us through.
+     * Asserts the call does not throw {@link WorkflowReplayDriftException}. Any other exception (e.g. NPE from
+     * incomplete mock setup after the guard) is fine — the guard let us through.
      */
     private void assertNoDriftThrown(Runnable r) {
         try {

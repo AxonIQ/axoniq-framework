@@ -22,12 +22,12 @@ import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive.TerminateCommand;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -62,7 +62,7 @@ class TerminateDelegateFailTest {
     private Executor executor;
     private EventNameCustomizer eventNameCustomizer;
     private TerminateDelegate delegate;
-    private WorkflowDefinitionId workflowDefinitionId;
+    private MessageType workflowDefinitionId;
 
     @SuppressWarnings("unchecked")
     @BeforeEach
@@ -75,7 +75,7 @@ class TerminateDelegateFailTest {
         processingContext = mock(ProcessingContext.class);
         unitOfWorkFactory = mock(UnitOfWorkFactory.class);
         executor = Runnable::run;
-        workflowDefinitionId = new WorkflowDefinitionId(new QualifiedName("test-workflow"), "0.0.1");
+        workflowDefinitionId = new MessageType(new QualifiedName("test-workflow"), "0.0.1");
 
         UnitOfWork unitOfWork = mock(UnitOfWork.class);
         when(unitOfWorkFactory.create(any(String.class))).thenReturn(unitOfWork);

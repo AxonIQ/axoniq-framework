@@ -195,7 +195,7 @@ public class EventConditions {
             }
 
             @Override
-            public @Nonnull Set<String> serializedAssociations() {
+            public @Nonnull Set<String> associations() {
                 return associations.criteria();
             }
         };

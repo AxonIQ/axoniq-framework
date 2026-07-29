@@ -19,18 +19,17 @@
 package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
-import io.axoniq.workflow.runtime.execution.ConfigurationBackedProcessingContext;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
-import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.CompletePhase;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.RequiredComponentPhase;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
@@ -174,10 +173,8 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                                      .latestToken(null)
                                                      .thenCompose(
                                                              latestToken -> initializeWorkflowEngine(
-                                                                     cfg,
                                                                      workflowEngine,
                                                                      unitOfWorkFactory,
-                                                                     processor,
                                                                      processorToken,
                                                                      latestToken
                                                              )
@@ -227,26 +224,25 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     }
 
     CompletableFuture<Void> initializeWorkflowEngine(
-            Configuration configuration,
             WorkflowEngine workflowEngine,
             UnitOfWorkFactory unitOfWorkFactory,
-            StreamingEventProcessor processor,
             @Nullable TrackingToken processorToken,
             @Nullable TrackingToken latestToken
     ) {
         var replaySupport = workflowEngine.replayStatusChangedHandler();
         replaySupport.initializeReplayTracking(processorToken, latestToken);
-        var executionContext = new ConfigurationBackedProcessingContext(configuration);
         return unitOfWorkFactory.create(moduleName + "WorkflowRehydration")
-                                .executeWithResult(context -> {
-                                    workflowEngine.rehydrateRunningWorkflows(context, executionContext);
-                                    return completedFuture(null);
+                                .executeWithResult(sourcingContext -> {
+                                    var executionUnitOfWork = new SimpleUnitOfWorkFactory(sourcingContext)
+                                            .create(moduleName + "WorkflowExecutionContext");
+                                    return executionUnitOfWork.executeWithResult(executionContext -> {
+                                        workflowEngine.start(processorToken, sourcingContext, executionContext);
+                                        return completedFuture(null);
+                                    });
                                 })
                                 .thenRun(() -> {
                                     if (!requiresReplay(processorToken, latestToken)) {
                                         replaySupport.switchToLiveMode();
-                                    } else {
-                                        workflowEngine.startCheckpointCatchUp();
                                     }
                                 });
     }
@@ -254,8 +250,9 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     boolean requiresReplay(@Nullable TrackingToken resetToken, @Nullable TrackingToken latestToken) {
         if (resetToken == null || latestToken == null) {
             return false;
+        } else {
+            return !resetToken.samePositionAs(latestToken);
         }
-        return !resetToken.samePositionAs(latestToken);
     }
 
     @Override

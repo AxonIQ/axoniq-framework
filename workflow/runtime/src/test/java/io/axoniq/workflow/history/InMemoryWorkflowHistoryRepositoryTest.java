@@ -19,9 +19,9 @@
 package io.axoniq.workflow.history;
 
 import io.axoniq.workflow.history.api.WorkflowHistory;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowDefinitionId;
 import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.*;
 
@@ -32,10 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class InMemoryWorkflowHistoryRepositoryTest {
 
-    private static final WorkflowDefinitionId DEFINITION_ID = new WorkflowDefinitionId(
-            new QualifiedName("HistoryWorkflow"),
-            "0.0.1"
-    );
+    private static final MessageType DEFINITION_ID = new MessageType(new QualifiedName("HistoryWorkflow"), "0.0.1");
 
     private InMemoryWorkflowHistoryRepository repository;
 
@@ -47,7 +44,8 @@ class InMemoryWorkflowHistoryRepositoryTest {
     @Test
     void shouldSaveAndFindById() {
         String workflowId = "wf-1";
-        WorkflowHistory history = new WorkflowHistory(workflowId, new EventSourcedWorkflowState(workflowId, DEFINITION_ID));
+        WorkflowHistory history = new WorkflowHistory(workflowId,
+                                                      new EventSourcedWorkflowState(workflowId, DEFINITION_ID));
 
         repository.save(history);
 
@@ -88,10 +86,12 @@ class InMemoryWorkflowHistoryRepositoryTest {
     @Test
     void shouldUpdateExistingEntry() {
         String workflowId = "wf-1";
-        WorkflowHistory history1 = new WorkflowHistory(workflowId, new EventSourcedWorkflowState(workflowId, DEFINITION_ID));
+        WorkflowHistory history1 = new WorkflowHistory(workflowId,
+                                                       new EventSourcedWorkflowState(workflowId, DEFINITION_ID));
         repository.save(history1);
 
-        WorkflowHistory history2 = new WorkflowHistory(workflowId, new EventSourcedWorkflowState(workflowId, DEFINITION_ID));
+        WorkflowHistory history2 = new WorkflowHistory(workflowId,
+                                                       new EventSourcedWorkflowState(workflowId, DEFINITION_ID));
         repository.save(history2);
 
         Optional<WorkflowHistory> found = repository.findById(workflowId);

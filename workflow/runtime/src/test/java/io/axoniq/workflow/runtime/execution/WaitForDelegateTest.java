@@ -62,6 +62,7 @@ class WaitForDelegateTest {
     private ProcessingContext processingContext;
     private WaitForDelegate delegate;
     private AtomicReference<WorkflowStep> startedStep;
+    private WorkflowScheduler workflowScheduler;
 
     @BeforeEach
     void setUp() {
@@ -72,6 +73,10 @@ class WaitForDelegateTest {
         eventSink = mock(EventSink.class);
         processingContext = mock(ProcessingContext.class);
         startedStep = new AtomicReference<>();
+        workflowScheduler = mock(WorkflowScheduler.class);
+        var scheduledTask = mock(WorkflowScheduler.ScheduledTask.class);
+        when(scheduledTask.completion()).thenReturn(new CompletableFuture<>());
+        when(workflowScheduler.schedule(any(), any())).thenReturn(scheduledTask);
         Executor executor = Runnable::run;
         EventNameCustomizer customizer = DefaultEventNameCustomizer.Builder.defaults();
 
@@ -83,7 +88,7 @@ class WaitForDelegateTest {
         when(workflowExecution.workflowId()).thenReturn("wf-123");
         when(workflowExecution.state()).thenReturn(state);
         when(workflowExecution.processingContext()).thenReturn(processingContext);
-        when(workflowExecution.isExecutable()).thenReturn(true);
+        when(workflowExecution.isRunning()).thenReturn(true);
         when(workflowExecution.hasTasks()).thenReturn(true);
         when(state.containsStep("awaitPayment")).thenAnswer(inv -> startedStep.get() != null);
         when(state.getStep("awaitPayment")).thenAnswer(inv -> startedStep.get());
@@ -105,7 +110,8 @@ class WaitForDelegateTest {
                 clock,
                 unitOfWorkFactory,
                 eventSink,
-                executor
+                executor,
+                workflowScheduler
         );
     }
 
@@ -113,7 +119,7 @@ class WaitForDelegateTest {
     void startedWaitEventCarriesReplayableWaitDetails() {
         var condition = mock(EventCondition.class);
         when(condition.qualifiedName()).thenReturn(new QualifiedName("io.acme.PaymentConfirmed"));
-        when(condition.serializedAssociations()).thenReturn(Set.of("payload:orderId=123", "metadata:tenantId=eu"));
+        when(condition.associations()).thenReturn(Set.of("payload:orderId=123", "metadata:tenantId=eu"));
 
         delegate.waitForEvent(new PrimitiveCommands.WorkflowStepResultWaitForCommand(
                 "awaitPayment",
