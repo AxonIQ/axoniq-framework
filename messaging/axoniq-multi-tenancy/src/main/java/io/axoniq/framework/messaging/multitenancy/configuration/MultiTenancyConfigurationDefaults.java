@@ -180,7 +180,8 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
 
     /**
      * Decorates the {@code QueryBus} with a {@link TenantAwareQueryBus}, scoping subscription-query update emission
-     * and completion to the tenant resolved from the {@link ProcessingContext}.
+     * and completion to the tenant resolved from the {@link ProcessingContext} and rejecting queries for tenants that
+     * are not served.
      *
      * @param componentRegistry the registry to register the decorator with
      */
@@ -189,7 +190,9 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
                 forType(QueryBus.class)
                         .with((config, name, delegate) -> delegate instanceof TenantAwareQueryBus
                                 ? delegate
-                                : new TenantAwareQueryBus(delegate, config.getComponent(TenantResolver.class)))
+                                : new TenantAwareQueryBus(delegate,
+                                                          config.getComponent(TenantResolver.class),
+                                                          config.getComponent(TenantProvider.class)))
                         .order(TENANT_AWARE_QUERY_BUS_ORDER)
         );
     }

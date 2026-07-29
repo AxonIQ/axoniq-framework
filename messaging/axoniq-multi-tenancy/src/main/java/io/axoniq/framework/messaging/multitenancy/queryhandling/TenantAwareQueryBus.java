@@ -19,6 +19,7 @@
 package io.axoniq.framework.messaging.multitenancy.queryhandling;
 
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import org.axonframework.common.annotation.Internal;
@@ -63,10 +64,15 @@ import static java.util.Objects.requireNonNull;
  * resolves its {@code QueryBus} from the context, every emitter obtained either by parameter injection or by a direct
  * {@code forContext} call is scoped this way, regardless of how it was constructed.
  * <p>
- * Dispatching methods ({@link #query(QueryMessage, ProcessingContext)},
- * {@link #subscriptionQuery(QueryMessage, ProcessingContext, int)}, {@link #subscribeToUpdates(QueryMessage, int)}) and
- * {@link #subscribe(QualifiedName, QueryHandler)} are pure pass-through: tenant routing for those already happens at
- * the connector level.
+ * {@link #query(QueryMessage, ProcessingContext)} additionally rejects queries for a tenant that is not (or no longer)
+ * served, before delegating. A distributed {@code QueryBus} may serve a query from its local segment whenever a local
+ * handler is subscribed for it, bypassing the tenant-routing connector entirely, which would otherwise answer queries
+ * for a tenant that was never registered or whose context has been removed. Validating here keeps the outcome identical
+ * regardless of whether the query is served locally or dispatched through the connector.
+ * <p>
+ * The remaining dispatching methods ({@link #subscriptionQuery(QueryMessage, ProcessingContext, int)},
+ * {@link #subscribeToUpdates(QueryMessage, int)}) and {@link #subscribe(QualifiedName, QueryHandler)} are pure
+ * pass-through: subscription queries always travel through the connector, which resolves the tenant itself.
  * <p>
  * Registered as a decorator on {@link QueryBus} by
  * {@link io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults}, positioned
@@ -84,16 +90,22 @@ public class TenantAwareQueryBus implements QueryBus {
 
     private final QueryBus delegate;
     private final TenantResolver tenantResolver;
+    private final TenantDescriptors tenantDescriptors;
 
     /**
      * Constructs a {@code TenantAwareQueryBus}, delegating all operations to the given {@code delegate}.
      *
-     * @param delegate       the {@code QueryBus} to delegate all operations to
-     * @param tenantResolver the {@link TenantResolver} used for tenant resolution from query messages
+     * @param delegate          the {@code QueryBus} to delegate all operations to
+     * @param tenantResolver    the {@link TenantResolver} used for tenant resolution from query messages
+     * @param tenantDescriptors the currently served {@link TenantDescriptor TenantDescriptors}, used to reject queries
+     *                          for tenants that are not served
      */
-    public TenantAwareQueryBus(QueryBus delegate, TenantResolver tenantResolver) {
+    public TenantAwareQueryBus(QueryBus delegate,
+                               TenantResolver tenantResolver,
+                               TenantDescriptors tenantDescriptors) {
         this.delegate = requireNonNull(delegate, "The QueryBus delegate must not be null.");
         this.tenantResolver = requireNonNull(tenantResolver, "The TenantResolver must not be null.");
+        this.tenantDescriptors = requireNonNull(tenantDescriptors, "The TenantDescriptors must not be null.");
     }
 
     @Override
@@ -102,8 +114,23 @@ public class TenantAwareQueryBus implements QueryBus {
         return this;
     }
 
+    /**
+     * Dispatches the given {@code query} for the tenant resolved from it.
+     * <p>
+     * Rejects the {@code query} with a {@link TenantNotResolvedException} when its
+     * {@link TenantResolver#resolveTenant(Message, Collection) resolved tenant} is not among the currently served
+     * tenants, rather than leaving that verdict to the tenant-routing connector: a distributed {@code QueryBus} serves
+     * queries with a locally subscribed handler from its local segment, never reaching the connector.
+     *
+     * @param query   the query to dispatch
+     * @param context the processing context under which the query is dispatched (can be {@code null})
+     * @return a {@link MessageStream} of the responses for the given {@code query}
+     * @throws TenantNotResolvedException if no tenant can be resolved from the given {@code query}, or the resolved
+     *                                    tenant is not served
+     */
     @Override
     public MessageStream<QueryResponseMessage> query(QueryMessage query, @Nullable ProcessingContext context) {
+        assertServedTenant(query);
         return delegate.query(query, context);
     }
 
@@ -311,6 +338,26 @@ public class TenantAwareQueryBus implements QueryBus {
                                                   .orElseThrow(() -> new TenantNotResolvedException(
                                                           "Cannot resolve tenant: no ProcessingContext was provided"));
         return message -> isForTenant(tenant, message) && filter.test(message);
+    }
+
+    /**
+     * Asserts the tenant resolved from the given {@code query} is among the currently served tenants.
+     * <p>
+     * Matches on {@link TenantDescriptor#tenantId()} rather than on descriptor equality, as a {@link TenantResolver} is
+     * free to construct a descriptor of its own instead of returning one of the served ones.
+     *
+     * @param query the query to resolve and verify the tenant of
+     * @throws TenantNotResolvedException if no tenant can be resolved from the given {@code query}, or the resolved
+     *                                    tenant is not served
+     */
+    private void assertServedTenant(QueryMessage query) {
+        List<TenantDescriptor> tenants = tenantDescriptors.tenants();
+        TenantDescriptor tenant = tenantResolver.resolveTenant(query, tenants);
+        if (tenants.stream().noneMatch(served -> served.tenantId().equals(tenant.tenantId()))) {
+            logger.warn("Tenant [{}] resolved for query [{}] with identifier [{}] is not served. Rejecting it.",
+                        tenant.tenantId(), query.type().qualifiedName(), query.identifier());
+            throw TenantNotResolvedException.forTenantId(tenant.tenantId());
+        }
     }
 
     private boolean isForTenant(TenantDescriptor tenant, QueryMessage message) {

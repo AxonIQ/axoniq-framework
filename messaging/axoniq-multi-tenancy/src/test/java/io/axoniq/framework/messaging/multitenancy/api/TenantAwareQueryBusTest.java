@@ -37,6 +37,8 @@ import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
@@ -49,6 +51,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class TenantAwareQueryBusTest {
 
     private static final TenantDescriptor TENANT_A = TestFixtures.TENANT_A;
+    private static final TenantDescriptor TENANT_B = TestFixtures.TENANT_B;
+
+    /**
+     * The tenants the bus under test serves, mirroring what a {@code TenantProvider} reports at runtime.
+     */
+    private static TenantDescriptors servedTenants() {
+        return () -> List.of(TENANT_A, TENANT_B);
+    }
 
     private static QueryMessage queryMessageForTenant(String tenantId) {
         return new GenericQueryMessage(new MessageType(new QualifiedName("TestQuery")), "payload")
@@ -69,7 +79,8 @@ class TenantAwareQueryBusTest {
 
         private final RecordingQueryBus delegate = new RecordingQueryBus();
         private final TenantAwareQueryBus testSubject = new TenantAwareQueryBus(delegate,
-                                                                                new MetadataBasedTenantResolver());
+                                                                                new MetadataBasedTenantResolver(),
+                                                                                servedTenants());
 
         @Test
         void emitUpdateAndsTenantClauseOntoTheGivenFilter() {
@@ -192,7 +203,8 @@ class TenantAwareQueryBusTest {
 
         private final RecordingQueryBus delegate = new RecordingQueryBus();
         private final TenantAwareQueryBus testSubject = new TenantAwareQueryBus(delegate,
-                                                                                new MetadataBasedTenantResolver());
+                                                                                new MetadataBasedTenantResolver(),
+                                                                                servedTenants());
 
         @Test
         void emitUpdateThrowsWhenContextCarriesNoTenant() {
@@ -269,7 +281,7 @@ class TenantAwareQueryBusTest {
             // given a resolver that ignores message metadata entirely and always resolves to TENANT_A
             TenantResolver alwaysTenantA = (message, tenants) -> TENANT_A;
             RecordingQueryBus delegate = new RecordingQueryBus();
-            TenantAwareQueryBus testSubject = new TenantAwareQueryBus(delegate, alwaysTenantA);
+            TenantAwareQueryBus testSubject = new TenantAwareQueryBus(delegate, alwaysTenantA, servedTenants());
             ProcessingContext context = contextForTenant(TENANT_A);
 
             // when
@@ -285,7 +297,7 @@ class TenantAwareQueryBusTest {
             // given
             TenantResolver alwaysTenantA = (message, tenants) -> TENANT_A;
             RecordingQueryBus delegate = new RecordingQueryBus();
-            TenantAwareQueryBus testSubject = new TenantAwareQueryBus(delegate, alwaysTenantA);
+            TenantAwareQueryBus testSubject = new TenantAwareQueryBus(delegate, alwaysTenantA, servedTenants());
             ProcessingContext context = contextForTenant(TENANT_A);
 
             // when
@@ -301,7 +313,8 @@ class TenantAwareQueryBusTest {
 
         private final RecordingQueryBus delegate = new RecordingQueryBus();
         private final TenantAwareQueryBus testSubject = new TenantAwareQueryBus(delegate,
-                                                                                new MetadataBasedTenantResolver());
+                                                                                new MetadataBasedTenantResolver(),
+                                                                                servedTenants());
 
         @Test
         void composedEmitUpdateFilterTreatsAnUnresolvableRegistryMessageAsANonMatchRatherThanThrowing() {
@@ -325,7 +338,8 @@ class TenantAwareQueryBusTest {
 
         private final RecordingQueryBus delegate = new RecordingQueryBus();
         private final TenantAwareQueryBus testSubject = new TenantAwareQueryBus(delegate,
-                                                                                new MetadataBasedTenantResolver());
+                                                                                new MetadataBasedTenantResolver(),
+                                                                                servedTenants());
 
         @Test
         void subscribeDelegatesAndReturnsItself() {
@@ -380,6 +394,85 @@ class TenantAwareQueryBusTest {
             assertThat(describedProperties)
                     .hasSize(1)
                     .containsKey("delegate");
+        }
+    }
+
+    @Nested
+    class ServedTenantVerification {
+
+        private final RecordingQueryBus delegate = new RecordingQueryBus();
+        private final List<TenantDescriptor> served = new ArrayList<>(List.of(TENANT_A, TENANT_B));
+        private final TenantAwareQueryBus testSubject = new TenantAwareQueryBus(delegate,
+                                                                               new MetadataBasedTenantResolver(),
+                                                                               () -> served);
+
+        @Test
+        void queryForAnUnservedTenantIsRejectedWithoutReachingTheDelegate() {
+            // given a query tagged for a tenant that was never served
+            QueryMessage query = queryMessageForTenant("tenant-never-served");
+
+            // when / then
+            assertThatThrownBy(() -> testSubject.query(query, null))
+                    .isInstanceOf(TenantNotResolvedException.class)
+                    .hasMessageContaining("tenant-never-served");
+            assertThat(delegate.queriedMessage).isNull();
+        }
+
+        @Test
+        void queryWithoutTenantMetadataIsRejectedWithoutReachingTheDelegate() {
+            // given a query that carries no tenant identifier at all
+            QueryMessage query = new GenericQueryMessage(new MessageType(new QualifiedName("TestQuery")), "payload");
+
+            // when / then
+            assertThatThrownBy(() -> testSubject.query(query, null))
+                    .isInstanceOf(TenantNotResolvedException.class);
+            assertThat(delegate.queriedMessage).isNull();
+        }
+
+        @Test
+        void queryForATenantThatStoppedBeingServedIsRejectedFromThenOn() {
+            // given a query for a served tenant, which is dispatched
+            QueryMessage query = queryMessageForTenant(TENANT_A.tenantId());
+            testSubject.query(query, null);
+            assertThat(delegate.queriedMessage).isSameAs(query);
+
+            // when the tenant stops being served, as happens when its context is removed at runtime
+            served.remove(TENANT_A);
+            delegate.queriedMessage = null;
+
+            // then the very same query no longer reaches the delegate
+            assertThatThrownBy(() -> testSubject.query(query, null))
+                    .isInstanceOf(TenantNotResolvedException.class)
+                    .hasMessageContaining(TENANT_A.tenantId());
+            assertThat(delegate.queriedMessage).isNull();
+        }
+
+        @Test
+        void queryIsAcceptedWhenTheResolverReturnsADescriptorMatchingAServedTenantByIdentifierOnly() {
+            // given a resolver constructing its own, property-less descriptor rather than returning a served one
+            TenantResolver identifierOnlyResolver =
+                    (message, tenants) -> TenantDescriptor.tenantWithId(TENANT_A.tenantId());
+            TenantAwareQueryBus testSubject = new TenantAwareQueryBus(delegate, identifierOnlyResolver, () -> served);
+            QueryMessage query = queryMessageForTenant(TENANT_A.tenantId());
+
+            // when
+            testSubject.query(query, null);
+
+            // then the tenant is matched on its identifier, not on descriptor equality
+            assertThat(delegate.queriedMessage).isSameAs(query);
+        }
+
+        @Test
+        void subscriptionQueryForAnUnservedTenantIsPassedThroughToTheDelegate() {
+            // given a subscription query for a tenant that is not served
+            QueryMessage query = queryMessageForTenant("tenant-never-served");
+
+            // when
+            testSubject.subscriptionQuery(query, null, 50);
+
+            // then it still reaches the delegate: subscription queries always travel through the tenant-routing
+            // connector, which resolves - and rejects - the tenant itself
+            assertThat(delegate.subscriptionQueriedMessage).isSameAs(query);
         }
     }
 
