@@ -99,15 +99,11 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
         );
         if (eventHandler instanceof CheckpointingSupplier checkpointingSupplier) {
             checkpointingHandler = checkpointingSupplier.checkpointing();
-        } else if (eventHandler instanceof Checkpointing checkpointing) {
-            checkpointingHandler = checkpointing;
         } else {
             checkpointingHandler = null;
         }
         if (eventHandler instanceof ReplayStatusChangedHandlerSupplier replayStatusChangedHandlerSupplier) {
             replayStatusChangedHandler = replayStatusChangedHandlerSupplier.replayStatusChangedHandler();
-        } else if (eventHandler instanceof ReplayStatusChangedHandler replayStatusChanged) {
-            replayStatusChangedHandler = replayStatusChanged;
         } else {
             replayStatusChangedHandler = null;
         }
