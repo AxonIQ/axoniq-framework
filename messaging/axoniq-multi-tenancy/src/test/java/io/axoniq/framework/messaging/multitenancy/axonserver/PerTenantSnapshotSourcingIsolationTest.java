@@ -27,7 +27,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
-import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorage;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingEventStorageEngine;
@@ -98,11 +97,12 @@ class PerTenantSnapshotSourcingIsolationTest {
         tenantProvider.addTenant(TENANT_A);
         tenantProvider.addTenant(TENANT_B);
 
-        // Subscribed rather than registered by hand, so the tenants reach the composer the way they do in production.
-        TenantEventStorage tenantEventStorage = new TenantEventStorage(tenantEngines::apply,
-                                                                      tenantSnapshotStores::apply);
-        tenantProvider.subscribe(tenantEventStorage);
-        routingEngine = new MultiTenantEventStorageEngine(tenantEventStorage, tenantRouter);
+        // Subscribed rather than registered by hand, so the tenants reach the engine the way they do in production.
+        MultiTenantEventStorageEngine multiTenantEngine = new MultiTenantEventStorageEngine(tenantEngines::apply,
+                                                                                           tenantSnapshotStores::apply,
+                                                                                           tenantRouter);
+        tenantProvider.subscribe(multiTenantEngine);
+        routingEngine = multiTenantEngine;
         MultiTenantSnapshotStore routingSnapshotStore =
                 new MultiTenantSnapshotStore(tenantSnapshotStores::apply, tenantRouter);
 

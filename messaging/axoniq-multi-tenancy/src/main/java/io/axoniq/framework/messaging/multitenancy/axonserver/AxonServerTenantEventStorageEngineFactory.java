@@ -39,7 +39,8 @@ import java.util.function.Function;
  * per tenant against that tenant's Axon Server context.
  * <p>
  * Axon Server's engine is not its own {@link SnapshotStore} and does not resolve snapshots while sourcing, so
- * {@link io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorage} complements it with that tenant's
+ * {@link io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine} complements it with
+ * that tenant's
  * snapshot store. This factory only builds the engine.
  * <p>
  * Engines are created lazily and cached, and evicted on tenant removal, by a {@link TenantScopedCache} this factory

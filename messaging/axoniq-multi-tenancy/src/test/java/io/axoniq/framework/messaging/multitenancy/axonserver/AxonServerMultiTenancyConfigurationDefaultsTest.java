@@ -35,7 +35,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
-import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorage;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
@@ -245,19 +244,21 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
-        void subscribesTheTenantEventStorageToTheTenantProviderAtStartup() {
-            TenantEventStorage tenantEventStorage = configuration.getComponent(TenantEventStorage.class);
+        void subscribesTheRoutingEngineToTheTenantProviderAtStartup() {
+            MultiTenantAwareComponent routingEngine =
+                    (MultiTenantAwareComponent) configuration.getComponent(EventStorageEngine.class);
 
-            assertThat(tenantProvider.subscribedComponents()).contains(tenantEventStorage);
+            assertThat(tenantProvider.subscribedComponents()).contains(routingEngine);
         }
 
         @Test
-        void cancelsTheTenantEventStorageSubscriptionOnShutdown() {
-            TenantEventStorage tenantEventStorage = configuration.getComponent(TenantEventStorage.class);
+        void cancelsTheRoutingEngineSubscriptionOnShutdown() {
+            MultiTenantAwareComponent routingEngine =
+                    (MultiTenantAwareComponent) configuration.getComponent(EventStorageEngine.class);
 
             configuration.shutdown();
 
-            assertThat(tenantProvider.subscribedComponents()).doesNotContain(tenantEventStorage);
+            assertThat(tenantProvider.subscribedComponents()).doesNotContain(routingEngine);
         }
 
         @Test

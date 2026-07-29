@@ -30,7 +30,8 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
  * sourcing to. Implementations are expected to create the per-tenant engine lazily and cache it.
  * <p>
  * Implementations build the tenant's engine and nothing more. Whether that engine also needs the tenant's snapshot
- * store to serve a snapshot sourcing strategy is decided by {@link TenantEventStorage}, so an implementation neither
+ * store to serve a snapshot sourcing strategy is decided by the {@link MultiTenantEventStorageEngine}, so an
+ * implementation neither
  * knows nor cares about snapshots.
  *
  * @author Stefan Dragisic
