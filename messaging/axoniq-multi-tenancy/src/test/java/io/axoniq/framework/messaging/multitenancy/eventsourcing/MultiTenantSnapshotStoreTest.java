@@ -25,6 +25,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
@@ -53,6 +54,10 @@ class MultiTenantSnapshotStoreTest {
         return new GenericEventMessage(new MessageType("TestEvent"),
                                        "payload",
                                        Map.of(TenantDescriptor.TENANT_ID_KEY, tenant.tenantId()));
+    }
+
+    private static Snapshot snapshot() {
+        return new Snapshot(new GlobalIndexPosition(0L), "0", "payload", Instant.EPOCH, Map.of());
     }
 
     private final TenantDescriptorMapping<SnapshotStore> stores = new TenantDescriptorMapping<>();
@@ -99,9 +104,8 @@ class MultiTenantSnapshotStoreTest {
                     new MultiTenantSnapshotStore(stores::apply, new TenantRouter(alwaysTenant(TENANT_B), stores));
             StubProcessingContext context = new StubProcessingContext();
             context.withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
-            Snapshot snapshot = new Snapshot(new GlobalIndexPosition(0L), "0", "payload", Instant.EPOCH, Map.of());
 
-            testSubject.store(SNAPSHOT_NAME, IDENTIFIER, snapshot, context);
+            testSubject.store(SNAPSHOT_NAME, IDENTIFIER, snapshot(), context);
 
             assertThat(tenantA.storeCount()).isEqualTo(1);
             assertThat(tenantB.storeCount()).isZero();
@@ -121,12 +125,34 @@ class MultiTenantSnapshotStoreTest {
                                                  new TenantRouter(new MetadataBasedTenantResolver(), stores));
             ProcessingContext tenantAContext = StubProcessingContext.forMessage(messageForTenant(TENANT_A));
             ProcessingContext tenantBContext = StubProcessingContext.forMessage(messageForTenant(TENANT_B));
-            Snapshot snapshot = new Snapshot(new GlobalIndexPosition(0L), "0", "payload", Instant.EPOCH, Map.of());
 
-            testSubject.store(SNAPSHOT_NAME, IDENTIFIER, snapshot, tenantAContext).join();
+            testSubject.store(SNAPSHOT_NAME, IDENTIFIER, snapshot(), tenantAContext).join();
 
-            assertThat(testSubject.load(SNAPSHOT_NAME, IDENTIFIER, tenantAContext).join()).isEqualTo(snapshot);
+            assertThat(testSubject.load(SNAPSHOT_NAME, IDENTIFIER, tenantAContext).join()).isEqualTo(snapshot());
             assertThat(testSubject.load(SNAPSHOT_NAME, IDENTIFIER, tenantBContext).join()).isNull();
+        }
+    }
+
+    @Nested
+    class TenantsAddedAfterConstruction {
+
+        // The store resolves its tenant's store per operation rather than once, so a tenant added after this store was
+        // built is served too. That a removed tenant loses its store is a property of the factory holding them, and is
+        // asserted in TenantScopedCacheTest and AxonServerTenantSnapshotStoreFactoryTest.
+        @Test
+        void aTenantAddedAfterConstructionIsRoutedToItsOwnStore() {
+            MultiTenantSnapshotStore testSubject =
+                    new MultiTenantSnapshotStore(stores::apply,
+                                                 new TenantRouter(new MetadataBasedTenantResolver(), stores));
+            TenantDescriptor lateTenant = TenantDescriptor.tenantWithId("late-tenant");
+            RecordingSnapshotStore storeOfLateTenant = stores.entry(lateTenant, new RecordingSnapshotStore());
+            ProcessingContext lateContext = StubProcessingContext.forMessage(messageForTenant(lateTenant));
+
+            testSubject.store(SNAPSHOT_NAME, IDENTIFIER, snapshot(), lateContext).join();
+
+            assertThat(testSubject.load(SNAPSHOT_NAME, IDENTIFIER, lateContext).join()).isEqualTo(snapshot());
+            assertThat(storeOfLateTenant.storeCount()).isEqualTo(1);
+            assertThat(tenantA.storeCount()).isZero();
         }
     }
 
@@ -150,9 +176,8 @@ class MultiTenantSnapshotStoreTest {
                     new MultiTenantSnapshotStore(stores::apply,
                                                  new TenantRouter(new MetadataBasedTenantResolver(), stores));
             StubProcessingContext contextWithoutTenant = new StubProcessingContext();
-            Snapshot snapshot = new Snapshot(new GlobalIndexPosition(0L), "0", "payload", Instant.EPOCH, Map.of());
 
-            var result = testSubject.store(SNAPSHOT_NAME, IDENTIFIER, snapshot, contextWithoutTenant);
+            var result = testSubject.store(SNAPSHOT_NAME, IDENTIFIER, snapshot(), contextWithoutTenant);
 
             assertThat(result).isCompletedExceptionally();
             assertThatThrownBy(result::join).hasCauseInstanceOf(TenantNotResolvedException.class);
@@ -169,4 +194,5 @@ class MultiTenantSnapshotStoreTest {
 
         assertThat(descriptor.getDescribedProperties()).containsKeys("snapshotStoreFactory", "tenantRouter");
     }
+
 }

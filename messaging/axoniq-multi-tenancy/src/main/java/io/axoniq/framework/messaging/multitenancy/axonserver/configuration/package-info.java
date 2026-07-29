@@ -19,11 +19,11 @@
 
 
 /**
- * Part of the Axoniq Framework multi-tenancy module. Root of the Axon Server specific multi-tenancy packages, each
- * mirroring a package of this module: {@code api}, {@code commandhandling}, {@code eventsourcing} and
- * {@code configuration}.
+ * Part of the Axoniq Framework multi-tenancy module. Contains the configuration enhancer wiring the Axon Server
+ * specific multi-tenancy components, mirroring
+ * {@link io.axoniq.framework.messaging.multitenancy.configuration}.
  */
 @NullMarked
-package io.axoniq.framework.messaging.multitenancy.axonserver;
+package io.axoniq.framework.messaging.multitenancy.axonserver.configuration;
 
 import org.jspecify.annotations.NullMarked;

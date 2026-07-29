@@ -71,8 +71,8 @@ public record RegisterTenantDescriptorHandlerInterceptor(
         if (message instanceof CommandMessage || message instanceof QueryMessage) {
             Optional<TenantDescriptor> tenant = tenantRouter.resolveFromMessage(message);
             if (tenant.isPresent()) {
-                return interceptorChain.proceed(message, context.withResource(TenantDescriptor.RESOURCE_KEY,
-                                                                             tenant.get()));
+                ProcessingContext tenantContext = context.withResource(TenantDescriptor.RESOURCE_KEY, tenant.get());
+                return interceptorChain.proceed(message, tenantContext);
             }
             logger.warn("Tenant could not be resolved for message: {}. Proceeding without tenant context.", message);
         }

@@ -19,11 +19,10 @@
 
 
 /**
- * Part of the Axoniq Framework multi-tenancy module. Root of the Axon Server specific multi-tenancy packages, each
- * mirroring a package of this module: {@code api}, {@code commandhandling}, {@code eventsourcing} and
- * {@code configuration}.
+ * Part of the Axoniq Framework multi-tenancy module. Contains the Axon Server command bus connector routing each
+ * command to the connection of its tenant.
  */
 @NullMarked
-package io.axoniq.framework.messaging.multitenancy.axonserver;
+package io.axoniq.framework.messaging.multitenancy.axonserver.commandhandling;
 
 import org.jspecify.annotations.NullMarked;

@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.util;
+package io.axoniq.framework.axonserver.connector.api;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.AxonServerConnectionFactory;
@@ -30,8 +30,6 @@ import io.axoniq.axonserver.connector.event.SnapshotChannel;
 import io.axoniq.axonserver.connector.event.transformation.EventTransformationChannel;
 import io.axoniq.axonserver.connector.impl.ServerAddress;
 import io.axoniq.axonserver.connector.query.QueryChannel;
-import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
-import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 
 import java.util.List;
 import java.util.Map;
@@ -58,6 +56,9 @@ public class RecordingAxonServerConnectionManager extends AxonServerConnectionMa
     }
 
     /**
+     * Returns the contexts a connection was requested for, so a test can assert which tenants were connected to and in
+     * what order.
+     *
      * @return the contexts passed to {@link #getConnection(String)}, in call order
      */
     public List<String> requestedContexts() {

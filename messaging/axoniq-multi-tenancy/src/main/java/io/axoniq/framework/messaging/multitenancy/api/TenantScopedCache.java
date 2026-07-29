@@ -87,7 +87,9 @@ public class TenantScopedCache<C> implements MultiTenantAwareComponent {
      * @throws NullPointerException if any of the given arguments is {@code null}
      */
     public TenantScopedCache(Function<TenantDescriptor, C> componentFactory, String owner) {
-        this(componentFactory, TenantScopedCache::dropReference, owner);
+        this(componentFactory, (tenant, component) -> {
+            // Nothing to release: the component's lifecycle is owned elsewhere, so dropping the reference is enough.
+        }, owner);
     }
 
     /**
@@ -188,10 +190,6 @@ public class TenantScopedCache<C> implements MultiTenantAwareComponent {
      */
     public List<TenantDescriptor> tenants() {
         return tenantsView;
-    }
-
-    private static <T> void dropReference(TenantDescriptor tenant, T component) {
-        // The component's lifecycle is owned elsewhere, so eviction only drops this cache's reference to it.
     }
 
     private void evict(TenantDescriptor tenant, @Nullable RegistrationToken token) {

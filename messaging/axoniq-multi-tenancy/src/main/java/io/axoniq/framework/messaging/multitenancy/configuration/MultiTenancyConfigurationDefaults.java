@@ -79,7 +79,7 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      * zero per-tenant connectors to start.
      * <p>
      * Public so that backend-specific enhancers registering a {@link TenantProvider} implementation (e.g.
-     * {@link io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerMultiTenancyConfigurationDefaults})
+     * {@link io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults})
      * can align their component's start and shutdown phase with this one.
      */
     public static final int TENANT_PROVIDER_PHASE = -10;
@@ -90,7 +90,7 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      * are cancelled while the {@code TenantProvider} is still running.
      * <p>
      * Public so that backend-specific enhancers registering a per-tenant command bus connector (e.g.
-     * {@link io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerMultiTenancyConfigurationDefaults})
+     * {@link io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults})
      * can subscribe it to the {@link TenantProvider} at the same phase.
      */
     public static final int TENANT_COMPONENT_SUBSCRIBER_PHASE = TENANT_PROVIDER_PHASE + 5;

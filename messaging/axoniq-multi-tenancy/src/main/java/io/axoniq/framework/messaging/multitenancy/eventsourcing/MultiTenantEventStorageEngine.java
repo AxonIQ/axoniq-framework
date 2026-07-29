@@ -57,8 +57,8 @@ import static java.util.Objects.requireNonNull;
  * unambiguous.
  * <p>
  * The {@link SourcingCondition} is routed unchanged, so a {@link SourcingStrategy.Snapshot snapshot sourcing strategy}
- * reaches the tenant's own engine rather than being resolved above the fan-out, where no tenant is known yet. Keeping it
- * intact requires the application-wide snapshot composition to be switched off, which the configuration enhancer
+ * reaches the tenant's own engine rather than being resolved above the fan-out, where no tenant is known yet. Keeping
+ * it intact requires the application-wide snapshot composition to be switched off, which the configuration enhancer
  * registering this engine does.
  * <p>
  * Each tenant's engine is composed once with that tenant's snapshot store through

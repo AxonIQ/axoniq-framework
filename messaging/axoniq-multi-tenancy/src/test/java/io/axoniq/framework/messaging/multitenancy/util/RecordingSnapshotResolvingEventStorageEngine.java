@@ -52,6 +52,9 @@ public class RecordingSnapshotResolvingEventStorageEngine extends RecordingEvent
     private final RecordingSnapshotStore snapshots = new RecordingSnapshotStore();
 
     /**
+     * Returns how often a snapshot was read from {@code this} engine, counting both routes: an explicit load and a
+     * snapshot resolved within a sourcing call.
+     *
      * @return how often a snapshot was read, whether through {@link #load(QualifiedName, Object, ProcessingContext)} or
      * within a snapshot sourcing
      */
@@ -60,6 +63,8 @@ public class RecordingSnapshotResolvingEventStorageEngine extends RecordingEvent
     }
 
     /**
+     * Returns how often a snapshot was written to {@code this} engine.
+     *
      * @return how often {@link #store(QualifiedName, Object, Snapshot, ProcessingContext)} was called
      */
     public int storeCount() {

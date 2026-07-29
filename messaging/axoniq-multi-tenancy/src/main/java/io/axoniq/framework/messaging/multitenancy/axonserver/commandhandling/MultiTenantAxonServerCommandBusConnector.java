@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.axonserver;
+package io.axoniq.framework.messaging.multitenancy.axonserver.commandhandling;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
@@ -30,6 +30,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import org.axonframework.common.FutureUtils;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.commandhandling.CommandMessage;
@@ -58,10 +59,15 @@ import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedEx
  * Axon Server connection, command handler subscriptions, and in-flight command tracking. Command subscription state
  * and the incoming-command handler are replayed onto newly registered tenants.
  *
+ * Internal, because the connector is wired by {@link
+ * io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults} and
+ * reached through the {@link CommandBusConnector} component, never constructed by an application itself.
+ *
  * @author Jan Galinski
  * @author Jakob Hatzl
  * @since 5.3.0
  */
+@Internal
 public class MultiTenantAxonServerCommandBusConnector
         implements CommandBusConnector, MultiTenantAwareComponent, ConnectorLifecycle {
 

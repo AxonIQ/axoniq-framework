@@ -55,6 +55,8 @@ public class RecordingEventStorageEngine implements EventStorageEngine {
     private boolean sourcedWithSnapshotStrategy;
 
     /**
+     * Returns how often events were appended to {@code this} engine.
+     *
      * @return how often {@link #appendEvents(AppendCondition, ProcessingContext, List)} was called
      */
     public int appendCount() {
@@ -62,6 +64,8 @@ public class RecordingEventStorageEngine implements EventStorageEngine {
     }
 
     /**
+     * Returns how often {@code this} engine was sourced, so a test can tell a cached engine from a freshly built one.
+     *
      * @return how often {@link #source(SourcingCondition, ProcessingContext)} was called
      */
     public int sourceCount() {

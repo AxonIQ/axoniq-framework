@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.axonserver;
+package io.axoniq.framework.messaging.multitenancy.axonserver.api;
 
 import io.axoniq.axonserver.connector.ResultStream;
 import io.axoniq.axonserver.connector.admin.AdminChannel;
@@ -46,7 +46,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
-import static io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerTenantUtils.tenantDescriptor;
+import static io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantUtils.tenantDescriptor;
 import static java.util.Objects.requireNonNull;
 
 /**

@@ -42,6 +42,9 @@ public class RecordingSnapshotStore implements SnapshotStore {
     private int storeCount;
 
     /**
+     * Returns how often a snapshot was read from {@code this} store, so a test can assert which tenant's store served
+     * the read.
+     *
      * @return how often {@link #load(QualifiedName, Object, ProcessingContext)} was called
      */
     public int loadCount() {
@@ -49,6 +52,8 @@ public class RecordingSnapshotStore implements SnapshotStore {
     }
 
     /**
+     * Returns how often a snapshot was written to {@code this} store.
+     *
      * @return how often {@link #store(QualifiedName, Object, Snapshot, ProcessingContext)} was called
      */
     public int storeCount() {
