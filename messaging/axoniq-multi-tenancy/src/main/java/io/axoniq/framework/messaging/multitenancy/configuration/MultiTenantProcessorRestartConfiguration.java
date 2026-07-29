@@ -43,7 +43,7 @@ public record MultiTenantProcessorRestartConfiguration(Duration restartTimeout) 
      */
     @SuppressWarnings("MissingJavadoc")
     public MultiTenantProcessorRestartConfiguration {
-        Objects.requireNonNull(restartTimeout, "The restart timeout must not be null");
+        Objects.requireNonNull(restartTimeout, "The restart timeout must not be null.");
         if (!restartTimeout.isPositive()) {
             throw new IllegalArgumentException("The restart timeout must be positive.");
         }

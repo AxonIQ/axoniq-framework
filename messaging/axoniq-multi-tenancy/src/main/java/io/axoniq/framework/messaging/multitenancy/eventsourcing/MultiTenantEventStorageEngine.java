@@ -199,14 +199,20 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiT
 
     @Override
     public MessageStream<EventMessage> stream(StreamingCondition condition) {
-        List<TenantDescriptor> currentTenants = tenants();
-        if (currentTenants.isEmpty()) {
-            return MessageStream.empty();
+        try {
+            List<TenantDescriptor> currentTenants = tenants();
+            if (currentTenants.isEmpty()) {
+                return MessageStream.empty();
+            }
+            MultiTenantTrackingToken startToken = MultiTenantTrackingToken.from(condition.position());
+            return DelayedMessageStream.create(
+                    resolveStartToken(startToken, currentTenants)
+                            .thenApply(openFrom -> merge(startToken, openFrom, currentTenants, condition.criteria())));
+        } catch (RuntimeException failure) {
+            // Resolving the start position touches each tenant's engine and can fail synchronously. Return that as a
+            // failed stream rather than throwing, matching source() and appendEvents().
+            return MessageStream.failed(failure);
         }
-        MultiTenantTrackingToken startToken = MultiTenantTrackingToken.from(condition.position());
-        return DelayedMessageStream.create(
-                resolveStartToken(startToken, currentTenants)
-                        .thenApply(openFrom -> merge(startToken, openFrom, currentTenants, condition.criteria())));
     }
 
     /**
@@ -215,15 +221,15 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiT
      */
     private CompletableFuture<MultiTenantTrackingToken> resolveStartToken(MultiTenantTrackingToken startToken,
                                                                           List<TenantDescriptor> currentTenants) {
-        CompletableFuture<MultiTenantTrackingToken> resolved = CompletableFuture.completedFuture(startToken);
+        CompletableFuture<MultiTenantTrackingToken> start = CompletableFuture.completedFuture(startToken);
         for (TenantDescriptor tenant : currentTenants) {
             if (startToken.tokenForTenant(tenant.tenantId()) == null) {
-                resolved = resolved.thenCombine(
+                start = start.thenCombine(
                         engineFor(tenant).firstToken(),
                         (token, firstToken) -> token.advancedTo(tenant.tenantId(), firstToken));
             }
         }
-        return resolved;
+        return start;
     }
 
     /**
@@ -262,13 +268,14 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiT
     }
 
     /**
-     * The beginning of every tenant's store, which is a token holding no position at all.
+     * Returns a token holding no per-tenant position, so a processor resuming from it opens every tenant at the
+     * beginning of its own store.
      * <p>
-     * A tenant absent from a token has consumed nothing, so {@link #stream(StreamingCondition) stream} opens it at the
-     * beginning of its own store. Naming each tenant at position zero would say the same thing, but it would also make
-     * the token disagree with any token written before that tenant existed, and a streaming processor compares those two
-     * to recognize an event it has already handled. Leaving them out keeps that comparison meaningful, and lets one
-     * token mean "from the beginning" whatever the set of tenants turns out to be when it is used.
+     * The beginning of a tenant's store is not assumed to be the zero position. {@link #stream(StreamingCondition)
+     * Streaming} from this token fills in each tenant's own {@link EventStorageEngine#firstToken() first token} when it
+     * opens that tenant's stream, so a tenant whose early events were pruned still opens at its real first event.
+     * Naming those positions in this token instead would make it disagree with a token written before a tenant existed,
+     * and a streaming processor compares the two to recognize an event it already handled, so they are left out.
      */
     @Override
     public CompletableFuture<TrackingToken> firstToken() {
@@ -287,15 +294,21 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiT
 
     private CompletableFuture<TrackingToken> composeToken(
             Function<EventStorageEngine, CompletableFuture<TrackingToken>> tokenLookup) {
-        CompletableFuture<MultiTenantTrackingToken> composed =
-                CompletableFuture.completedFuture(MultiTenantTrackingToken.empty());
-        for (TenantDescriptor tenant : tenants()) {
-            composed = composed.thenCombine(
-                    tokenLookup.apply(engineFor(tenant)),
-                    (token, resolved) -> token.advancedTo(tenant.tenantId(), resolved));
+        try {
+            CompletableFuture<MultiTenantTrackingToken> composed =
+                    CompletableFuture.completedFuture(MultiTenantTrackingToken.empty());
+            for (TenantDescriptor tenant : tenants()) {
+                composed = composed.thenCombine(
+                        tokenLookup.apply(engineFor(tenant)),
+                        (token, resolved) -> token.advancedTo(tenant.tenantId(), resolved));
+            }
+            // Upcast CompletableFuture<MultiTenantTrackingToken> to the CompletableFuture<TrackingToken> return type.
+            return composed.thenApply(TrackingToken.class::cast);
+        } catch (RuntimeException failure) {
+            // Resolving a tenant's token touches its engine and can fail synchronously. Return a failed future rather
+            // than throwing, matching appendEvents().
+            return CompletableFuture.failedFuture(failure);
         }
-        // Upcast CompletableFuture<MultiTenantTrackingToken> to the CompletableFuture<TrackingToken> return type.
-        return composed.thenApply(TrackingToken.class::cast);
     }
 
     @Override

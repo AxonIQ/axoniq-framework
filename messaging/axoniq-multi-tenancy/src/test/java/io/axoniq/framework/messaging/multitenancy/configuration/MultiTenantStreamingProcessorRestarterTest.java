@@ -255,6 +255,41 @@ class MultiTenantStreamingProcessorRestarterTest {
 
             assertThat(tenantProvider.subscribedComponents()).doesNotContain(testSubject);
         }
+
+        @Test
+        void stopDuringAnInFlightRestartDoesNotBringTheProcessorBackUp() throws InterruptedException {
+            CountDownLatch shutdownReached = new CountDownLatch(1);
+            CompletableFuture<Void> shutdownGate = new CompletableFuture<>();
+            RecordingStreamingEventProcessor gatedProcessor = new RecordingStreamingEventProcessor("gated", true) {
+                @Override
+                public CompletableFuture<Void> shutdown() {
+                    shutdownReached.countDown();
+                    return shutdownGate.thenCompose(ignored -> super.shutdown());
+                }
+            };
+            AxonConfiguration gatedConfiguration = configurationWith(registry -> registry.registerComponent(
+                    StreamingEventProcessor.class, gatedProcessor.name(), config -> gatedProcessor));
+            gatedConfiguration.start();
+            MultiTenantStreamingProcessorRestarter gatedSubject =
+                    new MultiTenantStreamingProcessorRestarter(gatedConfiguration);
+            gatedSubject.start();
+            try {
+                tenantProvider.addTenant(TENANT_A);
+                assertThat(shutdownReached.await(2, TimeUnit.SECONDS)).isTrue();
+
+                // stop() lands while the restart is blocked on the processor's shutdown
+                gatedSubject.stop();
+                shutdownGate.complete(null);
+
+                // the shutdown completes, but the processor is not started again after stop()
+                await().atMost(Duration.ofSeconds(2))
+                       .untilAsserted(() -> assertThat(gatedProcessor.shutdownCount()).isEqualTo(1));
+                assertThat(gatedProcessor.startCount()).isZero();
+            } finally {
+                shutdownGate.complete(null);
+                gatedConfiguration.shutdown();
+            }
+        }
     }
 
     @Nested

@@ -23,6 +23,7 @@ import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import org.axonframework.common.AxonThreadFactory;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
@@ -194,6 +195,10 @@ class MultiTenantStreamingProcessorRestarter implements MultiTenantAwareComponen
     private void restartRunningProcessors() {
         restartCount.incrementAndGet();
         for (StreamingEventProcessor processor : configuration.getComponents(StreamingEventProcessor.class).values()) {
+            // Re-check on every processor, so a stop() midway through the set does not start the remaining processors.
+            if (!running.get()) {
+                return;
+            }
             if (processor.isRunning()) {
                 restart(processor);
             }
@@ -204,7 +209,9 @@ class MultiTenantStreamingProcessorRestarter implements MultiTenantAwareComponen
         logger.info("Restarting streaming event processor [{}] to apply the current tenant set.", processor.name());
         try {
             processor.shutdown()
-                     .thenCompose(ignored -> processor.start())
+                     // A stop() during the shutdown must not bring the processor back up, so the start is skipped once
+                     // no longer running. The processor is left stopped, matching stop()'s intent.
+                     .thenCompose(ignored -> running.get() ? processor.start() : FutureUtils.emptyCompletedFuture())
                      .orTimeout(restartTimeout.toMillis(), TimeUnit.MILLISECONDS)
                      .join();
         } catch (Exception failure) {

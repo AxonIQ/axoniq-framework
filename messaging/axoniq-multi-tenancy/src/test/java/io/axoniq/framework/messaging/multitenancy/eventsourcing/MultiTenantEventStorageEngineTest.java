@@ -64,6 +64,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.*;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -370,10 +372,9 @@ class MultiTenantEventStorageEngineTest {
             seed(storeA, eventAt("A1", instant(0)));
             seed(storeB, eventAt("B1", instant(1)));
 
-            // A tenant absent from a token has consumed nothing, so the beginning of every store is the token that
-            // holds no position at all. Naming each tenant at position zero would say the same thing, but such a token
-            // disagrees with one written before that tenant existed, and a streaming processor compares those two to
-            // recognize an event it already handled.
+            // firstToken names no tenant: streaming from it opens each tenant at its own store beginning (filled in per
+            // tenant), while a token written before a tenant existed stays comparable, so the processor does not rehand
+            // already-handled events after a tenant change.
             assertThat(testSubject.firstToken().join()).isEqualTo(MultiTenantTrackingToken.empty());
         }
 
@@ -426,6 +427,117 @@ class MultiTenantEventStorageEngineTest {
             assertThat(payloads(stream, 2)).containsExactly("A1", "B1");
             stream.close();
         }
+
+        @Test
+        void oneTenantFailingToOpenFailsTheWholeStream() {
+            TenantDescriptorMapping<EventStorageEngine> failingEngines = new TenantDescriptorMapping<>();
+            InMemoryEventStorageEngine healthyStore = new InMemoryEventStorageEngine();
+            failingEngines.entry(TENANT_A, healthyStore);
+            failingEngines.entry(TENANT_B, new InMemoryEventStorageEngine() {
+                @Override
+                public MessageStream<EventMessage> stream(StreamingCondition condition) {
+                    throw new IllegalStateException("cannot open the stream");
+                }
+            });
+            MultiTenantEventStorageEngine failing = streamingEngineOver(failingEngines);
+            seed(healthyStore, eventAt("A1", instant(0)));
+
+            MessageStream<EventMessage> stream = failing.stream(StreamingCondition.startingFrom(null));
+
+            // the read spans all tenants, so one tenant failing to open fails the whole stream: the healthy tenant's
+            // event is not served
+            await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> assertThat(stream.error()).isPresent());
+            assertThat(stream.hasNextAvailable()).isFalse();
+            stream.close();
+        }
+
+        @Test
+        void streamReturnsAFailedStreamWhenResolvingAStartPositionThrows() {
+            TenantDescriptorMapping<EventStorageEngine> failingEngines = new TenantDescriptorMapping<>();
+            failingEngines.entry(TENANT_A, new InMemoryEventStorageEngine());
+            failingEngines.entry(TENANT_B, new InMemoryEventStorageEngine() {
+                @Override
+                public CompletableFuture<TrackingToken> firstToken() {
+                    throw new IllegalStateException("cannot resolve the first token");
+                }
+            });
+            MultiTenantEventStorageEngine failing = streamingEngineOver(failingEngines);
+
+            // resolving the start position runs synchronously. A failure there must come back through the stream, so
+            // stream() returns a failed stream rather than throwing
+            MessageStream<EventMessage> stream = failing.stream(StreamingCondition.startingFrom(null));
+
+            assertThat(stream.error()).isPresent();
+            stream.close();
+        }
+
+        @Test
+        void aTenantWhoseStreamFailsSurfacesItsErrorOnTheMergedStream() {
+            TenantDescriptorMapping<EventStorageEngine> failingEngines = new TenantDescriptorMapping<>();
+            InMemoryEventStorageEngine healthyStore = new InMemoryEventStorageEngine();
+            failingEngines.entry(TENANT_A, healthyStore);
+            failingEngines.entry(TENANT_B, new InMemoryEventStorageEngine() {
+                @Override
+                public MessageStream<EventMessage> stream(StreamingCondition condition) {
+                    return MessageStream.failed(new IllegalStateException("cannot read the tenant"));
+                }
+            });
+            MultiTenantEventStorageEngine failing = streamingEngineOver(failingEngines);
+            seed(healthyStore, eventAt("A1", instant(0)));
+
+            MessageStream<EventMessage> stream = failing.stream(StreamingCondition.startingFrom(null));
+
+            // A tenant signalling failure as a failed stream, rather than throwing, surfaces its error on the merged
+            // read. The pooled streaming processor aborts on that error before draining, so no tenant progresses even
+            // though the merge itself still holds the healthy tenant's event.
+            await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> assertThat(stream.error()).isPresent());
+            stream.close();
+        }
+
+        @Test
+        void streamOpensEachTenantAtItsOwnFirstTokenNotAtZero() {
+            // A tenant whose store begins past zero, standing in for one whose early events were pruned: its engine's
+            // firstToken() is non-zero. Streaming from the (empty) multi-tenant firstToken must open it at that real
+            // position, resolved from the tenant's own engine, rather than assuming zero.
+            TrackingToken prunedFirst = new GlobalSequenceTrackingToken(7);
+            AtomicReference<TrackingToken> openedAt = new AtomicReference<>();
+            RecordingEventStorageEngine prunedTenant = new RecordingEventStorageEngine() {
+                @Override
+                public CompletableFuture<TrackingToken> firstToken() {
+                    return CompletableFuture.completedFuture(prunedFirst);
+                }
+
+                @Override
+                public MessageStream<EventMessage> stream(StreamingCondition condition) {
+                    openedAt.set(condition.position());
+                    return super.stream(condition);
+                }
+            };
+            TenantDescriptorMapping<EventStorageEngine> prunedEngines = new TenantDescriptorMapping<>();
+            prunedEngines.entry(TENANT_A, prunedTenant);
+            MultiTenantEventStorageEngine testSubject = streamingEngineOver(prunedEngines);
+
+            testSubject.stream(StreamingCondition.startingFrom(testSubject.firstToken().join())).close();
+
+            assertThat(openedAt.get()).isEqualTo(prunedFirst);
+        }
+
+        @Test
+        void latestTokenReturnsAFailedFutureWhenATenantEngineThrows() {
+            TenantDescriptorMapping<EventStorageEngine> failingEngines = new TenantDescriptorMapping<>();
+            failingEngines.entry(TENANT_A, new InMemoryEventStorageEngine());
+            failingEngines.entry(TENANT_B, new InMemoryEventStorageEngine() {
+                @Override
+                public CompletableFuture<TrackingToken> latestToken() {
+                    throw new IllegalStateException("cannot resolve the latest token");
+                }
+            });
+            MultiTenantEventStorageEngine failing = streamingEngineOver(failingEngines);
+
+            // composing the per-tenant tokens touches each engine synchronously. A failure there comes back as a failed
+            // future rather than throwing, matching appendEvents()
+            assertThat(failing.latestToken()).isCompletedExceptionally();
+        }
     }
 
     @Nested
@@ -443,7 +555,7 @@ class MultiTenantEventStorageEngineTest {
         }
 
         @Test
-        void firstTokenIsAnEmptyMultiTenantToken() {
+        void firstTokenIsEmptyWhenNoTenantsExist() {
             assertThat(testSubject.firstToken().join()).isEqualTo(MultiTenantTrackingToken.empty());
         }
     }
