@@ -6,7 +6,7 @@
 
 ## Context
 
-[ADR-009](./009-event-sourced-workflow-state-rehydration.md) establishes event-sourced workflow rehydration.
+[ADR-009](./009-event-sourced-workflow-state-rehydration.md) proposes event-sourced workflow rehydration.
 Its startup sequence exposed individual engine operations to
 `WorkflowEventProcessingRegistrationEnhancer`: seeding the safe point, loading workflow state, and starting restored
 executions.
