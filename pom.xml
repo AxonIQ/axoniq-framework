@@ -93,6 +93,7 @@
         <module>testing/axoniq-test-logging</module>
         <module>testing/axoniq-testcontainer</module>
 
+        <module>tracing/axoniq-tracing-micrometer</module>
         <module>docs/_samples</module>
     </modules>
 

@@ -1,0 +1,4 @@
+* xref:tracing:index.adoc[]
+** xref:tracing:opentelemetry.adoc[]
+** xref:tracing:customisation.adoc[]
+** xref:tracing:examples.adoc[]
