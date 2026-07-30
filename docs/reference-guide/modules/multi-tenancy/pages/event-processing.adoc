@@ -3,7 +3,7 @@
 :navtitle: Event processing
 :reftext: Event processing
 
-Axon Framework has two kinds of event processor. A streaming event processor pulls events from a stream and tracks its position in a token. A subscribing event processor reacts to events on the event bus as they are published.
+Axon Framework has two kinds of event processors. A streaming event processor pulls events from a stream and tracks its position in a token. A subscribing event processor reacts to events on the event bus as they are published.
 Multi-tenancy makes the streaming event processor tenant-aware: a single pooled streaming event processor consumes the events of every tenant, keeping each tenant's projection separated, with no extra configuration.
 This page covers that streaming event processor. A subscribing event processor is not wired to the per-tenant stores. <<Subscribing event processors>> explains how it behaves in a multi-tenant application.
 
@@ -20,13 +20,13 @@ Because the stream is shared across tenants, a tenant whose store cannot be read
 
 == Handling events per tenant
 
-Write an ordinary event handler.
+Events in a multi-tenancy application are handled through regular xref:events:event-handlers.adoc[event handlers].
 During handling, the tenant of the event is available on the processing context, so the handler writes to the projection of the tenant the event belongs to.
 
-The tenant is determined by which tenant's event store the event was streamed from, not by the event's metadata.
-No tenant information has to be present in the stored event for a handler to determine its tenant.
+The tenant is determined by the event store connection the event was streamed from, so no tenant information has to be present in the stored event's payload or metadata.
+See xref:multi-tenancy:tenant-management.adoc#tenant-resolution[tenant resolution] for how the tenant of a message is determined.
 
-See xref:multi-tenancy:tenant-scoped-components.adoc[Tenant-scoped components] for injecting a tenant's own instance of a resource, such as a per-tenant read-model repository, and xref:multi-tenancy:tenant-management.adoc#tenant-resolution[tenant resolution] for how the tenant of a message is determined.
+See xref:multi-tenancy:tenant-scoped-components.adoc[Tenant-scoped components] for injecting a tenant's own instance of a resource, such as a per-tenant read-model repository, to write a per-tenant projection.
 
 == Adding and removing tenants
 
@@ -42,7 +42,7 @@ This happens automatically and requires no configuration.
 Events are delivered at least once, as they are for any streaming event processor, so an event handler must be written so that handling the same event twice has the same effect as handling it once.
 
 On a multi-tenant stream a duplicate is more likely than on a single-tenant one.
-Adding or removing a tenant re-opens the stream, and the processor cannot always tell that an event of another tenant was already handled, so a duplicate follows an ordinary tenant change, not only a failure.
+Adding or removing a tenant re-opens the stream, and the processor cannot always tell that an event of another tenant was already handled, so a duplicate may follow an ordinary tenant change, not only a failure.
 
 In practice this means deriving a projection from the identifiers in the event rather than counting.
 Recording an enrollment as `enrolledStudents.add(studentId)` is safe to repeat, while `enrollments = enrollments + 1` is not.
