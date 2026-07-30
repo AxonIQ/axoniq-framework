@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.invoke.MethodHandles;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Type-preserving tracing decorator for {@link QueryBusConnector}.
@@ -77,6 +78,7 @@ public final class TracingQueryBusConnector implements QueryBusConnector {
 
     private final QueryBusConnector delegate;
     private final SpanFactory spanFactory;
+    private final AtomicBoolean deliveryTracingFailureReported = new AtomicBoolean();
 
     /**
      * Initializes a tracing {@link QueryBusConnector} wrapping the given {@code delegate}, obtaining spans from the
@@ -135,7 +137,9 @@ public final class TracingQueryBusConnector implements QueryBusConnector {
      * Tracing must never cost a delivery. This runs in the result stream's entry consumer, after the entry has already
      * been taken from the delegate stream, so a propagated failure would hand the subscriber an exception in place of
      * an update that is then gone for good. Any failure -- most plausibly malformed trace metadata arriving from a
-     * remote node -- is therefore logged and contained, leaving only a gap in the trace.
+     * remote node -- is therefore contained, leaving only a gap in the trace. The first such failure is logged as a
+     * warning, because nothing else about the run reveals that tracing has degraded; the rest drop to debug, because
+     * the cause is usually persistent and would otherwise be logged for every update.
      */
     private void traceUpdateDelivery(SubscriptionQueryUpdateMessage update,
                                      QueryMessage query,
@@ -151,7 +155,20 @@ public final class TracingQueryBusConnector implements QueryBusConnector {
                        .start()
                        .close();
         } catch (Exception e) {
-            logger.debug("Failed to trace the delivery of subscription query update [{}].", update.identifier(), e);
+            // Warn once, then step down to debug. The cause is typically environmental and therefore persistent
+            // (a remote node propagating trace metadata this Propagator cannot read), so every subsequent update
+            // would fail identically and warning on each would bury the rest of the log.
+            if (deliveryTracingFailureReported.compareAndSet(false, true)) {
+                logger.warn("Failed to trace the delivery of subscription query update [{}]. Delivery itself is "
+                                    + "unaffected; the trace loses this update. Further occurrences are logged "
+                                    + "at debug level.",
+                            update.identifier(),
+                            e);
+            } else {
+                logger.debug("Failed to trace the delivery of subscription query update [{}].",
+                             update.identifier(),
+                             e);
+            }
         }
     }
 
