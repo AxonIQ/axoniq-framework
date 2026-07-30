@@ -40,6 +40,7 @@ import org.junit.jupiter.api.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -140,6 +141,61 @@ class TenantAwareQueryBusTest {
             assertThat(delegate.completeSubscriptionsExceptionallyCause).isSameAs(cause);
             assertThat(delegate.completeSubscriptionsExceptionallyContext).isSameAs(context);
         }
+
+        @Test
+        void emitUpdateAndCountAndsTenantClauseOntoTheGivenFilterAndReturnsTheDelegatesCount() {
+            // given
+            ProcessingContext context = contextForTenant(TENANT_A);
+            Predicate<QueryMessage> callerFilter = message -> true;
+
+            // when
+            CompletableFuture<OptionalInt> result = testSubject.emitUpdateAndCount(callerFilter,
+                                                                                    updateSupplier(),
+                                                                                    context);
+
+            // then
+            assertThat(delegate.emitUpdateAndCountFilter.test(queryMessageForTenant(TENANT_A.tenantId()))).isTrue();
+            assertThat(delegate.emitUpdateAndCountFilter.test(queryMessageForTenant("tenant-B"))).isFalse();
+            assertThat(delegate.emitUpdateAndCountContext).isSameAs(context);
+            assertThat(result.join()).isEqualTo(OptionalInt.of(3));
+        }
+
+        @Test
+        void completeSubscriptionsAndCountAndsTenantClauseOntoTheGivenFilterAndReturnsTheDelegatesCount() {
+            // given
+            ProcessingContext context = contextForTenant(TENANT_A);
+
+            // when
+            CompletableFuture<OptionalInt> result = testSubject.completeSubscriptionsAndCount(message -> true,
+                                                                                                context);
+
+            // then
+            assertThat(delegate.completeSubscriptionsAndCountFilter.test(queryMessageForTenant(TENANT_A.tenantId())))
+                    .isTrue();
+            assertThat(delegate.completeSubscriptionsAndCountFilter.test(queryMessageForTenant("tenant-B"))).isFalse();
+            assertThat(delegate.completeSubscriptionsAndCountContext).isSameAs(context);
+            assertThat(result.join()).isEqualTo(OptionalInt.of(2));
+        }
+
+        @Test
+        void completeSubscriptionsExceptionallyAndCountAndsTenantClauseOntoTheGivenFilterAndReturnsTheDelegatesCount() {
+            // given
+            ProcessingContext context = contextForTenant(TENANT_A);
+            RuntimeException cause = new RuntimeException("boom");
+
+            // when
+            CompletableFuture<OptionalInt> result =
+                    testSubject.completeSubscriptionsExceptionallyAndCount(message -> true, cause, context);
+
+            // then
+            assertThat(delegate.completeSubscriptionsExceptionallyAndCountFilter
+                               .test(queryMessageForTenant(TENANT_A.tenantId()))).isTrue();
+            assertThat(delegate.completeSubscriptionsExceptionallyAndCountFilter
+                               .test(queryMessageForTenant("tenant-B"))).isFalse();
+            assertThat(delegate.completeSubscriptionsExceptionallyAndCountCause).isSameAs(cause);
+            assertThat(delegate.completeSubscriptionsExceptionallyAndCountContext).isSameAs(context);
+            assertThat(result.join()).isEqualTo(OptionalInt.of(1));
+        }
     }
 
     @Nested
@@ -185,6 +241,35 @@ class TenantAwareQueryBusTest {
                                                                                     new RuntimeException(), context))
                     .isInstanceOf(TenantNotResolvedException.class);
             assertThat(delegate.completeSubscriptionsExceptionallyFilter).isNull();
+        }
+
+        @Test
+        void emitUpdateAndCountThrowsWhenContextCarriesNoTenant() {
+            ProcessingContext context = StubProcessingContext.forMessage(queryMessageForTenant(TENANT_A.tenantId()));
+
+            assertThatThrownBy(() -> testSubject.emitUpdateAndCount(message -> true, updateSupplier(), context))
+                    .isInstanceOf(TenantNotResolvedException.class);
+            assertThat(delegate.emitUpdateAndCountFilter).isNull();
+        }
+
+        @Test
+        void completeSubscriptionsAndCountThrowsWhenContextCarriesNoTenant() {
+            ProcessingContext context = StubProcessingContext.forMessage(queryMessageForTenant(TENANT_A.tenantId()));
+
+            assertThatThrownBy(() -> testSubject.completeSubscriptionsAndCount(message -> true, context))
+                    .isInstanceOf(TenantNotResolvedException.class);
+            assertThat(delegate.completeSubscriptionsAndCountFilter).isNull();
+        }
+
+        @Test
+        void completeSubscriptionsExceptionallyAndCountThrowsWhenContextCarriesNoTenant() {
+            ProcessingContext context = StubProcessingContext.forMessage(queryMessageForTenant(TENANT_A.tenantId()));
+
+            assertThatThrownBy(() -> testSubject.completeSubscriptionsExceptionallyAndCount(message -> true,
+                                                                                            new RuntimeException(),
+                                                                                            context))
+                    .isInstanceOf(TenantNotResolvedException.class);
+            assertThat(delegate.completeSubscriptionsExceptionallyAndCountFilter).isNull();
         }
     }
 
@@ -412,6 +497,13 @@ class TenantAwareQueryBusTest {
         private Predicate<QueryMessage> completeSubscriptionsExceptionallyFilter;
         private Throwable completeSubscriptionsExceptionallyCause;
         private ProcessingContext completeSubscriptionsExceptionallyContext;
+        private Predicate<QueryMessage> emitUpdateAndCountFilter;
+        private ProcessingContext emitUpdateAndCountContext;
+        private Predicate<QueryMessage> completeSubscriptionsAndCountFilter;
+        private ProcessingContext completeSubscriptionsAndCountContext;
+        private Predicate<QueryMessage> completeSubscriptionsExceptionallyAndCountFilter;
+        private Throwable completeSubscriptionsExceptionallyAndCountCause;
+        private ProcessingContext completeSubscriptionsExceptionallyAndCountContext;
 
         @Override
         public QueryBus subscribe(QualifiedName queryName, QueryHandler queryHandler) {
@@ -469,6 +561,34 @@ class TenantAwareQueryBusTest {
             this.completeSubscriptionsExceptionallyCause = cause;
             this.completeSubscriptionsExceptionallyContext = context;
             return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public CompletableFuture<OptionalInt> emitUpdateAndCount(Predicate<QueryMessage> filter,
+                                                                 Supplier<SubscriptionQueryUpdateMessage> updateSupplier,
+                                                                 @Nullable ProcessingContext context) {
+            this.emitUpdateAndCountFilter = filter;
+            this.emitUpdateAndCountContext = context;
+            return CompletableFuture.completedFuture(OptionalInt.of(3));
+        }
+
+        @Override
+        public CompletableFuture<OptionalInt> completeSubscriptionsAndCount(Predicate<QueryMessage> filter,
+                                                                             @Nullable ProcessingContext context) {
+            this.completeSubscriptionsAndCountFilter = filter;
+            this.completeSubscriptionsAndCountContext = context;
+            return CompletableFuture.completedFuture(OptionalInt.of(2));
+        }
+
+        @Override
+        public CompletableFuture<OptionalInt> completeSubscriptionsExceptionallyAndCount(
+                Predicate<QueryMessage> filter,
+                Throwable cause,
+                @Nullable ProcessingContext context) {
+            this.completeSubscriptionsExceptionallyAndCountFilter = filter;
+            this.completeSubscriptionsExceptionallyAndCountCause = cause;
+            this.completeSubscriptionsExceptionallyAndCountContext = context;
+            return CompletableFuture.completedFuture(OptionalInt.of(1));
         }
 
         @Override
