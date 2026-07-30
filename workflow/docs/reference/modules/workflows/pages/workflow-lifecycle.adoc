@@ -30,7 +30,7 @@ Any async steps still running are interrupted (see <<complete-with-running-steps
 |The workflow was explicitly failed via `ctx.fail()`.
 
 |`CANCELLED`
-|The workflow was cancelled via `ctx.cancel()` (from inside the workflow) or externally via the `WorkflowManager` API.
+|The workflow was cancelled via `ctx.cancel()`.
 
 |`TIMED_OUT`
 |The workflow exceeded its overall timeout.
@@ -98,10 +98,10 @@ Both terminate the workflow, but they signal different intent and are called fro
 |Inside the workflow
 |The workflow detected an error and cannot continue. Called from your workflow code.
 
-|`ctx.cancel()` / `ctx.cancel("reason")` (inside) or `workflowManager.workflow(id).cancel(reason)` (outside)
+|`ctx.cancel()` / `ctx.cancel("reason")`
 |`CANCELLED`
-|Inside or outside the workflow
-|The workflow should stop gracefully, either by workflow logic or by an external action (user, admin, API).
+|Inside the workflow
+|The workflow logic has determined that it should stop gracefully.
 |===
 
 === `fail`—internal termination
@@ -146,14 +146,12 @@ if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
 <!-- vale on -->
 ++++
 
-The last event recorded for `shipOrder` and `notifyCustomer` is their `Started`; the workflow's `Failed` is the terminal event, and no further events are published for the workflow. The `Failed` event records the original exception's class and message (`RuntimeException` here), not the wrapper. To record a terminal outcome and run compensation for a running step, cancel it individually with `ctx.cancelStep(...)` or `workflowManager.workflow(id).cancelStep(...)` before failing the workflow.
+The last event recorded for `shipOrder` and `notifyCustomer` is their `Started`; the workflow's `Failed` is the terminal event, and no further events are published for the workflow. The `Failed` event records the original exception's class and message (`RuntimeException` here), not the wrapper. To record a terminal outcome and run compensation for a running step, cancel it individually with `ctx.cancelStep(...)` before failing the workflow.
 
-=== `cancel`—external termination
+=== `cancel`—internal termination
 
-Use the `WorkflowManager` API from outside the workflow—for example, when a user or API wants to stop a running workflow.
-Like `fail`, cancellation interrupts running steps and then terminates the workflow with a single workflow-level event.
-External cancellation is *cooperative*: the call returns a `CompletableFuture` that completes once the cancellation has fully finished on the workflow's own control thread (bounded by a timeout), so the durable terminal record is committed by the time it completes.
-The caller decides whether to block on the result (for example with `.join()`) or compose it asynchronously.
+Use `ctx.cancel()` inside a workflow when its business logic determines that it should stop gracefully. Like `fail`,
+cancellation interrupts running steps and then terminates the workflow with a single workflow-level event.
 
 Given a workflow with parallel steps running:
 
@@ -169,58 +167,29 @@ var notification = ctx.execute("notifyCustomer", ctx.workflowPayload(),
                                 step -> step.timeout(Duration.ofMinutes(1)));
 ----
 
-An external caller cancels the workflow while those steps are still running, using the `WorkflowManager` API (resolve it from the configuration as a registered component):
-
-The `WorkflowManager` API is fluent: first *select* what to act on, then invoke a command on the selection.
-
 [source,java]
 ----
-WorkflowManager workflowManager = configuration.getComponent(WorkflowManager.class);
-
-// Select a single instance by id, then cancel it. join() blocks until the durable record is committed.
-boolean cancelled = workflowManager.workflow("order-123")
-                                   .cancel(CancellationReason.of("Cancelled by user"))
-                                   .join();
-
-// Select every non-terminal instance matching a state predicate, then cancel them.
-CancellationResult result = workflowManager.workflows(state -> "EU".equals(state.payload().get("region")))
-                                           .cancel(CancellationReason.of("Region shut down"))
-                                           .join();
-
-// Or compose asynchronously instead of blocking the caller thread.
-workflowManager.workflow("order-123")
-               .cancel(CancellationReason.of("Cancelled by user"))
-               .thenAccept(wasCancelled -> log.info("cancelled: {}", wasCancelled));
-----
-
-`workflow(id)` returns a `WorkflowHandle`; its `cancel(reason)` returns a `CompletableFuture<Boolean>` that completes `true` when the instance existed and was non-terminal (a cancellation was enqueued) and `false` otherwise.
-`workflows(predicate)` returns a point-in-time snapshot of every non-terminal instance whose state matches, and its `cancel(reason)` returns a `CompletableFuture<CancellationResult>` that completes with `matched` (handles acted on), `affected` (instances a cancellation was enqueued for), and the affected workflow ids once every handle's cancellation has settled.
-
-A selection is iterable, so you can inspect each instance and decide per instance:
-
-[source,java]
-----
-for (WorkflowHandle handle : workflowManager.workflows(state -> state.payload().containsKey("stuck"))) {
-    handle.state()
-          .filter(state -> state.workflowStepNames().contains("awaitApproval"))
-          .ifPresent(state -> handle.cancel(CancellationReason.of("Manual review timed out")).join());
+// A business condition reached by the workflow cancels it and interrupts
+// shipOrder and notifyCustomer.
+if (orderCancelled()) {
+    ctx.cancel("Order cancelled by customer");
 }
 ----
 
 ++++
 <!-- vale off -->
 <div class="et-player" data-autoplay>
-  <div class="et-src" data-title="workflowManager.cancel()">
+  <div class="et-src" data-title="ctx.cancel()">
 1 started OrderFulfillmentWorkflow#ExecuteStarted
 2 started ShipOrderStarted {"orderId": 123}
 3 started NotifyCustomerStarted {"orderId": 123}
-4 cancelled OrderFulfillmentWorkflow#ExecuteCancelled {"type": "...WorkflowCancelledException", "message": "Cancelled by user"}
+4 cancelled OrderFulfillmentWorkflow#ExecuteCancelled {"type": "...WorkflowCancelledException", "message": "Order cancelled by customer"}
   </div>
 </div>
 <!-- vale on -->
 ++++
 
-As the log shows, the last event recorded for `shipOrder` and `notifyCustomer` is their `Started`; the workflow's `Cancelled` is the terminal event. To record a terminal outcome and run compensation for a specific step, cancel it individually with `workflowManager.workflow(id).cancelStep(...)` (see xref:step-orchestration.adoc[]).
+As the log shows, the last event recorded for `shipOrder` and `notifyCustomer` is their `Started`; the workflow's `Cancelled` is the terminal event. To record a terminal outcome and run compensation for a specific step, cancel it individually with `ctx.cancelStep(...)` (see xref:step-orchestration.adoc[]).
 
 If the workflow body itself is blocked on the interrupted step (for example inside `awaitExecute(...)` or `.await()`), that call unblocks with a `StepInterruptedException`, which the body can catch (or its parent `StepFailedException`) to run compensation or cleanup. This is purely an in-body signal: it does not change what is recorded, the step's last event-log entry still stays `Started`.
 

@@ -23,11 +23,10 @@ import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.F
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.management.WorkflowManager;
-import io.axoniq.workflow.runtime.api.management.WorkflowManager.CancellationReason;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.workflow.runtime.test.utils.SleepUtils;
@@ -50,17 +49,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Verifies that joining a {@code cancelAllRunningSteps(reason)} future immediately followed by joining a
- * {@code cancel(reason)} future, called back to back on the same external thread, deterministically cancels the
- * directly-awaited {@code awaitedStep} with a durable {@code CANCELLED} record, runs the body's compensation, and
- * drives the workflow to a terminal {@code CANCELLED} state.
+ * Verifies that joining {@code requestAllRunningStepsCancellation(reason)} immediately followed by joining
+ * {@code requestWorkflowCancellation(reason)}, called back to back on the same external thread, deterministically
+ * cancels the directly-awaited {@code awaitedStep} with a durable {@code CANCELLED} record, runs the body's
+ * compensation, and drives the workflow to a terminal {@code CANCELLED} state.
  * <p>
- * The determinism holds by construction: joining {@code cancelAllRunningSteps}'s future blocks the caller until its
- * own control-thread task has fully finished, every durable {@code <step>:CANCELLED} record included, so the
- * subsequent {@code cancel} cannot even enqueue its task until the per-step cancellations are complete. The two
- * tasks can never race in the queue. The body observes {@code awaitedStep}'s cancellation as a catchable
- * {@link StepCancellationException}, compensates, then parks on {@code holdStep} (which never completes on its own)
- * until the external {@code cancel} terminates the workflow.
+ * The determinism holds by construction: joining the first future blocks the caller until its control-thread task has
+ * fully finished, every durable {@code <step>:CANCELLED} record included. The subsequent workflow cancellation
+ * request is therefore not issued until the per-step cancellations are complete. The body observes
+ * {@code awaitedStep}'s cancellation as a catchable {@link StepCancellationException}, compensates, then parks on
+ * {@code holdStep} (which never completes on its own) until the external workflow-cancellation request terminates it.
  *
  * @author Stefan Dragisic
  * @since 0.3.0
@@ -93,19 +91,14 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
         delayedPublisher.start();
 
         awaitParked(id);
+        var execution = workflowEngine.workflowExecutions()
+                                      .stream()
+                                      .filter(w -> w.workflowId().equals(id))
+                                      .findFirst().orElseThrow(() -> new IllegalStateException(
+                        "no workflow found with id " + id));
 
-        var handle = configuration.getComponent(WorkflowManager.class).workflow(id);
-        // Back to back on the same thread: joining each future before issuing the next call blocks until its own
-        // control-thread task has fully finished, so the second call's task cannot race the first one's.
-        int cancelled = handle.cancelAllRunningSteps(CancellationReason.of("cancel all running steps")).join();
-        boolean workflowCancelAccepted = handle.cancel(CancellationReason.of("cancel workflow")).join();
-
-        assertThat(cancelled)
-                .as("cancelAllRunningSteps should cancel both running steps")
-                .isEqualTo(2);
-        assertThat(workflowCancelAccepted)
-                .as("cancel should find the workflow alive and run to completion")
-                .isTrue();
+        execution.requestAllRunningStepsCancellation(new StepCancellationException("cancel all running steps")).join();
+        execution.requestWorkflowCancellation(new WorkflowCancelledException("cancel workflow")).join();
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var history = workflowHistoryRepository.findById(id);

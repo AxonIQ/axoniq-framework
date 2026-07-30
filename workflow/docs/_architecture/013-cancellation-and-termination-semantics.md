@@ -8,7 +8,7 @@
 
 A workflow can terminate in four ways — completion, failure ([`ctx.fail`](./001-command-mode-primitives.md)),
 cancellation (`ctx.cancel`), and timeout — and a single running step can be cancelled independently
-(`ctx.cancelStep`, `WorkflowStepResult.cancel()`, or externally). These are two different concerns that were
+(`ctx.cancelStep` or `WorkflowStepResult.cancel()`). These are two different concerns that were
 previously handled by one path: every whole-workflow terminal first cancelled each running step individually,
 publishing a `<step>:CANCELLED` record per step before the workflow terminal record.
 
@@ -26,7 +26,7 @@ workflow's own control thread.
 
 Separate the two concerns.
 
-**Whole-workflow termination** (completion, fail, cancel, timeout — in-body or external) publishes only the
+**Whole-workflow termination** (completion, fail, cancel, timeout) publishes only the
 **workflow-level** terminal event (`<workflow>:COMPLETED` / `FAILED` / `CANCELLED` / `TIMED_OUT`). Running steps
 are **interrupted**, not individually cancelled: their futures are completed with a non-cancellation cause and
 the pending task queue is discarded. No per-step terminal record is published; a step that was running is left
@@ -34,30 +34,10 @@ in its last recorded state (`STARTED`) in the event log. Because the queue is di
 queued retry attempt cannot launch, so no cross-task "terminating" flag or ordering drain is needed; a retry
 launch additionally gates on `workflowStatus().isTerminal()`.
 
-**Single-step cancellation** (`ctx.cancelStep`, `WorkflowStepResult.cancel()`, and the external
-`WorkflowManager.cancelStep` / `cancelAllRunningSteps`) still publishes a `<step>:CANCELLED` record and lets the
-body catch `StepCancellationException` and compensate. The record is authored **on the workflow control thread**
-(the single consumer of the task queue): in-body callers author it synchronously; external callers enqueue the
-work onto the control thread and never drive workflow logic from the caller thread. The not-terminal check and
-the publish are therefore atomic with respect to concurrent step completion — first-writer-wins, no race.
-
-External management is exposed only through `WorkflowManager`, and only as a fluent selection-then-action API,
-never by mutating a live execution from outside. A caller first selects — `workflow(id)` returns a safe
-`WorkflowHandle` for one instance, `workflows(predicate)` returns a point-in-time snapshot `WorkflowSelection` of
-matching non-terminal instances — then invokes a cooperative command (`cancel`, `cancelStep`,
-`cancelAllRunningSteps`) on it. A handle exposes only the id, a read-only state snapshot, and those commands; it
-never leaks the execution or its task queue. Per-handle commands return a `CompletableFuture<Boolean>` /
-`CompletableFuture<Integer>`; bulk selection commands return a `CompletableFuture<CancellationResult>` (`matched`,
-`affected`, affected ids). External operations are cooperative: each command's work is enqueued onto the control
-thread, and the returned future completes once the control thread has durably processed the command (the durable
-records included), or completes exceptionally after a bounded timeout if the control thread has not finished by
-then. The caller decides whether to block on the result (`join()` / `get()`) or compose it asynchronously; it
-never pumps the queue itself. A bulk command launches every matched handle's action concurrently — each instance
-owns an independent control thread, so there is no reason to serialize across instances — and waits for all of
-them to settle before aggregating; a handle whose action completes exceptionally counts as matched but not
-affected, so one stuck instance cannot fail the whole aggregate. An uncaught `StepCancellationException`
-propagates and wedges the instance non-terminally exactly like any other uncaught exception (the caller's body is
-responsible for catching it).
+**Single-step cancellation** (`ctx.cancelStep` and `WorkflowStepResult.cancel()`) still publishes a
+`<step>:CANCELLED` record and lets the body catch `StepCancellationException` and compensate. The record is
+authored on the workflow control thread, the single consumer of the task queue. The not-terminal check and publish
+are therefore atomic with respect to concurrent step completion: first writer wins.
 
 ### How a step's fate is decided (one mechanism, two causes)
 

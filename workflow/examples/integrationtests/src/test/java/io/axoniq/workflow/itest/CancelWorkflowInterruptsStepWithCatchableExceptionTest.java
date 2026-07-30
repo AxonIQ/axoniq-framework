@@ -23,11 +23,10 @@ import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.F
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.management.WorkflowManager;
-import io.axoniq.workflow.runtime.api.management.WorkflowManager.CancellationReason;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.workflow.runtime.test.utils.SleepUtils;
@@ -49,9 +48,9 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * Verifies that when a whole-workflow {@code cancel()} interrupts a step the body is parked on, the body's blocking
- * wait unblocks with a catchable {@link StepInterruptedException} (a {@link
- * io.axoniq.workflow.runtime.api.execution.state.StepFailedException}), so it can run compensation, even though no
- * durable {@code <step>:CANCELLED} record is ever published for the interrupted step.
+ * wait unblocks with a catchable {@link StepInterruptedException} (a
+ * {@link io.axoniq.workflow.runtime.api.execution.state.StepFailedException}), so it can run compensation, even though
+ * no durable {@code <step>:CANCELLED} record is ever published for the interrupted step.
  *
  * @author Stefan Dragisic
  * @since 0.3.0
@@ -61,9 +60,13 @@ class CancelWorkflowInterruptsStepWithCatchableExceptionTest extends AbstractWor
     private static final Logger logger =
             LoggerFactory.getLogger(CancelWorkflowInterruptsStepWithCatchableExceptionTest.class);
 
-    /** Set true iff the body actually caught StepInterruptedException around the parked step and ran compensation. */
+    /**
+     * Set true iff the body actually caught StepInterruptedException around the parked step and ran compensation.
+     */
     static final AtomicBoolean COMPENSATION_RAN = new AtomicBoolean(false);
-    /** Records the throwable class that actually unwound the body's await, for the assertion below. */
+    /**
+     * Records the throwable class that actually unwound the body's await, for the assertion below.
+     */
     static volatile String BODY_EXIT = "none";
 
     public CancelWorkflowInterruptsStepWithCatchableExceptionTest() {
@@ -89,12 +92,15 @@ class CancelWorkflowInterruptsStepWithCatchableExceptionTest extends AbstractWor
 
         awaitParked(id);
 
-        var manager = configuration.getComponent(WorkflowManager.class);
-        boolean cancelled = manager.workflow(id)
-                                   .cancel(CancellationReason.of("operator cancelled while step running"))
-                                   .join();
+        var execution = workflowEngine.workflowExecutions()
+                                      .stream()
+                                      .filter(w -> w.workflowId().equals(id))
+                                      .findFirst().orElseThrow(() -> new IllegalStateException(
+                        "no workflow found with id " + id));
 
-        assertThat(cancelled).isTrue();
+        execution.requestWorkflowCancellation(
+                new WorkflowCancelledException("operator cancelled while step running")
+        ).join();
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var history = workflowHistoryRepository.findById(id);
