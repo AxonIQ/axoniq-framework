@@ -20,8 +20,6 @@
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
-import io.axoniq.framework.messaging.multitenancy.api.TenantChangeListener;
-import io.axoniq.framework.messaging.multitenancy.api.TenantChangeSource;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
@@ -88,10 +86,10 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * As a {@link MultiTenantAwareComponent} this engine follows the
  * {@link io.axoniq.framework.messaging.multitenancy.api.TenantProvider TenantProvider}: a tenant added at runtime gets
- * its engine on first use, and a removed tenant's composed engine is evicted. As a {@link TenantChangeSource} it
- * announces each such registration to its subscribers, for a component that has to act on the tenants this engine holds
- * rather than on the tenants the provider knows. Re-registering an already registered tenant is announced too, since
- * that rebuilds the tenant's composed engine.
+ * its engine on first use, and a removed tenant's composed engine is evicted. Each such registration is announced to
+ * the listeners subscribed through {@link #subscribe(TenantChangeListener)}, for a component that has to act on the
+ * tenants this engine holds rather than on the tenants the provider knows. Re-registering an already registered tenant
+ * is announced too, since that rebuilds the tenant's composed engine.
  * <p>
  * The read side ({@link #stream}, {@link #firstToken}, {@link #latestToken}, {@link #tokenAt}) carries no context and
  * spans all current tenants. It merges the per-tenant streams, tags every event with its tenant, and positions the
@@ -103,8 +101,7 @@ import static java.util.Objects.requireNonNull;
  * @since 5.3.0
  */
 @Internal
-public class MultiTenantEventStorageEngine
-        implements EventStorageEngine, MultiTenantAwareComponent, TenantChangeSource {
+public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiTenantAwareComponent {
 
     private static final Logger logger = LoggerFactory.getLogger(MultiTenantEventStorageEngine.class);
 
@@ -183,11 +180,28 @@ public class MultiTenantEventStorageEngine
         return composedEngines.tenants();
     }
 
-    @Override
+    /**
+     * Subscribes the given {@code listener} to the changes of the tenants {@code this} engine holds.
+     * <p>
+     * A change is announced only once it is visible through {@link #tenants()}, which is what makes acting on one safe.
+     * A listener must therefore subscribe here rather than to the
+     * {@link io.axoniq.framework.messaging.multitenancy.api.TenantProvider TenantProvider}: the provider notifies its
+     * subscribers in turn, so a subscriber of the provider can observe this engine before it registered the tenant.
+     * <p>
+     * Every call adds a listener of its own, so a listener subscribed twice is invoked twice for one change. Each
+     * returned registration removes what its own call added.
+     * <p>
+     * Announcing happens on the thread applying the change, so a listener must return promptly and hand off any work of
+     * its own. A listener cancelled while an announcement is in flight may still be invoked for that announcement,
+     * so it has to tolerate running once more after its own cancellation.
+     *
+     * @param listener the listener to invoke after every change to the tenants {@code this} engine holds
+     * @return a registration whose cancellation stops the given {@code listener} from being invoked further
+     * @throws NullPointerException if the given {@code listener} is {@code null}
+     */
     public Registration subscribe(TenantChangeListener listener) {
         requireNonNull(listener, "The tenant change listener must not be null");
-        // Subscribing twice would invoke the listener twice per change, while cancelling once would leave it subscribed.
-        tenantChangeListeners.addIfAbsent(listener);
+        tenantChangeListeners.add(listener);
         return () -> tenantChangeListeners.remove(listener);
     }
 

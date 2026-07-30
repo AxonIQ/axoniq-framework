@@ -28,7 +28,6 @@ import io.axoniq.axonserver.grpc.admin.ReplicationGroupOverview;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
-import io.axoniq.framework.messaging.multitenancy.api.TenantChangeSource;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
@@ -137,30 +136,6 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
-        void keepsTheTenantChangeSourceResolvableWhenTheEventStorageEngineIsDecorated() {
-            // A decorator returns the decorated type, so resolving the event storage engine no longer yields the
-            // tenant-routing engine. Whatever follows its tenants resolves the source instead, which no
-            // EventStorageEngine decorator matches.
-            AxonConfiguration decoratedConfiguration =
-                    MessagingConfigurer.create()
-                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
-                                       .componentRegistry(registry -> registry
-                                               .registerComponent(TenantComponentProvider.class,
-                                                                  config -> componentProvider)
-                                               .registerDecorator(EventStorageEngine.class, 0,
-                                                                  (config, name, delegate) ->
-                                                                          SnapshotCapableEventStorageEngine.decorate(
-                                                                                  delegate,
-                                                                                  new InMemorySnapshotStore())))
-                                       .build();
-
-            assertThat(decoratedConfiguration.getComponent(EventStorageEngine.class))
-                    .isInstanceOf(SnapshotCapableEventStorageEngine.class);
-            assertThat(decoratedConfiguration.getComponent(TenantChangeSource.class))
-                    .isInstanceOf(MultiTenantEventStorageEngine.class);
-        }
-
-        @Test
         void subscribesTheFactoriesBeforeTheRoutingEngineThatComposesFromThem() {
             // The engine announces a tenant only once it holds it, and whatever acts on that announcement composes
             // through the factories, so a factory that has not been told yet fails the merged stream for every tenant.
@@ -190,9 +165,51 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
-        void registersNoTenantChangeSourceWhenTheApplicationSuppliesItsOwnEventStorageEngine() {
-            // Both names are registered together or not at all, so an application bringing its own event store keeps it
-            // and gets no tenant-routing source, leaving whatever follows tenant changes inert.
+        void subscribesAndFollowsTheRoutingEngineItselfWhenTheEventStorageEngineIsDecorated() {
+            // A decorator returns the decorated type, so resolving the event storage engine no longer yields the
+            // tenant-routing engine. Both the tenant lifecycle subscription and the restarter's listener still have to
+            // reach the engine itself, which they do because a start handler is bound to its own component rather than
+            // to the decorated one. Resolving instead would follow a decorator that announces no tenant change.
+            StubTenantProvider decoratedProvider = new StubTenantProvider();
+            AxonConfiguration decoratedConfiguration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TenantProvider.class, config -> decoratedProvider)
+                                               .registerComponent(TenantComponentProvider.class,
+                                                                  config -> componentProvider)
+                                               .registerDecorator(EventStorageEngine.class, 0,
+                                                                  (config, name, delegate) ->
+                                                                          SnapshotCapableEventStorageEngine.decorate(
+                                                                                  delegate,
+                                                                                  new InMemorySnapshotStore())))
+                                       .build();
+            decoratedConfiguration.start();
+            try {
+                MultiTenantEventStorageEngine routingEngine =
+                        decoratedProvider.subscribedComponents()
+                                         .stream()
+                                         .filter(MultiTenantEventStorageEngine.class::isInstance)
+                                         .map(MultiTenantEventStorageEngine.class::cast)
+                                         .findFirst()
+                                         .orElseThrow();
+                MockComponentDescriptor descriptor = new MockComponentDescriptor();
+                routingEngine.describeTo(descriptor);
+
+                assertThat(decoratedConfiguration.getComponent(EventStorageEngine.class))
+                        .isInstanceOf(SnapshotCapableEventStorageEngine.class);
+                assertThat(decoratedProvider.subscribedComponents())
+                        .filteredOn(MultiTenantEventStorageEngine.class::isInstance)
+                        .hasSize(1);
+                // The restarter's listener sits on the routing engine, not on the decorator wrapping it.
+                assertThat(descriptor.getDescribedProperties()).containsEntry("tenantChangeListenerCount", 1);
+            } finally {
+                decoratedConfiguration.shutdown();
+            }
+        }
+
+        @Test
+        void registersNoRoutingEngineWhenTheApplicationSuppliesItsOwnEventStorageEngine() {
             EventStorageEngine applicationEngine = new InMemoryEventStorageEngine();
             AxonConfiguration ownEngineConfiguration =
                     MessagingConfigurer.create()
@@ -204,14 +221,14 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
                                                                   config -> applicationEngine))
                                        .build();
 
+            // Multi-tenancy is on, but nothing routes across tenants, so the application's own store serves everyone.
             assertThat(ownEngineConfiguration.getComponent(EventStorageEngine.class)).isSameAs(applicationEngine);
-            assertThat(ownEngineConfiguration.hasComponent(TenantChangeSource.class)).isFalse();
         }
 
         @Test
-        void subscribesTheRoutingEngineToTheTenantProviderExactlyOnceDespiteItsTwoNames() {
-            // Only the source registration carries the tenant lifecycle. Wrapping the event storage engine registration
-            // in a subscribed component too would register every tenant with the engine twice, recomposing each one.
+        void subscribesTheRoutingEngineToTheTenantProviderExactlyOnce() {
+            // Registering the engine twice, or wrapping a second registration in a subscribed component, would register
+            // every tenant with it twice and recompose each tenant's engine.
             StubTenantProvider countingProvider = new StubTenantProvider();
             AxonConfiguration countedConfiguration =
                     MessagingConfigurer.create()
@@ -229,14 +246,6 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
             } finally {
                 countedConfiguration.shutdown();
             }
-        }
-
-        @Test
-        void resolvesTheRoutingEngineAsBothTheTenantChangeSourceAndTheEventStorageEngine() {
-            // Whatever follows the engine's tenants resolves the source, while everything else resolves the event
-            // storage engine, so the two names have to yield the one instance.
-            assertThat(configuration.getComponent(EventStorageEngine.class))
-                    .isSameAs(configuration.getComponent(TenantChangeSource.class));
         }
 
         @Test

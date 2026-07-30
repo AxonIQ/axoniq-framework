@@ -19,7 +19,8 @@
 
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
-import io.axoniq.framework.messaging.multitenancy.api.TenantChangeSource;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.AxonThreadFactory;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.Registration;
@@ -34,13 +35,13 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Restarts the running {@link StreamingEventProcessor StreamingEventProcessors} whenever the set of tenants changes, so
@@ -50,13 +51,14 @@ import java.util.concurrent.atomic.AtomicLong;
  * opened, so a tenant added afterwards is not read and a removed tenant's stream stays open. Re-opening the stream with
  * the current tenants requires a processor restart, which the coordinator supports.
  * <p>
- * The restart follows the {@link TenantChangeSource}, whose tenants decide what a re-opened stream spans, rather than
- * the {@link io.axoniq.framework.messaging.multitenancy.api.TenantProvider TenantProvider} that source itself follows. A
- * tenant change reaches the provider's subscribers in turn, and a subscriber ahead of the source may take real time over
- * its own registration, such as one opening a connection for the tenant. A restart takes barely any time by comparison,
- * so a restart driven by the provider can re-open the stream while the source still reports the previous tenants. The
- * new tenant is then missing from a stream that nothing re-opens again, because no further tenant change follows.
- * Following the source rules that out: it announces a change only once that change is visible through its own
+ * The restart follows the {@link MultiTenantEventStorageEngine} handed to
+ * {@link #follow(MultiTenantEventStorageEngine)} at startup, rather than the
+ * {@link io.axoniq.framework.messaging.multitenancy.api.TenantProvider TenantProvider} that engine itself follows. A
+ * tenant change reaches the provider's subscribers in turn, and a subscriber ahead of the engine may take real time
+ * over its own registration, such as one opening a connection for the tenant. A restart takes barely any time by
+ * comparison, so a restart driven by the provider can re-open the stream while the engine still reports the previous
+ * tenants. The new tenant is then missing from a stream that nothing re-opens again, because no further tenant change
+ * follows. Following the engine rules that out: it announces a change only once that change is visible through its own
  * tenants.
  * <p>
  * Restarts are coalesced onto a single thread: a burst of tenant changes, such as the initial discovery of several
@@ -79,13 +81,14 @@ import java.util.concurrent.atomic.AtomicLong;
  * processors are slow to stop and start can register a customized
  * {@link MultiTenantStreamingProcessorRestartConfiguration} to raise it.
  * <p>
- * Internal, because it is registered by the {@link MultiTenancyConfigurationDefaults} enhancer and never used directly.
+ * Internal, because it is registered by the {@link MultiTenancyConfigurationDefaults} enhancer. The only member an
+ * enhancer building a tenant-routing engine calls is {@link #follow(MultiTenantEventStorageEngine)}.
  *
  * @author Laura Devriendt
  * @since 5.3.0
  */
 @Internal
-class MultiTenantStreamingProcessorRestarter implements DescribableComponent {
+public class MultiTenantStreamingProcessorRestarter implements DescribableComponent {
 
     private static final Logger logger = LoggerFactory.getLogger(MultiTenantStreamingProcessorRestarter.class);
 
@@ -97,16 +100,14 @@ class MultiTenantStreamingProcessorRestarter implements DescribableComponent {
     private final AtomicBoolean restartRequested = new AtomicBoolean(false);
     private final AtomicLong restartCount = new AtomicLong();
 
-    @Nullable
-    private volatile Registration subscription;
+    private final AtomicReference<@Nullable Followed> followed = new AtomicReference<>();
     @Nullable
     private volatile ExecutorService restartExecutor;
 
     /**
      * Constructs a restarter for the given {@code configuration}.
      *
-     * @param configuration the configuration supplying the tenant change source to follow and the streaming event
-     *                      processors to restart
+     * @param configuration the configuration supplying the processors to restart and the restart timeout
      */
     MultiTenantStreamingProcessorRestarter(Configuration configuration) {
         this.configuration = Objects.requireNonNull(configuration, "The configuration must not be null");
@@ -115,8 +116,7 @@ class MultiTenantStreamingProcessorRestarter implements DescribableComponent {
     }
 
     /**
-     * Subscribes this restarter to the tenant changes of the event storage engine it will re-open the stream over, and
-     * prepares the restart executor, so tenant changes from this point on trigger a restart of the running streaming
+     * Prepares the restart executor, so tenant changes from this point on trigger a restart of the running streaming
      * event processors.
      */
     void start() {
@@ -124,29 +124,50 @@ class MultiTenantStreamingProcessorRestarter implements DescribableComponent {
         restartExecutor = Executors.newSingleThreadExecutor(
                 new AxonThreadFactory("MultiTenantStreamingProcessorRestarter"));
         running.set(true);
-        subscription = subscribeToTenantChanges();
     }
 
     /**
-     * Subscribes to the configured {@link TenantChangeSource}, whose tenants decide what a re-opened stream spans.
+     * Follows the tenant changes of the given {@code engine}, whose tenants decide what a re-opened stream spans.
      * <p>
-     * Without one no stream spans tenants, so there is nothing a tenant change could make a processor miss and nothing
-     * to restart. That is reported once rather than silently doing nothing, since it also means this component is
-     * inert.
+     * Must be called with the engine an enhancer built, from a start handler on that engine's own component
+     * definition, rather than with one resolved from the {@link Configuration}. The engine is registered under
+     * {@link org.axonframework.eventsourcing.eventstore.EventStorageEngine EventStorageEngine} and any enhancer may
+     * decorate that type, so a resolved instance can be a decorator, which announces no tenant change at all.
+     * <p>
+     * May be called before or after {@link #start()}, since a change announced while this restarter is not running is
+     * ignored. Only one engine can be followed, since a second one's tenants decide nothing about the merged stream the
+     * first one spans.
      *
-     * @return a registration whose cancellation stops tenant changes from reaching {@code this} restarter, or
-     * {@code null} when there is no source to follow
+     * @param engine the engine whose tenant changes re-open the streams of the running streaming event processors
+     * @throws NullPointerException       if the given {@code engine} is {@code null}
+     * @throws AxonConfigurationException if {@code this} restarter already follows an engine
      */
-    @Nullable
-    private Registration subscribeToTenantChanges() {
-        Optional<TenantChangeSource> tenantChangeSource = configuration.getOptionalComponent(TenantChangeSource.class);
-        if (tenantChangeSource.isEmpty()) {
-            logger.info("""
-                        No tenant change source is configured, so no stream spans tenants and the streaming event \
-                        processors are left alone on a tenant change.""");
-            return null;
+    public void follow(MultiTenantEventStorageEngine engine) {
+        Objects.requireNonNull(engine, "The multi-tenant event storage engine must not be null");
+        Registration engineSubscription = engine.subscribe(this::requestRestart);
+        if (!followed.compareAndSet(null, new Followed(engine, engineSubscription))) {
+            // Left subscribed, a second engine would restart on tenants that decide nothing about the merged stream.
+            engineSubscription.cancel();
+            throw new AxonConfigurationException(
+                    "This restarter already follows a multi-tenant event storage engine, so it cannot follow another.");
         }
-        return tenantChangeSource.get().subscribe(this::requestRestart);
+    }
+
+    /**
+     * Warns when nothing handed this restarter an engine to follow, so a tenant change reaches no streaming event
+     * processor.
+     * <p>
+     * Called once every component that could hand over an engine has started, since a handover and this restarter's own
+     * start share a lifecycle phase and therefore have no order between them.
+     */
+    void warnWhenFollowingNothing() {
+        if (followed.get() == null) {
+            logger.warn("""
+                        No multi-tenant event storage engine follows the tenants of this application, so a tenant \
+                        added or removed at runtime does not re-open the streams of the running streaming event \
+                        processors. \
+                        Events of such a tenant are then only picked up after a restart of the application.""");
+        }
     }
 
     /**
@@ -154,10 +175,11 @@ class MultiTenantStreamingProcessorRestarter implements DescribableComponent {
      */
     void stop() {
         running.set(false);
-        Registration currentSubscription = subscription;
-        if (currentSubscription != null) {
-            currentSubscription.cancel();
-            subscription = null;
+        // Taken out in one step, so two concurrent stops cannot cancel the same subscription twice. A follow cannot
+        // interleave: it runs in a start phase and this in a shutdown phase.
+        Followed currentlyFollowed = followed.getAndSet(null);
+        if (currentlyFollowed != null) {
+            currentlyFollowed.registration().cancel();
         }
         ExecutorService executor = restartExecutor;
         if (executor != null) {
@@ -246,8 +268,24 @@ class MultiTenantStreamingProcessorRestarter implements DescribableComponent {
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("running", running.get());
-        descriptor.describeProperty("followingTenantChanges", subscription != null);
+        Followed currentlyFollowed = followed.get();
+        descriptor.describeProperty("followingTenantChanges", currentlyFollowed != null);
+        if (currentlyFollowed != null) {
+            // Only described when present, since a descriptor cannot hold a null value.
+            descriptor.describeProperty("followedEngine", currentlyFollowed.engine());
+        }
         descriptor.describeProperty("restartCount", restartCount.get());
         descriptor.describeProperty("restartTimeout", restartTimeout);
+    }
+
+    /**
+     * The engine {@code this} restarter follows and the subscription it holds on that engine, so both are taken on and
+     * given up in one step.
+     *
+     * @param engine       the engine whose tenant changes drive the restarts
+     * @param registration the subscription held on that {@code engine}
+     */
+    private record Followed(MultiTenantEventStorageEngine engine, Registration registration) {
+
     }
 }

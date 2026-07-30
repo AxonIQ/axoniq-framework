@@ -22,11 +22,11 @@ package io.axoniq.framework.messaging.multitenancy.axonserver.configuration;
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
-import io.axoniq.framework.messaging.multitenancy.api.TenantChangeSource;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
+import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenantStreamingProcessorRestarter;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
@@ -187,10 +187,7 @@ class TenantNotificationOrderTest {
                     registry.disableEnhancer(AxonServerConfigurationEnhancer.class)
                             .disableEnhancer(AxonServerMultiTenancyConfigurationDefaults.class)
                             .registerComponent(TenantProvider.class, config -> tenantProvider)
-                            .registerComponent(TenantChangeSource.class, config -> routingEngine)
-                            .registerComponent(EventStorageEngine.class,
-                                               config -> (EventStorageEngine) config.getComponent(
-                                                       TenantChangeSource.class));
+                            .registerComponent(EventStorageEngine.class, config -> routingEngine);
                 })
                 .messaging(messaging -> messaging.eventProcessing(
                         processing -> processing.pooledStreaming(
@@ -198,6 +195,9 @@ class TenantNotificationOrderTest {
                                         "projection",
                                         components -> components.declarative("projection", config -> projection)))))
                 .build();
+
+        // The Axon Server enhancer is disabled here, so the handover it performs in production is done by hand.
+        configuration.getComponent(MultiTenantStreamingProcessorRestarter.class).follow(routingEngine);
     }
 
     private static void awaitTermination(Thread thread) {

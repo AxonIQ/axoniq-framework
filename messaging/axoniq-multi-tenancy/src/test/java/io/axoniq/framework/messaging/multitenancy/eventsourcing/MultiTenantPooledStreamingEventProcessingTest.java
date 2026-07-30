@@ -21,12 +21,12 @@ package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
-import io.axoniq.framework.messaging.multitenancy.api.TenantChangeSource;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
+import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenantStreamingProcessorRestarter;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
@@ -86,7 +86,9 @@ class MultiTenantPooledStreamingEventProcessingTest {
         TenantEventStorageEngineFactory engineFactory = stores::get;
         TenantSnapshotStoreFactory snapshotStoreFactory = tenant -> new InMemorySnapshotStore();
         MultiTenantEventStorageEngine routingEngine = new MultiTenantEventStorageEngine(
-                engineFactory, snapshotStoreFactory, new TenantRouter(new MetadataBasedTenantResolver(), tenantProvider));
+                engineFactory,
+                snapshotStoreFactory,
+                new TenantRouter(new MetadataBasedTenantResolver(), tenantProvider));
         tenantProvider.subscribe(routingEngine);
 
         SimpleEventHandlingComponent projection =
@@ -106,10 +108,7 @@ class MultiTenantPooledStreamingEventProcessingTest {
                     registry.disableEnhancer(AxonServerConfigurationEnhancer.class)
                             .disableEnhancer(AxonServerMultiTenancyConfigurationDefaults.class)
                             .registerComponent(TenantProvider.class, config -> tenantProvider)
-                            .registerComponent(TenantChangeSource.class, config -> routingEngine)
-                            .registerComponent(EventStorageEngine.class,
-                                               config -> (EventStorageEngine) config.getComponent(
-                                                       TenantChangeSource.class));
+                            .registerComponent(EventStorageEngine.class, config -> routingEngine);
                 })
                 .messaging(messaging -> messaging.eventProcessing(
                         processing -> processing.pooledStreaming(
@@ -117,6 +116,8 @@ class MultiTenantPooledStreamingEventProcessingTest {
                                         "projection",
                                         components -> components.declarative("projection", config -> projection)))))
                 .build();
+        // The Axon Server enhancer is disabled here, so the handover it performs in production is done by hand.
+        configuration.getComponent(MultiTenantStreamingProcessorRestarter.class).follow(routingEngine);
     }
 
     @AfterEach

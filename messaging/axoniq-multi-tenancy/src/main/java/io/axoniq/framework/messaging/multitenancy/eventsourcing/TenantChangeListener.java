@@ -16,7 +16,7 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.messaging.multitenancy.api;
+package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
 import org.axonframework.common.annotation.Internal;
 
@@ -24,7 +24,8 @@ import org.axonframework.common.annotation.Internal;
  * Listener notified whenever the tenants a component holds change.
  * <p>
  * A component announces a change only once it is visible through its own tenants, so a listener reading them acts on
- * what the announcing component actually holds. That is the difference with following a {@link TenantProvider}
+ * what the announcing component actually holds. That is the difference with following a
+ * {@link io.axoniq.framework.messaging.multitenancy.api.TenantProvider TenantProvider}
  * directly, whose subscribers are notified in turn, so one ahead of the component may still be registering when the
  * notification arrives.
  * <p>

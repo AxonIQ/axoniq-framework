@@ -23,7 +23,6 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
-import io.axoniq.framework.messaging.multitenancy.api.TenantChangeSource;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
@@ -33,6 +32,7 @@ import io.axoniq.framework.messaging.multitenancy.axonserver.commandhandling.Mul
 import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AxonServerTenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AxonServerTenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
+import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenantStreamingProcessorRestarter;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
@@ -54,6 +54,8 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -82,6 +84,9 @@ import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTena
 @Internal
 @RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
 public class AxonServerMultiTenancyConfigurationDefaults implements ConfigurationEnhancer {
+
+    private static final Logger logger =
+            LoggerFactory.getLogger(AxonServerMultiTenancyConfigurationDefaults.class);
 
     /**
      * The order of {@code this} enhancer compared to others.
@@ -190,10 +195,8 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
      * {@link TenantEventStorageEngineFactory} and a {@link TenantSnapshotStoreFactory}. Registered before the Axon
      * Server enhancer, whose {@code registerIfNotPresent} for both types then backs off.
      * <p>
-     * The routing engine is registered as a {@link TenantChangeSource} as well as the {@link EventStorageEngine}, so a
-     * component that has to follow its tenants resolves a type no {@code EventStorageEngine} decorator matches. Both
-     * names yield the one instance, and only the source registration follows the tenant lifecycle, so a tenant is
-     * registered with it exactly once.
+     * The engine is handed to the streaming processor restarter at startup, so a tenant change re-opens the streams of
+     * the running streaming event processors.
      * <p>
      * Also disables the {@link SnapshotSourcingConfigurationEnhancer}, since the routing engine composes each tenant's
      * engine with that tenant's snapshot store itself. The engine and both factories are subscribed to the
@@ -221,13 +224,20 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                                     AxonServerTenantEventStorageEngineFactory::new,
                                     MultiTenancyConfigurationDefaults.TENANT_COMPONENT_FACTORY_PHASE),
                 SearchScope.ALL);
-        if (!componentRegistry.hasComponent(EventStorageEngine.class, SearchScope.ALL)) {
+        if (componentRegistry.hasComponent(EventStorageEngine.class, SearchScope.ALL)) {
+            // Multi-tenancy is on, but the application supplies the event storage engine, so no engine routes across
+            // tenants. Said loudly, since every tenant then shares that one store and nothing announces a tenant
+            // change.
+            logger.warn("""
+                        Multi-tenancy is enabled while an EventStorageEngine is already registered, so events are not \
+                        stored per tenant and a tenant change does not reach the streaming event processors. Remove \
+                        that registration to let each tenant have its own event store.""");
+        } else {
             componentRegistry.registerComponent(
-                    subscribedComponent(TenantChangeSource.class,
-                                        AxonServerMultiTenancyConfigurationDefaults::routingEngine));
-            componentRegistry.registerComponent(
-                    ComponentDefinition.ofType(EventStorageEngine.class)
-                                       .withBuilder(AxonServerMultiTenancyConfigurationDefaults::routingEngineFrom));
+                    subscribedComponent(EventStorageEngine.class,
+                                        AxonServerMultiTenancyConfigurationDefaults::routingEngine)
+                            .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
+                                     AxonServerMultiTenancyConfigurationDefaults::followRoutingEngine));
         }
 
         componentRegistry.registerIfNotPresent(
@@ -256,18 +266,26 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
         }
     }
 
+    /**
+     * Hands the {@code engine} this enhancer built to the {@link MultiTenantStreamingProcessorRestarter}, so a tenant
+     * change re-opens the streams of the running streaming event processors.
+     * <p>
+     * Bound to this enhancer's own component definition, so the {@code engine} is the one built at
+     * {@link #routingEngine(Configuration)} rather than one resolved from the configuration. See
+     * {@link MultiTenantStreamingProcessorRestarter#follow(MultiTenantEventStorageEngine)} for why that matters.
+     *
+     * @param config the configuration holding the restarter to hand the given {@code engine} to
+     * @param engine the engine built by this enhancer, whose tenant changes drive the restarts
+     */
+    private static void followRoutingEngine(Configuration config, EventStorageEngine engine) {
+        config.getComponent(MultiTenantStreamingProcessorRestarter.class)
+              .follow((MultiTenantEventStorageEngine) engine);
+    }
+
     private static MultiTenantEventStorageEngine routingEngine(Configuration config) {
         return new MultiTenantEventStorageEngine(config.getComponent(TenantEventStorageEngineFactory.class),
                                                  config.getComponent(TenantSnapshotStoreFactory.class),
                                                  config.getComponent(TenantRouter.class));
-    }
-
-    /**
-     * Returns the tenant-routing engine registered as the {@link TenantChangeSource}, as the
-     * {@link EventStorageEngine} it also serves as.
-     */
-    private static EventStorageEngine routingEngineFrom(Configuration config) {
-        return (EventStorageEngine) config.getComponent(TenantChangeSource.class);
     }
 
     private static MultiTenantSnapshotStore routingSnapshotStore(Configuration config) {

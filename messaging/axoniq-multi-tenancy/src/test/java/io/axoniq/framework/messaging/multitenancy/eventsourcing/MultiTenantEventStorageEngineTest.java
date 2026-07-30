@@ -20,7 +20,6 @@
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
-import io.axoniq.framework.messaging.multitenancy.api.TenantChangeListener;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
@@ -30,6 +29,7 @@ import io.axoniq.framework.messaging.multitenancy.util.RecordingEventStorageEngi
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotResolvingEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
@@ -852,15 +852,20 @@ class MultiTenantEventStorageEngineTest {
         }
 
         @Test
-        void subscribingTheSameListenerTwiceAnnouncesItOnce() {
+        void announcesToEverySubscriptionSeparatelyAndCancelsThemIndependently() {
             AtomicInteger announcements = new AtomicInteger();
             TenantChangeListener listener = announcements::incrementAndGet;
-            testSubject.subscribe(listener);
+            Registration first = testSubject.subscribe(listener);
             testSubject.subscribe(listener);
 
             testSubject.registerTenant(TENANT_A);
+            assertThat(announcements).hasValue(2);
 
-            assertThat(announcements).hasValue(1);
+            // Cancelling one subscription leaves what the other call added.
+            assertThat(first.cancel()).isTrue();
+            testSubject.registerTenant(TENANT_B);
+
+            assertThat(announcements).hasValue(3);
         }
 
         @Test
@@ -878,7 +883,10 @@ class MultiTenantEventStorageEngineTest {
 
         @Test
         void rejectsANullEngineFactory() {
-            assertThatThrownBy(() -> new MultiTenantEventStorageEngine(null, snapshotStores, tenantRouter))
+            ThrowingCallable construction =
+                    () -> new MultiTenantEventStorageEngine(null, snapshotStores, tenantRouter);
+
+            assertThatThrownBy(construction)
                     .isInstanceOf(NullPointerException.class)
                     .hasMessage("The tenant event storage engine factory must not be null");
         }
@@ -887,7 +895,10 @@ class MultiTenantEventStorageEngineTest {
         void rejectsANullSnapshotStoreFactory() {
             TenantEventStorageEngineFactory engineFactory = tenant -> new RecordingEventStorageEngine();
 
-            assertThatThrownBy(() -> new MultiTenantEventStorageEngine(engineFactory, null, tenantRouter))
+            ThrowingCallable construction =
+                    () -> new MultiTenantEventStorageEngine(engineFactory, null, tenantRouter);
+
+            assertThatThrownBy(construction)
                     .isInstanceOf(NullPointerException.class)
                     .hasMessage("The tenant snapshot store factory must not be null");
         }
@@ -901,13 +912,15 @@ class MultiTenantEventStorageEngineTest {
         testSubject.describeTo(descriptor);
 
         assertThat(descriptor.getDescribedProperties())
-                .containsKeys("engineFactory", "snapshotStoreFactory", "tenantRouter");
+                .containsKeys("engineFactory", "snapshotStoreFactory", "tenantRouter", "tenantChangeListenerCount");
     }
 
     private static MultiTenantEventStorageEngine streamingEngineOver(
             TenantDescriptorMapping<EventStorageEngine> engines) {
         MultiTenantEventStorageEngine engine = new MultiTenantEventStorageEngine(
-                engines::apply, tenant -> new InMemorySnapshotStore(), new TenantRouter(alwaysTenant(TENANT_A), engines));
+                engines::apply,
+                tenant -> new InMemorySnapshotStore(),
+                new TenantRouter(alwaysTenant(TENANT_A), engines));
         engines.tenants().forEach(engine::registerTenant);
         return engine;
     }

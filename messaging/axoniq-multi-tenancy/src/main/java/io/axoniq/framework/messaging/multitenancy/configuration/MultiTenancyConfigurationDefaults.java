@@ -108,6 +108,17 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      */
     public static final int TENANT_COMPONENT_FACTORY_PHASE = TENANT_COMPONENT_SUBSCRIBER_PHASE - 1;
 
+    /**
+     * The start phase in which a component verifies that a tenant-routing component was handed to it, one after
+     * {@link #TENANT_COMPONENT_SUBSCRIBER_PHASE}.
+     * <p>
+     * Not public, since nothing outside this enhancer aligns to it.
+     * <p>
+     * A handover happens in {@link #TENANT_COMPONENT_SUBSCRIBER_PHASE}, which has no order within itself, so a
+     * component cannot conclude in that same phase that no handover is coming. Checking a phase later can.
+     */
+    static final int TENANT_HANDOVER_CHECK_PHASE = TENANT_COMPONENT_SUBSCRIBER_PHASE + 1;
+
     @Override
     public int order() {
         return ENHANCER_ORDER;
@@ -166,6 +177,9 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
     /**
      * Registers the {@link MultiTenantStreamingProcessorRestarter}, starting it at startup so a change in the set of
      * tenants restarts the running streaming event processors, and stopping it at shutdown.
+     * <p>
+     * A second start handler runs in {@link #TENANT_HANDOVER_CHECK_PHASE} to report a restarter that nothing handed a
+     * tenant-routing component to, since that cannot be concluded within the phase the handover itself happens in.
      *
      * @param componentRegistry the registry to register the restarter with
      */
@@ -178,6 +192,8 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
                         .ofType(MultiTenantStreamingProcessorRestarter.class)
                         .withBuilder(MultiTenantStreamingProcessorRestarter::new)
                         .onStart(TENANT_COMPONENT_SUBSCRIBER_PHASE, MultiTenantStreamingProcessorRestarter::start)
+                        .onStart(TENANT_HANDOVER_CHECK_PHASE,
+                                 MultiTenantStreamingProcessorRestarter::warnWhenFollowingNothing)
                         .onShutdown(TENANT_COMPONENT_SUBSCRIBER_PHASE, MultiTenantStreamingProcessorRestarter::stop)
         );
     }
