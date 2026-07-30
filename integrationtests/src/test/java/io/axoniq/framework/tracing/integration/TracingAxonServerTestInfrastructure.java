@@ -20,12 +20,12 @@
 package io.axoniq.framework.tracing.integration;
 
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
-import org.axonframework.messaging.tracing.SpanFactory;
-import org.axonframework.messaging.tracing.attributes.MessageIdSpanAttributesProvider;
-import org.axonframework.messaging.tracing.attributes.MessageTypeSpanAttributesProvider;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
+import org.axonframework.messaging.tracing.SpanFactory;
+import org.axonframework.messaging.tracing.attributes.MessageIdSpanAttributesProvider;
+import org.axonframework.messaging.tracing.attributes.MessageTypeSpanAttributesProvider;
 
 import java.util.List;
 

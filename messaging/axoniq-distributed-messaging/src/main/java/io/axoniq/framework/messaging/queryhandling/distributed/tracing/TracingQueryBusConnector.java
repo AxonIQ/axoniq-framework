@@ -20,8 +20,6 @@
 package io.axoniq.framework.messaging.queryhandling.distributed.tracing;
 
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
-import org.axonframework.messaging.tracing.Span;
-import org.axonframework.messaging.tracing.SpanFactory;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -31,6 +29,8 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
+import org.axonframework.messaging.tracing.Span;
+import org.axonframework.messaging.tracing.SpanFactory;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

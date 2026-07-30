@@ -49,12 +49,12 @@ import org.slf4j.LoggerFactory;
  *     {@link io.micrometer.context.ContextSnapshot#setThreadLocals()}).</li>
  * </ol>
  * Together these let instrumented JDBC/gRPC/WebClient calls and MDC logging nest under the active Axon span. Resolution
- * is lazy — deferred to framework-configuration time — so it observes the finally-registered {@code SpanFactory}. The
+ * is lazy -- deferred to framework-configuration time -- so it observes the finally-registered {@code SpanFactory}. The
  * enhancer backs off entirely (with an {@code INFO} log) when no {@link Tracer} component is registered, and the
- * decorators back off when no {@link SpanFactory} component exists at all — the jar being on the classpath never breaks
+ * decorators back off when no {@link SpanFactory} component exists at all -- the jar being on the classpath never breaks
  * a configuration that does not wire tracing. If a {@code SpanFactory} <em>is</em> configured but is a different
  * implementation than {@link MicrometerSpanFactory}, an {@link IllegalStateException} is raised rather than silently
- * skipping — configure the Micrometer {@code SpanFactory} or disable this bridge.
+ * skipping -- configure the Micrometer {@code SpanFactory} or disable this bridge.
  * <p>
  * This governs only the <em>in-process, thread-local</em> bridge. Cross-service trace-context propagation (via the
  * {@code Propagator} over message metadata) is part of core tracing and is unaffected by disabling this enhancer. To

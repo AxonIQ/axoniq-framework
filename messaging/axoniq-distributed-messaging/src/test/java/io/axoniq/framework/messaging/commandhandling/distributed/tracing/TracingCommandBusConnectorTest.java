@@ -108,7 +108,7 @@ class TracingCommandBusConnectorTest {
                     new GenericCommandResultMessage(new MessageType("Result"), "ok")));
 
             // when the underlying connector delivers an inbound command, the inner delegate calls onSuccess
-            // synchronously — that completes the result callback, which closes the span scope.
+            // synchronously -- that completes the result callback, which closes the span scope.
             delegate.handler.handle(command, resultCollector);
 
             // then the handle span was opened AND closed on the receive leg

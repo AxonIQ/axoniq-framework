@@ -20,7 +20,6 @@
 package io.axoniq.framework.tracing.integration;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
-import org.axonframework.messaging.tracing.SpanFactory;
 import io.axoniq.framework.tracing.micrometer.MicrometerSpanFactory;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.otel.bridge.OtelCurrentTraceContext;
@@ -39,6 +38,7 @@ import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.axonframework.messaging.commandhandling.configuration.CommandHandlingModule;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.axonframework.messaging.tracing.SpanFactory;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,8 +66,8 @@ import static org.awaitility.Awaitility.await;
  * via {@link GenericContainer}). Runs under the {@code integration-test} Maven profile alongside the other
  * {@code *IT} suites.
  * <p>
- * The trace shape asserted here is the simplest in-scope command flow ({@code CommandBus.dispatch} →
- * {@code CommandBus.handle} → {@code @CommandHandler} enhancer span); the full multi-component trace tree is
+ * The trace shape asserted here is the simplest in-scope command flow ({@code CommandBus.dispatch} ->
+ * {@code CommandBus.handle} -> {@code @CommandHandler} enhancer span); the full multi-component trace tree is
  * exercised by {@link MicrometerTracingEndToEndIntegrationTest} against the {@code InMemorySpanExporter}.
  */
 @Testcontainers

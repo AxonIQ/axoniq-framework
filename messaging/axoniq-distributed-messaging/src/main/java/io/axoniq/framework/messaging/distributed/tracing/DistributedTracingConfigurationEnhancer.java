@@ -51,7 +51,7 @@ public final class DistributedTracingConfigurationEnhancer implements Configurat
 
     /**
      * Decorator order for the distributed-tracing decorators. Near-maximal so tracing is applied last and is the
-     * <em>outermost</em> wrapper — spans cover all inner decorators, and tracing wrappers are reliably detectable by
+     * <em>outermost</em> wrapper -- spans cover all inner decorators, and tracing wrappers are reliably detectable by
      * an outermost {@code instanceof} check. Same value and rationale as
      * {@code MessagingTracingConfigurationEnhancer#TRACING_DECORATOR_ORDER}.
      */

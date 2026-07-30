@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2026. Axoniq B.V.
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
  * Licensed under the AXONIQ TERMS OF SERVICE,
  * Version 29 April 2026 (the "License");

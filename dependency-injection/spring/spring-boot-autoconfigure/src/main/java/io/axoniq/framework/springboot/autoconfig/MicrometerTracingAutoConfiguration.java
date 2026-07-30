@@ -37,7 +37,7 @@ import org.springframework.context.annotation.Bean;
  * registers the {@link org.axonframework.messaging.tracing.SpanFactory} from the {@link Tracer}/{@code Propagator}
  * beans (bridged to Axon components by the Spring configurer), and
  * {@link MicrometerThreadLocalContextPropagationConfigurationEnhancer} installs the thread-local bridge. This
- * autoconfiguration therefore contributes no wiring beans — only property-driven <em>toggles</em>:
+ * autoconfiguration therefore contributes no wiring beans -- only property-driven <em>toggles</em>:
  * <ul>
  *     <li>{@link #micrometerTracingDisablingEnhancer()} disables both enhancers when {@code axon.tracing.enabled=false},
  *     so no {@code SpanFactory} is registered and nothing is decorated;</li>
@@ -74,9 +74,9 @@ public class MicrometerTracingAutoConfiguration {
     }
 
     /**
-     * Disables the {@link MicrometerThreadLocalContextPropagationConfigurationEnhancer} — and with it the
+     * Disables the {@link MicrometerThreadLocalContextPropagationConfigurationEnhancer} -- and with it the
      * {@code UnitOfWorkFactory} decorator and thread-local span accessor that make the active Axon span current on the
-     * framework's worker threads — when {@code axon.tracing.thread-local-context-propagation.enabled} is {@code false}.
+     * framework's worker threads -- when {@code axon.tracing.thread-local-context-propagation.enabled} is {@code false}.
      * Core tracing (spans and cross-service propagation) is unaffected. When the property is {@code true} (the default)
      * this enhancer does nothing and the ServiceLoader-discovered enhancer installs the bridge as usual.
      *

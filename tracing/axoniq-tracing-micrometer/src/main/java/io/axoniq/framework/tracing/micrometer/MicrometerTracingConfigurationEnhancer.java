@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2026. Axoniq B.V.
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
  * Licensed under the AXONIQ TERMS OF SERVICE,
  * Version 29 April 2026 (the "License");
@@ -46,12 +46,12 @@ import org.slf4j.LoggerFactory;
  * <em>components</em> rather than creating them, because they are provided by a concrete Micrometer tracing bridge (for
  * example {@code micrometer-tracing-bridge-otel}), not by this module:
  * <ul>
- *     <li>{@link Tracer} and {@link Propagator} — <b>required to enable tracing</b>. When either is absent, this
+ *     <li>{@link Tracer} and {@link Propagator} -- <b>required to enable tracing</b>. When either is absent, this
  *     enhancer backs off entirely (an {@code INFO} log explains how to enable tracing) and no {@link SpanFactory} is
- *     registered — matching the framework contract that tracing is off when no {@code SpanFactory} component exists.
+ *     registered -- matching the framework contract that tracing is off when no {@code SpanFactory} component exists.
  *     The jar being on the classpath (possibly transitively) therefore never breaks a configuration that does not
  *     wire a Micrometer bridge.</li>
- *     <li>{@link ObservationRegistry} — optional; defaulted to {@link ObservationRegistry#create()} when absent.</li>
+ *     <li>{@link ObservationRegistry} -- optional; defaulted to {@link ObservationRegistry#create()} when absent.</li>
  * </ul>
  * The host application registers the {@link Tracer} and {@link Propagator} as components, obtained from its chosen
  * bridge, e.g.:

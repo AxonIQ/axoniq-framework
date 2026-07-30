@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2026. Axoniq B.V.
+ * Copyright (c) 2010-2026. AxonIQ B.V.
  *
  * Licensed under the AXONIQ TERMS OF SERVICE,
  * Version 29 April 2026 (the "License");
@@ -29,8 +29,8 @@ import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.eventhandling.AsyncInMemoryStreamableEventSource;
 import org.axonframework.messaging.eventhandling.EventTestUtils;
 import org.axonframework.messaging.eventhandling.annotation.EventHandler;
-import org.axonframework.messaging.tracing.configuration.MessagingTracingSettings;
 import org.axonframework.messaging.tracing.SpanFactory;
+import org.axonframework.messaging.tracing.configuration.MessagingTracingSettings;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

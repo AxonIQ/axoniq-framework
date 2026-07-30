@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@link ApplicationContextRunner}.
  * <p>
  * The Spring layer is a thin properties-to-settings translation: assertions therefore run at the framework-component
- * level — the enhancer bean participates in a {@link MessagingConfigurer} build and the resulting
+ * level -- the enhancer bean participates in a {@link MessagingConfigurer} build and the resulting
  * {@link AxonConfiguration} is inspected for the {@link DistributedTracingSettings} component read by the
  * distributed-connector tracing enhancer.
  *
@@ -58,7 +58,7 @@ class DistributedTracingAutoConfigurationTest {
 
     @Test
     void connectorTogglesReachTheDistributedSettingsComponent() {
-        // given / when the connector toggles are set, the settings component must carry them — the component the
+        // given / when the connector toggles are set, the settings component must carry them -- the component the
         // distributed tracing enhancer reads when decorating the CommandBusConnector / QueryBusConnector
         contextRunner.withPropertyValues(
                              "axon.tracing.command-bus-connector.enabled=false",
@@ -90,7 +90,7 @@ class DistributedTracingAutoConfigurationTest {
 
     @Test
     void tracingDisabledContributesNoEnhancerAtAll() {
-        // given / when / then — the autoconfiguration backs off entirely
+        // given / when / then -- the autoconfiguration backs off entirely
         contextRunner.withPropertyValues("axon.tracing.enabled=false")
                      .run(context -> assertThat(context).doesNotHaveBean("distributedTracingConfigurationEnhancer"));
     }
@@ -109,7 +109,7 @@ class DistributedTracingAutoConfigurationTest {
                                  })
                                  .build();
 
-                         // when / then — registerIfNotPresent leaves the user registration in place
+                         // when / then -- registerIfNotPresent leaves the user registration in place
                          assertThat(configuration.getComponent(DistributedTracingSettings.class))
                                  .isSameAs(userSettings);
                      });

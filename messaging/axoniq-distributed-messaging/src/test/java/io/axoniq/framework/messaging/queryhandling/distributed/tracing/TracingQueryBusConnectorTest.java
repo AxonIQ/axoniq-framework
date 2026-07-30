@@ -20,8 +20,6 @@
 package io.axoniq.framework.messaging.queryhandling.distributed.tracing;
 
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
-import org.axonframework.messaging.tracing.support.TestSpanFactory;
-import org.axonframework.messaging.tracing.support.TestSpanFactory.TestSpanType;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.Message;
@@ -38,6 +36,8 @@ import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.axonframework.messaging.tracing.Span;
 import org.axonframework.messaging.tracing.SpanFactory;
 import org.axonframework.messaging.tracing.SpanScope;
+import org.axonframework.messaging.tracing.support.TestSpanFactory;
+import org.axonframework.messaging.tracing.support.TestSpanFactory.TestSpanType;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;

@@ -32,8 +32,8 @@ import java.util.Objects;
 import java.util.function.Function;
 
 /**
- * {@link UnitOfWorkFactory} decorator that bridges thread-bound state — the active trace context, MDC, security context
- * — captured on the (synchronous) dispatching thread into the framework-executed segments of the created
+ * {@link UnitOfWorkFactory} decorator that bridges thread-bound state -- the active trace context, MDC, security context
+ * -- captured on the (synchronous) dispatching thread into the framework-executed segments of the created
  * {@link UnitOfWork}, which run on the unit of work's work-scheduler threads.
  * <p>
  * On {@link #create}, the caller's thread-locals are captured into a {@link ContextSnapshot} (the dispatching thread is

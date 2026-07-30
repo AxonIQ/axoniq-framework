@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Tests {@link ProcessingContextAccessor}: it reads the active Micrometer span from a {@link ProcessingContext} (via
  * {@link MicrometerSpanFactory#rawSpanFrom}, keyed by the span thread-local key). {@code writeValues} is a required
- * part of the {@link io.micrometer.context.ContextAccessor} contract but is a deliberate no-op — see the class
+ * part of the {@link io.micrometer.context.ContextAccessor} contract but is a deliberate no-op -- see the class
  * Javadoc for why.
  */
 class ProcessingContextAccessorTest {

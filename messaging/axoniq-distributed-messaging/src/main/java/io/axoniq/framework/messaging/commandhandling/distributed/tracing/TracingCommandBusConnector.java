@@ -20,15 +20,15 @@
 package io.axoniq.framework.messaging.commandhandling.distributed.tracing;
 
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
-import org.axonframework.messaging.tracing.Span;
-import org.axonframework.messaging.tracing.SpanFactory;
-import org.axonframework.messaging.tracing.SpanScope;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.tracing.Span;
+import org.axonframework.messaging.tracing.SpanFactory;
+import org.axonframework.messaging.tracing.SpanScope;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
@@ -40,7 +40,7 @@ import java.util.concurrent.CompletableFuture;
  * Opens a producer span around the send leg ({@link #dispatch(CommandMessage, ProcessingContext)}) and a consumer
  * span around the receive leg ({@code onIncomingCommand} handler invocation). These connector legs nest between the
  * local bus dispatch / handle spans produced by {@code TracingCommandBus} and become observable only over a real
- * transport — in-process tests with no connector wiring will not see them.
+ * transport -- in-process tests with no connector wiring will not see them.
  * <p>
  * This decorator is registered by {@code DistributedTracingConfigurationEnhancer}; it is never instantiated directly
  * by applications.
@@ -108,7 +108,7 @@ public final class TracingCommandBusConnector implements CommandBusConnector {
     }
 
     /**
-     * Wraps the inbound {@link Handler} so the receive leg is opened as a consumer span — parented on the dispatch
+     * Wraps the inbound {@link Handler} so the receive leg is opened as a consumer span -- parented on the dispatch
      * span via the W3C trace context propagated on the command's metadata.
      */
     private static final class TracingHandler implements Handler {
@@ -130,7 +130,7 @@ public final class TracingCommandBusConnector implements CommandBusConnector {
             );
             SpanScope scope = span.start();
             // Propagate the receive-leg span's context onto the command so the downstream bus-level handler nests
-            // under this span, producing the full A → B → C → D chain over the gRPC hop.
+            // under this span, producing the full A -> B -> C -> D chain over the gRPC hop.
             CommandMessage propagated = span.propagateContext(commandMessage);
             try {
                 delegate.handle(propagated, new ResultCallback() {

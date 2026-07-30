@@ -56,8 +56,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * End-to-end tracing integration test for the <b>Micrometer</b> binding, wired through the real
- * {@link MessagingConfigurer} (Axon Server connector disabled to keep it local). Only the backend components — a
- * {@link Tracer} and {@link Propagator} over Micrometer Tracing's OpenTelemetry bridge — are registered; the
+ * {@link MessagingConfigurer} (Axon Server connector disabled to keep it local). Only the backend components -- a
+ * {@link Tracer} and {@link Propagator} over Micrometer Tracing's OpenTelemetry bridge -- are registered; the
  * ServiceLoader-discovered {@link MicrometerTracingConfigurationEnhancer} then builds the {@link MicrometerSpanFactory}
  * and installs the thread-local bridge. Spans are captured with an in-memory OpenTelemetry exporter. The test covers
  * command and query results, their span trees, current tracer context inside a handler, and bridge installation.
