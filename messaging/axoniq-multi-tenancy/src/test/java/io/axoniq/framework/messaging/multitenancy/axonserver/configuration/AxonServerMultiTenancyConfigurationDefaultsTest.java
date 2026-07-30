@@ -26,7 +26,9 @@ import io.axoniq.axonserver.grpc.admin.ContextOverview;
 import io.axoniq.axonserver.grpc.admin.ContextUpdate;
 import io.axoniq.axonserver.grpc.admin.ReplicationGroupOverview;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
@@ -35,7 +37,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantProvider;
 import io.axoniq.framework.messaging.multitenancy.axonserver.commandhandling.MultiTenantAxonServerCommandBusConnector;
 import io.axoniq.framework.messaging.multitenancy.axonserver.queryhandling.MultiTenantAxonServerQueryBusConnector;
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
@@ -88,17 +89,54 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         // when
         AxonConfiguration configuration =
                 MessagingConfigurer.create()
-                                   .componentRegistry(MultiTenancyConfigurationUtils::disableMultiTenancy)
+                                   .componentRegistry(MultiTenancyUtils::disable)
                                    .build();
 
         // then none of the Axon Server-backed multi-tenancy defaults were registered
         assertThat(configuration.hasComponent(TenantProvider.class)).isFalse();
+        assertThat(configuration.hasComponent(TenantRouter.class)).isFalse();
         assertThat(configuration.getComponent(CommandBusConnector.class))
                 .extracting("delegate")
                 .isNotInstanceOf(MultiTenantAxonServerCommandBusConnector.class);
         assertThat(configuration.getComponent(QueryBusConnector.class))
                 .extracting("delegate")
                 .isNotInstanceOf(MultiTenantAxonServerQueryBusConnector.class);
+    }
+
+    @Nested
+    class MissingAxonServerConnection {
+
+        private AxonConfiguration configuration;
+
+        @BeforeEach
+        void buildConfigurationWithoutAxonServer() {
+            // multi-tenancy left active while the Axon Server connector is disabled, so nothing registers a
+            // connection manager for the tenants to be contexts of
+            configuration = MessagingConfigurer.create()
+                                               .componentRegistry(registry -> registry.disableEnhancer(
+                                                       AxonServerConfigurationEnhancer.class))
+                                               .build();
+        }
+
+        @Test
+        void resolvingTheTenantProviderFailsWithAnActionableMessage() {
+            // when resolving the tenant provider
+            // then the failure names the cause and both ways out, rather than a bare missing-component message
+            assertThatThrownBy(() -> configuration.getComponent(TenantProvider.class))
+                    .isInstanceOf(AxonConfigurationException.class)
+                    .hasMessageContaining("no AxonServerConnectionManager is configured")
+                    .hasMessageContaining("MultiTenancyUtils#disable");
+        }
+
+        @Test
+        void resolvingTheCommandBusConnectorFailsWithAnActionableMessage() {
+            // when resolving the multi-tenant command bus connector, which needs the same connection
+            // then it fails the same diagnosable way
+            assertThatThrownBy(() -> configuration.getComponent(CommandBusConnector.class))
+                    .isInstanceOf(AxonConfigurationException.class)
+                    .hasMessageContaining("no AxonServerConnectionManager is configured")
+                    .hasMessageContaining("MultiTenancyUtils#disable");
+        }
     }
 
     @Nested
@@ -125,9 +163,8 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
-        void registersTheDefaultMultiTenantAxonServerCommandBusConnector() {
-            assertThat(configuration.getComponent(CommandBusConnector.class))
-                    .extracting("delegate")
+        void registersTheDefaultMultiTenantAxonServerCommandBusConnector() throws Exception {
+            assertThat(commandBusConnectorDelegate(configuration))
                     .isInstanceOf(MultiTenantAxonServerCommandBusConnector.class);
         }
 

@@ -39,6 +39,8 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.stream.Stream;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -51,8 +53,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MultiTenancyAutoConfigurationTest {
 
     private static final String DISABLE_ENHANCER = "disableMultiTenancyConfigurationEnhancer";
-    private static final String DISABLE_WITHOUT_AXON_SERVER_ENHANCER =
-            "disableMultiTenancyWithoutAxonServerConfigurationEnhancer";
     private static final String AXON_SERVER_WARNING = "multiTenancyRequiresAxonServerWarning";
 
     /**
@@ -71,7 +71,6 @@ class MultiTenancyAutoConfigurationTest {
             contextRunner.run(context -> {
                 // then multi-tenancy is left active and no warning is contributed
                 assertThat(context).doesNotHaveBean(DISABLE_ENHANCER);
-                assertThat(context).doesNotHaveBean(DISABLE_WITHOUT_AXON_SERVER_ENHANCER);
                 assertThat(context).doesNotHaveBean(AXON_SERVER_WARNING);
             });
         }
@@ -84,7 +83,6 @@ class MultiTenancyAutoConfigurationTest {
                          .run(context -> {
                              // then multi-tenancy is left active
                              assertThat(context).doesNotHaveBean(DISABLE_ENHANCER);
-                             assertThat(context).doesNotHaveBean(DISABLE_WITHOUT_AXON_SERVER_ENHANCER);
                          });
         }
 
@@ -96,7 +94,6 @@ class MultiTenancyAutoConfigurationTest {
                          .run(context -> {
                              // then the disabling enhancer is contributed, without a warning about Axon Server
                              assertThat(context).hasBean(DISABLE_ENHANCER);
-                             assertThat(context).doesNotHaveBean(DISABLE_WITHOUT_AXON_SERVER_ENHANCER);
                              assertThat(context).doesNotHaveBean(AXON_SERVER_WARNING);
                          });
         }
@@ -108,8 +105,7 @@ class MultiTenancyAutoConfigurationTest {
                          // when the context starts
                          .run(context -> {
                              // then multi-tenancy is disabled for lack of a backend, without warning about it
-                             assertThat(context).hasBean(DISABLE_WITHOUT_AXON_SERVER_ENHANCER);
-                             assertThat(context).doesNotHaveBean(DISABLE_ENHANCER);
+                             assertThat(context).hasBean(DISABLE_ENHANCER);
                              assertThat(context).doesNotHaveBean(AXON_SERVER_WARNING);
                          });
         }
@@ -121,26 +117,26 @@ class MultiTenancyAutoConfigurationTest {
                          // when the context starts
                          .run(context -> {
                              // then multi-tenancy is disabled anyway, and the misconfiguration is warned about
-                             assertThat(context).hasBean(DISABLE_WITHOUT_AXON_SERVER_ENHANCER);
+                             assertThat(context).hasBean(DISABLE_ENHANCER);
                              assertThat(context).hasBean(AXON_SERVER_WARNING);
                          });
         }
 
         @Test
-        void contributesBothDisablingEnhancersWhenMultiTenancyAndAxonServerAreDisabled() {
-            // given both are explicitly disabled
+        void contributesTheDisablingEnhancerOnceWhenMultiTenancyAndAxonServerAreDisabled() {
+            // given both reasons to disable multi-tenancy apply at once
             contextRunner.withPropertyValues("axon.multitenancy.enabled=false", "axon.axonserver.enabled=false")
                          // when the context starts
                          .run(context -> {
-                             // then both disabling enhancers are contributed, which is harmless as disabling is idempotent
+                             // then the single disabling enhancer is contributed exactly once
+                             assertThat(context).hasSingleBean(ConfigurationEnhancer.class);
                              assertThat(context).hasBean(DISABLE_ENHANCER);
-                             assertThat(context).hasBean(DISABLE_WITHOUT_AXON_SERVER_ENHANCER);
                          });
         }
     }
 
     /**
-     * Verifies the actual effect of the contributed enhancers against a real configuration, including that they run
+     * Verifies the actual effect of the contributed enhancer against a real configuration, including that it runs
      * before {@link MultiTenancyConfigurationDefaults} so disabling takes effect. The
      * {@code MultiTenancyConfigurationDefaults} enhancer is registered explicitly here, standing in for the one the
      * multi-tenancy module contributes through the {@code ServiceLoader} at runtime.
@@ -151,17 +147,16 @@ class MultiTenancyAutoConfigurationTest {
         private final MultiTenancyAutoConfiguration autoConfiguration = new MultiTenancyAutoConfiguration();
 
         @Test
-        void disablingEnhancerRunsBeforeTheDefaultsEnhancer() {
-            // then the disabling enhancer is ordered before the defaults enhancer it deactivates
+        void disablingEnhancerRunsBeforeEveryMultiTenancyEnhancer() {
+            // then the disabling enhancer is ordered before the anchor of the multi-tenancy enhancer block, and
+            // so before all of them. MultiTenancyUtilsTest guards that the block really is anchored there.
             assertThat(autoConfiguration.disableMultiTenancyConfigurationEnhancer().order())
-                    .isLessThan(MultiTenancyConfigurationDefaults.ENHANCER_ORDER);
-            assertThat(autoConfiguration.disableMultiTenancyWithoutAxonServerConfigurationEnhancer().order())
                     .isLessThan(MultiTenancyConfigurationDefaults.ENHANCER_ORDER);
         }
 
         @Test
         void multiTenancyDefaultsApplyWithoutAnyDisablingEnhancer() {
-            // when the configuration is built with the service-loaded defaults only
+            // when the configuration is built with the defaults enhancers and no disabling enhancer
             AxonConfiguration configuration = configurationWith();
 
             // then the defaults enhancer took effect and registered its default tenant resolver
@@ -216,9 +211,7 @@ class MultiTenancyAutoConfigurationTest {
                                           registry.disableEnhancerScanning()
                                                   .registerEnhancer(new AxonServerMultiTenancyConfigurationDefaults())
                                                   .registerEnhancer(new MultiTenancyConfigurationDefaults());
-                                          for (ConfigurationEnhancer enhancer : enhancers) {
-                                              registry.registerEnhancer(enhancer);
-                                          }
+                                          Stream.of(enhancers).forEach(registry::registerEnhancer);
                                       })
                                       .build();
         }

@@ -47,7 +47,6 @@ import static org.axonframework.common.configuration.DecoratorDefinition.forType
  * <ul>
  *     <li>the default {@link TenantResolver}, which resolves the tenant from message metadata, unless a user registered a custom {@link TenantResolver}</li>
  *     <li>the {@link TenantRouter} that every tenant-routing component shares to decide the tenant of a message</li>
- *     <li>the {@link TenantComponentParameterResolverFactory} to inject tenant-scoped components into message handlers</li>
  *     <li>the {@link TenantComponentProviderSubscriber} to subscribe every {@link TenantComponentProvider} to the {@link TenantProvider} at startup</li>
  *     <li>the {@link RegisterTenantDescriptorHandlerInterceptor} which takes the resolved {@link TenantDescriptor} from the message and stores it in the {@link ProcessingContext}</li>
  *     <li>the {@link TenantAwareQueryBus} decorator, scoping subscription-query update emission and completion to the tenant resolved from the {@link ProcessingContext}</li>
@@ -55,7 +54,7 @@ import static org.axonframework.common.configuration.DecoratorDefinition.forType
  * <p>
  * Contributed through the {@link java.util.ServiceLoader}, so multi-tenancy is active as soon as the
  * {@code axoniq-multi-tenancy} module is on the classpath. Use
- * {@link MultiTenancyConfigurationUtils#disableMultiTenancy(ComponentRegistry)} to opt out.
+ * {@link io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils#disable(ComponentRegistry)} to opt out.
  *
  * @author Stefan Dragisic
  * @author Steven van Beelen
@@ -74,6 +73,10 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      * <p>
      * Runs early, so the multi-tenancy defaults registered here are in place before other enhancers and user
      * registrations that build on them.
+     * <p>
+     * Anchors the multi-tenancy enhancer block: every other multi-tenancy enhancer expresses its order as this value
+     * plus a positive offset, so this is always the first of them to run. Anything disabling multi-tenancy from within
+     * another enhancer only has to order itself below this value.
      */
     public static final int ENHANCER_ORDER = Integer.MIN_VALUE + 5;
 

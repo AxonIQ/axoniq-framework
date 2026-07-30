@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.annotation;
 
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import org.axonframework.common.configuration.AxonConfiguration;
@@ -34,10 +35,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Verifies the {@link TenantComponentParameterResolverFactoryConfigurationEnhancer} against a real
  * {@link MessagingConfigurer}: the {@link TenantComponentParameterResolverFactory} resolving
- * {@link TenantScoped}-annotated handler parameters is wired out of the box.
- * <p>
- * That the factory stays away once multi-tenancy is disabled is covered by
- * {@code MultiTenancyConfigurationDefaultsTest}, which owns the disabling utility.
+ * {@link TenantScoped}-annotated handler parameters is wired out of the box, and stays wired even once multi-tenancy
+ * is disabled, so handlers declaring such parameters can still be inspected.
  *
  * @author Jakob Hatzl
  */
@@ -68,34 +67,58 @@ class TenantComponentParameterResolverFactoryConfigurationEnhancerTest {
 
         @Test
         void registersAParameterResolverFactoryThatResolvesTenantScopedComponentParameters() throws Exception {
-            // given
+            // given a handler whose tenant-scoped parameter is not the payload, so only the tenant-scoped
+            // factory can claim it
             ParameterResolverFactory factory = configuration.getComponent(ParameterResolverFactory.class);
-            Method handler = SampleHandlers.class.getDeclaredMethod("handle", CourseRepository.class);
+            Method handler = tenantScopedHandler();
 
             // when
-            ParameterResolver<?> resolver = factory.createInstance(handler, handler.getParameters(), 0);
+            ParameterResolver<?> resolver = factory.createInstance(handler, handler.getParameters(), 1);
 
-            // then
-            assertThat(resolver)
-                    .extracting("provider")
-                    .isInstanceOf(TenantComponentProvider.class);
+            // then the parameter resolves. What it resolves to is covered by
+            // TenantComponentParameterResolverFactoryTest.
+            assertThat(resolver).isNotNull();
         }
+    }
+
+    @Test
+    void keepsResolvingTenantScopedParametersWhenMultiTenancyIsDisabled() throws Exception {
+        // given a configuration that opted out of multi-tenancy
+        AxonConfiguration configuration =
+                MessagingConfigurer.create()
+                                   .componentRegistry(MultiTenancyUtils::disable)
+                                   .componentRegistry(registry -> registry.registerComponent(
+                                           TenantComponentProvider.class,
+                                           config -> componentProvider))
+                                   .build();
+        ParameterResolverFactory factory = configuration.getComponent(ParameterResolverFactory.class);
+        Method handler = tenantScopedHandler();
+
+        // when
+        ParameterResolver<?> resolver = factory.createInstance(handler, handler.getParameters(), 1);
+
+        // then the parameter still resolves. Disabling multi-tenancy must not stop a handler that declares a
+        // tenant-scoped parameter from being inspected, which would fail the whole configuration at startup.
+        assertThat(resolver).isNotNull();
+    }
+
+    private static Method tenantScopedHandler() throws NoSuchMethodException {
+        return SampleHandlers.class.getDeclaredMethod("handle", String.class, CourseRepository.class);
     }
 
     @SuppressWarnings("unused")
     private static final class SampleHandlers {
 
-        void handle(@TenantScoped CourseRepository repository) {
-            // Reflection target only. The parameter type drives the matching under test.
+        void handle(String command, @TenantScoped CourseRepository repository) {
+            // Reflection target only. The tenant-scoped parameter sits at index 1, so the payload resolver
+            // cannot claim it and the assertions speak only about the tenant-scoped factory.
         }
     }
 
     private static final class CourseRepository {
 
-        private final TenantDescriptor tenant;
-
         private CourseRepository(TenantDescriptor tenant) {
-            this.tenant = tenant;
+            // The tenant is not read back. This test is about the parameter being resolvable at all.
         }
     }
 }

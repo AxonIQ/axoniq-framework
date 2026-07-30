@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.messaging.multitenancy.annotation.TenantScoped;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
@@ -31,7 +32,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
-import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.interception.HandlerInterceptorRegistry;
 import org.axonframework.messaging.queryhandling.QueryBus;
@@ -40,7 +40,6 @@ import org.axonframework.messaging.queryhandling.interception.InterceptingQueryB
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
@@ -67,7 +66,7 @@ class MultiTenancyConfigurationDefaultsTest {
         // when
         AxonConfiguration configuration =
                 MessagingConfigurer.create()
-                                   .componentRegistry(MultiTenancyConfigurationUtils::disableMultiTenancy)
+                                   .componentRegistry(MultiTenancyUtils::disable)
                                    .build();
 
         // then none of the multi-tenancy defaults were registered
@@ -78,31 +77,6 @@ class MultiTenancyConfigurationDefaultsTest {
                 .noneMatch(RegisterTenantDescriptorHandlerInterceptor.class::isInstance);
         assertThat(interceptorRegistry.queryInterceptors(configuration, TenantAwareQueryHandler.class, "handle"))
                 .noneMatch(RegisterTenantDescriptorHandlerInterceptor.class::isInstance);
-    }
-
-    @Test
-    void disablingMultiTenancyAlsoDisablesTheEnhancersOutsideThisPackage() throws Exception {
-        // given a tenant-scoped component that would be resolvable while multi-tenancy is active
-        TenantComponentProvider<CourseRepository> componentProvider =
-                TenantComponentProvider.withFactory(CourseRepository.class, CourseRepository::new);
-
-        // when
-        AxonConfiguration configuration =
-                MessagingConfigurer.create()
-                                   .componentRegistry(MultiTenancyConfigurationUtils::disableMultiTenancy)
-                                   .componentRegistry(registry -> registry.registerComponent(
-                                           TenantComponentProvider.class,
-                                           config -> componentProvider))
-                                   .build();
-
-        // then the Axon Server-backed tenant provider is absent...
-        assertThat(configuration.hasComponent(TenantProvider.class)).isFalse();
-        // ...and nothing resolves the tenant-scoped handler parameter anymore
-        ParameterResolverFactory factory = configuration.getComponent(ParameterResolverFactory.class);
-        Method handler = TenantAwareCommandHandler.class.getDeclaredMethod("handle",
-                                                                           String.class,
-                                                                           CourseRepository.class);
-        assertThat(factory.createInstance(handler, handler.getParameters(), 1)).isNull();
     }
 
     @Nested
