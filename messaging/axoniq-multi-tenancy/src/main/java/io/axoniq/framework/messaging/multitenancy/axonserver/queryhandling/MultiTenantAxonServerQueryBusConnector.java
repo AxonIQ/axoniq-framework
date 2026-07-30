@@ -33,6 +33,7 @@ import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonS
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.Registration;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
@@ -58,11 +59,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * The connector composes one {@link AxonServerQueryBusConnector} per {@link TenantDescriptor}, each owning its own
  * Axon Server connection, query handler subscriptions, and in-flight query tracking. Query subscription state and the
  * incoming-query handler are replayed onto newly registered tenants.
+ * <p>
+ * Internal, because the connector is wired by {@link AxonServerMultiTenancyConfigurationDefaults} and
+ * reached through the {@link QueryBusConnector} component, never constructed by an application itself.
  *
  * @author Jan Galinski
  * @author Jakob Hatzl
  * @since 5.3.0
  */
+@Internal
 public class MultiTenantAxonServerQueryBusConnector
         implements QueryBusConnector, MultiTenantAwareComponent, ConnectorLifecycle {
 
