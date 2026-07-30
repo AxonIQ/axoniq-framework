@@ -41,6 +41,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.invoke.MethodHandles;
 import java.util.Collection;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -173,6 +174,37 @@ public class TenantAwareQueryBus implements QueryBus {
     }
 
     /**
+     * Emits the outcome of the {@code updateSupplier} to
+     * {@link QueryBus#subscriptionQuery(QueryMessage, ProcessingContext, int) subscription queries} matching the given
+     * {@code queryName} and given {@code filter}, returning the number of subscription queries the update was emitted
+     * to.
+     * <p>
+     * Implementations that cannot determine this number return {@link OptionalInt#empty} instead.
+     * <p>
+     * {@code AND}s a tenant clause onto the given {@code filter}, matching only {@link QueryMessage QueryMessages}
+     * whose {@link TenantResolver#resolveTenant(Message) resolved tenant} equals the tenant resolved from the given
+     * {@code context}.
+     *
+     * @param filter         a predicate filtering on {@link QueryMessage QueryMessages}. The {@code updateSupplier}
+     *                       will only be sent to subscription queries matching this filter
+     * @param updateSupplier the update supplier to emit for
+     *                       {@link QueryBus#subscriptionQuery(QueryMessage, ProcessingContext, int) subscription
+     *                       queries} matching the given {@code filter}
+     * @param context        the processing context under which the updateSupplier is being emitted; this is needed to
+     *                       resolve the actual tenant; a {@code null} context submitted here will produce a
+     *                       {@link TenantNotResolvedException} immediately
+     * @return a future completing with the number of subscription queries the update was emitted to as an
+     * {@link OptionalInt}, which is empty when we couldn't match
+     * @throws TenantNotResolvedException in case no context is supplied
+     */
+    @Override
+    public CompletableFuture<OptionalInt> emitUpdateAndCount(Predicate<QueryMessage> filter,
+                                                             Supplier<SubscriptionQueryUpdateMessage> updateSupplier,
+                                                             @Nullable ProcessingContext context) {
+        return delegate.emitUpdateAndCount(scopedToTenant(context, filter), updateSupplier, context);
+    }
+
+    /**
      * Completes {@link QueryBus#subscriptionQuery(QueryMessage, ProcessingContext, int) subscription queries} matching
      * the given {@code filter}.
      * <p>
@@ -185,15 +217,43 @@ public class TenantAwareQueryBus implements QueryBus {
      *
      * @param filter  a predicate filtering on {@link QueryMessage QueryMessages}; subscription queries matching this
      *                filter are completed
-     * @param context the processing context within which to complete subscription queries (can be {@code null})
+     * @param context the processing context within which to complete subscription queries (can be {@code null});
+     *                this is needed to resolve the actual tenant; a {@code null} context submitted here will produce a
+     *                {@link TenantNotResolvedException} immediately
      * @return a future completing whenever all matching
      * {@link QueryBus#subscriptionQuery(QueryMessage, ProcessingContext, int) subscription queries} have been
      * completed
+     * @throws TenantNotResolvedException in case no context is supplied
      */
     @Override
     public CompletableFuture<Void> completeSubscriptions(Predicate<QueryMessage> filter,
                                                          @Nullable ProcessingContext context) {
         return delegate.completeSubscriptions(scopedToTenant(context, filter), context);
+    }
+
+    /**
+     * Completes {@link QueryBus#subscriptionQuery(QueryMessage, ProcessingContext, int) subscription queries} matching
+     * the given {@code filter}, returning the number of subscription queries that were completed.
+     * <p>
+     * Implementations that cannot determine this number return {@link OptionalInt#empty} instead.
+     * <p>
+     * {@code AND}s a tenant clause onto the given {@code filter}, matching only {@link QueryMessage QueryMessages}
+     * whose {@link TenantResolver#resolveTenant(Message) resolved tenant} equals the tenant resolved from the given
+     * {@code context}.
+     *
+     * @param filter  a predicate filtering on {@link QueryMessage QueryMessages}. Subscription queries matching this
+     *                filter will be completed
+     * @param context the processing context within which to complete subscription queries (can be {@code null}); this
+     *                is needed to resolve the actual tenant; a {@code null} context submitted here will produce a
+     *                {@link TenantNotResolvedException} immediately
+     * @return a future completing with the number of subscription queries that were completed as an
+     * {@link OptionalInt}, which is empty when we couldn't match
+     * @throws TenantNotResolvedException in case no context is supplied
+     */
+    @Override
+    public CompletableFuture<OptionalInt> completeSubscriptionsAndCount(Predicate<QueryMessage> filter,
+                                                                        @Nullable ProcessingContext context) {
+        return delegate.completeSubscriptionsAndCount(scopedToTenant(context, filter), context);
     }
 
     /**
@@ -211,16 +271,46 @@ public class TenantAwareQueryBus implements QueryBus {
      *                filter are completed exceptionally
      * @param cause   the cause of an error
      * @param context the processing context within which to complete subscription queries exceptionally (can be
-     *                {@code null})
+     *                {@code null}); this is needed to resolve the actual tenant; a {@code null} context submitted
+     *                here will produce a {@link TenantNotResolvedException} immediately
      * @return a future completing whenever all matching
      * {@link QueryBus#subscriptionQuery(QueryMessage, ProcessingContext, int) subscription queries} have been completed
      * exceptionally
+     * @throws TenantNotResolvedException in case no context is supplied
      */
     @Override
     public CompletableFuture<Void> completeSubscriptionsExceptionally(Predicate<QueryMessage> filter,
                                                                       Throwable cause,
                                                                       @Nullable ProcessingContext context) {
         return delegate.completeSubscriptionsExceptionally(scopedToTenant(context, filter), cause, context);
+    }
+
+    /**
+     * Completes {@link QueryBus#subscriptionQuery(QueryMessage, ProcessingContext, int) subscription queries} matching
+     * the given {@code filter} exceptionally with the given {@code cause}, returning the number of subscription queries
+     * that were completed exceptionally.
+     * <p>
+     * Implementations that cannot determine this number return {@link OptionalInt#empty} instead.
+     * <p>
+     * {@code AND}s a tenant clause onto the given {@code filter}, matching only {@link QueryMessage QueryMessages}
+     * whose {@link TenantResolver#resolveTenant(Message) resolved tenant} equals the tenant resolved from the given
+     * {@code context}.
+     *
+     * @param filter  a predicate filtering on {@link QueryMessage QueryMessages}. Subscription queries matching this
+     *                filter will be completed exceptionally
+     * @param cause   the cause of an error
+     * @param context the processing context within which to complete subscription queries exceptionally (can be
+     *                {@code null}); this is needed to resolve the actual tenant; a {@code null} context submitted here
+     *                will produce a {@link TenantNotResolvedException} immediately
+     * @return a future completing with the number of subscription queries that were completed exceptionally as an
+     * {@link OptionalInt}, which is empty when we couldn't match
+     * @throws TenantNotResolvedException in case no context is supplied
+     */
+    @Override
+    public CompletableFuture<OptionalInt> completeSubscriptionsExceptionallyAndCount(Predicate<QueryMessage> filter,
+                                                                                     Throwable cause,
+                                                                                     @Nullable ProcessingContext context) {
+        return delegate.completeSubscriptionsExceptionallyAndCount(scopedToTenant(context, filter), cause, context);
     }
 
     /**
