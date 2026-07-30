@@ -19,27 +19,33 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
-import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.common.util.MockException;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
+import org.axonframework.messaging.queryhandling.GenericSubscriptionQueryUpdateMessage;
 import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.QueryHandler;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.axonframework.messaging.queryhandling.SimpleQueryBus;
+import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -128,7 +134,7 @@ class DistributedQueryBusTest {
         // Then - Should use connector
         assertThat(connector.queryCount.get())
                 .as("Connector should be used when no local handler is registered")
-                        .isEqualTo(1);
+                .isEqualTo(1);
     }
 
     @Test
@@ -152,56 +158,6 @@ class DistributedQueryBusTest {
         assertThat(connector.subscriptionQueryCount.get())
                 .as("Subscription queries should always use the connector")
                 .isEqualTo(1);
-    }
-
-    /**
-     * Stub implementation of {@link QueryBusConnector} that tracks invocations for test verification.
-     */
-    private static class StubQueryBusConnector implements QueryBusConnector {
-
-        final Set<QualifiedName> subscribedQueries = new HashSet<>();
-        final AtomicInteger queryCount = new AtomicInteger(0);
-        final AtomicInteger subscriptionQueryCount = new AtomicInteger(0);
-
-        @NonNull
-        @Override
-        public MessageStream<QueryResponseMessage> query(@NonNull QueryMessage query,
-                                                         @Nullable ProcessingContext context) {
-            queryCount.incrementAndGet();
-            QueryResponseMessage response = mock(QueryResponseMessage.class);
-            return MessageStream.fromIterable(() -> List.of(response).iterator());
-        }
-
-        @NonNull
-        @Override
-        public MessageStream<QueryResponseMessage> subscriptionQuery(@NonNull QueryMessage query,
-                                                                     @Nullable ProcessingContext context,
-                                                                     int updateBufferSize) {
-            subscriptionQueryCount.incrementAndGet();
-            QueryResponseMessage response = mock(QueryResponseMessage.class);
-            return MessageStream.fromIterable(() -> List.of(response).iterator());
-        }
-
-        @Override
-        public @NonNull CompletableFuture<Void> subscribe(@NonNull QualifiedName name) {
-            subscribedQueries.add(name);
-            return CompletableFuture.completedFuture(null);
-        }
-
-        @Override
-        public boolean unsubscribe(@NonNull QualifiedName name) {
-            return subscribedQueries.remove(name);
-        }
-
-        @Override
-        public void onIncomingQuery(@NonNull Handler handler) {
-            // No-op for tests
-        }
-
-        @Override
-        public void describeTo(@NonNull ComponentDescriptor descriptor) {
-            descriptor.describeProperty("name", "StubQueryBusConnector");
-        }
     }
 
     @Nested
@@ -310,6 +266,227 @@ class DistributedQueryBusTest {
             assertThat(connector.queryCount.get())
                     .as("Connector should be used when local shortcut is disabled, even if handler is registered")
                     .isEqualTo(1);
+        }
+    }
+
+    @Nested
+    @DisplayName("Emit and Complete And-Count Tests")
+    class EmitAndCompleteAndCountTests {
+
+        private StubUpdateCallback matchingCallbackOne;
+        private StubUpdateCallback matchingCallbackTwo;
+        private StubUpdateCallback nonMatchingCallback;
+        private QueryMessage matchingQueryOne;
+        private QueryMessage matchingQueryTwo;
+        private QueryMessage nonMatchingQuery;
+        private Predicate<QueryMessage> matchingFilter;
+
+        @BeforeEach
+        void registerSubscriptionQueries() {
+            testSubject = new DistributedQueryBus(localSegment, connector, configuration);
+            QualifiedName queryName = new QualifiedName("TestQuery");
+            matchingQueryOne = queryMessage(queryName);
+            matchingQueryTwo = queryMessage(queryName);
+            nonMatchingQuery = queryMessage(queryName);
+            matchingFilter = query -> query.identifier().equals(matchingQueryOne.identifier())
+                    || query.identifier().equals(matchingQueryTwo.identifier());
+
+            matchingCallbackOne = new StubUpdateCallback();
+            matchingCallbackTwo = new StubUpdateCallback();
+            nonMatchingCallback = new StubUpdateCallback();
+            connector.incomingHandler.registerUpdateHandler(matchingQueryOne, matchingCallbackOne);
+            connector.incomingHandler.registerUpdateHandler(matchingQueryTwo, matchingCallbackTwo);
+            connector.incomingHandler.registerUpdateHandler(nonMatchingQuery, nonMatchingCallback);
+        }
+
+        @Test
+        void emitUpdateAndCountReturnsNumberOfMatchingSubscriptionsAndSendsToThemOnly() {
+            SubscriptionQueryUpdateMessage update =
+                    new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
+
+            OptionalInt matchCount = testSubject.emitUpdateAndCount(matchingFilter, () -> update, null)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
+
+            assertThat(matchCount).isPresent();
+            assertThat(matchCount).hasValue(2);
+            assertThat(matchingCallbackOne.sendUpdateCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.sendUpdateCount.get()).isEqualTo(1);
+            assertThat(nonMatchingCallback.sendUpdateCount.get()).isZero();
+        }
+
+        @Test
+        void emitUpdateAndCountReturnsZeroWhenNoSubscriptionsMatch() {
+            SubscriptionQueryUpdateMessage update =
+                    new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
+
+            OptionalInt matchCount = testSubject.emitUpdateAndCount(query -> false, () -> update, null)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
+
+            assertThat(matchCount).isPresent();
+            assertThat(matchCount).hasValue(0);
+        }
+
+        @Test
+        void emitUpdateStillSendsToAllMatchingSubscriptions() {
+            SubscriptionQueryUpdateMessage update =
+                    new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
+
+            testSubject.emitUpdate(matchingFilter, () -> update, null).join();
+
+            assertThat(matchingCallbackOne.sendUpdateCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.sendUpdateCount.get()).isEqualTo(1);
+            assertThat(nonMatchingCallback.sendUpdateCount.get()).isZero();
+        }
+
+        @Test
+        void completeSubscriptionsAndCountReturnsNumberOfMatchingSubscriptionsAndCompletesThemOnly() {
+            OptionalInt matchCount = testSubject.completeSubscriptionsAndCount(matchingFilter, null)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
+
+            assertThat(matchCount).isPresent();
+            assertThat(matchCount).hasValue(2);
+            assertThat(matchingCallbackOne.completeCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.completeCount.get()).isEqualTo(1);
+            assertThat(nonMatchingCallback.completeCount.get()).isZero();
+        }
+
+        @Test
+        void completeSubscriptionsAndCountReturnsZeroWhenNoSubscriptionsMatch() {
+            OptionalInt matchCount = testSubject.completeSubscriptionsAndCount(query -> false, null)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
+
+            assertThat(matchCount).isPresent();
+            assertThat(matchCount).hasValue(0);
+        }
+
+        @Test
+        void completeSubscriptionsStillCompletesAllMatchingSubscriptions() {
+            testSubject.completeSubscriptions(matchingFilter, null).join();
+
+            assertThat(matchingCallbackOne.completeCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.completeCount.get()).isEqualTo(1);
+            assertThat(nonMatchingCallback.completeCount.get()).isZero();
+        }
+
+        @Test
+        void completeSubscriptionsExceptionallyAndCountReturnsNumberOfMatchingSubscriptionsAndCompletesThemOnly() {
+            MockException cause = new MockException("Mock");
+
+            OptionalInt matchCount = testSubject.completeSubscriptionsExceptionallyAndCount(matchingFilter, cause, null)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
+
+            assertThat(matchCount).isPresent();
+            assertThat(matchCount).hasValue(2);
+            assertThat(matchingCallbackOne.completeExceptionallyCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.completeExceptionallyCount.get()).isEqualTo(1);
+            assertThat(nonMatchingCallback.completeExceptionallyCount.get()).isZero();
+        }
+
+        @Test
+        void completeSubscriptionsExceptionallyAndCountReturnsZeroWhenNoSubscriptionsMatch() {
+            MockException cause = new MockException("Mock");
+
+            OptionalInt matchCount = testSubject.completeSubscriptionsExceptionallyAndCount(query -> false, cause, null)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
+
+            assertThat(matchCount).isPresent();
+            assertThat(matchCount).hasValue(0);
+        }
+
+        @Test
+        void completeSubscriptionsExceptionallyStillCompletesAllMatchingSubscriptions() {
+            MockException cause = new MockException("Mock");
+
+            testSubject.completeSubscriptionsExceptionally(matchingFilter, cause, null).join();
+
+            assertThat(matchingCallbackOne.completeExceptionallyCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.completeExceptionallyCount.get()).isEqualTo(1);
+            assertThat(nonMatchingCallback.completeExceptionallyCount.get()).isZero();
+        }
+    }
+
+    /**
+     * Stub implementation of {@link QueryBusConnector} that tracks invocations for test verification.
+     */
+    private static class StubQueryBusConnector implements QueryBusConnector {
+
+        final Set<QualifiedName> subscribedQueries = new HashSet<>();
+        final AtomicInteger queryCount = new AtomicInteger(0);
+        final AtomicInteger subscriptionQueryCount = new AtomicInteger(0);
+        Handler incomingHandler;
+
+        @NonNull
+        @Override
+        public MessageStream<QueryResponseMessage> query(@NonNull QueryMessage query,
+                                                         @Nullable ProcessingContext context) {
+            queryCount.incrementAndGet();
+            QueryResponseMessage response = mock(QueryResponseMessage.class);
+            return MessageStream.fromIterable(() -> List.of(response).iterator());
+        }
+
+        @NonNull
+        @Override
+        public MessageStream<QueryResponseMessage> subscriptionQuery(@NonNull QueryMessage query,
+                                                                     @Nullable ProcessingContext context,
+                                                                     int updateBufferSize) {
+            subscriptionQueryCount.incrementAndGet();
+            QueryResponseMessage response = mock(QueryResponseMessage.class);
+            return MessageStream.fromIterable(() -> List.of(response).iterator());
+        }
+
+        @Override
+        public @NonNull CompletableFuture<Void> subscribe(@NonNull QualifiedName name) {
+            subscribedQueries.add(name);
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public boolean unsubscribe(@NonNull QualifiedName name) {
+            return subscribedQueries.remove(name);
+        }
+
+        @Override
+        public void onIncomingQuery(@NonNull Handler handler) {
+            this.incomingHandler = handler;
+        }
+
+        @Override
+        public void describeTo(@NonNull ComponentDescriptor descriptor) {
+            descriptor.describeProperty("name", "StubQueryBusConnector");
+        }
+    }
+
+    /**
+     * Stub implementation of {@link QueryBusConnector.UpdateCallback} that tracks invocations for test verification.
+     */
+    private static class StubUpdateCallback implements QueryBusConnector.UpdateCallback {
+
+        final AtomicInteger sendUpdateCount = new AtomicInteger(0);
+        final AtomicInteger completeCount = new AtomicInteger(0);
+        final AtomicInteger completeExceptionallyCount = new AtomicInteger(0);
+
+        @Override
+        public CompletableFuture<Void> sendUpdate(SubscriptionQueryUpdateMessage update) {
+            sendUpdateCount.incrementAndGet();
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public CompletableFuture<Void> complete() {
+            completeCount.incrementAndGet();
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public CompletableFuture<Void> completeExceptionally(Throwable cause) {
+            completeExceptionallyCount.incrementAndGet();
+            return CompletableFuture.completedFuture(null);
         }
     }
 }
