@@ -47,6 +47,7 @@ import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.MockComponentDescriptor;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
@@ -209,23 +210,6 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
-        void registersNoRoutingEngineWhenTheApplicationSuppliesItsOwnEventStorageEngine() {
-            EventStorageEngine applicationEngine = new InMemoryEventStorageEngine();
-            AxonConfiguration ownEngineConfiguration =
-                    MessagingConfigurer.create()
-                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
-                                       .componentRegistry(registry -> registry
-                                               .registerComponent(TenantComponentProvider.class,
-                                                                  config -> componentProvider)
-                                               .registerComponent(EventStorageEngine.class,
-                                                                  config -> applicationEngine))
-                                       .build();
-
-            // Multi-tenancy is on, but nothing routes across tenants, so the application's own store serves everyone.
-            assertThat(ownEngineConfiguration.getComponent(EventStorageEngine.class)).isSameAs(applicationEngine);
-        }
-
-        @Test
         void subscribesTheRoutingEngineToTheTenantProviderExactlyOnce() {
             // Registering the engine twice, or wrapping a second registration in a subscribed component, would register
             // every tenant with it twice and recompose each tenant's engine.
@@ -274,7 +258,37 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
     }
 
     @Nested
-    class ForeignSnapshotStoreRejection {
+    class ForeignStorageComponentRejection {
+
+        // An EventStorageEngine registered elsewhere serves every tenant from one place, so no tenant keeps its events
+        // to itself and streamed events carry no tenant, which is what a tenant-scoped component is resolved from.
+        @Test
+        void rejectsAnEventStorageEngineRegisteredByTheApplication() {
+            EventStorageEngine singleTenantEngine = new InMemoryEventStorageEngine();
+            MessagingConfigurer configurer =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry.registerComponent(
+                                               EventStorageEngine.class, config -> singleTenantEngine))
+                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer);
+
+            assertThatThrownBy(configurer::build)
+                    .isInstanceOf(AxonConfigurationException.class)
+                    .hasMessageContaining("EventStorageEngine")
+                    .hasMessageContaining("TenantEventStorageEngineFactory");
+        }
+
+        // The rejection must not trip on the framework's own default engine: EventSourcingConfigurationDefaults
+        // registers an InMemoryEventStorageEngine, but at an order far after this enhancer, so it backs off instead.
+        @Test
+        void acceptsTheDefaultEventSourcingSetupAndYieldsTheRoutingEngine() {
+            AxonConfiguration defaultSetup =
+                    EventSourcingConfigurer.create()
+                                           .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
+                                           .build();
+
+            assertThat(defaultSetup.getComponent(EventStorageEngine.class))
+                    .isInstanceOf(MultiTenantEventStorageEngine.class);
+        }
 
         // A SnapshotStore registered elsewhere serves every tenant from one place, while sourcing keeps reading each
         // tenant's snapshots from that tenant's own store. That has to fail loudly rather than write and read snapshots

@@ -54,8 +54,6 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -84,9 +82,6 @@ import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTena
 @Internal
 @RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
 public class AxonServerMultiTenancyConfigurationDefaults implements ConfigurationEnhancer {
-
-    private static final Logger logger =
-            LoggerFactory.getLogger(AxonServerMultiTenancyConfigurationDefaults.class);
 
     /**
      * The order of {@code this} enhancer compared to others.
@@ -193,7 +188,7 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
      * Registers the {@link MultiTenantEventStorageEngine} as the {@link EventStorageEngine} and the
      * {@link MultiTenantSnapshotStore} as the {@link SnapshotStore}, backed by a
      * {@link TenantEventStorageEngineFactory} and a {@link TenantSnapshotStoreFactory}. Registered before the Axon
-     * Server enhancer, whose {@code registerIfNotPresent} for both types then backs off.
+     * Server enhancer, whose {@code registerIfNotPresent} for the types it shares then backs off.
      * <p>
      * The engine is handed to the streaming processor restarter at startup, so a tenant change re-opens the streams of
      * the running streaming event processors.
@@ -202,14 +197,16 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
      * engine with that tenant's snapshot store itself. The engine and both factories are subscribed to the
      * {@link TenantProvider}, so a removed tenant's engine, snapshot store and composed engine are all evicted.
      * <p>
-     * Rejects a {@link SnapshotStore} registered by the application, since one store serving every tenant would break
-     * the per-tenant snapshot isolation.
+     * Rejects a {@link SnapshotStore} or an {@link EventStorageEngine} registered by the application, since one of
+     * either serving every tenant would break the per-tenant isolation this engine exists for.
      *
      * @param componentRegistry the registry to register the routing components and their factories with
-     * @throws AxonConfigurationException if a {@link SnapshotStore} is already registered
+     * @throws AxonConfigurationException if a {@link SnapshotStore} or an {@link EventStorageEngine} is already
+     *                                    registered
      */
     static void registerMultiTenantEventStorageEngine(ComponentRegistry componentRegistry) {
         rejectForeignSnapshotStore(componentRegistry);
+        rejectForeignEventStorageEngine(componentRegistry);
         // Snapshots are composed per tenant by the routing engine, so the application-wide composition steps aside.
         // Applied above the tenant fan-out it would resolve snapshots before a tenant is known, leaving every tenant's
         // engine without the snapshot sourcing strategy.
@@ -224,26 +221,35 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                                     AxonServerTenantEventStorageEngineFactory::new,
                                     MultiTenancyConfigurationDefaults.TENANT_COMPONENT_FACTORY_PHASE),
                 SearchScope.ALL);
-        if (componentRegistry.hasComponent(EventStorageEngine.class, SearchScope.ALL)) {
-            // Multi-tenancy is on, but the application supplies the event storage engine, so no engine routes across
-            // tenants. Said loudly, since every tenant then shares that one store and nothing announces a tenant
-            // change.
-            logger.warn("""
-                        Multi-tenancy is enabled while an EventStorageEngine is already registered, so events are not \
-                        stored per tenant and a tenant change does not reach the streaming event processors. Remove \
-                        that registration to let each tenant have its own event store.""");
-        } else {
-            componentRegistry.registerComponent(
-                    subscribedComponent(EventStorageEngine.class,
-                                        AxonServerMultiTenancyConfigurationDefaults::routingEngine)
-                            .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
-                                     AxonServerMultiTenancyConfigurationDefaults::followRoutingEngine));
-        }
+        componentRegistry.registerComponent(
+                subscribedComponent(EventStorageEngine.class,
+                                    AxonServerMultiTenancyConfigurationDefaults::routingEngine)
+                        .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
+                                 AxonServerMultiTenancyConfigurationDefaults::followRoutingEngine));
 
-        componentRegistry.registerIfNotPresent(
+        componentRegistry.registerComponent(
                 ComponentDefinition.ofType(SnapshotStore.class)
-                                   .withBuilder(AxonServerMultiTenancyConfigurationDefaults::routingSnapshotStore),
-                SearchScope.ALL);
+                                   .withBuilder(AxonServerMultiTenancyConfigurationDefaults::routingSnapshotStore));
+    }
+
+    /**
+     * Rejects an {@link EventStorageEngine} that is already registered when multi-tenancy activates.
+     * <p>
+     * Such an engine serves every tenant from one place, so no tenant can keep its events to itself. It also leaves the
+     * streamed events without the tenant they belong to, which is what a tenant-scoped component is resolved from, so
+     * every tenant's read model would collapse into one. This fails rather than silently giving up that isolation.
+     *
+     * @param componentRegistry the registry to check for an already registered {@link EventStorageEngine}
+     * @throws AxonConfigurationException if an {@link EventStorageEngine} is already registered
+     */
+    private static void rejectForeignEventStorageEngine(ComponentRegistry componentRegistry) {
+        if (componentRegistry.hasComponent(EventStorageEngine.class, SearchScope.ALL)) {
+            throw new AxonConfigurationException("""
+                    A multi-tenant application stores events per tenant, so it cannot use an EventStorageEngine that \
+                    serves every tenant from one place, but one is already registered. Register a \
+                    TenantEventStorageEngineFactory to control how each tenant's event storage engine is built, \
+                    instead of registering an EventStorageEngine of your own.""");
+        }
     }
 
     /**
