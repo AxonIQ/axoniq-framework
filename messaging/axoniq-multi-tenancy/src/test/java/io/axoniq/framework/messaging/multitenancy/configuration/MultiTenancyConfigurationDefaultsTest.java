@@ -22,14 +22,17 @@ package io.axoniq.framework.messaging.multitenancy.configuration;
 import io.axoniq.framework.messaging.multitenancy.annotation.TenantScoped;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
+import io.axoniq.framework.messaging.multitenancy.api.TenantChangeSource;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
@@ -39,9 +42,11 @@ import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Method;
+import java.time.Duration;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
+import static org.awaitility.Awaitility.await;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -213,14 +218,33 @@ class MultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
-        void subscribesTheStreamingProcessorRestarterToTheTenantProviderAndCancelsItOnShutdown() {
-            assertThat(tenantProvider.subscribedComponents())
-                    .anyMatch(MultiTenantStreamingProcessorRestarter.class::isInstance);
+        void wiresTheStreamingProcessorRestarterToTheRoutingEnginesTenantsUntilShutdown() {
+            // Asserted through what the wiring does, rather than through the restarter reporting itself as running: a
+            // tenant registered with the routing engine reaches the restarter while the configuration runs, and stops
+            // reaching it afterwards.
+            MultiTenantStreamingProcessorRestarter restarter =
+                    configuration.getComponent(MultiTenantStreamingProcessorRestarter.class);
+            MultiTenantEventStorageEngine routingEngine =
+                    (MultiTenantEventStorageEngine) configuration.getComponent(TenantChangeSource.class);
+
+            routingEngine.registerTenant(TENANT_B);
+
+            await().atMost(Duration.ofSeconds(2))
+                   .untilAsserted(() -> assertThat(restartCount(restarter)).isPositive());
 
             configuration.shutdown();
 
-            assertThat(tenantProvider.subscribedComponents())
-                    .noneMatch(MultiTenantStreamingProcessorRestarter.class::isInstance);
+            // Asserted on the engine, since a stopped restarter ignores a restart request either way, so counting
+            // restarts cannot tell a cancelled listener from a still-registered one.
+            MockComponentDescriptor engineDescriptor = new MockComponentDescriptor();
+            routingEngine.describeTo(engineDescriptor);
+            assertThat(engineDescriptor.getDescribedProperties()).containsEntry("tenantChangeListenerCount", 0);
+        }
+
+        private static long restartCount(MultiTenantStreamingProcessorRestarter restarter) {
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+            restarter.describeTo(descriptor);
+            return (long) descriptor.getDescribedProperties().get("restartCount");
         }
 
         @Test

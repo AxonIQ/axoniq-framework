@@ -21,6 +21,8 @@ package io.axoniq.framework.messaging.multitenancy.axonserver.configuration;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
+import io.axoniq.framework.messaging.multitenancy.api.TenantChangeSource;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
@@ -29,7 +31,9 @@ import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEvent
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
+import org.axonframework.common.Registration;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
@@ -48,6 +52,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
@@ -55,17 +62,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Verifies that a tenant added at runtime is streamed regardless of the order in which the tenant provider notifies its
- * subscribers.
+ * Verifies that a tenant added at runtime is streamed no matter where the {@link MultiTenantEventStorageEngine} sits
+ * among the {@link TenantProvider}'s subscribers, or how long the subscribers ahead of it take.
  * <p>
- * Both the {@link MultiTenantEventStorageEngine} and the streaming processor restarter follow the
- * {@link TenantProvider}, and both subscribe in the same start phase, so their relative notification order is not
- * fixed. The engine knows the current tenants and the restarter re-opens the stream, so an order that put the restarter
- * first could plausibly re-open the stream over a tenant set that does not yet include the tenant just added.
- * <p>
- * It does not: both orders below pick the tenant up. The tests are here to keep it that way, since the other tests in
- * this package all subscribe the engine before starting the configuration, which fixes it ahead of the restarter and
- * leaves the other order untested.
+ * The merged stream is assembled over the engine's tenants at the moment it opens, and re-opening it requires a
+ * processor restart. That restart therefore follows the engine's own tenant changes rather than the provider's, so it
+ * can only ever observe a tenant set the engine already holds. Subscriber order and subscriber lag stop being variables
+ * for it, which is what these tests pin down: the provider notifies its subscribers in turn, and a subscriber ahead of
+ * the engine may take real time over its own registration, such as one opening a connection for the tenant.
  */
 class TenantNotificationOrderTest {
 
@@ -90,7 +94,7 @@ class TenantNotificationOrderTest {
     }
 
     @Test
-    void picksUpATenantAddedAtRuntimeWhenTheEngineIsNotifiedFirst() {
+    void picksUpATenantAddedAtRuntimeWhenTheEngineHoldsTheStartupTenants() {
         buildConfiguration();
         tenantProvider.subscribe(routingEngine);
         tenantProvider.addTenant(TENANT_A);
@@ -105,11 +109,10 @@ class TenantNotificationOrderTest {
     }
 
     @Test
-    void picksUpATenantAddedAtRuntimeWhenTheRestarterIsNotifiedFirst() {
+    void picksUpATenantTheEngineRegistersAfterTheProcessorsStarted() {
         buildConfiguration();
         tenantProvider.addTenant(TENANT_A);
-        // Starting subscribes the restarter, so subscribing the engine afterwards puts it second in line for every
-        // later tenant change. Nothing in the contract fixes that order.
+        // Starting first, so the engine holds the tenant only after the processors opened their streams.
         configuration.start();
         tenantProvider.subscribe(routingEngine);
         publish(storeA, "A1");
@@ -117,6 +120,45 @@ class TenantNotificationOrderTest {
 
         tenantProvider.addTenant(TENANT_B);
         publish(storeB, "B1");
+
+        awaitHandled(TENANT_B, "B1");
+    }
+
+    @Test
+    void picksUpATenantAddedAtRuntimeWhileASubscriberAheadOfTheEngineIsStillRegisteringIt() {
+        buildConfiguration();
+        tenantProvider.addTenant(TENANT_A);
+        // Starting first, so anything the configuration subscribes sits ahead of the engine, and the engine is reached
+        // only after a subscriber that finishes registering when released. That is the lag an asynchronously created
+        // backend leaves behind, and the order in which it actually bites.
+        configuration.start();
+        BlockingSubscriber blockingSubscriber = new BlockingSubscriber();
+        tenantProvider.subscribe(blockingSubscriber);
+        tenantProvider.subscribe(routingEngine);
+        publish(storeA, "A1");
+        awaitHandled(TENANT_A, "A1");
+
+        blockingSubscriber.blockRegistrations();
+
+        // Adding on another thread, since the blocking subscriber holds up the notification that carries the tenant to
+        // the engine.
+        Thread tenantAddition = new Thread(() -> tenantProvider.addTenant(TENANT_B));
+        tenantAddition.start();
+        publish(storeB, "B1");
+        blockingSubscriber.awaitReached();
+
+        // Waiting for the stream to be serving again proves it was re-opened while the engine still lacked the tenant,
+        // which is the moment a restart driven by the provider would settle on the stale set.
+        try {
+            publish(storeA, "A2");
+            awaitHandled(TENANT_A, "A2");
+            // The stream is still serving the previous tenant set. A restart driven by the provider would have re-opened
+            // it here, over a set that does not yet include the new tenant.
+            assertThat(routingEngine.tenants()).doesNotContain(TENANT_B);
+        } finally {
+            blockingSubscriber.release();
+        }
+        awaitTermination(tenantAddition);
 
         awaitHandled(TENANT_B, "B1");
     }
@@ -145,7 +187,10 @@ class TenantNotificationOrderTest {
                     registry.disableEnhancer(AxonServerConfigurationEnhancer.class)
                             .disableEnhancer(AxonServerMultiTenancyConfigurationDefaults.class)
                             .registerComponent(TenantProvider.class, config -> tenantProvider)
-                            .registerComponent(EventStorageEngine.class, config -> routingEngine);
+                            .registerComponent(TenantChangeSource.class, config -> routingEngine)
+                            .registerComponent(EventStorageEngine.class,
+                                               config -> (EventStorageEngine) config.getComponent(
+                                                       TenantChangeSource.class));
                 })
                 .messaging(messaging -> messaging.eventProcessing(
                         processing -> processing.pooledStreaming(
@@ -155,9 +200,74 @@ class TenantNotificationOrderTest {
                 .build();
     }
 
+    private static void awaitTermination(Thread thread) {
+        try {
+            thread.join(Duration.ofSeconds(10).toMillis());
+            assertThat(thread.isAlive()).as("the tenant addition should have finished").isFalse();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for the tenant addition to finish", interrupted);
+        }
+    }
+
     private void awaitHandled(TenantDescriptor tenant, Object payload) {
         await().atMost(Duration.ofSeconds(10))
                .untilAsserted(() -> assertThat(handled).contains(new Handled(tenant, payload)));
+    }
+
+    /**
+     * A tenant-aware component that finishes registering a tenant only once it is released, standing in for one that
+     * opens a connection for the tenant. Subscribed before the routing engine, so it holds up the engine's registration
+     * of every later tenant.
+     */
+    private static class BlockingSubscriber implements MultiTenantAwareComponent {
+
+        private final CountDownLatch reached = new CountDownLatch(1);
+        private final CountDownLatch released = new CountDownLatch(1);
+        private final AtomicBoolean blocking = new AtomicBoolean();
+
+        private void blockRegistrations() {
+            blocking.set(true);
+        }
+
+        private void awaitReached() {
+            await(reached);
+        }
+
+        private void release() {
+            released.countDown();
+        }
+
+        @Override
+        public Registration registerTenant(TenantDescriptor tenantDescriptor) {
+            if (blocking.get()) {
+                reached.countDown();
+                await(released);
+            }
+            return () -> true;
+        }
+
+        @Override
+        public Registration registerAndStartTenant(TenantDescriptor tenantDescriptor) {
+            return registerTenant(tenantDescriptor);
+        }
+
+        @Override
+        public void describeTo(ComponentDescriptor descriptor) {
+            descriptor.describeProperty("blocking", blocking.get());
+            descriptor.describeProperty("released", released.getCount() == 0);
+        }
+
+        private static void await(CountDownLatch latch) {
+            try {
+                if (!latch.await(10, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("The blocking subscriber was never reached or released");
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while waiting on the blocking subscriber", interrupted);
+            }
+        }
     }
 
     private void publish(EventStorageEngine store, String payload) {

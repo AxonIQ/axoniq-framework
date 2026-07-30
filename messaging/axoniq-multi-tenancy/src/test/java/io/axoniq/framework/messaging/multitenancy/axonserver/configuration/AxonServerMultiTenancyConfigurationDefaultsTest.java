@@ -28,12 +28,15 @@ import io.axoniq.axonserver.grpc.admin.ReplicationGroupOverview;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
+import io.axoniq.framework.messaging.multitenancy.api.TenantChangeSource;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantProvider;
 import io.axoniq.framework.messaging.multitenancy.axonserver.commandhandling.MultiTenantAxonServerCommandBusConnector;
+import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AxonServerTenantEventStorageEngineFactory;
+import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AxonServerTenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
@@ -47,6 +50,8 @@ import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
+import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
+import org.axonframework.eventsourcing.snapshot.inmemory.InMemorySnapshotStore;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.junit.jupiter.api.*;
@@ -129,6 +134,109 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         void registersTheMultiTenantEventStorageEngineAsTheEventStorageEngine() {
             assertThat(configuration.getComponent(EventStorageEngine.class))
                     .isInstanceOf(MultiTenantEventStorageEngine.class);
+        }
+
+        @Test
+        void keepsTheTenantChangeSourceResolvableWhenTheEventStorageEngineIsDecorated() {
+            // A decorator returns the decorated type, so resolving the event storage engine no longer yields the
+            // tenant-routing engine. Whatever follows its tenants resolves the source instead, which no
+            // EventStorageEngine decorator matches.
+            AxonConfiguration decoratedConfiguration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TenantComponentProvider.class,
+                                                                  config -> componentProvider)
+                                               .registerDecorator(EventStorageEngine.class, 0,
+                                                                  (config, name, delegate) ->
+                                                                          SnapshotCapableEventStorageEngine.decorate(
+                                                                                  delegate,
+                                                                                  new InMemorySnapshotStore())))
+                                       .build();
+
+            assertThat(decoratedConfiguration.getComponent(EventStorageEngine.class))
+                    .isInstanceOf(SnapshotCapableEventStorageEngine.class);
+            assertThat(decoratedConfiguration.getComponent(TenantChangeSource.class))
+                    .isInstanceOf(MultiTenantEventStorageEngine.class);
+        }
+
+        @Test
+        void subscribesTheFactoriesBeforeTheRoutingEngineThatComposesFromThem() {
+            // The engine announces a tenant only once it holds it, and whatever acts on that announcement composes
+            // through the factories, so a factory that has not been told yet fails the merged stream for every tenant.
+            StubTenantProvider orderedProvider = new StubTenantProvider();
+            AxonConfiguration orderedConfiguration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TenantProvider.class, config -> orderedProvider)
+                                               .registerComponent(TenantComponentProvider.class,
+                                                                  config -> componentProvider))
+                                       .build();
+            orderedConfiguration.start();
+            try {
+                List<Class<?>> subscriptionOrder = orderedProvider.subscribedComponents()
+                                                                  .stream()
+                                                                  .<Class<?>>map(Object::getClass)
+                                                                  .toList();
+
+                assertThat(subscriptionOrder).containsSubsequence(AxonServerTenantSnapshotStoreFactory.class,
+                                                                  MultiTenantEventStorageEngine.class);
+                assertThat(subscriptionOrder).containsSubsequence(AxonServerTenantEventStorageEngineFactory.class,
+                                                                  MultiTenantEventStorageEngine.class);
+            } finally {
+                orderedConfiguration.shutdown();
+            }
+        }
+
+        @Test
+        void registersNoTenantChangeSourceWhenTheApplicationSuppliesItsOwnEventStorageEngine() {
+            // Both names are registered together or not at all, so an application bringing its own event store keeps it
+            // and gets no tenant-routing source, leaving whatever follows tenant changes inert.
+            EventStorageEngine applicationEngine = new InMemoryEventStorageEngine();
+            AxonConfiguration ownEngineConfiguration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TenantComponentProvider.class,
+                                                                  config -> componentProvider)
+                                               .registerComponent(EventStorageEngine.class,
+                                                                  config -> applicationEngine))
+                                       .build();
+
+            assertThat(ownEngineConfiguration.getComponent(EventStorageEngine.class)).isSameAs(applicationEngine);
+            assertThat(ownEngineConfiguration.hasComponent(TenantChangeSource.class)).isFalse();
+        }
+
+        @Test
+        void subscribesTheRoutingEngineToTheTenantProviderExactlyOnceDespiteItsTwoNames() {
+            // Only the source registration carries the tenant lifecycle. Wrapping the event storage engine registration
+            // in a subscribed component too would register every tenant with the engine twice, recomposing each one.
+            StubTenantProvider countingProvider = new StubTenantProvider();
+            AxonConfiguration countedConfiguration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TenantProvider.class, config -> countingProvider)
+                                               .registerComponent(TenantComponentProvider.class,
+                                                                  config -> componentProvider))
+                                       .build();
+            countedConfiguration.start();
+            try {
+                assertThat(countingProvider.subscribedComponents())
+                        .filteredOn(MultiTenantEventStorageEngine.class::isInstance)
+                        .hasSize(1);
+            } finally {
+                countedConfiguration.shutdown();
+            }
+        }
+
+        @Test
+        void resolvesTheRoutingEngineAsBothTheTenantChangeSourceAndTheEventStorageEngine() {
+            // Whatever follows the engine's tenants resolves the source, while everything else resolves the event
+            // storage engine, so the two names have to yield the one instance.
+            assertThat(configuration.getComponent(EventStorageEngine.class))
+                    .isSameAs(configuration.getComponent(TenantChangeSource.class));
         }
 
         @Test

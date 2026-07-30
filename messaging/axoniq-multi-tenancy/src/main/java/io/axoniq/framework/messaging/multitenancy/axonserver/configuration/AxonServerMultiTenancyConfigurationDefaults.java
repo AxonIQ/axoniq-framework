@@ -23,6 +23,7 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
+import io.axoniq.framework.messaging.multitenancy.api.TenantChangeSource;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
@@ -189,6 +190,11 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
      * {@link TenantEventStorageEngineFactory} and a {@link TenantSnapshotStoreFactory}. Registered before the Axon
      * Server enhancer, whose {@code registerIfNotPresent} for both types then backs off.
      * <p>
+     * The routing engine is registered as a {@link TenantChangeSource} as well as the {@link EventStorageEngine}, so a
+     * component that has to follow its tenants resolves a type no {@code EventStorageEngine} decorator matches. Both
+     * names yield the one instance, and only the source registration follows the tenant lifecycle, so a tenant is
+     * registered with it exactly once.
+     * <p>
      * Also disables the {@link SnapshotSourcingConfigurationEnhancer}, since the routing engine composes each tenant's
      * engine with that tenant's snapshot store itself. The engine and both factories are subscribed to the
      * {@link TenantProvider}, so a removed tenant's engine, snapshot store and composed engine are all evicted.
@@ -207,16 +213,23 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
         componentRegistry.disableEnhancer(SnapshotSourcingConfigurationEnhancer.class);
         componentRegistry.registerIfNotPresent(
                 subscribedComponent(TenantSnapshotStoreFactory.class,
-                                    AxonServerTenantSnapshotStoreFactory::new),
+                                    AxonServerTenantSnapshotStoreFactory::new,
+                                    MultiTenancyConfigurationDefaults.TENANT_COMPONENT_FACTORY_PHASE),
                 SearchScope.ALL);
         componentRegistry.registerIfNotPresent(
                 subscribedComponent(TenantEventStorageEngineFactory.class,
-                                    AxonServerTenantEventStorageEngineFactory::new),
+                                    AxonServerTenantEventStorageEngineFactory::new,
+                                    MultiTenancyConfigurationDefaults.TENANT_COMPONENT_FACTORY_PHASE),
                 SearchScope.ALL);
-        componentRegistry.registerIfNotPresent(
-                subscribedComponent(EventStorageEngine.class,
-                                    AxonServerMultiTenancyConfigurationDefaults::routingEngine),
-                SearchScope.ALL);
+        if (!componentRegistry.hasComponent(EventStorageEngine.class, SearchScope.ALL)) {
+            componentRegistry.registerComponent(
+                    subscribedComponent(TenantChangeSource.class,
+                                        AxonServerMultiTenancyConfigurationDefaults::routingEngine));
+            componentRegistry.registerComponent(
+                    ComponentDefinition.ofType(EventStorageEngine.class)
+                                       .withBuilder(AxonServerMultiTenancyConfigurationDefaults::routingEngineFrom));
+        }
+
         componentRegistry.registerIfNotPresent(
                 ComponentDefinition.ofType(SnapshotStore.class)
                                    .withBuilder(AxonServerMultiTenancyConfigurationDefaults::routingSnapshotStore),
@@ -249,6 +262,14 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                                                  config.getComponent(TenantRouter.class));
     }
 
+    /**
+     * Returns the tenant-routing engine registered as the {@link TenantChangeSource}, as the
+     * {@link EventStorageEngine} it also serves as.
+     */
+    private static EventStorageEngine routingEngineFrom(Configuration config) {
+        return (EventStorageEngine) config.getComponent(TenantChangeSource.class);
+    }
+
     private static MultiTenantSnapshotStore routingSnapshotStore(Configuration config) {
         return new MultiTenantSnapshotStore(config.getComponent(TenantSnapshotStoreFactory.class),
                                             config.getComponent(TenantRouter.class));
@@ -266,10 +287,30 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
      */
     private static <C> ComponentDefinition<C> subscribedComponent(Class<C> componentType,
                                                                   Function<Configuration, C> builder) {
+        return subscribedComponent(componentType,
+                                   builder,
+                                   MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE);
+    }
+
+    /**
+     * Builds a {@link ComponentDefinition} for a component that follows the tenant lifecycle, subscribing it in the
+     * given {@code subscriberPhase}. When the built component is a {@link MultiTenantAwareComponent}, it is subscribed
+     * to the {@link TenantProvider} at startup and unsubscribed at shutdown, so tenant additions and removals reach its
+     * per-tenant cache.
+     *
+     * @param componentType   the component type to register
+     * @param builder         the builder constructing the component from the {@link Configuration}
+     * @param subscriberPhase the start phase in which to subscribe the component
+     * @param <C>             the component type
+     * @return a {@link ComponentDefinition} for the subscribed component
+     */
+    private static <C> ComponentDefinition<C> subscribedComponent(Class<C> componentType,
+                                                                  Function<Configuration, C> builder,
+                                                                  int subscriberPhase) {
         AtomicReference<@Nullable Registration> subscription = new AtomicReference<>();
         return ComponentDefinition.ofType(componentType)
                                   .withBuilder(builder::apply)
-                                  .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
+                                  .onStart(subscriberPhase,
                                            (config, component) -> {
                                                if (component instanceof MultiTenantAwareComponent aware) {
                                                    subscription.set(config.getComponent(TenantProvider.class)
@@ -277,7 +318,7 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                                                }
                                                return FutureUtils.emptyCompletedFuture();
                                            })
-                                  .onShutdown(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
+                                  .onShutdown(subscriberPhase,
                                               (config, ignored) -> {
                                                   Registration registration = subscription.getAndSet(null);
                                                   if (registration != null) {

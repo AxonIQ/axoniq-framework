@@ -19,15 +19,14 @@
 
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
-import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
-import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
-import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.api.TenantChangeSource;
 import org.axonframework.common.AxonThreadFactory;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -35,6 +34,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -48,15 +48,23 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>
  * A running stream cannot change its set of tenants. The merged stream is assembled over the tenants present when it
  * opened, so a tenant added afterwards is not read and a removed tenant's stream stays open. Re-opening the stream with
- * the current tenants requires a processor restart, which the coordinator supports. This component subscribes itself to
- * the {@link TenantProvider} at startup, so it is notified of tenants discovered at startup and of tenants added or
- * removed at runtime, and requests a restart on each.
+ * the current tenants requires a processor restart, which the coordinator supports.
+ * <p>
+ * The restart follows the {@link TenantChangeSource}, whose tenants decide what a re-opened stream spans, rather than
+ * the {@link io.axoniq.framework.messaging.multitenancy.api.TenantProvider TenantProvider} that source itself follows. A
+ * tenant change reaches the provider's subscribers in turn, and a subscriber ahead of the source may take real time over
+ * its own registration, such as one opening a connection for the tenant. A restart takes barely any time by comparison,
+ * so a restart driven by the provider can re-open the stream while the source still reports the previous tenants. The
+ * new tenant is then missing from a stream that nothing re-opens again, because no further tenant change follows.
+ * Following the source rules that out: it announces a change only once that change is visible through its own
+ * tenants.
  * <p>
  * Restarts are coalesced onto a single thread: a burst of tenant changes, such as the initial discovery of several
  * tenants, results in as few restarts as possible while still ending on the current tenant set. Every restart pauses
- * processing for all tenants briefly. Both {@link #registerTenant(TenantDescriptor)} and
- * {@link #registerAndStartTenant(TenantDescriptor)} request a restart, because the {@code TenantProvider} starts after
- * the processors, so the initial discovery arrives while the processors are already running.
+ * processing for all tenants briefly. Whether the tenants discovered at startup request a restart depends on whether
+ * this restarter subscribed before they were registered, which is not fixed. Either way the processors start far later
+ * in the lifecycle, so such a request finds nothing running and each processor opens its stream over the full startup
+ * set of its own accord.
  * <p>
  * Every running streaming event processor is restarted, not only the ones consuming across tenants. With the module on
  * the classpath multi-tenancy is on by default, so the event store routes across tenants and a pooled streaming
@@ -77,7 +85,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * @since 5.3.0
  */
 @Internal
-class MultiTenantStreamingProcessorRestarter implements MultiTenantAwareComponent {
+class MultiTenantStreamingProcessorRestarter implements DescribableComponent {
 
     private static final Logger logger = LoggerFactory.getLogger(MultiTenantStreamingProcessorRestarter.class);
 
@@ -97,7 +105,8 @@ class MultiTenantStreamingProcessorRestarter implements MultiTenantAwareComponen
     /**
      * Constructs a restarter for the given {@code configuration}.
      *
-     * @param configuration the configuration supplying the tenant provider and the streaming event processors
+     * @param configuration the configuration supplying the tenant change source to follow and the streaming event
+     *                      processors to restart
      */
     MultiTenantStreamingProcessorRestarter(Configuration configuration) {
         this.configuration = Objects.requireNonNull(configuration, "The configuration must not be null");
@@ -106,15 +115,38 @@ class MultiTenantStreamingProcessorRestarter implements MultiTenantAwareComponen
     }
 
     /**
-     * Subscribes this restarter to the {@link TenantProvider} and prepares the restart executor, so tenant changes from
-     * this point on trigger a restart of the running streaming event processors.
+     * Subscribes this restarter to the tenant changes of the event storage engine it will re-open the stream over, and
+     * prepares the restart executor, so tenant changes from this point on trigger a restart of the running streaming
+     * event processors.
      */
     void start() {
         // Create the executor before marking running, so a running restarter always has an executor to drain onto.
         restartExecutor = Executors.newSingleThreadExecutor(
                 new AxonThreadFactory("MultiTenantStreamingProcessorRestarter"));
         running.set(true);
-        subscription = configuration.getComponent(TenantProvider.class).subscribe(this);
+        subscription = subscribeToTenantChanges();
+    }
+
+    /**
+     * Subscribes to the configured {@link TenantChangeSource}, whose tenants decide what a re-opened stream spans.
+     * <p>
+     * Without one no stream spans tenants, so there is nothing a tenant change could make a processor miss and nothing
+     * to restart. That is reported once rather than silently doing nothing, since it also means this component is
+     * inert.
+     *
+     * @return a registration whose cancellation stops tenant changes from reaching {@code this} restarter, or
+     * {@code null} when there is no source to follow
+     */
+    @Nullable
+    private Registration subscribeToTenantChanges() {
+        Optional<TenantChangeSource> tenantChangeSource = configuration.getOptionalComponent(TenantChangeSource.class);
+        if (tenantChangeSource.isEmpty()) {
+            logger.info("""
+                        No tenant change source is configured, so no stream spans tenants and the streaming event \
+                        processors are left alone on a tenant change.""");
+            return null;
+        }
+        return tenantChangeSource.get().subscribe(this::requestRestart);
     }
 
     /**
@@ -132,20 +164,6 @@ class MultiTenantStreamingProcessorRestarter implements MultiTenantAwareComponen
             executor.shutdownNow();
             restartExecutor = null;
         }
-    }
-
-    @Override
-    public Registration registerTenant(TenantDescriptor tenantDescriptor) {
-        requestRestart();
-        return () -> {
-            requestRestart();
-            return true;
-        };
-    }
-
-    @Override
-    public Registration registerAndStartTenant(TenantDescriptor tenantDescriptor) {
-        return registerTenant(tenantDescriptor);
     }
 
     private void requestRestart() {
@@ -228,6 +246,7 @@ class MultiTenantStreamingProcessorRestarter implements MultiTenantAwareComponen
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("running", running.get());
+        descriptor.describeProperty("followingTenantChanges", subscription != null);
         descriptor.describeProperty("restartCount", restartCount.get());
         descriptor.describeProperty("restartTimeout", restartTimeout);
     }

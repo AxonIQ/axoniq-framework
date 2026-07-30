@@ -20,6 +20,7 @@
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantChangeListener;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
@@ -62,6 +63,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -590,6 +592,39 @@ class MultiTenantEventStorageEngineTest {
     }
 
     @Nested
+    class StreamingATenantTheFactoriesDoNotHoldYet {
+
+        @Test
+        void failsTheWholeMergedStreamWhenAFactoryDoesNotHoldTheTenantYet() {
+            // The engine and its factories are separate tenant provider subscribers, so the engine can hold a tenant the
+            // factories have not registered yet.
+            Set<TenantDescriptor> factoryTenants = new HashSet<>();
+            factoryTenants.add(TENANT_A);
+            TenantEventStorageEngineFactory engineFactory = tenant -> {
+                if (!factoryTenants.contains(tenant)) {
+                    throw new TenantNotResolvedException("Tenant [%s] is not registered with the factory",
+                                                         tenant.tenantId());
+                }
+                return new InMemoryEventStorageEngine();
+            };
+            MultiTenantEventStorageEngine testSubject =
+                    new MultiTenantEventStorageEngine(engineFactory,
+                                                      tenant -> new InMemorySnapshotStore(),
+                                                      new TenantRouter(alwaysTenant(TENANT_A), engines));
+            testSubject.registerTenant(TENANT_A);
+            testSubject.registerTenant(TENANT_B);
+
+            MessageStream<EventMessage> stream =
+                    testSubject.stream(StreamingCondition.conditionFor(MultiTenantTrackingToken.empty(),
+                                                                      EventCriteria.havingAnyTag()));
+
+            // Not just that tenant's part of it: one factory short of a tenant fails the stream for every tenant. Hence
+            // the factories are subscribed a phase before whatever announces a tenant, so they always lead.
+            assertThat(stream.error()).containsInstanceOf(TenantNotResolvedException.class);
+        }
+    }
+
+    @Nested
     class StreamingWithoutTenants {
 
         private final MultiTenantEventStorageEngine testSubject = streamingEngineOver(new TenantDescriptorMapping<>());
@@ -751,6 +786,90 @@ class MultiTenantEventStorageEngineTest {
         }
     }
 
+
+    @Nested
+    class AnnouncingTenantChanges {
+
+        private final MultiTenantEventStorageEngine testSubject =
+                new MultiTenantEventStorageEngine(engines::apply,
+                                                  snapshotStores,
+                                                  new TenantRouter(alwaysTenant(TENANT_A), engines));
+
+        @Test
+        void announcesARegistrationOnlyOnceItIsVisibleThroughTheEnginesTenants() {
+            List<List<TenantDescriptor>> tenantsWhenAnnounced = new ArrayList<>();
+            testSubject.subscribe(() -> tenantsWhenAnnounced.add(testSubject.tenants()));
+
+            testSubject.registerTenant(TENANT_A);
+            testSubject.registerAndStartTenant(TENANT_B);
+
+            // What a listener re-opening the merged stream depends on: the engine already holds the tenant by the time
+            // the listener runs.
+            assertThat(tenantsWhenAnnounced).hasSize(2);
+            assertThat(tenantsWhenAnnounced.getFirst()).containsExactly(TENANT_A);
+            assertThat(tenantsWhenAnnounced.getLast()).containsExactlyInAnyOrder(TENANT_A, TENANT_B);
+        }
+
+        @Test
+        void announcesACancelledRegistrationOnce() {
+            Registration registration = testSubject.registerTenant(TENANT_A);
+            List<List<TenantDescriptor>> tenantsWhenAnnounced = new ArrayList<>();
+            testSubject.subscribe(() -> tenantsWhenAnnounced.add(testSubject.tenants()));
+
+            registration.cancel();
+            // Cancelling again removes nothing, so there is no further change to announce.
+            registration.cancel();
+
+            // Pinned the same way as the addition: the engine no longer holds the tenant when the listener runs.
+            assertThat(tenantsWhenAnnounced).hasSize(1);
+            assertThat(tenantsWhenAnnounced.getFirst()).isEmpty();
+        }
+
+        @Test
+        void stopsAnnouncingToAListenerWhoseSubscriptionWasCancelled() {
+            AtomicInteger announcements = new AtomicInteger();
+            Registration listenerRegistration = testSubject.subscribe(announcements::incrementAndGet);
+            testSubject.registerTenant(TENANT_A);
+
+            listenerRegistration.cancel();
+            testSubject.registerTenant(TENANT_B);
+
+            assertThat(announcements).hasValue(1);
+        }
+
+        @Test
+        void aFailingListenerNeitherFailsTheRegistrationNorSkipsTheOtherListeners() {
+            AtomicInteger announcements = new AtomicInteger();
+            testSubject.subscribe(() -> {
+                throw new IllegalStateException("cannot follow tenants");
+            });
+            testSubject.subscribe(announcements::incrementAndGet);
+
+            testSubject.registerTenant(TENANT_A);
+
+            assertThat(announcements).hasValue(1);
+            assertThat(testSubject.tenants()).containsExactly(TENANT_A);
+        }
+
+        @Test
+        void subscribingTheSameListenerTwiceAnnouncesItOnce() {
+            AtomicInteger announcements = new AtomicInteger();
+            TenantChangeListener listener = announcements::incrementAndGet;
+            testSubject.subscribe(listener);
+            testSubject.subscribe(listener);
+
+            testSubject.registerTenant(TENANT_A);
+
+            assertThat(announcements).hasValue(1);
+        }
+
+        @Test
+        void rejectsANullListener() {
+            assertThatThrownBy(() -> testSubject.subscribe(null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("The tenant change listener must not be null");
+        }
+    }
 
     @Nested
     class Construction {

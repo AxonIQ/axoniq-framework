@@ -96,6 +96,18 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      */
     public static final int TENANT_COMPONENT_SUBSCRIBER_PHASE = TENANT_PROVIDER_PHASE + 5;
 
+    /**
+     * The start phase in which the components a tenant-routing component composes from are subscribed to the
+     * {@link io.axoniq.framework.messaging.multitenancy.api.TenantProvider TenantProvider}, one before
+     * {@link #TENANT_COMPONENT_SUBSCRIBER_PHASE}.
+     * <p>
+     * A tenant-routing component builds a tenant's parts through these factories, and announces a tenant only once it
+     * holds it. Whatever acts on that announcement therefore reaches the factories, which must already hold the tenant
+     * by then. Subscribing them a phase earlier makes that order structural rather than a consequence of the order the
+     * components happen to be registered in.
+     */
+    public static final int TENANT_COMPONENT_FACTORY_PHASE = TENANT_COMPONENT_SUBSCRIBER_PHASE - 1;
+
     @Override
     public int order() {
         return ENHANCER_ORDER;
@@ -152,9 +164,8 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
     }
 
     /**
-     * Registers the {@link MultiTenantStreamingProcessorRestarter}, subscribing it to the {@link TenantProvider} at
-     * startup so a change in the set of tenants restarts the running streaming event processors, and cancelling that
-     * subscription at shutdown.
+     * Registers the {@link MultiTenantStreamingProcessorRestarter}, starting it at startup so a change in the set of
+     * tenants restarts the running streaming event processors, and stopping it at shutdown.
      *
      * @param componentRegistry the registry to register the restarter with
      */

@@ -19,13 +19,21 @@
 
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
+import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantChangeSource;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingStreamingEventProcessor;
+import io.axoniq.framework.messaging.multitenancy.util.StubTenantChangeSource;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.infra.MockComponentDescriptor;
+import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
+import org.axonframework.eventsourcing.snapshot.inmemory.InMemorySnapshotStore;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.junit.jupiter.api.AfterEach;
@@ -34,6 +42,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -55,6 +64,7 @@ import static org.awaitility.Awaitility.await;
 class MultiTenantStreamingProcessorRestarterTest {
 
     private final StubTenantProvider tenantProvider = new StubTenantProvider();
+    private final StubTenantChangeSource tenantChangeSource = new StubTenantChangeSource();
     private final RecordingStreamingEventProcessor runningProcessor =
             new RecordingStreamingEventProcessor("running-processor", true);
     private final RecordingStreamingEventProcessor stoppedProcessor =
@@ -83,6 +93,8 @@ class MultiTenantStreamingProcessorRestarterTest {
                                   .componentRegistry(registry -> {
                                       registry.disableEnhancerScanning()
                                               .registerComponent(TenantProvider.class, config -> tenantProvider)
+                                              .registerComponent(TenantChangeSource.class,
+                                                                 config -> tenantChangeSource)
                                               .registerComponent(
                                                   MultiTenantStreamingProcessorRestartConfiguration.class,
                                                   config -> MultiTenantStreamingProcessorRestartConfiguration.DEFAULT);
@@ -104,7 +116,7 @@ class MultiTenantStreamingProcessorRestarterTest {
         void restartsRunningProcessorWhenTenantAddedAtRuntime() {
             testSubject.start();
 
-            tenantProvider.addTenant(TENANT_A);
+            tenantChangeSource.announceTenantsChanged();
 
             await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> {
                 assertThat(runningProcessor.shutdownCount()).isGreaterThanOrEqualTo(1);
@@ -117,7 +129,7 @@ class MultiTenantStreamingProcessorRestarterTest {
         void doesNotRestartAProcessorThatIsNotRunning() {
             testSubject.start();
 
-            tenantProvider.addTenant(TENANT_A);
+            tenantChangeSource.announceTenantsChanged();
 
             // the running processor is restarted, proving the restart cycle ran and iterated all processors
             await().atMost(Duration.ofSeconds(2))
@@ -127,10 +139,12 @@ class MultiTenantStreamingProcessorRestarterTest {
             assertThat(stoppedProcessor.shutdownCount()).isZero();
         }
 
+        // A smoke test: with no start() there is no subscription, so this pins that announcing before start is
+        // harmless rather than exercising the running guard itself.
         @Test
         void doesNotRestartWhenATenantChangesBeforeStart() {
             // no start(), so the restarter is not subscribed and ignores tenant changes
-            tenantProvider.addTenant(TENANT_A);
+            tenantChangeSource.announceTenantsChanged();
 
             assertThat(runningProcessor.startCount()).isZero();
             assertThat(runningProcessor.shutdownCount()).isZero();
@@ -164,12 +178,12 @@ class MultiTenantStreamingProcessorRestarterTest {
                     new MultiTenantStreamingProcessorRestarter(gatedConfiguration);
             gatedSubject.start();
             try {
-                tenantProvider.addTenant(TENANT_A);
+                tenantChangeSource.announceTenantsChanged();
                 assertThat(firstRestartReached.await(2, TimeUnit.SECONDS)).isTrue();
 
                 int burst = 8;
                 for (int index = 0; index < burst; index++) {
-                    tenantProvider.addTenant(new TenantDescriptor("burst-tenant-" + index));
+                    tenantChangeSource.announceTenantsChanged();
                 }
                 releaseFirstRestart.countDown();
 
@@ -206,7 +220,7 @@ class MultiTenantStreamingProcessorRestarterTest {
                     new MultiTenantStreamingProcessorRestarter(mixedConfiguration);
             mixedSubject.start();
             try {
-                tenantProvider.addTenant(TENANT_A);
+                tenantChangeSource.announceTenantsChanged();
 
                 await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> {
                     assertThat(firstShutdowns.get()).isGreaterThanOrEqualTo(1);
@@ -229,12 +243,12 @@ class MultiTenantStreamingProcessorRestarterTest {
                     new MultiTenantStreamingProcessorRestarter(failingConfiguration);
             failingSubject.start();
             try {
-                tenantProvider.addTenant(TENANT_A);
+                tenantChangeSource.announceTenantsChanged();
                 await().atMost(Duration.ofSeconds(2))
                        .untilAsserted(() -> assertThat(shutdownAttempts.get()).isGreaterThanOrEqualTo(1));
 
                 // a later change is still processed, so a failing restart does not wedge the restarter
-                tenantProvider.addTenant(TENANT_B);
+                tenantChangeSource.announceTenantsChanged();
                 await().atMost(Duration.ofSeconds(2))
                        .untilAsserted(() -> assertThat(shutdownAttempts.get()).isGreaterThanOrEqualTo(2));
             } finally {
@@ -245,16 +259,109 @@ class MultiTenantStreamingProcessorRestarterTest {
     }
 
     @Nested
+    class FollowingTheRoutingEngine {
+
+        private final InMemoryEventStorageEngine tenantEngine = new InMemoryEventStorageEngine();
+
+        private MultiTenantEventStorageEngine routingEngine;
+        private AxonConfiguration engineConfiguration;
+        private MultiTenantStreamingProcessorRestarter engineSubject;
+
+        @BeforeEach
+        void startWithARoutingEngine() {
+            routingEngine = new MultiTenantEventStorageEngine(tenant -> tenantEngine,
+                                                             tenant -> new InMemorySnapshotStore(),
+                                                             new TenantRouter(new MetadataBasedTenantResolver(),
+                                                                              tenantProvider));
+            engineConfiguration = configurationWith(registry -> registry
+                    .registerComponent(StreamingEventProcessor.class,
+                                       runningProcessor.name(),
+                                       config -> runningProcessor)
+                    .registerComponent(TenantChangeSource.class, config -> routingEngine));
+            engineConfiguration.start();
+            engineSubject = new MultiTenantStreamingProcessorRestarter(engineConfiguration);
+            engineSubject.start();
+        }
+
+        @AfterEach
+        void stopEngineSubject() {
+            engineSubject.stop();
+            engineConfiguration.shutdown();
+        }
+
+        @Test
+        void restartsWhenTheRoutingEngineRegistersATenant() {
+            routingEngine.registerTenant(TENANT_A);
+
+            await().atMost(Duration.ofSeconds(2))
+                   .untilAsserted(() -> assertThat(restartCount(engineSubject)).isPositive());
+        }
+
+        @Test
+        void doesNotRestartOnATenantChangeThatOnlyReachesTheTenantProvider() {
+            // The provider announcing a tenant is not what decides the re-opened stream's tenants, so on its own it is
+            // no reason to restart. Only the engine's own registration is.
+            tenantProvider.addTenant(TENANT_A);
+
+            await().during(Duration.ofMillis(200))
+                   .atMost(Duration.ofSeconds(2))
+                   .untilAsserted(() -> assertThat(restartCount(engineSubject)).isZero());
+        }
+
+        @Test
+        void stopCancelsTheListenerItRegisteredWithTheRoutingEngine() {
+            // Asserted on the engine, since a stopped restarter ignores a restart request either way, so counting
+            // restarts cannot tell a cancelled listener from a still-registered one.
+            assertThat(tenantChangeListenerCount(routingEngine)).isOne();
+
+            engineSubject.stop();
+
+            assertThat(tenantChangeListenerCount(routingEngine)).isZero();
+        }
+
+        private static int tenantChangeListenerCount(MultiTenantEventStorageEngine engine) {
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+            engine.describeTo(descriptor);
+            return (int) descriptor.getDescribedProperties().get("tenantChangeListenerCount");
+        }
+    }
+
+    @Nested
     class Lifecycle {
 
         @Test
-        void stopUnsubscribesFromTheTenantProvider() {
-            testSubject.start();
-            assertThat(tenantProvider.subscribedComponents()).contains(testSubject);
+        void startsInertWhenNoTenantChangeSourceIsConfigured() {
+            // Without a source no stream spans tenants, so there is nothing for a tenant change to make a processor
+            // miss.
+            AxonConfiguration sourcelessConfiguration = MessagingConfigurer
+                    .create()
+                    .componentRegistry(registry -> registry
+                            .disableEnhancerScanning()
+                            .registerComponent(TenantProvider.class, config -> tenantProvider)
+                            .registerComponent(MultiTenantStreamingProcessorRestartConfiguration.class,
+                                               config -> MultiTenantStreamingProcessorRestartConfiguration.DEFAULT)
+                            .registerComponent(StreamingEventProcessor.class,
+                                               runningProcessor.name(),
+                                               config -> runningProcessor))
+                    .build();
+            sourcelessConfiguration.start();
+            MultiTenantStreamingProcessorRestarter sourcelessSubject =
+                    new MultiTenantStreamingProcessorRestarter(sourcelessConfiguration);
+            try {
+                sourcelessSubject.start();
 
-            testSubject.stop();
+                assertThat(describedProperties(sourcelessSubject)).containsEntry("followingTenantChanges", false);
+                assertThat(restartCount(sourcelessSubject)).isZero();
+            } finally {
+                sourcelessSubject.stop();
+                sourcelessConfiguration.shutdown();
+            }
+        }
 
-            assertThat(tenantProvider.subscribedComponents()).doesNotContain(testSubject);
+        private static Map<String, Object> describedProperties(MultiTenantStreamingProcessorRestarter restarter) {
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+            restarter.describeTo(descriptor);
+            return descriptor.getDescribedProperties();
         }
 
         @Test
@@ -275,7 +382,7 @@ class MultiTenantStreamingProcessorRestarterTest {
                     new MultiTenantStreamingProcessorRestarter(gatedConfiguration);
             gatedSubject.start();
             try {
-                tenantProvider.addTenant(TENANT_A);
+                tenantChangeSource.announceTenantsChanged();
                 assertThat(shutdownReached.await(2, TimeUnit.SECONDS)).isTrue();
 
                 // stop() lands while the restart is blocked on the processor's shutdown

@@ -21,6 +21,7 @@ package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantChangeSource;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
@@ -105,7 +106,10 @@ class MultiTenantPooledStreamingEventProcessingTest {
                     registry.disableEnhancer(AxonServerConfigurationEnhancer.class)
                             .disableEnhancer(AxonServerMultiTenancyConfigurationDefaults.class)
                             .registerComponent(TenantProvider.class, config -> tenantProvider)
-                            .registerComponent(EventStorageEngine.class, config -> routingEngine);
+                            .registerComponent(TenantChangeSource.class, config -> routingEngine)
+                            .registerComponent(EventStorageEngine.class,
+                                               config -> (EventStorageEngine) config.getComponent(
+                                                       TenantChangeSource.class));
                 })
                 .messaging(messaging -> messaging.eventProcessing(
                         processing -> processing.pooledStreaming(

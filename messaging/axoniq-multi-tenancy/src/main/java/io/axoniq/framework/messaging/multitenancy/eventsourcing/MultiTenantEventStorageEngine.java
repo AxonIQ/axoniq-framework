@@ -20,6 +20,8 @@
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
+import io.axoniq.framework.messaging.multitenancy.api.TenantChangeListener;
+import io.axoniq.framework.messaging.multitenancy.api.TenantChangeSource;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
@@ -44,6 +46,8 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.Comparator;
@@ -51,6 +55,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
@@ -83,7 +88,10 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * As a {@link MultiTenantAwareComponent} this engine follows the
  * {@link io.axoniq.framework.messaging.multitenancy.api.TenantProvider TenantProvider}: a tenant added at runtime gets
- * its engine on first use, and a removed tenant's composed engine is evicted.
+ * its engine on first use, and a removed tenant's composed engine is evicted. As a {@link TenantChangeSource} it
+ * announces each such registration to its subscribers, for a component that has to act on the tenants this engine holds
+ * rather than on the tenants the provider knows. Re-registering an already registered tenant is announced too, since
+ * that rebuilds the tenant's composed engine.
  * <p>
  * The read side ({@link #stream}, {@link #firstToken}, {@link #latestToken}, {@link #tokenAt}) carries no context and
  * spans all current tenants. It merges the per-tenant streams, tags every event with its tenant, and positions the
@@ -95,7 +103,10 @@ import static java.util.Objects.requireNonNull;
  * @since 5.3.0
  */
 @Internal
-public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiTenantAwareComponent {
+public class MultiTenantEventStorageEngine
+        implements EventStorageEngine, MultiTenantAwareComponent, TenantChangeSource {
+
+    private static final Logger logger = LoggerFactory.getLogger(MultiTenantEventStorageEngine.class);
 
     private static final Comparator<MessageStream.Entry<EventMessage>> OLDEST_FIRST =
             Comparator.comparing(entry -> entry.message().timestamp());
@@ -104,6 +115,7 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiT
     private final TenantSnapshotStoreFactory snapshotStoreFactory;
     private final TenantRouter tenantRouter;
     private final TenantScopedCache<EventStorageEngine> composedEngines;
+    private final CopyOnWriteArrayList<TenantChangeListener> tenantChangeListeners = new CopyOnWriteArrayList<>();
 
     /**
      * Constructs a {@code MultiTenantEventStorageEngine}.
@@ -172,13 +184,53 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiT
     }
 
     @Override
+    public Registration subscribe(TenantChangeListener listener) {
+        requireNonNull(listener, "The tenant change listener must not be null");
+        // Subscribing twice would invoke the listener twice per change, while cancelling once would leave it subscribed.
+        tenantChangeListeners.addIfAbsent(listener);
+        return () -> tenantChangeListeners.remove(listener);
+    }
+
+    @Override
     public Registration registerTenant(TenantDescriptor tenantDescriptor) {
-        return composedEngines.registerTenant(tenantDescriptor);
+        return announcing(composedEngines.registerTenant(tenantDescriptor));
     }
 
     @Override
     public Registration registerAndStartTenant(TenantDescriptor tenantDescriptor) {
-        return composedEngines.registerAndStartTenant(tenantDescriptor);
+        return announcing(composedEngines.registerAndStartTenant(tenantDescriptor));
+    }
+
+    /**
+     * Announces the registration that just took effect and wraps its {@code registration} to announce its cancellation
+     * too, so a listener sees both directions of a tenant change.
+     *
+     * @param registration the registration that just took effect
+     * @return a registration announcing its own cancellation before returning its result
+     */
+    private Registration announcing(Registration registration) {
+        announceTenantsChanged();
+        return () -> {
+            boolean cancelled = registration.cancel();
+            // Cancelling is idempotent, so only a cancellation that removed the tenant is a change to announce.
+            if (cancelled) {
+                announceTenantsChanged();
+            }
+            return cancelled;
+        };
+    }
+
+    private void announceTenantsChanged() {
+        for (TenantChangeListener listener : tenantChangeListeners) {
+            try {
+                listener.onTenantsChanged();
+            } catch (RuntimeException failure) {
+                // One listener must not fail the tenant registration, nor keep the others from being told.
+                logger.warn("""
+                            A tenant change listener of the multi-tenant event storage engine failed. The tenant \
+                            change itself stands and the remaining listeners are still notified.""", failure);
+            }
+        }
     }
 
     private TenantDescriptor tenantForAppend(@Nullable ProcessingContext context, List<TaggedEventMessage<?>> events) {
@@ -327,6 +379,7 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiT
         descriptor.describeProperty("engineFactory", engineFactory);
         descriptor.describeProperty("snapshotStoreFactory", snapshotStoreFactory);
         descriptor.describeProperty("tenantRouter", tenantRouter);
+        descriptor.describeProperty("tenantChangeListenerCount", tenantChangeListeners.size());
         composedEngines.describeTo(descriptor);
     }
 
