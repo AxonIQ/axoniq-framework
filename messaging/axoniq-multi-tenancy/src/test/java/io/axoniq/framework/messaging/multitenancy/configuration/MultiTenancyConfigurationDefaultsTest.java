@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.multitenancy.configuration;
 import io.axoniq.framework.messaging.multitenancy.annotation.TenantScoped;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
+import io.axoniq.framework.messaging.multitenancy.queryhandling.TenantAwareQueryBus;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
@@ -35,9 +36,12 @@ import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.interception.HandlerInterceptorRegistry;
+import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
+import org.axonframework.messaging.queryhandling.interception.InterceptingQueryBus;
 import org.junit.jupiter.api.*;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
@@ -122,6 +126,66 @@ class MultiTenancyConfigurationDefaultsTest {
             assertThat(resolver)
                     .extracting("provider")
                     .isInstanceOf(TenantComponentProvider.class);
+        }
+
+        @Test
+        void decoratesTheQueryBusWithATenantAwareQueryBus() {
+            // when
+            QueryBus queryBus = configuration.getComponent(QueryBus.class);
+
+            // then
+            assertThat(queryBus).isInstanceOf(InterceptingQueryBus.class);
+            assertThat(interceptingQueryBusDelegate(queryBus)).isInstanceOf(TenantAwareQueryBus.class);
+        }
+    }
+
+    @Nested
+    class TenantAwareQueryBusDecoratorIdempotency {
+
+        @Test
+        void registeringTheDecoratorTwiceDoesNotDoubleWrap() {
+            // given / when
+            AxonConfiguration configuration = MessagingConfigurer.create()
+                                                                 .componentRegistry(cr -> cr.registerComponent(
+                                                                         TenantResolver.class,
+                                                                         config -> new MetadataBasedTenantResolver()))
+                                                                 .componentRegistry(cr -> cr.registerComponent(
+                                                                         TenantProvider.class,
+                                                                         config -> new StubTenantProvider()))
+                                                                 .componentRegistry(cr -> {
+                                                                     MultiTenancyConfigurationDefaults
+                                                                             .registerTenantAwareQueryBusDecorator(cr);
+                                                                     MultiTenancyConfigurationDefaults
+                                                                             .registerTenantAwareQueryBusDecorator(cr);
+                                                                 })
+                                                                 .build();
+
+            // then
+            QueryBus queryBus = configuration.getComponent(QueryBus.class);
+            QueryBus unwrapped = interceptingQueryBusDelegate(queryBus);
+            assertThat(unwrapped).isInstanceOf(TenantAwareQueryBus.class);
+            assertThat(tenantAwareQueryBusDelegate((TenantAwareQueryBus) unwrapped))
+                    .isNotInstanceOf(TenantAwareQueryBus.class);
+        }
+    }
+
+    private static QueryBus interceptingQueryBusDelegate(QueryBus queryBus) {
+        try {
+            Field delegateField = InterceptingQueryBus.class.getDeclaredField("delegate");
+            delegateField.setAccessible(true);
+            return (QueryBus) delegateField.get(queryBus);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException("Failed to extract delegate from InterceptingQueryBus", e);
+        }
+    }
+
+    private static QueryBus tenantAwareQueryBusDelegate(TenantAwareQueryBus queryBus) {
+        try {
+            Field delegateField = TenantAwareQueryBus.class.getDeclaredField("delegate");
+            delegateField.setAccessible(true);
+            return (QueryBus) delegateField.get(queryBus);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException("Failed to extract delegate from TenantAwareQueryBus", e);
         }
     }
 

@@ -10,17 +10,19 @@
  * governing permissions and limitations under the License.
  * You may not use this file except in compliance with the License.
  *
- * You may obtain a copy of the License at:
+ * You may obtain a copy of the License at:         * {@link AppendEventsTransactionRejectedException} when Axon Server decided against the append operation, and with an
+ * {@link EventStoreException} when the outcome of the append operation is undetermined
  *  https://www.axoniq.io/legal/terms-of-service
  *
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
 
+
 /**
- * Part of the Axoniq Multi-Tenancy folder.
+ * Part of the Axoniq Framework multi-tenancy module. Contains the Axon Server parts specific to query handling.
  */
 @NullMarked
-package io.axoniq.framework.messaging.multitenancy.query;
+package io.axoniq.framework.messaging.multitenancy.axonserver.queryhandling;
 
 import org.jspecify.annotations.NullMarked;
