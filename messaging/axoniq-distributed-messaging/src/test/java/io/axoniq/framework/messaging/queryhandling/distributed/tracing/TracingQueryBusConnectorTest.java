@@ -24,6 +24,7 @@ import org.axonframework.messaging.tracing.support.TestSpanFactory;
 import org.axonframework.messaging.tracing.support.TestSpanFactory.TestSpanType;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -35,6 +36,8 @@ import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.axonframework.messaging.tracing.Span;
+import org.axonframework.messaging.tracing.SpanFactory;
+import org.axonframework.messaging.tracing.SpanScope;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -132,7 +135,7 @@ class TracingQueryBusConnectorTest {
             assertThat(result.next()).get().extracting(MessageStream.Entry::message).isSameAs(update);
             assertThat(result.next()).isEmpty();
 
-            // then exactly one delivery marker exists, parented on the emitter and linked to the originating query.
+            // then exactly one delivery span exists, parented on the emitter and linked to the originating query.
             // The link resolves to the CONNECTOR's subscriptionQuery span here because TestSpanFactory's
             // identity-keyed propagation makes this connector's own propagateContext(query) the last writer; in
             // production, Micrometer's copy-based propagation leaves the original query instance carrying the
@@ -149,7 +152,7 @@ class TracingQueryBusConnectorTest {
         }
 
         @Test
-        void opensExactlyOneDeliveryMarkerPerUpdateEntry() {
+        void opensExactlyOneDeliverySpanPerUpdateEntry() {
             // given a subscription stream delivering two updates of the same type
             SubscriptionQueryUpdateMessage secondUpdate =
                     new GenericSubscriptionQueryUpdateMessage(new MessageType("MyUpdate"), "second-update-payload");
@@ -161,8 +164,61 @@ class TracingQueryBusConnectorTest {
             assertThat(result.next()).isPresent();
             assertThat(result.next()).isEmpty();
 
-            // then each update entry produced exactly one delivery marker -- neither zero-for-N nor duplicates
+            // then each update entry produced exactly one delivery span -- neither zero-for-N nor duplicates
             spanFactory.verifySpanCount(QUERY_UPDATE_SPAN, 2);
+        }
+
+        @Nested
+        class FailingDeliverySpan {
+
+            @Test
+            void deliversTheUpdateWhenTheDeliverySpanCannotBeCreated() {
+                // given a factory failing to create the delivery span, as malformed remote trace metadata would cause
+                TracingQueryBusConnector connector =
+                        new TracingQueryBusConnector(delegate,
+                                                     new FailingDeliverySpanFactory(spanFactory, Failure.ON_CREATE));
+                delegate.subscriptionQueryResult = MessageStream.fromItems(update);
+
+                // when the update entry is consumed
+                MessageStream<QueryResponseMessage> result = connector.subscriptionQuery(query, null, 16);
+
+                // then the update still reaches the subscriber and the stream terminates normally -- a tracing
+                // failure must never cost a delivered update, which the entry-consuming trace would otherwise do
+                assertThat(result.next()).get().extracting(MessageStream.Entry::message).isSameAs(update);
+                assertThat(result.next()).isEmpty();
+            }
+
+            @Test
+            void deliversTheUpdateWhenTheDeliverySpanCannotBeStarted() {
+                // given a factory whose delivery span fails on start rather than on creation
+                TracingQueryBusConnector connector =
+                        new TracingQueryBusConnector(delegate,
+                                                     new FailingDeliverySpanFactory(spanFactory, Failure.ON_START));
+                delegate.subscriptionQueryResult = MessageStream.fromItems(update);
+
+                // when the update entry is consumed
+                MessageStream<QueryResponseMessage> result = connector.subscriptionQuery(query, null, 16);
+
+                // then delivery is unaffected -- containment covers the whole delivery trace, not just span creation
+                assertThat(result.next()).get().extracting(MessageStream.Entry::message).isSameAs(update);
+                assertThat(result.next()).isEmpty();
+            }
+
+            @Test
+            void keepsTracingTheSendLegWhenTheDeliverySpanFails() {
+                // given a factory failing only for delivery spans
+                TracingQueryBusConnector connector =
+                        new TracingQueryBusConnector(delegate,
+                                                     new FailingDeliverySpanFactory(spanFactory, Failure.ON_CREATE));
+                delegate.subscriptionQueryResult = MessageStream.fromItems(update);
+
+                // when the update entry is consumed
+                connector.subscriptionQuery(query, null, 16).next();
+
+                // then the delivery span is the only casualty; the send-leg span is unaffected
+                spanFactory.verifySpanCompleted(SUBSCRIPTION_QUERY_SPAN);
+                spanFactory.verifyNoSpanWithNamePrefix(QUERY_UPDATE_SPAN_PREFIX);
+            }
         }
     }
 
@@ -253,6 +309,82 @@ class TracingQueryBusConnectorTest {
             // then
             assertThat(delegate.subscribed).isEqualTo(new QualifiedName("MyQuery"));
             assertThat(unsubscribed).isTrue();
+        }
+    }
+
+    private enum Failure {
+        ON_CREATE,
+        ON_START
+    }
+
+    /**
+     * Delegates every span to a real {@link TestSpanFactory} except the linked handler span recording subscription
+     * update delivery, which fails either on creation or on start.
+     */
+    private record FailingDeliverySpanFactory(SpanFactory delegate, Failure failure) implements SpanFactory {
+
+        @Override
+        public Span createLinkedHandlerSpan(String operationName, Message message, Message linkedMessage,
+                                            @Nullable ProcessingContext context) {
+            if (failure == Failure.ON_CREATE) {
+                throw new IllegalStateException("Cannot create the delivery span.");
+            }
+            return new FailingToStartSpan();
+        }
+
+        @Override
+        public Span createDispatchSpan(String operationName, Message message, @Nullable ProcessingContext context) {
+            return delegate.createDispatchSpan(operationName, message, context);
+        }
+
+        @Override
+        public Span createHandlerSpan(String operationName, Message message, @Nullable ProcessingContext context) {
+            return delegate.createHandlerSpan(operationName, message, context);
+        }
+
+        @Override
+        public Span createContextParentHandlerSpan(String operationName, Message message,
+                                                   @Nullable ProcessingContext context) {
+            return delegate.createContextParentHandlerSpan(operationName, message, context);
+        }
+
+        @Override
+        public Span createInternalSpan(String operationName, @Nullable ProcessingContext context) {
+            return delegate.createInternalSpan(operationName, context);
+        }
+
+        @Override
+        public Span createDisconnectedHandlerSpan(String operationName, Message message,
+                                                  @Nullable ProcessingContext context) {
+            return delegate.createDisconnectedHandlerSpan(operationName, message, context);
+        }
+
+        @Override
+        public Span createRootSpan(String operationName, @Nullable ProcessingContext context) {
+            return delegate.createRootSpan(operationName, context);
+        }
+    }
+
+    private static final class FailingToStartSpan implements Span {
+
+        @Override
+        public SpanScope start() {
+            throw new IllegalStateException("Cannot start the delivery span.");
+        }
+
+        @Override
+        public Span addAttribute(String key, String value) {
+            return this;
+        }
+
+        @Override
+        public Span recordException(Throwable t) {
+            return this;
+        }
+
+        @Override
+        public <M extends Message> M propagateContext(M message) {
+            return message;
         }
     }
 

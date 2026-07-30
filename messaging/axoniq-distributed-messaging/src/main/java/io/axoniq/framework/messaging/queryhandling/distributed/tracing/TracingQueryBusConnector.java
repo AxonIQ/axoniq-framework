@@ -32,7 +32,10 @@ import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.lang.invoke.MethodHandles;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
@@ -52,6 +55,8 @@ import java.util.concurrent.CompletableFuture;
  */
 @Internal
 public final class TracingQueryBusConnector implements QueryBusConnector {
+
+    private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     /** Prefix for the connector query send-leg span ({@code "QueryBusConnector.query <name>"}). */
     private static final String QUERY_SPAN = "QueryBusConnector.query";
@@ -110,22 +115,44 @@ public final class TracingQueryBusConnector implements QueryBusConnector {
                 scoped -> delegate.subscriptionQuery(span.propagateContext(query), scoped, updateBufferSize)
                                   .onNext(entry -> {
                                       if (entry.message() instanceof SubscriptionQueryUpdateMessage update) {
-                                          // Child of the emitter trace, with a link to the originating subscription.
-                                          // One marker is created per consumed entry. The captured branch is read only
-                                          // as the parent fallback for updates without propagated trace metadata.
-                                          spanFactory.createLinkedHandlerSpan(
-                                                             QUERY_UPDATE_SPAN + " "
-                                                                     + update.type().qualifiedName().name(),
-                                                             update,
-                                                             query,
-                                                             scoped
-                                                     )
-                                                     .addAttribute(MESSAGE_CONVERSATION_ID_ATTRIBUTE,
-                                                                   query.identifier())
-                                                     .branch(null, ignored -> null);
+                                          traceUpdateDelivery(update, query, scoped);
                                       }
                                   })
         );
+    }
+
+    /**
+     * Records the delivery of one subscription query {@code update} to the subscriber, once per consumed entry. The
+     * span is started and immediately closed: a delivery is a point in time, not an interval, so the span has no
+     * meaningful duration and exists to place the update on the trace.
+     * <p>
+     * Its parent is the emitting node's span, extracted from the trace context that node propagated onto the update's
+     * metadata. {@code scoped} supplies the parent only as a fallback, for an update that carries no such metadata
+     * because it was emitted outside a traced flow; the delivery then nests under this connector's own subscription
+     * query span instead. The link always points at the originating {@code query}, tying the delivery back to the
+     * subscription that asked for it.
+     * <p>
+     * Tracing must never cost a delivery. This runs in the result stream's entry consumer, after the entry has already
+     * been taken from the delegate stream, so a propagated failure would hand the subscriber an exception in place of
+     * an update that is then gone for good. Any failure -- most plausibly malformed trace metadata arriving from a
+     * remote node -- is therefore logged and contained, leaving only a gap in the trace.
+     */
+    private void traceUpdateDelivery(SubscriptionQueryUpdateMessage update,
+                                     QueryMessage query,
+                                     @Nullable ProcessingContext scoped) {
+        try {
+            spanFactory.createLinkedHandlerSpan(
+                               QUERY_UPDATE_SPAN + " " + update.type().qualifiedName().name(),
+                               update,
+                               query,
+                               scoped
+                       )
+                       .addAttribute(MESSAGE_CONVERSATION_ID_ATTRIBUTE, query.identifier())
+                       .start()
+                       .close();
+        } catch (Exception e) {
+            logger.debug("Failed to trace the delivery of subscription query update [{}].", update.identifier(), e);
+        }
     }
 
     @Override
@@ -150,7 +177,7 @@ public final class TracingQueryBusConnector implements QueryBusConnector {
     }
 
     /**
-     * Wraps the inbound {@link Handler} so the receive leg is opened as a consumer span — parented on the dispatch
+     * Wraps the inbound {@link Handler} so the receive leg is opened as a consumer span -- parented on the dispatch
      * span via the W3C trace context propagated on the query's metadata.
      */
     private static final class TracingHandler implements Handler {
@@ -171,7 +198,7 @@ public final class TracingQueryBusConnector implements QueryBusConnector {
                     null
             );
             // Propagate the receive-leg span's context onto the query so the downstream bus-level handler nests
-            // under this span, producing the full bus-dispatch → connector-dispatch → connector-handle → bus-handle
+            // under this span, producing the full bus-dispatch -> connector-dispatch -> connector-handle -> bus-handle
             // chain across the gRPC hop.
             return span.branchStream(null, ignored -> delegate.query(span.propagateContext(query)));
         }
