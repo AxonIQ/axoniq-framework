@@ -19,8 +19,9 @@
 
 
 /**
- * Part of the Axoniq Framework multi-tenancy module. Contains Axon Server specific components
- * for multi tenancy support.
+ * Part of the Axoniq Framework multi-tenancy module. Root of the Axon Server specific multi-tenancy packages, each
+ * mirroring a package of this module: {@code api}, {@code commandhandling}, {@code eventsourcing} and
+ * {@code configuration}.
  */
 @NullMarked
 package io.axoniq.framework.messaging.multitenancy.axonserver;

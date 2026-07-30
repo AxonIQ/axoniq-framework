@@ -30,53 +30,38 @@ import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
+import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * A {@link MessageHandlerInterceptor} that registers a {@link TenantDescriptor} in the {@link ProcessingContext}. When
- * the {@link TenantResolver} is unable to resolve a {@link TenantDescriptor} for the given {@link Message}, the
- * interceptor logs a warning and proceeds without registering a {@link TenantDescriptor} in the
- * {@link ProcessingContext}.
+ * A {@link MessageHandlerInterceptor} that registers the {@link TenantDescriptor} of the handled {@link Message} in the
+ * {@link ProcessingContext}, so components further down the handling chain route to that tenant without inspecting the
+ * message again.
+ * <p>
+ * The tenant is decided by the shared {@link TenantRouter}, the same way every other tenant-routing component decides
+ * it. When the router cannot attribute the message to a known tenant, the interceptor logs a warning and proceeds
+ * without registering a {@link TenantDescriptor}.
  *
- * @param tenantResolver    the {@link TenantResolver} to resolve the {@link TenantDescriptor} from the {@link Message}
- * @param tenantDescriptors optional list of known {@link TenantDescriptor}s to resolve the {@link TenantDescriptor}
- *                          from the {@link Message}
+ * @param tenantRouter the router deciding which tenant the handled {@link Message} belongs to
  * @author Jan Galinski
+ * @author Laura Devriendt
  * @since 5.3.0
  */
 @Internal
 public record RegisterTenantDescriptorHandlerInterceptor(
-        TenantResolver tenantResolver,
-        TenantDescriptors tenantDescriptors
+        TenantRouter tenantRouter
 ) implements MessageHandlerInterceptor<Message> {
 
     private static final Logger logger = LoggerFactory.getLogger(RegisterTenantDescriptorHandlerInterceptor.class);
 
     /**
-     * A {@code RegisterTenantDescriptorHandlerInterceptor} that registers a {@link TenantDescriptor} in the
-     * {@link ProcessingContext} using the given {@code tenantResolver}. Convenience constructor that initializes the
-     * {@code tenantDescriptors} to an empty list.
+     * Verifies the non-null contract of the {@code tenantRouter} parameter.
      *
-     * @param tenantResolver the {@link TenantResolver} to resolve the {@link TenantDescriptor} from the
-     *                       {@link Message}
-     */
-    public RegisterTenantDescriptorHandlerInterceptor(TenantResolver tenantResolver) {
-        this(tenantResolver, Collections::emptyList);
-    }
-
-    /**
-     * Verifies the non-null contract of the {@code tenantResolver} and {@code tenantDescriptors} parameters.
-     *
-     * @param tenantResolver    the {@link TenantResolver} to resolve the {@link TenantDescriptor} from the
-     *                          {@link Message}
-     * @param tenantDescriptors the known {@link TenantDescriptors} to resolve the {@link TenantDescriptor} from the
-     *                          {@link Message}
+     * @param tenantRouter the router deciding which tenant the handled {@link Message} belongs to
      */
     public RegisterTenantDescriptorHandlerInterceptor {
-        requireNonNull(tenantResolver, "tenantResolver must not be null");
-        requireNonNull(tenantDescriptors, "tenantDescriptors must not be null");
+        requireNonNull(tenantRouter, "tenantRouter must not be null");
     }
 
     @Override
@@ -84,17 +69,12 @@ public record RegisterTenantDescriptorHandlerInterceptor(
                                               ProcessingContext context,
                                               MessageHandlerInterceptorChain<Message> interceptorChain) {
         if (message instanceof CommandMessage || message instanceof QueryMessage) {
-            try {
-                TenantDescriptor tenantDescriptor = tenantResolver.resolveTenant(message, tenantDescriptors.tenants());
-                return interceptorChain.proceed(message, context.withResource(
-                        TenantUtils.TENANT_RESOURCE_KEY,
-                        tenantDescriptor
-                ));
-            } catch (TenantNotResolvedException e) {
-                logger.warn("Tenant could not be resolved for message: {}. Proceeding without tenant context. {}",
-                            message,
-                            e.getMessage());
+            Optional<TenantDescriptor> tenant = tenantRouter.resolveFromMessage(message);
+            if (tenant.isPresent()) {
+                ProcessingContext tenantContext = context.withResource(TenantDescriptor.RESOURCE_KEY, tenant.get());
+                return interceptorChain.proceed(message, tenantContext);
             }
+            logger.warn("Tenant could not be resolved for message: {}. Proceeding without tenant context.", message);
         }
 
         return interceptorChain.proceed(message, context);

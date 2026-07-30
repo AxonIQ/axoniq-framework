@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.messaging.multitenancy.api;
 
-import io.axoniq.framework.messaging.multitenancy.util.TestFixtures;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.junit.jupiter.api.Nested;
@@ -30,8 +29,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.IntStream;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
@@ -192,6 +196,54 @@ class TenantComponentProviderTest {
             assertThat(factory.destroyed()).hasSize(1);
         }
 
+        // The superseded registration's instance is reachable through neither the provider nor its own cancellation
+        // once that Registration is dropped, so it has to be destroyed there and then.
+        @Test
+        void reRegisteringATenantDestroysTheSupersededInstance() {
+            // given an instance created under the first registration
+            testSubject.registerTenant(TENANT_A);
+            TestComponent superseded = testSubject.componentFor(TENANT_A);
+
+            // when the tenant is registered again
+            testSubject.registerTenant(TENANT_A);
+
+            // then the superseded instance is destroyed, and the tenant serves a fresh one
+            assertThat(factory.destroyed()).containsExactly(superseded);
+            assertThat(testSubject.componentFor(TENANT_A)).isNotSameAs(superseded);
+        }
+
+        // Every tenant's first message may arrive on many threads at once, and each instance may own a resource, so
+        // exactly one may be built and none may be destroyed.
+        @Test
+        void concurrentFirstAccessesShareTheOneInstanceTheFactoryBuilt() throws Exception {
+            int threads = 8;
+            testSubject.registerTenant(TENANT_A);
+            CountDownLatch allReady = new CountDownLatch(threads);
+            CountDownLatch startTogether = new CountDownLatch(1);
+
+            try (ExecutorService executor = Executors.newFixedThreadPool(threads)) {
+                List<Future<TestComponent>> accesses = IntStream.range(0, threads)
+                                                               .mapToObj(index -> executor.submit(() -> {
+                                                                   allReady.countDown();
+                                                                   startTogether.await();
+                                                                   return testSubject.componentFor(TENANT_A);
+                                                               }))
+                                                               .toList();
+                assertThat(allReady.await(5, TimeUnit.SECONDS)).isTrue();
+                startTogether.countDown();
+
+                List<TestComponent> components = accesses.stream()
+                                                         .map(TenantComponentProviderTest::instanceOf)
+                                                         .toList();
+                // Compared by identity: every TestComponent of one tenant is equal to every other, so equality would
+                // hold even if each thread got its own instance.
+                TestComponent sharedComponent = components.getFirst();
+                assertThat(components).allSatisfy(component -> assertThat(component).isSameAs(sharedComponent));
+            }
+            assertThat(factory.createCount(TENANT_A)).isEqualTo(1);
+            assertThat(factory.destroyed()).isEmpty();
+        }
+
         @Test
         void unregisteringTenantWithoutCreatedComponentDestroysNothing() {
             // given
@@ -246,6 +298,14 @@ class TenantComponentProviderTest {
 
     private record TestComponent(TenantDescriptor tenant) {
 
+    }
+
+    private static TestComponent instanceOf(Future<TestComponent> access) {
+        try {
+            return access.get(5, TimeUnit.SECONDS);
+        } catch (Exception failure) {
+            throw new IllegalStateException("Concurrent instance access failed", failure);
+        }
     }
 
     private static final class RecordingFactory implements TenantComponentFactory<TestComponent> {

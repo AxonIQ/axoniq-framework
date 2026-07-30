@@ -61,7 +61,7 @@ public record MetadataBasedTenantResolver(String metadataKey) implements TenantR
     /**
      * The default metadata key used to store the tenant identifier.
      */
-    public static final String DEFAULT_TENANT_METADATA_KEY = TenantUtils.TENANT_ID_KEY;
+    public static final String DEFAULT_TENANT_METADATA_KEY = TenantDescriptor.TENANT_ID_KEY;
 
     /**
      * Constructs a {@code MetadataBasedTenantResolver} using the default metadata key {@code "tenantId"}.

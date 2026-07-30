@@ -22,10 +22,13 @@ package io.axoniq.framework.messaging.multitenancy.configuration;
 import io.axoniq.framework.messaging.multitenancy.annotation.TenantComponentParameterResolverFactory;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
+import io.axoniq.framework.messaging.multitenancy.queryhandling.TenantAwareQueryBus;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
+import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfigurationEnhancer;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
@@ -36,16 +39,20 @@ import org.axonframework.common.configuration.SearchScope;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.messaging.core.interception.HandlerInterceptorRegistry;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.queryhandling.QueryBus;
 
 import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled.isEnabled;
+import static org.axonframework.common.configuration.DecoratorDefinition.forType;
 
 /**
  * {@link ConfigurationEnhancer} registering the default multi-tenancy components:
  * <ul>
  *     <li>the default {@link TenantResolver}, which resolves the tenant from message metadata, unless a user registered a custom {@link TenantResolver}</li>
+ *     <li>the {@link TenantRouter} that every tenant-routing component shares to decide the tenant of a message</li>
  *     <li>the {@link TenantComponentParameterResolverFactory} to inject tenant-scoped components into message handlers</li>
  *     <li>the {@link TenantComponentProviderSubscriber} to subscribe every {@link TenantComponentProvider} to the {@link TenantProvider} at startup</li>
  *     <li>the {@link RegisterTenantDescriptorHandlerInterceptor} which takes the resolved {@link TenantDescriptor} from the message and stores it in the {@link ProcessingContext}</li>
+ *     <li>the {@link TenantAwareQueryBus} decorator, scoping subscription-query update emission and completion to the tenant resolved from the {@link ProcessingContext}</li>
  * </ul>
  *
  * @author Stefan Dragisic
@@ -77,7 +84,7 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      * zero per-tenant connectors to start.
      * <p>
      * Public so that backend-specific enhancers registering a {@link TenantProvider} implementation (e.g.
-     * {@link io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerMultiTenancyConfigurationDefaults})
+     * {@link io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults})
      * can align their component's start and shutdown phase with this one.
      */
     public static final int TENANT_PROVIDER_PHASE = -10;
@@ -88,10 +95,23 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      * are cancelled while the {@code TenantProvider} is still running.
      * <p>
      * Public so that backend-specific enhancers registering a per-tenant command bus connector (e.g.
-     * {@link io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerMultiTenancyConfigurationDefaults})
+     * {@link io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults})
      * can subscribe it to the {@link TenantProvider} at the same phase.
      */
     public static final int TENANT_COMPONENT_SUBSCRIBER_PHASE = TENANT_PROVIDER_PHASE + 5;
+
+    /**
+     * The order at which {@link TenantAwareQueryBus} decorates the {@code QueryBus}.
+     * <p>
+     * Must be higher (applied further outside) than
+     * {@link DistributedQueryBusConfigurationEnhancer#DISTRIBUTED_QUERY_BUS_ORDER}: the distributed {@code QueryBus}
+     * does not delegate update emission or completion to its wrapped local segment, it owns the update registry
+     * directly, so a lower-order (inner) placement of {@code TenantAwareQueryBus} would never observe emit or complete
+     * calls at all. Staying below {@code InterceptingQueryBus.DECORATION_ORDER} keeps it inside the intercepting layer,
+     * whose {@code emitUpdate}/{@code completeSubscriptions*} overrides pass the filter through unmodified regardless.
+     */
+    public static final int TENANT_AWARE_QUERY_BUS_ORDER =
+            DistributedQueryBusConfigurationEnhancer.DISTRIBUTED_QUERY_BUS_ORDER + 25;
 
     @Override
     public int order() {
@@ -110,11 +130,21 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
                                                c -> new MetadataBasedTenantResolver(),
                                                SearchScope.ALL);
 
+        // Register the TenantRouter, so every tenant-routing component decides the tenant of a message the same way,
+        // against one and the same set of known tenants, rather than each building its own.
+        componentRegistry.registerIfNotPresent(TenantRouter.class,
+                                               config -> new TenantRouter(config.getComponent(TenantResolver.class),
+                                                                          config.getComponent(TenantProvider.class)),
+                                               SearchScope.ALL);
+
         // Keep every TenantComponentProvider in sync with the tenants known to the TenantProvider.
         registerTenantComponentProviderSubscription(componentRegistry);
 
         // Register HandlerInterceptor that puts a ResourceKey with the resolved TenantDescriptor into {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}.
         registerTenantDescriptorInterceptor(componentRegistry);
+
+        // Scope subscription-query update emission and completion to the tenant resolved from the ProcessingContext.
+        registerTenantAwareQueryBusDecorator(componentRegistry);
     }
 
     /**
@@ -148,10 +178,26 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
         );
     }
 
-    private static RegisterTenantDescriptorHandlerInterceptor interceptorFactory(Configuration config) {
-        return new RegisterTenantDescriptorHandlerInterceptor(
-                config.getComponent(TenantResolver.class),
-                config.getComponent(TenantProvider.class)
+    /**
+     * Decorates the {@code QueryBus} with a {@link TenantAwareQueryBus}, scoping subscription-query update emission
+     * and completion to the tenant resolved from the {@link ProcessingContext} and rejecting queries for tenants that
+     * are not served.
+     *
+     * @param componentRegistry the registry to register the decorator with
+     */
+    static void registerTenantAwareQueryBusDecorator(ComponentRegistry componentRegistry) {
+        componentRegistry.registerDecorator(
+                forType(QueryBus.class)
+                        .with((config, name, delegate) -> delegate instanceof TenantAwareQueryBus
+                                ? delegate
+                                : new TenantAwareQueryBus(delegate,
+                                                          config.getComponent(TenantResolver.class),
+                                                          config.getComponent(TenantProvider.class)))
+                        .order(TENANT_AWARE_QUERY_BUS_ORDER)
         );
+    }
+
+    private static RegisterTenantDescriptorHandlerInterceptor interceptorFactory(Configuration config) {
+        return new RegisterTenantDescriptorHandlerInterceptor(config.getComponent(TenantRouter.class));
     }
 }

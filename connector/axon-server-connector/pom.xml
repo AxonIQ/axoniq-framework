@@ -157,6 +157,20 @@
                         </manifestEntries>
                     </archive>
                 </configuration>
+                <executions>
+                    <!-- Publishes the test utilities, so other modules can reuse the recording doubles. The TLS test
+                         resources are left out: they hold private keys, which have no place in a published artifact. -->
+                    <execution>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                        <configuration>
+                            <excludes>
+                                <exclude>tls/**</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <!-- Silence the AS download message -->
             <plugin>

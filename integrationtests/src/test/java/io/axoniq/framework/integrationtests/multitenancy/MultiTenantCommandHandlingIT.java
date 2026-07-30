@@ -22,7 +22,6 @@ package io.axoniq.framework.integrationtests.multitenancy;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import io.axoniq.framework.messaging.multitenancy.annotation.TenantScoped;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
-import io.axoniq.framework.messaging.multitenancy.api.TenantUtils;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
@@ -49,6 +48,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException.tenantNotResolved;
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
 import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.registerTenantConnectPredicate;
@@ -225,7 +225,10 @@ class MultiTenantCommandHandlingIT {
             ProcessingContext context
     ) {
         RecordTenantCommand payload = command.payloadAs(RecordTenantCommand.class);
-        String tenantId = TenantUtils.tenantDescriptorFrom(context).tenantId();
+        String tenantId = TenantDescriptor
+                .fromContext(context)
+                .orElseThrow(tenantNotResolved("No tenant descriptor found in processing context"))
+                .tenantId();
         recordedCommands.add(new RecordedCommand(payload.id(), tenantId));
         return MessageStream.just(new GenericCommandResultMessage(new MessageType(String.class), "ok"));
     }
