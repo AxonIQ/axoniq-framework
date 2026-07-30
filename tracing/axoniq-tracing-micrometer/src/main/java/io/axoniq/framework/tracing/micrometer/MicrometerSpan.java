@@ -64,6 +64,20 @@ final class MicrometerSpan implements Span, RawSpanCarrier {
 
     private static final Logger logger = LoggerFactory.getLogger(MicrometerSpan.class);
 
+    /**
+     * Bounds the double-start warning to one occurrence, after which it drops to debug. Misuse of this kind is
+     * deterministic rather than incidental: the call path that double-starts one span double-starts every span it
+     * produces, so an unbounded warning would report the same defect for every message. The guard is static because
+     * each span is a fresh instance -- a per-instance flag would bound nothing.
+     */
+    private static final AtomicBoolean DOUBLE_START_REPORTED = new AtomicBoolean();
+
+    /**
+     * Bounds the record-before-start warning to one occurrence, for the same reason as
+     * {@link #DOUBLE_START_REPORTED}.
+     */
+    private static final AtomicBoolean RECORD_BEFORE_START_REPORTED = new AtomicBoolean();
+
     private final io.micrometer.tracing.Span.Builder builder;
     private final Tracer tracer;
     private final Propagator propagator;
@@ -93,10 +107,15 @@ final class MicrometerSpan implements Span, RawSpanCarrier {
         if (span == null) {
             span = builder.start();
             scope = new MicrometerSpanScope(this, span);
-        } else {
-            logger.warn("An attempt was made to start span with id [{}] of trace [{}] a second time.",
+        } else if (DOUBLE_START_REPORTED.compareAndSet(false, true)) {
+            logger.warn("An attempt was made to start span with id [{}] of trace [{}] a second time. "
+                                + "Further occurrences are logged at debug level.",
                         span.context().spanId(),
                         span.context().traceId());
+        } else {
+            logger.debug("An attempt was made to start span with id [{}] of trace [{}] a second time.",
+                         span.context().spanId(),
+                         span.context().traceId());
         }
         return Objects.requireNonNull(scope);
     }
@@ -126,7 +145,12 @@ final class MicrometerSpan implements Span, RawSpanCarrier {
     @Override
     public Span recordException(Throwable t) {
         if (span == null) {
-            logger.warn("An attempt was made to record an exception on a span that was not started yet.", t);
+            if (RECORD_BEFORE_START_REPORTED.compareAndSet(false, true)) {
+                logger.warn("An attempt was made to record an exception on a span that was not started yet. "
+                                    + "Further occurrences are logged at debug level.", t);
+            } else {
+                logger.debug("An attempt was made to record an exception on a span that was not started yet.", t);
+            }
             return this;
         }
         span.error(t);
