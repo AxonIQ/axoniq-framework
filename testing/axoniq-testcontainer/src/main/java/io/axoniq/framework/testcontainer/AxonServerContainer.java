@@ -19,6 +19,8 @@
 
 package io.axoniq.framework.testcontainer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.ContainerLaunchException;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -26,6 +28,8 @@ import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.utility.MountableFile;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -39,6 +43,8 @@ import java.util.Optional;
  * @author 4.8.0
  */
 public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(AxonServerContainer.class);
 
     private static final DockerImageName DEFAULT_IMAGE_NAME =
             DockerImageName.parse("docker.axoniq.io/axoniq/axonserver");
@@ -60,6 +66,19 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
     private static final String AXONIQ_AXONSERVER_DEVMODE_ENABLED = "AXONIQ_AXONSERVER_DEVMODE_ENABLED";
 
     private static final String AXON_SERVER_ADDRESS_TEMPLATE = "%s:%s";
+
+    /**
+     * Startup timeout for both wait strategies below. A container that could still become ready given a bit more
+     * time -- e.g. under CPU contention from other concurrently-starting containers on a busy CI runner -- should
+     * not fail the build just because the default 60s Testcontainers timeout was too tight.
+     */
+    private static final Duration STARTUP_TIMEOUT = Duration.ofMinutes(2);
+
+    /**
+     * Threshold above which a container's actual startup time is logged, to surface slow boots (e.g. caused by
+     * CPU contention from other concurrently-starting containers) without logging on every normal, fast start.
+     */
+    private static final Duration SLOW_STARTUP_THRESHOLD = Duration.ofSeconds(30);
 
     private String licensePath;
     private String configurationPath;
@@ -101,8 +120,10 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
         withExposedPorts(AXON_SERVER_HTTP_PORT, AXON_SERVER_GRPC_PORT)
                 .withEnv("TESTCONTAINERS_FORK_NUMBER", "" + System.getProperty("test.forkNumber", "0"))
                 .withEnv(AXONIQ_LICENSE, LICENCE_DEFAULT_LOCATION)
-                .waitingFor(Wait.forLogMessage(WAIT_FOR_LOG_MESSAGE, 1))
-                .waitingFor(Wait.forHttp(HEALTH_ENDPOINT).forPort(AXON_SERVER_HTTP_PORT));
+                .waitingFor(Wait.forLogMessage(WAIT_FOR_LOG_MESSAGE, 1).withStartupTimeout(STARTUP_TIMEOUT))
+                .waitingFor(Wait.forHttp(HEALTH_ENDPOINT)
+                                .forPort(AXON_SERVER_HTTP_PORT)
+                                .withStartupTimeout(STARTUP_TIMEOUT));
     }
 
     @Override
@@ -119,7 +140,13 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
 
     @Override
     protected void doStart() {
+        Instant startingAt = Instant.now();
         super.doStart();
+        Duration startupDuration = Duration.between(startingAt, Instant.now());
+        if (startupDuration.compareTo(SLOW_STARTUP_THRESHOLD) > 0) {
+            LOG.warn("Axon Server container [{}] took {} to become ready",
+                     getContainerName().replaceFirst("^/", ""), startupDuration);
+        }
         try {
             AxonServerContainerUtils.initCluster(getHost(), getHttpPort(), isShouldBeReused(), dcbContext);
         } catch (IOException e) {

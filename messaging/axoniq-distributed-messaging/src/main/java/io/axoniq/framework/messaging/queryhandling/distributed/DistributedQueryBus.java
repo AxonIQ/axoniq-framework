@@ -40,6 +40,7 @@ import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -74,8 +75,8 @@ public class DistributedQueryBus implements QueryBus {
 
     /**
      * Constructs a {@code DistributedQueryBus} using the given {@code localSegment} for
-     * {@link #subscribe(QualifiedName, QueryHandler) subscribing} handlers and the given {@code connector} to
-     * dispatch and receive queries and query responses with, to and from different segments of the {@code QueryBus}.
+     * {@link #subscribe(QualifiedName, QueryHandler) subscribing} handlers and the given {@code connector} to dispatch
+     * and receive queries and query responses with, to and from different segments of the {@code QueryBus}.
      *
      * @param localSegment  The local {@code QueryBus} used to subscribe handlers to.
      * @param connector     The {@code QueryBusConnector} to dispatch and receive queries and query responses with.
@@ -106,7 +107,7 @@ public class DistributedQueryBus implements QueryBus {
     @Override
     public MessageStream<QueryResponseMessage> query(QueryMessage query,
                                                      @Nullable ProcessingContext context) {
-        if (localQueryShortcut && subscriptions.contains(query.type().qualifiedName()) ) {
+        if (localQueryShortcut && subscriptions.contains(query.type().qualifiedName())) {
             return localSegment.query(query, context);
         }
         return connector.query(query, context);
@@ -132,29 +133,56 @@ public class DistributedQueryBus implements QueryBus {
     public CompletableFuture<Void> emitUpdate(Predicate<QueryMessage> filter,
                                               Supplier<SubscriptionQueryUpdateMessage> updateSupplier,
                                               @Nullable ProcessingContext context) {
+        return emitUpdateAndCount(filter, updateSupplier, context)
+                .thenApply(FutureUtils::ignoreResult);
+    }
+
+    @Override
+    public CompletableFuture<OptionalInt> emitUpdateAndCount(Predicate<QueryMessage> filter,
+                                                             Supplier<SubscriptionQueryUpdateMessage> updateSupplier,
+                                                             @Nullable ProcessingContext context) {
         List<CompletableFuture<Void>> tasks = new ArrayList<>();
         updateRegistry.forEach((message, sender) -> {
             if (filter.test((message))) {
                 tasks.add(sender.sendUpdate(updateSupplier.get()));
             }
         });
-        return CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0]));
+        return CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0]))
+                                .thenApply(v -> OptionalInt.of(tasks.size()));
     }
 
     @Override
     public CompletableFuture<Void> completeSubscriptions(Predicate<QueryMessage> filter,
                                                          @Nullable ProcessingContext context) {
+        return completeSubscriptionsAndCount(filter, context)
+                .thenApply(FutureUtils::ignoreResult);
+    }
+
+    @Override
+    public CompletableFuture<OptionalInt> completeSubscriptionsAndCount(Predicate<QueryMessage> filter,
+                                                                        @Nullable ProcessingContext context) {
         List<CompletableFuture<Void>> tasks = new ArrayList<>();
         updateRegistry.forEach((message, sender) -> {
             if (filter.test((message))) {
                 tasks.add(sender.complete());
             }
         });
-        return CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0]));
+        return CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0]))
+                                .thenApply(v -> OptionalInt.of(tasks.size()));
     }
 
     @Override
     public CompletableFuture<Void> completeSubscriptionsExceptionally(
+            Predicate<QueryMessage> filter,
+            Throwable cause,
+            @Nullable ProcessingContext context
+    ) {
+        return completeSubscriptionsExceptionallyAndCount(filter, cause, context)
+                .thenApply(FutureUtils::ignoreResult);
+    }
+
+    @Override
+    public CompletableFuture<OptionalInt> completeSubscriptionsExceptionallyAndCount(
             Predicate<QueryMessage> filter,
             Throwable cause,
             @Nullable ProcessingContext context
@@ -165,7 +193,8 @@ public class DistributedQueryBus implements QueryBus {
                 tasks.add(sender.completeExceptionally(cause));
             }
         });
-        return CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0]));
+        return CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0]))
+                                .thenApply(v -> OptionalInt.of(tasks.size()));
     }
 
     @Override
