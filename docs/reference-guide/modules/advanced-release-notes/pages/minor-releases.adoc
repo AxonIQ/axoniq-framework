@@ -3,6 +3,38 @@
 
 Any patch release made for an Axon project is tailored towards resolving bugs. This page aims to provide a dedicated overview of patch releases for Axoniq Framework features.
 
+[#release_5_2]
+== Release 5.2
+
+=== Release 5.2.2
+
+==== Dependency upgrades
+
+- Upgrade AF to 5.2.2 link:https://github.com/AxonIQ/axoniq-framework/pull/292[#292]
+
+==== Contributors
+
+A heartfelt thank you to all contributors who made this release possible:
+
+- link:https://github.com/smcvb[@smcvb]
+
+=== Release 5.2.1
+
+==== Bug fixes
+
+- Mirror AF4 behavior by returning `"empty"` for Query Handlers returning empty `Optionals` for interoperability (link:https://github.com/AxonIQ/axoniq-framework/pull/278[#278] by @smcvb)
+- [Port] Mirror AF4 behavior by returning `"empty"` for Query Handlers returning empty `Optionals` for interoperability (link:https://github.com/AxonIQ/axoniq-framework/pull/284[#284] by @smcvb)
+
+==== Documentation
+
+- [Port] Include AAF 5.2.0 release notes (link:https://github.com/AxonIQ/axoniq-framework/pull/237[#237] by @smcvb)
+
+==== Contributors
+
+A heartfelt thank you to all contributors who made this release possible:
+
+- link:https://github.com/smcvb[@smcvb]
+
 [#release_5_1]
 == Release 5.1
 === Release 5.1.2

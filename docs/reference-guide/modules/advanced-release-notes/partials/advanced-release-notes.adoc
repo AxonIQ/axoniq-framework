@@ -6,7 +6,8 @@
 
 |**Major** |xref:major-releases.adoc#release_5_2[5.2]
 | |xref:major-releases.adoc#release_5_1[5.1]
-|**Minor** |xref:minor-releases.adoc#release_5_1[5.1]
+|**Minor** |xref:minor-releases.adoc#release_5_2[5.2]
+| |xref:minor-releases.adoc#release_5_1[5.1]
 |===
 
 ifdef::data-protection[]
