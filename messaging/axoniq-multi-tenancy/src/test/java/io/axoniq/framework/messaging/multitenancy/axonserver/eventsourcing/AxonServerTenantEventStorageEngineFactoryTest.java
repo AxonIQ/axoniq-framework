@@ -58,8 +58,8 @@ class AxonServerTenantEventStorageEngineFactoryTest {
         assertThat(connectionManager.requestedContexts()).containsExactly(TENANT_A.tenantId());
     }
 
-    // Combining a tenant's engine with that tenant's snapshot store is TenantEventStorage's job, not this factory's, so
-    // the engine arrives raw. TenantEventStorageTest covers the combining itself.
+    // Combining a tenant's engine with that tenant's snapshot store is the routing engine's job, not this factory's, so
+    // the engine arrives raw. MultiTenantEventStorageEngineTest covers the combining itself.
     @Test
     void buildsTheEngineWithoutDecoratingItWithASnapshotStore() {
         assertThat(testSubject.engineFor(TENANT_A)).isNotInstanceOf(SnapshotCapableEventStorageEngine.class);
