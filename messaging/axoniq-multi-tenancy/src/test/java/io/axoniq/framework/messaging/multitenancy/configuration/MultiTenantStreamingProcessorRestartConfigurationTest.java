@@ -27,35 +27,35 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests the defaults, fluent copy, and validation of {@link MultiTenantProcessorRestartConfiguration}.
+ * Tests the defaults, fluent copy, and validation of {@link MultiTenantStreamingProcessorRestartConfiguration}.
  *
  * @author Laura Devriendt
  */
-class MultiTenantProcessorRestartConfigurationTest {
+class MultiTenantStreamingProcessorRestartConfigurationTest {
 
     @Test
     void defaultRestartTimeoutIsThirtySeconds() {
-        assertThat(MultiTenantProcessorRestartConfiguration.DEFAULT.restartTimeout())
+        assertThat(MultiTenantStreamingProcessorRestartConfiguration.DEFAULT.restartTimeout())
                 .isEqualTo(Duration.ofSeconds(30));
     }
 
     @Test
     void restartTimeoutReturnsACopyWithTheGivenTimeout() {
-        MultiTenantProcessorRestartConfiguration configuration =
-                MultiTenantProcessorRestartConfiguration.DEFAULT.restartTimeout(Duration.ofMinutes(2));
+        MultiTenantStreamingProcessorRestartConfiguration configuration =
+                MultiTenantStreamingProcessorRestartConfiguration.DEFAULT.restartTimeout(Duration.ofMinutes(2));
 
         assertThat(configuration.restartTimeout()).isEqualTo(Duration.ofMinutes(2));
     }
 
     @Test
     void rejectsANullRestartTimeout() {
-        assertThatThrownBy(() -> new MultiTenantProcessorRestartConfiguration(null))
+        assertThatThrownBy(() -> new MultiTenantStreamingProcessorRestartConfiguration(null))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void rejectsANonPositiveRestartTimeout() {
-        assertThatThrownBy(() -> new MultiTenantProcessorRestartConfiguration(Duration.ZERO))
+        assertThatThrownBy(() -> new MultiTenantStreamingProcessorRestartConfiguration(Duration.ZERO))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

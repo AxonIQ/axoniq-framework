@@ -83,8 +83,9 @@ class MultiTenantStreamingProcessorRestarterTest {
                                   .componentRegistry(registry -> {
                                       registry.disableEnhancerScanning()
                                               .registerComponent(TenantProvider.class, config -> tenantProvider)
-                                              .registerComponent(MultiTenantProcessorRestartConfiguration.class,
-                                                                 config -> MultiTenantProcessorRestartConfiguration.DEFAULT);
+                                              .registerComponent(
+                                                  MultiTenantStreamingProcessorRestartConfiguration.class,
+                                                  config -> MultiTenantStreamingProcessorRestartConfiguration.DEFAULT);
                                       components.accept(registry);
                                   })
                                   .build();
@@ -312,19 +313,22 @@ class MultiTenantStreamingProcessorRestarterTest {
             testSubject.describeTo(descriptor);
 
             assertThat(descriptor.getDescribedProperties())
-                    .containsEntry("restartTimeout", MultiTenantProcessorRestartConfiguration.DEFAULT.restartTimeout());
+                    .containsEntry("restartTimeout",
+                                   MultiTenantStreamingProcessorRestartConfiguration.DEFAULT.restartTimeout());
         }
 
         @Test
         void appliesARegisteredRestartTimeoutOverride() {
             Duration override = Duration.ofSeconds(120);
+            MultiTenantStreamingProcessorRestartConfiguration overrideConfiguration =
+                    new MultiTenantStreamingProcessorRestartConfiguration(override);
             AxonConfiguration overriddenConfiguration =
                     MessagingConfigurer.create()
                                        .componentRegistry(registry -> registry
                                                .disableEnhancerScanning()
                                                .registerComponent(
-                                                       MultiTenantProcessorRestartConfiguration.class,
-                                                       config -> new MultiTenantProcessorRestartConfiguration(override)))
+                                                       MultiTenantStreamingProcessorRestartConfiguration.class,
+                                                       config -> overrideConfiguration))
                                        .build();
             MockComponentDescriptor descriptor = new MockComponentDescriptor();
 

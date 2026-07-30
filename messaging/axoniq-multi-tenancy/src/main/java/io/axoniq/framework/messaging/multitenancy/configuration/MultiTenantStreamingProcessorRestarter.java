@@ -67,8 +67,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>
  * Each processor's shutdown-and-start is bounded by a safety-net timeout, so a processor that never completes its
  * shutdown or start cannot block the restart thread. It is taken from the
- * {@link MultiTenantProcessorRestartConfiguration}, which defaults to 30 seconds. A deployment whose processors are
- * slow to stop and start can register a customized {@link MultiTenantProcessorRestartConfiguration} to raise it.
+ * {@link MultiTenantStreamingProcessorRestartConfiguration}, which defaults to 30 seconds. A deployment whose
+ * processors are slow to stop and start can register a customized
+ * {@link MultiTenantStreamingProcessorRestartConfiguration} to raise it.
  * <p>
  * Internal, because it is registered by the {@link MultiTenancyConfigurationDefaults} enhancer and never used directly.
  *
@@ -101,7 +102,7 @@ class MultiTenantStreamingProcessorRestarter implements MultiTenantAwareComponen
     MultiTenantStreamingProcessorRestarter(Configuration configuration) {
         this.configuration = Objects.requireNonNull(configuration, "The configuration must not be null");
         this.restartTimeout =
-                configuration.getComponent(MultiTenantProcessorRestartConfiguration.class).restartTimeout();
+                configuration.getComponent(MultiTenantStreamingProcessorRestartConfiguration.class).restartTimeout();
     }
 
     /**

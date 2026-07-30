@@ -5,7 +5,7 @@
 
 Axon Framework has two kinds of event processor. A streaming event processor pulls events from a stream and tracks its position in a token. A subscribing event processor reacts to events on the event bus as they are published.
 Multi-tenancy makes the streaming event processor tenant-aware: a single pooled streaming event processor consumes the events of every tenant, keeping each tenant's projection separated, with no extra configuration.
-This page covers that streaming event processor. A subscribing event processor is not made tenant-aware. <<Subscribing event processors>> explains how it behaves in a multi-tenant application.
+This page covers that streaming event processor. A subscribing event processor is not wired to the per-tenant stores. <<Subscribing event processors>> explains how it behaves in a multi-tenant application.
 
 == How it works
 
@@ -54,15 +54,15 @@ The timeout defaults to 30 seconds.
 
 == Configuring the restart timeout
 
-A deployment whose processors are slow to stop and start can raise the safety-net timeout by registering a `MultiTenantProcessorRestartConfiguration` with a longer value:
+A deployment whose processors are slow to stop and start can raise the safety-net timeout by registering a `MultiTenantStreamingProcessorRestartConfiguration` with a longer value:
 
 [source,java]
 ----
 public void raiseRestartTimeout(MessagingConfigurer configurer) {
     configurer.componentRegistry(registry ->
         registry.registerComponent(
-                MultiTenantProcessorRestartConfiguration.class,
-                config -> MultiTenantProcessorRestartConfiguration.DEFAULT.restartTimeout(Duration.ofMinutes(2)) // <1>
+                MultiTenantStreamingProcessorRestartConfiguration.class,
+                config -> MultiTenantStreamingProcessorRestartConfiguration.DEFAULT.restartTimeout(Duration.ofMinutes(2)) // <1>
         )
     );
 }
@@ -71,10 +71,12 @@ public void raiseRestartTimeout(MessagingConfigurer configurer) {
 
 == Subscribing event processors
 
-Multi-tenancy keeps each tenant's events in its own store, and a streaming event processor reads those stores: it consumes every tenant and tracks a position per tenant, so each tenant's projection is kept separate and the processor resumes each tenant from its own last position after a restart.
+A streaming event processor reads the per-tenant stores.
+It consumes every tenant, tracks a position per tenant, and resumes each tenant from its own last position after a restart.
 
-A subscribing event processor is not tenant-aware, because it never reads those stores.
-It reacts to the shared, in-process event bus, which is not partitioned per tenant and keeps no token, so it keeps no per-tenant position, cannot resume or catch up, and only sees events published in this application instance while it runs.
-It does still get the tenant's identity: an event committed within a tenant's context carries that tenant on the processing context the handler runs in, so a handler can tell which tenant an event belongs to.
+A subscribing event processor does not read those stores.
+It reacts to the shared, in-process event bus, which keeps no token, so it holds no per-tenant position, cannot replay or catch up, and only sees events published in this application instance while it runs.
 
-Use a streaming event processor for a per-tenant projection.
+It can still build a per-tenant projection.
+An event committed within a tenant's context carries that tenant on the processing context the handler runs in, so a handler that writes through a xref:multi-tenancy:tenant-scoped-components.adoc[tenant-scoped] repository still reaches the right tenant's read model.
+What it gives up is the durability and replay above, so use a streaming event processor when a projection has to survive restarts or catch up on events published while it was down.

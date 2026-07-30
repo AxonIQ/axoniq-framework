@@ -159,8 +159,8 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      * @param componentRegistry the registry to register the restarter with
      */
     static void registerStreamingProcessorRestarter(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(MultiTenantProcessorRestartConfiguration.class,
-                                               c -> MultiTenantProcessorRestartConfiguration.DEFAULT,
+        componentRegistry.registerIfNotPresent(MultiTenantStreamingProcessorRestartConfiguration.class,
+                                               c -> MultiTenantStreamingProcessorRestartConfiguration.DEFAULT,
                                                SearchScope.ALL);
         componentRegistry.registerComponent(
                 ComponentDefinition

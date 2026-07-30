@@ -42,6 +42,7 @@ import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.eventsourcing.snapshot.inmemory.InMemorySnapshotStore;
+import org.axonframework.messaging.core.DelegatingMessageStream;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -63,8 +64,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.*;
@@ -448,6 +452,51 @@ class MultiTenantEventStorageEngineTest {
             // event is not served
             await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> assertThat(stream.error()).isPresent());
             assertThat(stream.hasNextAvailable()).isFalse();
+            stream.close();
+        }
+
+        @Test
+        void aLaterTenantFailingToOpenClosesTheStreamsAlreadyOpened() {
+            AtomicBoolean firstStreamClosed = new AtomicBoolean(false);
+            AtomicInteger opens = new AtomicInteger();
+            // Both tenants share one engine, so its stream() is invoked once per tenant regardless of which order the
+            // tenants are merged in. The first invocation opens a stream that records when it is closed, the second
+            // throws, so an opened stream always precedes the failing open.
+            EventStorageEngine sharedEngine = new InMemoryEventStorageEngine() {
+                @Override
+                public MessageStream<EventMessage> stream(StreamingCondition condition) {
+                    if (opens.getAndIncrement() == 0) {
+                        return new DelegatingMessageStream<EventMessage, EventMessage>(MessageStream.empty()) {
+                            @Override
+                            public Optional<Entry<EventMessage>> next() {
+                                return delegate().next();
+                            }
+
+                            @Override
+                            public Optional<Entry<EventMessage>> peek() {
+                                return delegate().peek();
+                            }
+
+                            @Override
+                            public void close() {
+                                firstStreamClosed.set(true);
+                                super.close();
+                            }
+                        };
+                    }
+                    throw new IllegalStateException("cannot open the second tenant's stream");
+                }
+            };
+            TenantDescriptorMapping<EventStorageEngine> sharedEngines = new TenantDescriptorMapping<>();
+            sharedEngines.entry(TENANT_A, sharedEngine);
+            sharedEngines.entry(TENANT_B, sharedEngine);
+            MultiTenantEventStorageEngine failing = streamingEngineOver(sharedEngines);
+
+            MessageStream<EventMessage> stream = failing.stream(StreamingCondition.startingFrom(null));
+
+            await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> assertThat(stream.error()).isPresent());
+            // the stream opened for the earlier tenant is closed rather than leaked when the later tenant fails to open
+            assertThat(firstStreamClosed).isTrue();
             stream.close();
         }
 

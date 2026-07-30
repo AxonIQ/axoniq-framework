@@ -69,5 +69,5 @@
   <text x="570" y="473" font-size="10" fill="#5F5E5A" text-anchor="middle">stream(conditionFor(tokenForTenant, criteria))</text>
 
   <text x="40" y="522" font-size="10" fill="#5F5E5A">Each entry carries its tenant. The framework copies it onto the per-event ProcessingContext, so a handler writes to that tenant's projection.</text>
-  <text x="40" y="540" font-size="10" fill="#5F5E5A">Restarts are coalesced onto one thread and bounded by MultiTenantProcessorRestartConfiguration (default 30 seconds).</text>
+  <text x="40" y="540" font-size="10" fill="#5F5E5A">Restarts are coalesced onto one thread and bounded by MultiTenantStreamingProcessorRestartConfiguration (default 30 seconds).</text>
 </svg>

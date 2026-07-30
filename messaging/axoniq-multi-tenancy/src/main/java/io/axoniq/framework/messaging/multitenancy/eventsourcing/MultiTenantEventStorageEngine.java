@@ -250,9 +250,20 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiT
                                               EventCriteria criteria) {
         Iterator<TenantDescriptor> tenantIterator = currentTenants.iterator();
         MessageStream<EventMessage> merged = openTenantStream(tenantIterator.next(), openFrom, criteria);
-        while (tenantIterator.hasNext()) {
-            MessageStream<EventMessage> tenantStream = openTenantStream(tenantIterator.next(), openFrom, criteria);
-            merged = new MergedMessageStream<>(OLDEST_FIRST, merged, tenantStream);
+        try {
+            while (tenantIterator.hasNext()) {
+                MessageStream<EventMessage> tenantStream = openTenantStream(tenantIterator.next(), openFrom, criteria);
+                merged = new MergedMessageStream<>(OLDEST_FIRST, merged, tenantStream);
+            }
+        } catch (RuntimeException openFailure) {
+            // Opening a later tenant's stream failed. Close the streams already opened for the earlier tenants before
+            // rethrowing, so a failed open does not leak them. A failure while closing must not mask the open failure.
+            try {
+                merged.close();
+            } catch (RuntimeException closeFailure) {
+                openFailure.addSuppressed(closeFailure);
+            }
+            throw openFailure;
         }
         return new TenantPositioningStream(carriedToken, merged);
     }

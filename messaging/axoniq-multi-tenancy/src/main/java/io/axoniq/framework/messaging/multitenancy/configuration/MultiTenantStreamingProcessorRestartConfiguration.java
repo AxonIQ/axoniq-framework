@@ -34,7 +34,7 @@ import java.util.Objects;
  * @author Laura Devriendt
  * @since 5.3.0
  */
-public record MultiTenantProcessorRestartConfiguration(Duration restartTimeout) {
+public record MultiTenantStreamingProcessorRestartConfiguration(Duration restartTimeout) {
 
     private static final Duration DEFAULT_RESTART_TIMEOUT = Duration.ofSeconds(30);
 
@@ -42,7 +42,7 @@ public record MultiTenantProcessorRestartConfiguration(Duration restartTimeout) 
      * Compact constructor validating that the given {@code restartTimeout} is a positive {@link Duration}.
      */
     @SuppressWarnings("MissingJavadoc")
-    public MultiTenantProcessorRestartConfiguration {
+    public MultiTenantStreamingProcessorRestartConfiguration {
         Objects.requireNonNull(restartTimeout, "The restart timeout must not be null.");
         if (!restartTimeout.isPositive()) {
             throw new IllegalArgumentException("The restart timeout must be positive.");
@@ -50,11 +50,11 @@ public record MultiTenantProcessorRestartConfiguration(Duration restartTimeout) 
     }
 
     /**
-     * A default instance of the {@code MultiTenantProcessorRestartConfiguration}, setting the {@link #restartTimeout()}
-     * to 30 seconds.
+     * A default instance of the {@code MultiTenantStreamingProcessorRestartConfiguration}, setting the
+     * {@link #restartTimeout()} to 30 seconds.
      */
-    public static final MultiTenantProcessorRestartConfiguration DEFAULT =
-            new MultiTenantProcessorRestartConfiguration(DEFAULT_RESTART_TIMEOUT);
+    public static final MultiTenantStreamingProcessorRestartConfiguration DEFAULT =
+            new MultiTenantStreamingProcessorRestartConfiguration(DEFAULT_RESTART_TIMEOUT);
 
     /**
      * Sets the safety-net timeout bounding each processor's shutdown-and-start during a restart. Raise it for a
@@ -63,7 +63,7 @@ public record MultiTenantProcessorRestartConfiguration(Duration restartTimeout) 
      * @param restartTimeout the timeout bounding each processor's restart
      * @return a copy of this configuration using the given {@code restartTimeout}
      */
-    public MultiTenantProcessorRestartConfiguration restartTimeout(Duration restartTimeout) {
-        return new MultiTenantProcessorRestartConfiguration(restartTimeout);
+    public MultiTenantStreamingProcessorRestartConfiguration restartTimeout(Duration restartTimeout) {
+        return new MultiTenantStreamingProcessorRestartConfiguration(restartTimeout);
     }
 }
