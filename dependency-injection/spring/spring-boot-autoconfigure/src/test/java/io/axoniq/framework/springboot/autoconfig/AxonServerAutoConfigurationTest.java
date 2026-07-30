@@ -162,7 +162,9 @@ class AxonServerAutoConfigurationTest {
 
     @Test
     void defaultAxonServerComponentsArePresent() {
-        testContext.run(context -> {
+        // Multi-tenancy is default-on with Axon Server and would wrap the engine in a tenant-routing wrapper;
+        // disable it so this test verifies the plain Axon Server storage engine wiring.
+        testContext.withPropertyValues("axon.multitenancy.enabled=false").run(context -> {
             assertThat(context).hasSingleBean(AxonServerConfiguration.class);
             // Default name for beans from an @EnableConfigurationProperties contain their prefix.
             assertThat(context).hasBean("axon.axonserver-" + AxonServerConfiguration.class.getName());

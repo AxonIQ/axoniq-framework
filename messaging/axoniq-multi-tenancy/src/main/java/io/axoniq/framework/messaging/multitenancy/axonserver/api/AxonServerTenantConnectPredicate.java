@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.axonserver;
+package io.axoniq.framework.messaging.multitenancy.axonserver.api;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;

@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy;
 
+import com.tngtech.archunit.core.importer.ImportOption.DoNotIncludeTests;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
@@ -32,7 +33,7 @@ import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPac
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@AnalyzeClasses(packages = ArchUnitPackageRulesTest.BASE_PACKAGE_NAME)
+@AnalyzeClasses(packages = ArchUnitPackageRulesTest.BASE_PACKAGE_NAME, importOptions = DoNotIncludeTests.class)
 public class ArchUnitPackageRulesTest {
 
     public static final String BASE_PACKAGE_NAME = "io.axoniq.framework.messaging.multitenancy";

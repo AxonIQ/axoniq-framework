@@ -26,6 +26,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.AxonConfiguration;
@@ -96,6 +97,11 @@ class MultiTenancyConfigurationDefaultsTest {
         void registersTheDefaultMetadataBasedTenantResolver() {
             assertThat(configuration.getComponent(TenantResolver.class))
                     .isInstanceOf(MetadataBasedTenantResolver.class);
+        }
+
+        @Test
+        void registersTheTenantRouterForTenantRoutingComponentsToShare() {
+            assertThat(configuration.getComponent(TenantRouter.class)).isNotNull();
         }
 
         @Test

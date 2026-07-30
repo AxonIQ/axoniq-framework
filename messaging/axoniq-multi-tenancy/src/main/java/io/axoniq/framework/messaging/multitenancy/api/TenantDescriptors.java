@@ -36,4 +36,18 @@ public interface TenantDescriptors {
      * @return the list of tenant descriptors
      */
     List<TenantDescriptor> tenants();
+
+    /**
+     * Indicates whether the given {@code tenant} is one of the {@link #tenants() tenants} of this application.
+     * <p>
+     * Answered on every message that carries a tenant, so an implementation backed by a set should override this to
+     * test membership directly rather than through the list {@link #tenants()} builds.
+     *
+     * @param tenant the tenant to check
+     * @return {@code true} when the given {@code tenant} is known
+     * @since 5.3.0
+     */
+    default boolean isKnown(TenantDescriptor tenant) {
+        return tenants().contains(tenant);
+    }
 }

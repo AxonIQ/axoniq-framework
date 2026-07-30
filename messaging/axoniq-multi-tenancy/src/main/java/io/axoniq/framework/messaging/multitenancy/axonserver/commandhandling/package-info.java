@@ -16,21 +16,13 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.messaging.multitenancy.api;
 
-
-import org.axonframework.eventsourcing.eventstore.EventStore;
-
-import java.util.function.Function;
 
 /**
- * Factory for creating {@link EventStore} segments for a given {@link TenantDescriptor}. After a segment is created, it
- * may be started automatically by the factory.
- *
- * @author Stefan Dragisic
- * @since 5.3.0
+ * Part of the Axoniq Framework multi-tenancy module. Contains the Axon Server command bus connector routing each
+ * command to the connection of its tenant.
  */
-@FunctionalInterface
-public interface TenantEventSegmentFactory extends Function<TenantDescriptor, EventStore> {
+@NullMarked
+package io.axoniq.framework.messaging.multitenancy.axonserver.commandhandling;
 
-}
+import org.jspecify.annotations.NullMarked;

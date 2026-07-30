@@ -28,10 +28,6 @@
             <groupId>org.axonframework</groupId>
             <artifactId>axon-messaging</artifactId>
         </dependency>
-        <dependency>
-            <groupId>org.axonframework</groupId>
-            <artifactId>axon-eventsourcing</artifactId>
-        </dependency>
 
         <dependency>
             <groupId>jakarta.persistence</groupId>
@@ -43,8 +39,6 @@
             <artifactId>axoniq-distributed-messaging</artifactId>
             <version>${project.version}</version>
         </dependency>
-
-
 
         <!-- Other -->
         <dependency>
@@ -70,11 +64,6 @@
             <groupId>org.axonframework</groupId>
             <artifactId>axon-conversion</artifactId>
             <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.axonframework</groupId>
-            <artifactId>axon-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

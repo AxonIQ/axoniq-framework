@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.axonserver;
+package io.axoniq.framework.messaging.multitenancy.axonserver.configuration;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.ResultStream;
@@ -31,11 +31,23 @@ import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
+import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantProvider;
+import io.axoniq.framework.messaging.multitenancy.axonserver.commandhandling.MultiTenantAxonServerCommandBusConnector;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
+import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.MockComponentDescriptor;
+import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
@@ -51,6 +63,7 @@ import static io.axoniq.framework.axonserver.connector.api.AxonServerConfigurati
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
@@ -111,6 +124,58 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
                     .extracting("delegate")
                     .isInstanceOf(MultiTenantAxonServerCommandBusConnector.class);
         }
+
+        @Test
+        void registersTheMultiTenantEventStorageEngineAsTheEventStorageEngine() {
+            assertThat(configuration.getComponent(EventStorageEngine.class))
+                    .isInstanceOf(MultiTenantEventStorageEngine.class);
+        }
+
+        @Test
+        void registersTheMultiTenantSnapshotStoreAsTheSnapshotStore() {
+            assertThat(configuration.getComponent(SnapshotStore.class))
+                    .isInstanceOf(MultiTenantSnapshotStore.class);
+        }
+
+        @Test
+        void leavesTheRoutingEngineUndecoratedSoSnapshotSourcingReachesEachTenantsOwnEngine() {
+            // the application-wide snapshot composition is disabled, so the framework does not decorate the routing
+            // engine with the snapshot store above the tenant fan-out
+            assertThat(configuration.getComponent(EventStorageEngine.class))
+                    .isNotInstanceOf(SnapshotCapableEventStorageEngine.class);
+        }
+
+        @Test
+        void routesWithTheTenantRouterFromTheConfiguration() {
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+
+            configuration.getComponent(EventStorageEngine.class).describeTo(descriptor);
+
+            assertThat(descriptor.getDescribedProperties())
+                    .containsEntry("tenantRouter", configuration.getComponent(TenantRouter.class));
+        }
+    }
+
+    @Nested
+    class ForeignSnapshotStoreRejection {
+
+        // A SnapshotStore registered elsewhere serves every tenant from one place, while sourcing keeps reading each
+        // tenant's snapshots from that tenant's own store. That has to fail loudly rather than write and read snapshots
+        // in different places.
+        @Test
+        void rejectsASnapshotStoreRegisteredByTheApplication() {
+            SnapshotStore singleTenantStore = new RecordingSnapshotStore();
+            MessagingConfigurer configurer =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry.registerComponent(
+                                               SnapshotStore.class, config -> singleTenantStore))
+                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer);
+
+            assertThatThrownBy(configurer::build)
+                    .isInstanceOf(AxonConfigurationException.class)
+                    .hasMessageContaining("SnapshotStore")
+                    .hasMessageContaining("TenantSnapshotStoreFactory");
+        }
     }
 
     @Nested
@@ -161,6 +226,60 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
             // then
             assertThat(tenantProvider.subscribedComponents()).doesNotContain(connector);
         }
+
+        @Test
+        void subscribesTheEventStorageEngineFactoryToTheTenantProviderAtStartup() {
+            MultiTenantAwareComponent factory =
+                    (MultiTenantAwareComponent) configuration.getComponent(TenantEventStorageEngineFactory.class);
+
+            assertThat(tenantProvider.subscribedComponents()).contains(factory);
+        }
+
+        @Test
+        void cancelsTheEventStorageEngineFactorySubscriptionOnShutdown() {
+            MultiTenantAwareComponent factory =
+                    (MultiTenantAwareComponent) configuration.getComponent(TenantEventStorageEngineFactory.class);
+
+            configuration.shutdown();
+
+            assertThat(tenantProvider.subscribedComponents()).doesNotContain(factory);
+        }
+
+        @Test
+        void subscribesTheRoutingEngineToTheTenantProviderAtStartup() {
+            MultiTenantAwareComponent routingEngine =
+                    (MultiTenantAwareComponent) configuration.getComponent(EventStorageEngine.class);
+
+            assertThat(tenantProvider.subscribedComponents()).contains(routingEngine);
+        }
+
+        @Test
+        void cancelsTheRoutingEngineSubscriptionOnShutdown() {
+            MultiTenantAwareComponent routingEngine =
+                    (MultiTenantAwareComponent) configuration.getComponent(EventStorageEngine.class);
+
+            configuration.shutdown();
+
+            assertThat(tenantProvider.subscribedComponents()).doesNotContain(routingEngine);
+        }
+
+        @Test
+        void subscribesTheSnapshotStoreFactoryToTheTenantProviderAtStartup() {
+            MultiTenantAwareComponent factory =
+                    (MultiTenantAwareComponent) configuration.getComponent(TenantSnapshotStoreFactory.class);
+
+            assertThat(tenantProvider.subscribedComponents()).contains(factory);
+        }
+
+        @Test
+        void cancelsTheSnapshotStoreFactorySubscriptionOnShutdown() {
+            MultiTenantAwareComponent factory =
+                    (MultiTenantAwareComponent) configuration.getComponent(TenantSnapshotStoreFactory.class);
+
+            configuration.shutdown();
+
+            assertThat(tenantProvider.subscribedComponents()).doesNotContain(factory);
+        }
     }
 
     @Nested
@@ -180,7 +299,7 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         // AxonServerConfigurationEnhancer wires a real, network-connecting QueryBusConnector on top of the (mocked)
         // AxonServerConnectionManager; overriding it here keeps that enhancer's other real defaults (AxonServerConfiguration,
         // MessageConverter) while short-circuiting the one component that would otherwise fail configuration.start().
-        // that will probably remove once we implemented the query handling part
+        // that will probably be removed once we implement the query handling part
         @Mock
         private QueryBusConnector queryBusConnector;
 

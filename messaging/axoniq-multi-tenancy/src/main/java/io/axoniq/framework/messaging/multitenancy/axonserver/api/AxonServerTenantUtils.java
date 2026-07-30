@@ -17,10 +17,11 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.axonserver;
+package io.axoniq.framework.messaging.multitenancy.axonserver.api;
 
 import io.axoniq.axonserver.grpc.admin.ContextOverview;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
+import org.axonframework.common.annotation.Internal;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -31,7 +32,8 @@ import java.util.Map;
  * @author Jan Galinski
  * @since 5.3.0
  */
-public final class AxonServerTenantUtils {
+@Internal
+final class AxonServerTenantUtils {
 
     /**
      * Extract {@link TenantDescriptor} information from the given {@link ContextOverview}.
@@ -39,7 +41,7 @@ public final class AxonServerTenantUtils {
      * @param contextOverview the {@link ContextOverview} to extract the {@link TenantDescriptor} from
      * @return the {@link TenantDescriptor} extracted from the given {@link ContextOverview}
      */
-    public static TenantDescriptor tenantDescriptor(ContextOverview contextOverview) {
+    static TenantDescriptor tenantDescriptor(ContextOverview contextOverview) {
         Map<String, String> properties = new HashMap<>(contextOverview.getMetaDataMap());
         properties.putIfAbsent("replicationGroup", contextOverview.getReplicationGroup().getName());
 

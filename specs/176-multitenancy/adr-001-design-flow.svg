@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="706" viewBox="0 0 760 706" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="758" height="704" rx="8" fill="#ffffff" stroke="#d1d5db"/>
+
+  <rect x="24" y="12" width="12" height="12" rx="3" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="42" y="22" font-size="11" fill="#2C2C2A">framework / connector</text>
+  <rect x="210" y="12" width="12" height="12" rx="3" fill="#EEEDFE" stroke="#7F77DD"/>
+  <text x="228" y="22" font-size="11" fill="#2C2C2A">custom (multi-tenancy)</text>
+  <text x="400" y="22" font-size="11" font-weight="500" fill="#534AB7">write flow</text>
+  <text x="478" y="22" font-size="11" font-weight="500" fill="#0F6E56">read flow</text>
+
+  <rect x="40" y="42" width="300" height="40" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="190" y="66" font-size="13" font-weight="500" fill="#2C2C2A" text-anchor="middle">Command handler</text>
+  <rect x="400" y="42" width="300" height="40" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="550" y="66" font-size="13" font-weight="500" fill="#2C2C2A" text-anchor="middle">Pooled streaming processor</text>
+
+  <path d="M190 82 L300 116" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="34" y="104" font-size="12" font-weight="500" fill="#534AB7">transaction / publish (ctx)</text>
+  <path d="M540 82 L470 116" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="360" y="100" font-size="12" font-weight="500" fill="#0F6E56">open / firstToken (cond, ctx)</text>
+
+  <rect x="520" y="146" width="210" height="46" rx="6" fill="#EEEDFE" stroke="#7F77DD"/>
+  <text x="625" y="164" font-size="10" font-weight="500" fill="#26215C" text-anchor="middle">MultiTenantStreamingProcessorRestarter</text>
+  <text x="625" y="179" font-size="10" fill="#534AB7" text-anchor="middle">restarts on tenant add / remove</text>
+  <path d="M690 146 L690 82" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="698" y="120" font-size="10" fill="#5F5E5A">restart</text>
+
+  <rect x="200" y="118" width="300" height="32" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="350" y="138" font-size="13" font-weight="500" fill="#2C2C2A" text-anchor="middle">InterceptingEventStore</text>
+  <line x1="350" y1="150" x2="350" y2="162" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <rect x="200" y="162" width="300" height="42" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="350" y="181" font-size="13" font-weight="500" fill="#2C2C2A" text-anchor="middle">StorageEngineBackedEventStore</text>
+  <text x="350" y="196" font-size="11" fill="#5F5E5A" text-anchor="middle">EventStore + the default StreamableEventSource</text>
+
+  <rect x="520" y="216" width="210" height="46" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="625" y="234" font-size="12" font-weight="500" fill="#2C2C2A" text-anchor="middle">entity snapshotting</text>
+  <text x="625" y="249" font-size="10" fill="#5F5E5A" text-anchor="middle">on the configured SnapshotPolicy</text>
+  <path d="M620 262 L600 296" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="628" y="284" font-size="11" fill="#5F5E5A">store (ctx)</text>
+
+  <path d="M330 204 L216 292" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="20" y="250" font-size="10" fill="#5F5E5A">no wrap here: the framework's snapshot composition</text>
+  <text x="20" y="263" font-size="10" fill="#5F5E5A">is disabled, so the sourcing condition passes through</text>
+
+  <rect x="60" y="292" width="300" height="106" rx="6" fill="#EEEDFE" stroke="#7F77DD"/>
+  <text x="210" y="311" font-size="13" font-weight="500" fill="#26215C" text-anchor="middle">MultiTenantEventStorageEngine</text>
+  <text x="210" y="329" font-size="11" fill="#534AB7" text-anchor="middle">writes -&gt; route: appendEvents / source</text>
+  <text x="210" y="346" font-size="11" fill="#0F6E56" text-anchor="middle">reads -&gt; merge: stream / firstToken / tokenAt</text>
+  <text x="210" y="361" font-size="10" fill="#5F5E5A" text-anchor="middle">MergedMessageStream + MultiTenantTrackingToken</text>
+  <text x="210" y="379" font-size="11" fill="#534AB7" text-anchor="middle">decorate(tenant engine, tenant snapshot store)</text>
+  <text x="210" y="392" font-size="10" fill="#5F5E5A" text-anchor="middle">composed once per tenant, evicted on tenant removal</text>
+
+  <rect x="420" y="296" width="300" height="46" rx="6" fill="#EEEDFE" stroke="#7F77DD"/>
+  <text x="570" y="316" font-size="13" font-weight="500" fill="#26215C" text-anchor="middle">MultiTenantSnapshotStore</text>
+  <text x="570" y="332" font-size="11" fill="#534AB7" text-anchor="middle">the SnapshotStore, routed per tenant</text>
+
+  <line x1="210" y1="398" x2="210" y2="486" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="218" y="440" font-size="11" fill="#5F5E5A">engineFor(tenant)</text>
+  <path d="M360 380 L470 486" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="570" y1="342" x2="570" y2="486" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="578" y="420" font-size="11" fill="#5F5E5A">storeFor(tenant)</text>
+
+  <rect x="60" y="486" width="300" height="48" rx="6" fill="#EEEDFE" stroke="#7F77DD"/>
+  <text x="210" y="505" font-size="12" font-weight="500" fill="#26215C" text-anchor="middle">TenantEventStorageEngineFactory</text>
+  <text x="210" y="521" font-size="11" fill="#534AB7" text-anchor="middle">lazy create, evict on tenant removal</text>
+  <rect x="420" y="486" width="300" height="48" rx="6" fill="#EEEDFE" stroke="#7F77DD"/>
+  <text x="570" y="505" font-size="12" font-weight="500" fill="#26215C" text-anchor="middle">TenantSnapshotStoreFactory</text>
+  <text x="570" y="521" font-size="11" fill="#534AB7" text-anchor="middle">lazy create, evict on tenant removal</text>
+
+  <rect x="40" y="548" width="680" height="92" rx="8" fill="none" stroke="#B4B2A9" stroke-dasharray="4 3"/>
+  <text x="380" y="565" font-size="11" fill="#5F5E5A" text-anchor="middle">one per tenant, on the tenant's Axon Server connection</text>
+  <rect x="60" y="578" width="300" height="40" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="210" y="602" font-size="13" font-weight="500" fill="#2C2C2A" text-anchor="middle">AxonServerEventStorageEngine</text>
+  <rect x="420" y="578" width="300" height="40" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="570" y="602" font-size="13" font-weight="500" fill="#2C2C2A" text-anchor="middle">AxonServerSnapshotStore</text>
+  <line x1="210" y1="534" x2="210" y2="578" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="570" y1="534" x2="570" y2="578" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <path d="M210 618 L210 646 L362 656" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <path d="M570 618 L570 646 L418 656" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <rect x="300" y="656" width="180" height="34" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="390" y="677" font-size="12" font-weight="500" fill="#2C2C2A" text-anchor="middle">tenant's Axon Server context</text>
+</svg>

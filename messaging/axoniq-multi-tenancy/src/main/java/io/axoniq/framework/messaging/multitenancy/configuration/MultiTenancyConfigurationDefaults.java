@@ -26,6 +26,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
@@ -43,6 +44,7 @@ import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTena
  * {@link ConfigurationEnhancer} registering the default multi-tenancy components:
  * <ul>
  *     <li>the default {@link TenantResolver}, which resolves the tenant from message metadata, unless a user registered a custom {@link TenantResolver}</li>
+ *     <li>the {@link TenantRouter} that every tenant-routing component shares to decide the tenant of a message</li>
  *     <li>the {@link TenantComponentParameterResolverFactory} to inject tenant-scoped components into message handlers</li>
  *     <li>the {@link TenantComponentProviderSubscriber} to subscribe every {@link TenantComponentProvider} to the {@link TenantProvider} at startup</li>
  *     <li>the {@link RegisterTenantDescriptorHandlerInterceptor} which takes the resolved {@link TenantDescriptor} from the message and stores it in the {@link ProcessingContext}</li>
@@ -77,7 +79,7 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      * zero per-tenant connectors to start.
      * <p>
      * Public so that backend-specific enhancers registering a {@link TenantProvider} implementation (e.g.
-     * {@link io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerMultiTenancyConfigurationDefaults})
+     * {@link io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults})
      * can align their component's start and shutdown phase with this one.
      */
     public static final int TENANT_PROVIDER_PHASE = -10;
@@ -88,7 +90,7 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      * are cancelled while the {@code TenantProvider} is still running.
      * <p>
      * Public so that backend-specific enhancers registering a per-tenant command bus connector (e.g.
-     * {@link io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerMultiTenancyConfigurationDefaults})
+     * {@link io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults})
      * can subscribe it to the {@link TenantProvider} at the same phase.
      */
     public static final int TENANT_COMPONENT_SUBSCRIBER_PHASE = TENANT_PROVIDER_PHASE + 5;
@@ -108,6 +110,13 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
         // Register the default TenantResolver, which resolves the tenant from message metadata.
         componentRegistry.registerIfNotPresent(TenantResolver.class,
                                                c -> new MetadataBasedTenantResolver(),
+                                               SearchScope.ALL);
+
+        // Register the TenantRouter, so every tenant-routing component decides the tenant of a message the same way,
+        // against one and the same set of known tenants, rather than each building its own.
+        componentRegistry.registerIfNotPresent(TenantRouter.class,
+                                               config -> new TenantRouter(config.getComponent(TenantResolver.class),
+                                                                          config.getComponent(TenantProvider.class)),
                                                SearchScope.ALL);
 
         // Keep every TenantComponentProvider in sync with the tenants known to the TenantProvider.
@@ -149,9 +158,6 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
     }
 
     private static RegisterTenantDescriptorHandlerInterceptor interceptorFactory(Configuration config) {
-        return new RegisterTenantDescriptorHandlerInterceptor(
-                config.getComponent(TenantResolver.class),
-                config.getComponent(TenantProvider.class)
-        );
+        return new RegisterTenantDescriptorHandlerInterceptor(config.getComponent(TenantRouter.class));
     }
 }

@@ -27,36 +27,36 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.*;
 
+import java.util.List;
 import java.util.Map;
 
-import static io.axoniq.framework.messaging.multitenancy.api.TenantUtils.TENANT_RESOURCE_KEY;
-import static io.axoniq.framework.messaging.multitenancy.api.TenantUtils.tenantDescriptorFrom;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class RegisterTenantDescriptorHandlerInterceptorTest {
 
+    private static final String TENANT_KEY = "lateTenantKey";
     private static final TenantDescriptor TENANT_A = new TenantDescriptor(
             "foo-a",
             Map.of("replicationGroup", "rg-a")
     );
 
     @Nested
-    class ConstructorWithTenantResolver {
+    class InterceptOnHandle {
 
         @Test
         void registersTheResolvedTenantDescriptorBeforeProceedingForCommandMessages() {
             // given
             RegisterTenantDescriptorHandlerInterceptor testSubject =
-                    new RegisterTenantDescriptorHandlerInterceptor(new MetadataBasedTenantResolver("lateTenantKey"));
+                    new RegisterTenantDescriptorHandlerInterceptor(routerKnowing(TENANT_A));
             Message message = new GenericCommandMessage(
                     new MessageType("TestCommand"),
                     "payload",
-                    Map.of("lateTenantKey", TENANT_A.tenantId())
+                    Map.of(TENANT_KEY, TENANT_A.tenantId())
             );
             ProcessingContext context = StubProcessingContext.forMessage(message);
             CapturingChain interceptorChain = new CapturingChain();
@@ -66,41 +66,54 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
 
             // then
             assertThat(result).isSameAs(interceptorChain.result);
-            assertThat(tenantDescriptorFrom(interceptorChain.context)).isEqualTo(TenantDescriptor.tenantWithId(
-                    TENANT_A.tenantId()
-            ));
+            assertThat(TenantDescriptor.fromContext(interceptorChain.context)).contains(TENANT_A);
         }
 
         @Test
-        void initializesTenantDescriptorsToAnEmptyList() {
-            // given
+        void registersTheResolvedTenantDescriptorBeforeProceedingForQueryMessages() {
             RegisterTenantDescriptorHandlerInterceptor testSubject =
-                    new RegisterTenantDescriptorHandlerInterceptor(new MetadataBasedTenantResolver("lateTenantKey"));
-            Message message = new GenericCommandMessage(
-                    new MessageType("TestCommand"),
-                    "payload",
-                    Map.of("lateTenantKey", TENANT_A.tenantId())
-            );
-            TenantDescriptor tenantDescriptor = new MetadataBasedTenantResolver("lateTenantKey").resolveTenant(message);
-            ProcessingContext context = StubProcessingContext.forMessage(message)
-                    .withResource(TENANT_RESOURCE_KEY, tenantDescriptor);
+                    new RegisterTenantDescriptorHandlerInterceptor(routerKnowing(TENANT_A));
+            Message message = new GenericQueryMessage(new GenericMessage("message-id",
+                                                                         new MessageType("TestQuery"),
+                                                                         "payload".getBytes(),
+                                                                         Map.of(TENANT_KEY, TENANT_A.tenantId())));
+            ProcessingContext context = StubProcessingContext.forMessage(message);
             CapturingChain interceptorChain = new CapturingChain();
 
             // when
-            testSubject.interceptOnHandle(message, context, interceptorChain);
+            MessageStream<?> result = testSubject.interceptOnHandle(message, context, interceptorChain);
 
             // then
-            assertThat(testSubject.tenantDescriptors().tenants()).isEmpty();
-            assertThat(tenantDescriptorFrom(interceptorChain.context)).isEqualTo(TenantDescriptor.tenantWithId(
-                    TENANT_A.tenantId()
-            ));
+            assertThat(result).isSameAs(interceptorChain.result);
+            assertThat(TenantDescriptor.fromContext(interceptorChain.context)).contains(TENANT_A);
+        }
+
+        @Test
+        void proceedsWithoutTenantContextWhenTheMessageNamesATenantThatIsNotKnown() {
+            // given
+            RegisterTenantDescriptorHandlerInterceptor testSubject =
+                    new RegisterTenantDescriptorHandlerInterceptor(routerKnowing(TENANT_A));
+            Message message = new GenericCommandMessage(
+                    new MessageType("TestCommand"),
+                    "payload",
+                    Map.of(TENANT_KEY, "unknown-tenant")
+            );
+            ProcessingContext context = StubProcessingContext.forMessage(message);
+            CapturingChain interceptorChain = new CapturingChain();
+
+            // when
+            MessageStream<?> result = testSubject.interceptOnHandle(message, context, interceptorChain);
+
+            // then
+            assertThat(result).isSameAs(interceptorChain.result);
+            assertThat(TenantDescriptor.fromContext(interceptorChain.context)).isEmpty();
         }
 
         @Test
         void proceedsWithoutTenantContextWhenTheTenantCannotBeResolved() {
             // given
             RegisterTenantDescriptorHandlerInterceptor testSubject =
-                    new RegisterTenantDescriptorHandlerInterceptor(new MetadataBasedTenantResolver("lateTenantKey"));
+                    new RegisterTenantDescriptorHandlerInterceptor(routerKnowing(TENANT_A));
             Message message = new GenericCommandMessage(new MessageType("TestCommand"), "payload");
             ProcessingContext context = StubProcessingContext.forMessage(message);
             CapturingChain interceptorChain = new CapturingChain();
@@ -110,9 +123,7 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
 
             // then
             assertThat(result).isSameAs(interceptorChain.result);
-            assertThatThrownBy(() -> TenantUtils.tenantDescriptorFrom(interceptorChain.context))
-                    .isInstanceOf(TenantNotResolvedException.class)
-                    .hasMessageContaining("No tenant descriptor found in processing context");
+            assertThat(TenantDescriptor.fromContext(interceptorChain.context)).isEmpty();
         }
 
         @Test
@@ -122,11 +133,12 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
             when(tenantResolver.resolveTenant(any(Message.class), any())).thenReturn(TENANT_A);
 
             RegisterTenantDescriptorHandlerInterceptor testSubject =
-                    new RegisterTenantDescriptorHandlerInterceptor(tenantResolver);
+                    new RegisterTenantDescriptorHandlerInterceptor(
+                            new TenantRouter(tenantResolver, () -> List.of(TENANT_A)));
             Message message = new GenericMessage("message-id",
                                                  new MessageType("TestEvent"),
                                                  "payload".getBytes(),
-                                                 Map.of("lateTenantKey", TENANT_A.tenantId()));
+                                                 Map.of(TENANT_KEY, TENANT_A.tenantId()));
             ProcessingContext context = StubProcessingContext.forMessage(message);
             CapturingChain interceptorChain = new CapturingChain();
 
@@ -138,10 +150,12 @@ class RegisterTenantDescriptorHandlerInterceptorTest {
             verify(tenantResolver, never()).resolveTenant(any(Message.class), any());
             assertThat(interceptorChain.context).isSameAs(context);
 
-            assertThatThrownBy(() -> TenantUtils.tenantDescriptorFrom(interceptorChain.context))
-                    .isInstanceOf(TenantNotResolvedException.class)
-                    .hasMessageContaining("No tenant descriptor found in processing context");
+            assertThat(TenantDescriptor.fromContext(interceptorChain.context)).isEmpty();
         }
+    }
+
+    private static TenantRouter routerKnowing(TenantDescriptor... tenants) {
+        return new TenantRouter(new MetadataBasedTenantResolver(TENANT_KEY), () -> List.of(tenants));
     }
 
     private static class CapturingChain implements MessageHandlerInterceptorChain<Message> {

@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy.axonserver;
+package io.axoniq.framework.messaging.multitenancy.axonserver.api;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.ResultStream;
@@ -164,6 +164,33 @@ class AxonServerTenantProviderTest {
 
             // then the component is registered for it only once
             assertThat(recorder.tenants()).containsExactly(tenant);
+        }
+    }
+
+    @Nested
+    class KnownTenants {
+
+        // Answered on every message that carries a tenant, so this provider tests its set directly rather than through
+        // the list tenants() copies.
+        @Test
+        void onlyReportsAddedTenantsAsKnown() {
+            AxonServerTenantProvider testSubject = new AxonServerTenantProvider(connectionManager, tenant -> true);
+            TenantDescriptor added = TenantDescriptor.tenantWithId("tenant-a");
+            testSubject.addTenant(added);
+
+            assertThat(testSubject.isKnown(added)).isTrue();
+            assertThat(testSubject.isKnown(TenantDescriptor.tenantWithId("never-added"))).isFalse();
+        }
+
+        @Test
+        void stopsReportingARemovedTenantAsKnown() {
+            AxonServerTenantProvider testSubject = new AxonServerTenantProvider(connectionManager, tenant -> true);
+            TenantDescriptor tenant = TenantDescriptor.tenantWithId("tenant-a");
+            testSubject.addTenant(tenant);
+
+            testSubject.removeTenant(tenant);
+
+            assertThat(testSubject.isKnown(tenant)).isFalse();
         }
     }
 
