@@ -47,6 +47,7 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 
 /**
  * Lifecycle-level tests for {@link MicrometerSpan} against Micrometer's {@link SimpleTracer} recording double: lazy
@@ -76,7 +77,7 @@ class MicrometerSpanLifecycleTest {
             // given
             factory.createInternalSpan("Lazy", null);
 
-            // then — no span was materialized on the tracer
+            // then -- no span was materialized on the tracer
             assertThat(tracer.getSpans()).isEmpty();
         }
 
@@ -206,7 +207,7 @@ class MicrometerSpanLifecycleTest {
             // given
             Span span = factory.createInternalSpan("NotStarted", null);
 
-            // when — no span exists yet; the call is a guarded no-op
+            // when -- no span exists yet; the call is a guarded no-op
             span.recordException(new RuntimeException("ignored"));
 
             // then
@@ -261,7 +262,7 @@ class MicrometerSpanLifecycleTest {
             // resources map in place instead of branching on withResource, masking exactly the isolation this test
             // guards
             UnitOfWork unitOfWork = UnitOfWorkTestUtils.aUnitOfWork();
-            unitOfWork.executeWithResult(context -> {
+            joinAndUnwrap(unitOfWork.executeWithResult(context -> {
                 Span span = factory.createInternalSpan("Scoped", context);
                 SpanScope scope = span.start();
 
@@ -275,7 +276,7 @@ class MicrometerSpanLifecycleTest {
                 assertThat(SpanScope.fromContext(context)).isNull();
                 scope.close();
                 return CompletableFuture.completedFuture(null);
-            }).join();
+            }));
         }
 
         @Test
@@ -368,7 +369,7 @@ class MicrometerSpanLifecycleTest {
                 return "result";
             });
 
-            // then — the span was current inside the block and cleared afterwards
+            // then -- the span was current inside the block and cleared afterwards
             assertThat(result).isEqualTo("result");
             SimpleSpan ended = tracer.getSpans().getLast();
             assertThat(currentSpanIdInside.get()).isEqualTo(ended.context().spanId());
@@ -398,7 +399,7 @@ class MicrometerSpanLifecycleTest {
             // when
             CompletableFuture<String> result = span.branchAsync(null, ignored -> gate);
 
-            // then — span not ended until the future completes (SimpleSpan reports Instant.EPOCH while open)
+            // then -- span not ended until the future completes (SimpleSpan reports Instant.EPOCH while open)
             assertThat(tracer.getSpans().getFirst().getEndTimestamp()).isEqualTo(Instant.EPOCH);
             gate.complete("done");
             assertThat(result.orTimeout(5, TimeUnit.SECONDS).join()).isEqualTo("done");

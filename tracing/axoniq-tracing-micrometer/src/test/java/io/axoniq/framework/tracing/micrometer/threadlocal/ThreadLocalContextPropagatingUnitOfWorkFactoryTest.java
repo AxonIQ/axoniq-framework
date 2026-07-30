@@ -35,7 +35,6 @@ import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import org.axonframework.messaging.core.EmptyApplicationContext;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.ProcessingLifecycle.DefaultPhases;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -52,11 +51,13 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.axonframework.common.FutureUtils.emptyCompletedFuture;
+import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 
 /**
  * Tests {@link ThreadLocalContextPropagatingUnitOfWorkFactory}: caller thread-locals captured at creation are restored
@@ -128,7 +129,7 @@ class ThreadLocalContextPropagatingUnitOfWorkFactoryTest {
             });
 
             // when
-            unitOfWork.execute().join();
+            joinAndUnwrap(unitOfWork.execute());
 
             // then the action ran on the worker thread yet saw the caller's correlation value
             assertThat(actionThread.get()).isEqualTo("uow-worker");
@@ -144,7 +145,7 @@ class ThreadLocalContextPropagatingUnitOfWorkFactoryTest {
             unitOfWork.on(DefaultPhases.INVOCATION, pc -> emptyCompletedFuture());
 
             // when
-            unitOfWork.execute().join();
+            joinAndUnwrap(unitOfWork.execute());
 
             // then the worker thread has no leaked correlation value
             assertThat(readCorrelationOnWorker()).isNull();
@@ -158,13 +159,16 @@ class ThreadLocalContextPropagatingUnitOfWorkFactoryTest {
             CORRELATION.remove();
             unitOfWork.on(DefaultPhases.INVOCATION, pc -> CompletableFuture.failedFuture(new RuntimeException("boom")));
 
-            // when / then — failure propagates and the worker thread-local is still cleaned up
-            assertThatThrownBy(() -> unitOfWork.execute().join()).hasRootCauseMessage("boom");
+            // when / then -- the action's own exception reaches the caller unwrapped, and the worker thread-local is
+            // still cleaned up
+            assertThatThrownBy(() -> joinAndUnwrap(unitOfWork.execute()))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessage("boom");
             assertThat(readCorrelationOnWorker()).isNull();
         }
 
         private @Nullable String readCorrelationOnWorker() throws Exception {
-            return worker.submit(CORRELATION::get).get();
+            return worker.submit(CORRELATION::get).get(5, TimeUnit.SECONDS);
         }
     }
 
@@ -193,7 +197,7 @@ class ThreadLocalContextPropagatingUnitOfWorkFactoryTest {
             });
 
             // when
-            unitOfWork.execute().join();
+            joinAndUnwrap(unitOfWork.execute());
 
             // then the INVOCATION action ran with the segment span current (its own segment, not a caller span)
             assertThat(currentSpanIdInInvocation.get()).isEqualTo(segmentSpanId.get());
@@ -226,7 +230,7 @@ class ThreadLocalContextPropagatingUnitOfWorkFactoryTest {
             });
 
             // when
-            unitOfWork.execute().join();
+            joinAndUnwrap(unitOfWork.execute());
 
             // then the child's parent is the segment span from the ProcessingContext resource
             assertThat(childParentSpanId.get()).isEqualTo(segmentSpanId.get());

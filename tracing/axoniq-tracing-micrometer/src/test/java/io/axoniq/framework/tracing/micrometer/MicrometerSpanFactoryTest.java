@@ -49,10 +49,12 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 
 /**
  * Tests {@link MicrometerSpanFactory} against Micrometer Tracing's OpenTelemetry bridge over a real OpenTelemetry SDK,
@@ -164,7 +166,7 @@ class MicrometerSpanFactoryTest {
                 // no-op body
             }
 
-            // then — no Micrometer span kind maps to the OpenTelemetry default INTERNAL
+            // then -- no Micrometer span kind maps to the OpenTelemetry default INTERNAL
             SpanData exported = exportedSpan();
             assertThat(exported.getName()).isEqualTo("MyInternal");
             assertThat(exported.getKind()).isEqualTo(SpanKind.INTERNAL);
@@ -373,7 +375,7 @@ class MicrometerSpanFactoryTest {
             // resources map in place instead of branching on withResource, masking exactly the isolation this test
             // guards -- and a branch opened off its root (e.g. a per-event handler span mid-batch)
             UnitOfWork unitOfWork = UnitOfWorkTestUtils.aUnitOfWork();
-            unitOfWork.executeWithResult(root -> {
+            joinAndUnwrap(unitOfWork.executeWithResult(root -> {
                 Span spanA = factory.createInternalSpan("A", root);
                 SpanScope scopeA = spanA.start();
                 SpanScope.addToContext(root, scopeA);
@@ -385,7 +387,7 @@ class MicrometerSpanFactoryTest {
                 }
                 scopeA.close();
                 return CompletableFuture.completedFuture(null);
-            }).join();
+            }));
 
             // then C is a root span: the branch never wrote anything back onto the shared root context
             SpanData spanCData = exportedSpanNamed("C");
@@ -528,7 +530,7 @@ class MicrometerSpanFactoryTest {
             AtomicReference<Throwable> childThreadFailure = new AtomicReference<>();
             AtomicReference<Boolean> currentTracerContextOnWorkerWasNull = new AtomicReference<>();
 
-            unitOfWork.executeWithResult(processingContext -> {
+            joinAndUnwrap(unitOfWork.executeWithResult(processingContext -> {
                 Span parent = factory.createInternalSpan("Parent", processingContext);
                 SpanScope parentScope = parent.start();
                 ProcessingContext branch = SpanScope.addToContext(processingContext, parentScope);
@@ -544,7 +546,7 @@ class MicrometerSpanFactoryTest {
                         }
                     });
                     childThread.start();
-                    childThread.join();
+                    childThread.join(TimeUnit.SECONDS.toMillis(5));
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new IllegalStateException(e);
@@ -552,9 +554,9 @@ class MicrometerSpanFactoryTest {
                     parentScope.close();
                 }
                 return CompletableFuture.completedFuture(null);
-            }).join();
+            }));
 
-            // then the child nests under the parent — the context rode on the ProcessingContext, not a thread-local
+            // then the child nests under the parent -- the context rode on the ProcessingContext, not a thread-local
             assertThat(childThreadFailure.get()).isNull();
             assertThat(currentTracerContextOnWorkerWasNull.get()).isTrue();
             SpanData parent = exportedSpanNamed("Parent");
