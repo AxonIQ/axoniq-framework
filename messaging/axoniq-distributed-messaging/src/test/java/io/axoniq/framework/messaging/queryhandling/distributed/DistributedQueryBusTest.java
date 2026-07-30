@@ -40,8 +40,10 @@ import org.junit.jupiter.api.*;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 
@@ -302,9 +304,12 @@ class DistributedQueryBusTest {
             SubscriptionQueryUpdateMessage update =
                     new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
 
-            Integer matchCount = testSubject.emitUpdateAndCount(matchingFilter, () -> update, null).join();
+            OptionalInt matchCount = testSubject.emitUpdateAndCount(matchingFilter, () -> update, null)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
 
-            assertThat(matchCount).isEqualTo(2);
+            assertThat(matchCount).isPresent();
+            assertThat(matchCount).hasValue(2);
             assertThat(matchingCallbackOne.sendUpdateCount.get()).isEqualTo(1);
             assertThat(matchingCallbackTwo.sendUpdateCount.get()).isEqualTo(1);
             assertThat(nonMatchingCallback.sendUpdateCount.get()).isZero();
@@ -315,9 +320,12 @@ class DistributedQueryBusTest {
             SubscriptionQueryUpdateMessage update =
                     new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
 
-            Integer matchCount = testSubject.emitUpdateAndCount(query -> false, () -> update, null).join();
+            OptionalInt matchCount = testSubject.emitUpdateAndCount(query -> false, () -> update, null)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
 
-            assertThat(matchCount).isZero();
+            assertThat(matchCount).isPresent();
+            assertThat(matchCount).hasValue(0);
         }
 
         @Test
@@ -334,9 +342,12 @@ class DistributedQueryBusTest {
 
         @Test
         void completeSubscriptionsAndCountReturnsNumberOfMatchingSubscriptionsAndCompletesThemOnly() {
-            Integer matchCount = testSubject.completeSubscriptionsAndCount(matchingFilter, null).join();
+            OptionalInt matchCount = testSubject.completeSubscriptionsAndCount(matchingFilter, null)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
 
-            assertThat(matchCount).isEqualTo(2);
+            assertThat(matchCount).isPresent();
+            assertThat(matchCount).hasValue(2);
             assertThat(matchingCallbackOne.completeCount.get()).isEqualTo(1);
             assertThat(matchingCallbackTwo.completeCount.get()).isEqualTo(1);
             assertThat(nonMatchingCallback.completeCount.get()).isZero();
@@ -344,9 +355,12 @@ class DistributedQueryBusTest {
 
         @Test
         void completeSubscriptionsAndCountReturnsZeroWhenNoSubscriptionsMatch() {
-            Integer matchCount = testSubject.completeSubscriptionsAndCount(query -> false, null).join();
+            OptionalInt matchCount = testSubject.completeSubscriptionsAndCount(query -> false, null)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
 
-            assertThat(matchCount).isZero();
+            assertThat(matchCount).isPresent();
+            assertThat(matchCount).hasValue(0);
         }
 
         @Test
@@ -362,10 +376,12 @@ class DistributedQueryBusTest {
         void completeSubscriptionsExceptionallyAndCountReturnsNumberOfMatchingSubscriptionsAndCompletesThemOnly() {
             MockException cause = new MockException("Mock");
 
-            Integer matchCount =
-                    testSubject.completeSubscriptionsExceptionallyAndCount(matchingFilter, cause, null).join();
+            OptionalInt matchCount = testSubject.completeSubscriptionsExceptionallyAndCount(matchingFilter, cause, null)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
 
-            assertThat(matchCount).isEqualTo(2);
+            assertThat(matchCount).isPresent();
+            assertThat(matchCount).hasValue(2);
             assertThat(matchingCallbackOne.completeExceptionallyCount.get()).isEqualTo(1);
             assertThat(matchingCallbackTwo.completeExceptionallyCount.get()).isEqualTo(1);
             assertThat(nonMatchingCallback.completeExceptionallyCount.get()).isZero();
@@ -375,10 +391,12 @@ class DistributedQueryBusTest {
         void completeSubscriptionsExceptionallyAndCountReturnsZeroWhenNoSubscriptionsMatch() {
             MockException cause = new MockException("Mock");
 
-            Integer matchCount =
-                    testSubject.completeSubscriptionsExceptionallyAndCount(query -> false, cause, null).join();
+            OptionalInt matchCount = testSubject.completeSubscriptionsExceptionallyAndCount(query -> false, cause, null)
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .join();
 
-            assertThat(matchCount).isZero();
+            assertThat(matchCount).isPresent();
+            assertThat(matchCount).hasValue(0);
         }
 
         @Test
