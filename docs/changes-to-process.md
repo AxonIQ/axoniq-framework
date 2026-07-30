@@ -961,12 +961,18 @@ The following files in `axon-5/` describe the API changes:
 - Update AxonIQ Console integration examples
 
 ### modules/monitoring/pages/tracing.adoc
-**Changes to apply:**
-- Update tracing module location (extensions/tracing/opentelemetry)
-- Document OpenTelemetry integration
-- Update span creation for new APIs
-- Document tracing with ProcessingContext
-- Update distributed tracing examples
+**Status:** ✅ COMPLETED
+**Changes applied:**
+- Published a declarative-first tracing guide with Spring Boot alternatives in matching tabs.
+- Documented the Micrometer OpenTelemetry bridge, OTLP export, Reactor context propagation, and current tracer context.
+- Documented the supported tracing settings records and the shared `axon.tracing.*` property namespace.
+- Audited component settings, processor attribute keys, and command, query, event, storage, and connector span names against source.
+- Documented streaming settings strictly as trace-topology choices.
+- Added declarative and Spring examples for setup, multiple exporters, custom factories, custom attribute providers, custom keys, and selective disablement.
+- Moved every Java snippet to tagged files under the tracing module's `examples` directory.
+- Registered the tracing examples as integration-test sources so Maven compiles them.
+- Documented distributed subscription-query update parenting, linking, and `messaging.message.conversation_id`.
+- Included the Jaeger capture and executable Jaeger integration-test reference.
 
 ---
 
@@ -1094,4 +1100,3 @@ The following files in `axon-5/` describe the API changes:
 - Remove JDBC configuration references (moved to external extension)
 - Document aggregate-based vs DCB-based storage performance
 - Update connection pool recommendations
-

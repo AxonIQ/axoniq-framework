@@ -1,0 +1,212 @@
+[.axoniq-feature]
+= OpenTelemetry
+:navtitle: OpenTelemetry
+
+Axoniq Framework integrates OpenTelemetry through Micrometer Tracing.
+`axoniq-tracing-micrometer` implements the Axon Framework `SpanFactory` using Micrometer's `Tracer` and `Propagator`.
+`micrometer-tracing-bridge-otel` connects those interfaces to an OpenTelemetry SDK.
+
+== Dependencies
+
+The declarative and Spring Boot configurations use the same Micrometer bridge and OTLP exporter.
+Spring Boot additionally supplies the SDK and Micrometer components.
+
+[tabs]
+====
+Configuration API::
++
+--
+[source,xml]
+----
+<dependency>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-tracing-micrometer</artifactId>
+    <version>${axoniq-framework.version}</version>
+</dependency>
+<dependency>
+    <groupId>io.micrometer</groupId>
+    <artifactId>micrometer-tracing-bridge-otel</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.opentelemetry</groupId>
+    <artifactId>opentelemetry-sdk</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.opentelemetry</groupId>
+    <artifactId>opentelemetry-exporter-otlp</artifactId>
+</dependency>
+----
+--
+
+Spring Boot::
++
+--
+[source,xml]
+----
+<dependency>
+    <groupId>io.axoniq.framework</groupId>
+    <artifactId>axoniq-tracing-micrometer</artifactId>
+    <version>${axoniq-framework.version}</version>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.micrometer</groupId>
+    <artifactId>micrometer-tracing-bridge-otel</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.opentelemetry</groupId>
+    <artifactId>opentelemetry-exporter-otlp</artifactId>
+</dependency>
+----
+--
+====
+
+== Construct the tracer and propagator
+
+[tabs]
+====
+Configuration API::
++
+--
+Construct the OpenTelemetry SDK, Micrometer `Tracer`, and Micrometer `Propagator`, then register the Micrometer components:
+
+[source,java]
+----
+include::example$tracing/configuration/OpenTelemetryTracingConfiguration.java[tag=full-open-telemetry,indent=0]
+----
+
+The example also registers SDK shutdown with the application lifecycle.
+--
+
+Spring Boot::
++
+--
+Spring Boot constructs the SDK and exposes the Micrometer components.
+Configure sampling and OTLP export:
+
+[source,yaml]
+----
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+----
+
+The Axoniq Framework binding discovers the `Tracer` and `Propagator` as framework components.
+When either component is absent, no Micrometer `SpanFactory` is registered.
+--
+====
+
+== Cross-process propagation
+
+The binding injects a dispatch span's trace context into outgoing message metadata through the configured Micrometer `Propagator`.
+With the OpenTelemetry bridge and W3C propagator, the metadata contains `traceparent` and, when present, `tracestate`.
+The receiving decorator extracts that context before creating its consumer span.
+
+This mechanism is independent of a particular transport or thread.
+It applies to local asynchronous dispatch and messages sent through Axon Server.
+
+Parent selection follows these priorities:
+
+* Dispatch spans use the active processing scope, existing propagation metadata, then the current tracer context.
+* Handler spans use propagation metadata, the active processing scope, then the current tracer context.
+* Context-parent handler spans use the active processing scope as parent and link to the publisher.
+* Root and disconnected-handler spans start a new trace and link to the triggering context when available.
+* Linked-handler spans add a link to the second message's propagated W3C context.
+
+The *current tracer context* is the lowest-priority context installed by external instrumentation and exposed by the Micrometer `Tracer`.
+Missing or invalid propagation metadata never prevents message handling.
+
+== Instrumentation and scoped context
+
+The durable trace relationship is carried by `ProcessingContext` and message metadata.
+During an operation, the Micrometer span scope exposes that operation's span as current and restores the previous tracer context afterward.
+The worker-thread bridge restores a captured Micrometer context snapshot around framework work.
+
+As a result, instrumented JDBC, WebClient, and gRPC calls can become children of the active Axon span.
+MDC-based trace and span identifiers also remain associated with that scoped work.
+
+== Reactor context propagation
+
+The binding registers a `ProcessingContext` accessor with Micrometer's `ContextRegistry`.
+Reactor automatic context propagation must also be enabled so captured context survives scheduler changes.
+
+[tabs]
+====
+Configuration API::
++
+--
+Enable Reactor's hook once during application startup, before pipelines are subscribed:
+
+[source,java]
+----
+include::example$tracing/configuration/ReactorTracingConfiguration.java[tag=automatic-context-propagation,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+[source,yaml]
+----
+spring:
+  reactor:
+    context-propagation: auto
+----
+--
+====
+
+The worker-thread bridge can be disabled independently:
+
+[source,yaml]
+----
+axon:
+  tracing:
+    thread-local-context-propagation:
+      enabled: false
+----
+
+Span creation and message metadata propagation remain enabled when the bridge is disabled.
+
+== Span kinds and links
+
+[cols="<,<"]
+|===
+|`SpanFactory` method |OpenTelemetry result through the Micrometer bridge
+
+|`createDispatchSpan`
+|`PRODUCER`
+
+|`createHandlerSpan`
+|`CONSUMER`
+
+|`createContextParentHandlerSpan`
+|`CONSUMER`, child of the active processing scope with a link to the producer
+
+|`createDisconnectedHandlerSpan`
+|`CONSUMER`, new trace with a link to the producer
+
+|`createInternalSpan`
+|`INTERNAL`
+
+|`createRootSpan`
+|`INTERNAL`, new trace with a link to the triggering context when present
+
+|`createLinkedHandlerSpan`
+|`CONSUMER` with a link to a second message
+|===
+
+Span links require a W3C `traceparent` in message metadata.
+The OpenTelemetry bridge exports links to backends such as Jaeger.
+
+== Log correlation
+
+Spring Boot includes current trace and span identifiers in log correlation by default when Micrometer Tracing is active.
+The scoped bridge makes those identifiers available during framework work.
+Use `logging.pattern.correlation` to customize the format.

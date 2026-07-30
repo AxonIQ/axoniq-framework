@@ -1,0 +1,186 @@
+[.axoniq-feature]
+= Customising Tracing
+:navtitle: Customisation
+
+Axon Framework uses one active `SpanFactory`.
+Applications can replace that factory, control individual tracing decorators, and contribute span attributes.
+
+== Replace the active `SpanFactory`
+
+`LoggingSpanFactory` is useful for local development without a tracing backend.
+
+[tabs]
+====
+Configuration API::
++
+--
+[source,java]
+----
+include::example$tracing/customisation/DeclarativeSpanCustomisation.java[tag=custom-span-factory,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+[source,java]
+----
+include::example$tracing/customisation/SpringCustomSpanFactoryConfiguration.java[tag=custom-span-factory,indent=0]
+----
+
+When a non-Micrometer factory replaces the Micrometer factory, disable the Micrometer worker-thread bridge:
+
+[source,yaml]
+----
+axon:
+  tracing:
+    thread-local-context-propagation:
+      enabled: false
+----
+--
+====
+
+Tracing is disabled when no `SpanFactory` can be created.
+`NoOpSpanFactory` is a null-object for tests, not an application-level off switch.
+
+== Disable tracing by environment
+
+[tabs]
+====
+Configuration API::
++
+--
+Register the Micrometer backend components only in environments where tracing is enabled:
+
+[source,java]
+----
+include::example$tracing/configuration/DeclarativeTracingConfiguration.java[tag=environment,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+[source,yaml]
+----
+axon:
+  tracing:
+    enabled: false
+----
+--
+====
+
+== Disable individual components
+
+[tabs]
+====
+Configuration API::
++
+--
+Register the supported tracing settings records as components:
+
+[source,java]
+----
+include::example$tracing/configuration/DeclarativeTracingConfiguration.java[tag=component-settings,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+[source,yaml]
+----
+axon:
+  tracing:
+    query-bus:
+      enabled: false
+    repository:
+      enabled: false
+    snapshot-store:
+      enabled: false
+    query-bus-connector:
+      enabled: false
+    event-processor:
+      batch-trace-enabled: false
+----
+--
+====
+
+The complete set of settings is listed on xref:tracing:index.adoc#_tracing_settings[Distributed Tracing].
+`distributed-in-same-trace` selects the streaming trace topology.
+It does not describe where or how event handling executes.
+
+== Add a custom `SpanAttributesProvider`
+
+[source,java]
+----
+include::example$tracing/customisation/TenantSpanAttributesProvider.java[tag=provider,indent=0]
+----
+
+[tabs]
+====
+Configuration API::
++
+--
+[source,java]
+----
+include::example$tracing/customisation/DeclarativeSpanCustomisation.java[tag=custom-provider,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+[source,java]
+----
+include::example$tracing/customisation/SpringSpanAttributesConfiguration.java[tag=custom-provider,indent=0]
+----
+--
+====
+
+A provider is invoked for messages passing through a traced component.
+Attributes owned by an internal operation, such as a repository or snapshot operation, are attached directly by that component's decorator.
+The event processor name is likewise attached directly as `axoniq.event_processor.name`.
+
+== Customise built-in attribute keys
+
+Built-in providers accept an attribute key or metadata prefix in their constructors.
+Disable the corresponding default provider when registering a replacement.
+
+[tabs]
+====
+Configuration API::
++
+--
+[source,java]
+----
+include::example$tracing/customisation/DeclarativeSpanCustomisation.java[tag=custom-keys,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+[source,java]
+----
+include::example$tracing/customisation/SpringSpanAttributesConfiguration.java[tag=custom-keys,indent=0]
+----
+
+[source,yaml]
+----
+axon:
+  tracing:
+    attribute-providers:
+      message-id: false
+      metadata: false
+----
+--
+====
+
+The default keys use the dotted `axoniq.*` layout with `snake_case` leaf segments.
+
+== Extend tracing
+
+Library and platform authors can implement `SpanFactory` or build decorators using the public `org.axonframework.messaging.tracing` API.
+Register additional decorators through a service-loaded `ConfigurationEnhancer`.
+Application code should treat built-in decorator names and implementation classes as internal details.

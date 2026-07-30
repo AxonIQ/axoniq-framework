@@ -1,0 +1,204 @@
+[.axoniq-feature]
+= Tracing Examples
+:navtitle: Examples
+
+These examples show common Micrometer Tracing configurations and trace topologies.
+
+== Initial setup
+
+[tabs]
+====
+Configuration API::
++
+--
+Construct the OpenTelemetry SDK, Micrometer bridge, and application configuration:
+
+[source,java]
+----
+include::example$tracing/configuration/OpenTelemetryTracingConfiguration.java[tag=full-open-telemetry,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+Add the Spring Boot starter, Micrometer binding, Actuator, OpenTelemetry bridge, and OTLP exporter.
+Then configure the exporter:
+
+[source,yaml]
+----
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+----
+--
+====
+
+A command sent through Axon Server produces this trace shape:
+
+----
+CommandBus.dispatch BookRoom                     [PRODUCER]
++- CommandBusConnector.dispatch BookRoom         [PRODUCER]
+   +- CommandBusConnector.handle BookRoom        [CONSUMER]
+      +- CommandBus.handle BookRoom              [CONSUMER]
+         +- BookRoomHandler.handle(BookRoom)     [INTERNAL]
+----
+
+== Logging-only backend
+
+[tabs]
+====
+Configuration API::
++
+--
+[source,java]
+----
+include::example$tracing/configuration/DeclarativeTracingConfiguration.java[tag=logging-span-factory,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+[source,java]
+----
+include::example$tracing/customisation/SpringCustomSpanFactoryConfiguration.java[tag=custom-span-factory,indent=0]
+----
+
+Disable `axon.tracing.thread-local-context-propagation.enabled` when using a non-Micrometer factory with the Micrometer module on the classpath.
+--
+====
+
+`LoggingSpanFactory` writes span lifecycle events through SLF4J.
+
+== Multiple exporters
+
+[tabs]
+====
+Configuration API::
++
+--
+Use OpenTelemetry's composite exporter:
+
+[source,java]
+----
+include::example$tracing/configuration/OpenTelemetryTracingConfiguration.java[tag=multiple-exporters,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+Expose additional `SpanExporter` beans:
+
+[source,java]
+----
+include::example$tracing/exporters/SpringExporterConfiguration.java[tag=additional-exporter,indent=0]
+----
+--
+====
+
+== Streaming event processing
+
+The default streaming topology creates a batch trace and links each event-processing span to its publisher:
+
+----
+StreamingEventProcessor.batch                         [INTERNAL]
++- EventProcessor.process RoomBooked                  [CONSUMER]
+   |  link: EventSink.publish RoomBooked
+   +- RoomAvailabilityProjector.on(RoomBooked)        [INTERNAL]
+----
+
+One batch can contain events from different publishers.
+Each `EventProcessor.process` span links to its own publisher.
+This describes the trace topology only and makes no assumption about scheduling, threads, or processing location.
+
+Set `distributed-in-same-trace` to select a topology where eligible process spans use the publisher span as parent:
+
+[source,yaml]
+----
+axon:
+  tracing:
+    event-processor:
+      distributed-in-same-trace: true
+----
+
+The `distributed-in-same-trace-time-limit` determines eligibility.
+Events outside the time limit start a new trace linked to their publisher.
+
+== Subscription-query updates
+
+An update has a transport parent-child relationship and a link to the subscription:
+
+----
+QueryBus.emitUpdate
++- QueryBusConnector.queryUpdate RoomView             [PRODUCER]
+   +- QueryBusConnector.queryUpdate RoomView          [CONSUMER]
+      +- link: QueryBus.subscriptionQuery WatchRoom
+----
+
+The subscription setup, initial response, and update transport spans carry `messaging.message.conversation_id`.
+
+== Jaeger export
+
+Point an OTLP HTTP exporter at Jaeger:
+
+[source,yaml]
+----
+management:
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+----
+
+`TracingJaegerIntegrationTest` starts Jaeger with Testcontainers, dispatches a command, and verifies the exported trace through Jaeger's HTTP API.
+
+== Environment and component controls
+
+[tabs]
+====
+Configuration API::
++
+--
+[source,java]
+----
+include::example$tracing/configuration/DeclarativeTracingConfiguration.java[tag=environment,indent=0]
+----
+
+[source,java]
+----
+include::example$tracing/configuration/DeclarativeTracingConfiguration.java[tag=component-settings,indent=0]
+----
+--
+
+Spring Boot::
++
+--
+[source,yaml]
+----
+axon:
+  tracing:
+    enabled: false
+----
+
+Or disable selected components:
+
+[source,yaml]
+----
+axon:
+  tracing:
+    event-store:
+      enabled: false
+    snapshot-store:
+      enabled: false
+    event-processor:
+      batch-trace-enabled: false
+    query-bus-connector:
+      enabled: false
+----
+--
+====

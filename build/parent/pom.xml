@@ -71,6 +71,10 @@
         <!-- Metrics -->
         <dropwizard.metrics.version>5.0.6</dropwizard.metrics.version>
         <micrometer.version>1.16.4</micrometer.version>
+        <!-- Tracing -->
+        <opentelemetry.version>1.52.0</opentelemetry.version>
+        <micrometer-tracing.version>1.6.4</micrometer-tracing.version>
+        <context-propagation.version>1.2.1</context-propagation.version>
         <!-- Other -->
         <byte-buddy.version>1.18.11</byte-buddy.version>
         <commons-io.version>2.22.0</commons-io.version>
@@ -110,6 +114,31 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- OpenTelemetry BOM (manages opentelemetry-api / -sdk / -exporter-otlp versions) -->
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-bom</artifactId>
+                <version>${opentelemetry.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Micrometer Tracing BOM (manages micrometer-tracing / -bridge-otel / -test versions) -->
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-tracing-bom</artifactId>
+                <version>${micrometer-tracing.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Micrometer Context Propagation (ThreadLocal <-> Reactor/Context bridge; not in the tracing BOM) -->
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>context-propagation</artifactId>
+                <version>${context-propagation.version}</version>
+            </dependency>
+
             <!-- Axon Framework -->
             <dependency>
                 <groupId>org.axonframework</groupId>
