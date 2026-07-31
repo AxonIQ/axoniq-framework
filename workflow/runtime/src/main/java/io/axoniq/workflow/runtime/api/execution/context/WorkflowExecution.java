@@ -107,7 +107,10 @@ public interface WorkflowExecution extends DescribableComponent {
     boolean hasTasks();
 
     /**
-     * Stops local execution for engine shutdown without producing step or workflow cancellation events.
+     * Stops only in-memory execution as part of engine shutdown.
+     * <p>
+     * This operation preserves the durable workflow state for replay and produces no step or workflow cancellation
+     * events. It must never be used to cancel or otherwise terminate a workflow.
      */
     void stopForShutdown();
 

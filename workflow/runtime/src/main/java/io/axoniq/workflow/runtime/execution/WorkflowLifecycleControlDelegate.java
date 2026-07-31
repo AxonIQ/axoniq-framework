@@ -40,7 +40,11 @@ import static io.axoniq.workflow.runtime.util.EventMessageUtils.cancelledWorkflo
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.failedWorkflow;
 
 /**
- * Delegate that owns the full workflow termination flow: cancel futures, send event, apply state, throw.
+ * Delegate that applies workflow and step lifecycle-control commands on the workflow control thread.
+ * <p>
+ * It prepares a workflow for a terminal lifecycle event, publishes that event, and waits for the state projection.
+ * For a single-step cancellation it completes the running future, leaving the owning step executor to publish the
+ * guarded terminal step event.
  * <p>
  * <b>Replay-drift invariant:</b> any path that publishes a workflow- or step-level event or mutates
  * recorded state must be guarded against replay drift first. This applies
@@ -68,7 +72,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     private final Executor executor;
 
     /**
-     * Constructs the terminate delegate.
+     * Constructs a lifecycle-control delegate.
      *
      * @param workflowContext               workflow context.
      * @param workflowExecution             workflow execution.

@@ -24,8 +24,8 @@ import jakarta.annotation.Nullable;
 /**
  * Internal control contract for programmatically changing workflow and step lifecycle state.
  * <p>
- * Each intent is carried by its own typed command, so callers and implementations always know what is being
- * terminated from the type alone.
+ * Each intent is carried by its own typed command, so callers and implementations know which lifecycle transition is
+ * requested from its type alone.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -47,13 +47,13 @@ public interface WorkflowLifecycleControl {
     void failWorkflow(@Nonnull FailWorkflowCommand command);
 
     /**
-     * Cancels a single running step, publishing its {@code <step>:CANCELLED} event while the workflow itself stays
-     * non-terminal. The {@code <step>:CANCELLED} record is authored directly on the control thread (guarded on the
-     * step still being non-terminal) before the step's future is torn down.
+     * Cancels a single running step while the workflow itself stays non-terminal.
+     * <p>
+     * The control operation completes the step's running future exceptionally. The owning step executor subsequently
+     * authors the guarded {@code <step>:CANCELLED} event through its normal terminal-event path.
      *
      * @param command step cancellation command.
-     * @return {@code true} if the step was non-terminal and a {@code <step>:CANCELLED} record was published;
-     * {@code false} if the step was unknown or already terminal (nothing published).
+     * @return {@code true} if cancellation was initiated for a running, non-terminal step, otherwise {@code false}
      */
     boolean cancelStep(@Nonnull CancelStepCommand command);
 
