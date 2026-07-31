@@ -18,7 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
@@ -37,7 +37,7 @@ import java.util.concurrent.TimeUnit;
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
- * @since 1.1.0
+ * @since 0.2.0
  */
 final class DefaultWorkflowCancellation implements WorkflowCancellation {
 
@@ -75,8 +75,9 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation {
         var done = new CompletableFuture<Boolean>();
         workflowExecution.appendTask(ignored -> {
             try {
-                done.complete(workflowContext.cancelStep(new TerminatePrimitive.CancelStep(
-                        stepName, cause, workflowExecution.workflowConfiguration().eventNameCustomizer())));
+                done.complete(workflowContext.cancelStep(PrimitiveCommands.cancelStep(
+                        stepName, cause, workflowExecution.workflowConfiguration().eventNameCustomizer()
+                                                               .forStepInheritance())));
             } catch (Throwable t) {
                 done.completeExceptionally(t);
             }
@@ -99,8 +100,9 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation {
             try {
                 var cancelled = 0;
                 for (var stepName : stepNames) {
-                    if (workflowContext.cancelStep(new TerminatePrimitive.CancelStep(
-                            stepName, cause, workflowExecution.workflowConfiguration().eventNameCustomizer()))) {
+                    if (workflowContext.cancelStep(PrimitiveCommands.cancelStep(
+                            stepName, cause, workflowExecution.workflowConfiguration().eventNameCustomizer()
+                                                                   .forStepInheritance()))) {
                         cancelled++;
                     }
                 }
@@ -126,8 +128,8 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation {
                     return;
                 }
                 try {
-                    workflowContext.cancelWorkflow(new TerminatePrimitive.CancelWorkflow(
-                            cancellationCause(cause), workflowExecution.workflowConfiguration().eventNameCustomizer(), null));
+                    workflowContext.cancelWorkflow(PrimitiveCommands.cancelWorkflow(
+                            cancellationCause(cause), workflowExecution.workflowConfiguration().eventNameCustomizer()));
                 } catch (WorkflowCancelledException expected) {
                     // The workflow-body primitive signals cancellation by throwing after the durable event is recorded.
                 }

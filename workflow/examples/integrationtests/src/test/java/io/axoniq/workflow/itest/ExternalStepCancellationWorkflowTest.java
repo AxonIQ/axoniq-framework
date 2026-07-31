@@ -30,6 +30,8 @@ import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
+import io.axoniq.workflow.runtime.test.utils.PrettyPrintingRecordingEventStore;
+import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
@@ -109,6 +111,15 @@ class ExternalStepCancellationWorkflowTest extends AbstractWorkflowTestBase<Simp
             assertThat(state.getStep("awaitApproval").status()).isEqualTo(StepStatus.CANCELLED);
             assertThat(state.getStep("compensate").status()).isEqualTo(StepStatus.COMPLETED);
         });
+
+        var cancelledStepEvent = PrettyPrintingRecordingEventStore.lastInstance().recorded().stream()
+                                                                   .filter(event -> MetadataUtils.getStepStatus(event.metadata())
+                                                                                                 .filter(StepStatus.CANCELLED::equals)
+                                                                                                 .isPresent())
+                                                                   .findFirst();
+        assertThat(cancelledStepEvent).isPresent();
+        assertThat(cancelledStepEvent.orElseThrow().type().qualifiedName().toString())
+                .isEqualTo("io.axoniq.dsl.externalcancel.AwaitApprovalCancelled");
     }
 
     public static class ExternalStepCancellationWorkflow {

@@ -143,7 +143,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
         if (resumedInFlight) {
             failureHandler.onFailure(stepName, new StepIndeterminateException(stepName), eventNameCustomizer);
-            return stateBased(stepName, workflowExecution);
+            return stateBased(stepName, eventNameCustomizer, workflowExecution);
         }
 
         if (!workflowExecution.state().containsStep(stepName)) {
@@ -240,6 +240,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
             }
         }
 
-        return stateBased(stepName, workflowExecution);
+        return stateBased(stepName, eventNameCustomizer, workflowExecution);
     }
 }

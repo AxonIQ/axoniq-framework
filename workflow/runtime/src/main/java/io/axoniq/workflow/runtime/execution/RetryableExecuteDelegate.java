@@ -104,7 +104,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             if (step.status() == StepStatus.RETRYING && step.result() instanceof StepRetryInfo info) {
                 Instant retryReadyAt = computeRetryReadyAt(retryPolicy, info.attempt(), step.timestamp());
                 scheduleRetryAttempt(command, info.attempt() + 1, retryReadyAt);
-                return stateBased(stepName, workflowExecution);
+                return stateBased(stepName, command.eventNameCustomizer(), workflowExecution);
             }
         }
 

@@ -35,7 +35,7 @@ import java.util.Map;
 public interface WorkflowContext extends
         ExecutePrimitive,
         WaitForPrimitive,
-        TerminatePrimitive,
+        WorkflowLifecycleControl,
         PayloadPrimitive,
         VersionPrimitive,
         AllMatchCombinator,

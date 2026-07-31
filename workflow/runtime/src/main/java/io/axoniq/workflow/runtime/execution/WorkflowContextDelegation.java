@@ -20,7 +20,8 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadPrimitive;
-import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.workflow.runtime.api.execution.context.VersionPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
@@ -62,7 +63,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
     // Primitive implementations
     private final RetryableExecuteDelegate retryableExecuteDelegate;
     private final WaitForDelegate waitForDelegate;
-    private final TerminateDelegate terminateDelegate;
+    private final WorkflowLifecycleControlDelegate lifecycleControlDelegate;
     private final PayloadDelegate payloadDelegate;
     private final VersionDelegate versionDelegate;
 
@@ -171,15 +172,14 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                    eventSink,
                                                    executorService,
                                                    timeoutScheduler);
-        this.terminateDelegate = new TerminateDelegate(workflowContext,
-                                                       workflowExecution,
-                                                       runningSteps,
-                                                       workflowStepProgress,
-                                                       terminalTeardown,
-                                                       unitOfWorkFactory,
-                                                       eventSink,
-                                                       executorService,
-                                                       stepParent);
+        this.lifecycleControlDelegate = new WorkflowLifecycleControlDelegate(workflowContext,
+                                                                              workflowExecution,
+                                                                              runningSteps,
+                                                                              workflowStepProgress,
+                                                                              terminalTeardown,
+                                                                              unitOfWorkFactory,
+                                                                              eventSink,
+                                                                              executorService);
         this.payloadDelegate = new PayloadDelegate(workflowContext,
                                                    workflowExecution,
                                                    runningSteps,
@@ -270,30 +270,26 @@ public class WorkflowContextDelegation implements WorkflowContext {
     }
 
     @Override
-    public void cancelWorkflow(@Nonnull TerminatePrimitive.CancelWorkflow command) {
+    public void cancelWorkflow(@Nonnull WorkflowLifecycleControl.CancelWorkflowCommand command) {
         workflowExecution.state().throwTerminalCause();
-        terminateDelegate.cancelWorkflow(new TerminatePrimitive.CancelWorkflow(
+        lifecycleControlDelegate.cancelWorkflow(PrimitiveCommands.cancelWorkflow(
                 command.cause(),
-                merge(workflowExecution.workflowConfiguration().eventNameCustomizer(),
-                      command.eventNameCustomizer()),
-                workflowExecution.workflowName()
+                merge(workflowExecution.workflowConfiguration().eventNameCustomizer(), command.eventNameCustomizer())
         ));
     }
 
     @Override
-    public void failWorkflow(@Nonnull TerminatePrimitive.FailWorkflow command) {
+    public void failWorkflow(@Nonnull WorkflowLifecycleControl.FailWorkflowCommand command) {
         workflowExecution.state().throwTerminalCause();
-        terminateDelegate.failWorkflow(new TerminatePrimitive.FailWorkflow(
+        lifecycleControlDelegate.failWorkflow(PrimitiveCommands.failWorkflow(
                 command.cause(),
-                merge(workflowExecution.workflowConfiguration().eventNameCustomizer(),
-                      command.eventNameCustomizer()),
-                workflowExecution.workflowName()
+                merge(workflowExecution.workflowConfiguration().eventNameCustomizer(), command.eventNameCustomizer())
         ));
     }
 
     @Override
-    public boolean cancelStep(@Nonnull TerminatePrimitive.CancelStep command) {
-        return terminateDelegate.cancelStep(command);
+    public boolean cancelStep(@Nonnull WorkflowLifecycleControl.CancelStepCommand command) {
+        return lifecycleControlDelegate.cancelStep(command);
     }
 
     @Nonnull

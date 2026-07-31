@@ -23,7 +23,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledExcepti
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
-import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
@@ -332,12 +332,23 @@ public abstract class AbstractStepExecutor {
         return e instanceof CompletionException ? e.getCause() : e;
     }
 
-    public static WorkflowStepResult stateBased(@Nonnull String stepName, WorkflowExecution workflowExecution) {
+    /**
+     * Creates a durable result handle for a step while retaining its event-name customizer for later cancellation.
+     *
+     * @param stepName            logical name of the step
+     * @param eventNameCustomizer customizer originally supplied for the step primitive
+     * @param workflowExecution   execution providing state access and cancellation delegation
+     * @return state-backed step result handle
+     */
+    @Nonnull
+    public static WorkflowStepResult stateBased(@Nonnull String stepName,
+                                                @Nonnull EventNameCustomizer eventNameCustomizer,
+                                                @Nonnull WorkflowExecution workflowExecution) {
         return new StateBasedWorkflowStepResult(stepName, () -> {
             workflowExecution.awaitStateChange(s -> true);
             return null;
-        }, cause -> workflowExecution.workflowContext().cancelStep(new TerminatePrimitive.CancelStep(
-                stepName, cause, workflowExecution.workflowConfiguration().eventNameCustomizer()
+        }, cause -> workflowExecution.workflowContext().cancelStep(PrimitiveCommands.cancelStep(
+                stepName, cause, eventNameCustomizer
         )), workflowExecution);
     }
 

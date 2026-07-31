@@ -253,7 +253,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         switch (exception) {
             case WorkflowFailedException wfe -> {
-                // if Events are already sent by TerminateDelegate, just let it propagate
+                // if events are already sent by WorkflowLifecycleControlDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
                     // Whole-workflow terminal: interrupt running steps (no per-step terminal event) and
                     // discard the queue, then publish only the workflow-level FAILED event.
@@ -272,7 +272,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 }
             }
             case WorkflowCancelledException wce -> {
-                // if Events are already sent by TerminateDelegate, just let it propagate
+                // if events are already sent by WorkflowLifecycleControlDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
                     // Whole-workflow terminal: interrupt running steps (no per-step terminal event) and
                     // discard the queue, then publish only the workflow-level CANCELLED event.

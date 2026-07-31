@@ -18,7 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
@@ -42,18 +42,18 @@ import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.ArgumentMatchers.anyString;
 
 /**
- * Tests for the replay-drift guard in {@link TerminateDelegate}. Drift detection must fire on
+ * Tests for the replay-drift guard in {@link WorkflowLifecycleControlDelegate}. Drift detection must fire on
  * workflow-level fail/cancel AND per-step cancellation, since both publish events that would
  * corrupt an in-flight workflow if old code ran past this point.
  *
  * @author Stefan Dragisic
  */
-class TerminateDelegateDriftTest {
+class WorkflowLifecycleControlDelegateDriftTest {
 
     private WorkflowContext workflowContext;
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
-    private TerminateDelegate delegate;
+    private WorkflowLifecycleControlDelegate delegate;
     private final WorkflowStepProgress workflowStepProgress = new WorkflowStepProgress();
 
     @BeforeEach
@@ -69,9 +69,8 @@ class TerminateDelegateDriftTest {
         when(workflowExecution.workflowName()).thenReturn("TestWorkflow");
         when(workflowExecution.state()).thenReturn(state);
 
-        delegate = new TerminateDelegate(
-                workflowContext, workflowExecution, new RunningSteps(), workflowStepProgress, () -> { }, unitOfWorkFactory, eventSink, executor,
-                DefaultEventNameCustomizer.Builder.defaults()
+        delegate = new WorkflowLifecycleControlDelegate(
+                workflowContext, workflowExecution, new RunningSteps(), workflowStepProgress, () -> { }, unitOfWorkFactory, eventSink, executor
         );
     }
 
@@ -82,8 +81,8 @@ class TerminateDelegateDriftTest {
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
 
-        var cmd = new TerminatePrimitive.FailWorkflow(
-                new RuntimeException("oops"), DefaultEventNameCustomizer.Builder.defaults(), null);
+        var cmd = PrimitiveCommands.failWorkflow(
+                new RuntimeException("oops"), DefaultEventNameCustomizer.Builder.defaults());
 
         assertThatThrownBy(() -> delegate.failWorkflow(cmd))
                 .isInstanceOf(WorkflowReplayDriftException.class)
@@ -101,8 +100,8 @@ class TerminateDelegateDriftTest {
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
 
-        var cmd = new TerminatePrimitive.CancelWorkflow(
-                null, DefaultEventNameCustomizer.Builder.defaults(), null);
+        var cmd = PrimitiveCommands.cancelWorkflow(
+                null, DefaultEventNameCustomizer.Builder.defaults());
 
         assertThatThrownBy(() -> delegate.cancelWorkflow(cmd))
                 .isInstanceOf(WorkflowReplayDriftException.class);
@@ -115,7 +114,7 @@ class TerminateDelegateDriftTest {
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
 
-        var cmd = new TerminatePrimitive.CancelStep(
+        var cmd = PrimitiveCommands.cancelStep(
                 "newCancelTarget", null, DefaultEventNameCustomizer.Builder.defaults());
 
         assertThatThrownBy(() -> delegate.cancelStep(cmd))
@@ -137,8 +136,8 @@ class TerminateDelegateDriftTest {
 
         // Workflow-level fail does eventually publish — we only assert no drift was thrown by
         // catching any non-drift throwable as "passes" for our purposes.
-        var cmd = new TerminatePrimitive.FailWorkflow(
-                new RuntimeException("expected"), DefaultEventNameCustomizer.Builder.defaults(), null);
+        var cmd = PrimitiveCommands.failWorkflow(
+                new RuntimeException("expected"), DefaultEventNameCustomizer.Builder.defaults());
 
         assertThatCode(() -> {
             try {

@@ -27,6 +27,7 @@ import io.axoniq.workflow.runtime.api.execution.context.FailWorkflowDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.VersionPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.VersionStepDefinition;
@@ -200,25 +201,23 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
 
     @Override
     public void fail(@Nonnull FailWorkflowDefinition definition) {
-        delegate.failWorkflow(new FailWorkflow(
+        delegate.failWorkflow(PrimitiveCommands.failWorkflow(
                 definition.cause(),
-                definition.primitiveMetadata().eventNameCustomizer(),
-                null
+                definition.primitiveMetadata().eventNameCustomizer()
         ));
     }
 
     @Override
     public void cancel(@Nonnull CancelWorkflowDefinition definition) {
-        delegate.cancelWorkflow(new CancelWorkflow(
+        delegate.cancelWorkflow(PrimitiveCommands.cancelWorkflow(
                 definition.cause(),
-                definition.primitiveMetadata().eventNameCustomizer(),
-                null
+                definition.primitiveMetadata().eventNameCustomizer()
         ));
     }
 
     @Override
     public void cancelStep(@Nonnull CancelStepDefinition definition) {
-        delegate.cancelStep(new CancelStep(
+        delegate.cancelStep(PrimitiveCommands.cancelStep(
                 definition.primitiveMetadata().stepName(),
                 definition.cause(),
                 definition.primitiveMetadata().eventNameCustomizer()
@@ -248,17 +247,17 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     }
 
     @Override
-    public void cancelWorkflow(@Nonnull CancelWorkflow command) {
+    public void cancelWorkflow(@Nonnull WorkflowLifecycleControl.CancelWorkflowCommand command) {
         delegate.cancelWorkflow(command);
     }
 
     @Override
-    public void failWorkflow(@Nonnull FailWorkflow command) {
+    public void failWorkflow(@Nonnull WorkflowLifecycleControl.FailWorkflowCommand command) {
         delegate.failWorkflow(command);
     }
 
     @Override
-    public boolean cancelStep(@Nonnull CancelStep command) {
+    public boolean cancelStep(@Nonnull WorkflowLifecycleControl.CancelStepCommand command) {
         return delegate.cancelStep(command);
     }
 

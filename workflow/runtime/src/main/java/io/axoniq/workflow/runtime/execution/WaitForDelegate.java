@@ -150,7 +150,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             }
         }
 
-        return stateBased(stepName, workflowExecution);
+        return stateBased(stepName, eventNameCustomizer, workflowExecution);
     }
 
     /**

@@ -48,7 +48,7 @@ import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Bu
  * details.
  *
  * @author Stefan Dragisic
- * @since 1.1.0
+ * @since 0.2.0
  */
 @Internal
 public class VersionDelegate implements VersionPrimitive {
