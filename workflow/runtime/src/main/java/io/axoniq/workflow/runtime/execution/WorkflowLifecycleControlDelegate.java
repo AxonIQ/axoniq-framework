@@ -183,6 +183,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     private void publishFailed(@Nonnull WorkflowLifecycleControl.FailWorkflowCommand command, @Nonnull String effectiveName) {
         var cause = command.cause();
         var eventNameCustomizer = command.eventNameCustomizer();
+        var workflowDefinitionId = workflowExecution.state().workflowDefinitionId();
         var exception = cause instanceof Exception
                 ? (Exception) cause
                 : cause != null ? new RuntimeException(cause) : new RuntimeException("Workflow failed");
@@ -195,7 +196,8 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
                 executor,
                 workflowContext.processingContext(),
                 ctx -> eventSink.publish(ctx,
-                                         failedWorkflow(workflowContext, effectiveName, exception, eventNameCustomizer))
+                                         failedWorkflow(workflowContext, effectiveName, exception, workflowDefinitionId,
+                                                        eventNameCustomizer))
         ).join(); // FIXME join
 
     }
@@ -204,6 +206,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
                                   @Nonnull String effectiveName) {
         var cause = command.cause();
         var eventNameCustomizer = command.eventNameCustomizer();
+        var workflowDefinitionId = workflowExecution.state().workflowDefinitionId();
 
         ProcessingContextUtils.executeWithResult(
                 workflowExecution.workflowId(),
@@ -211,7 +214,8 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
                 executor,
                 workflowContext.processingContext(),
                 ctx -> eventSink.publish(ctx,
-                                         cancelledWorkflow(workflowContext, effectiveName, cause, eventNameCustomizer))
+                                         cancelledWorkflow(workflowContext, effectiveName, cause, workflowDefinitionId,
+                                                            eventNameCustomizer))
         ).join(); // FIXME join
 
     }

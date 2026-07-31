@@ -26,6 +26,8 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeList
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -85,7 +87,7 @@ class WorkflowLifecycleControlDelegateFailTest {
                     return action.apply(processingContext);
                 });
 
-        when(workflowExecution.state()).thenReturn(new EventSourcedWorkflowState(Map.of(), workflowContext, Map.of()));
+        when(workflowExecution.state()).thenReturn(workflowState(Map.of()));
         when(workflowContext.processingContext()).thenReturn(processingContext);
         when(workflowExecution.workflowName()).thenReturn("test-workflow");
         when(workflowContext.workflowId()).thenReturn("wf-1");
@@ -164,7 +166,7 @@ class WorkflowLifecycleControlDelegateFailTest {
     @Test
     void terminateFailInvokesFailedStatusChangeListener() throws InterruptedException {
         var listener = mock(WorkflowStatusChangeListener.class);
-        EventSourcedWorkflowState state = new EventSourcedWorkflowState(Map.of(), workflowContext, Map.of(WorkflowStatus.FAILED, listener));
+        EventSourcedWorkflowState state = workflowState(Map.of(WorkflowStatus.FAILED, listener));
         when(workflowExecution.state()).thenReturn(state);
 
         var cause = new RuntimeException("boom");
@@ -172,8 +174,14 @@ class WorkflowLifecycleControlDelegateFailTest {
                 failWorkflow(cause, eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        state.evolve(EventMessageUtils.failedWorkflow(workflowContext, "test-workflow", cause, eventNameCustomizer), processingContext);
+        state.evolve(EventMessageUtils.failedWorkflow(workflowContext, "test-workflow", cause, state.workflowDefinitionId(),
+                                                      eventNameCustomizer), processingContext);
 
         verify(listener).onWorkflowStatus(eq(WorkflowStatus.FAILED), eq(workflowContext));
+    }
+
+    private EventSourcedWorkflowState workflowState(Map<WorkflowStatus, WorkflowStatusChangeListener> listeners) {
+        return new EventSourcedWorkflowState("wf-1", Map.of(), new MessageType(new QualifiedName("test-workflow"), "0.0.1"),
+                                             workflowContext, listeners);
     }
 }

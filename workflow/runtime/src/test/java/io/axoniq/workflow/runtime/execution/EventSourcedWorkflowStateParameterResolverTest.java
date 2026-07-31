@@ -43,7 +43,7 @@ import static org.mockito.Mockito.*;
 /**
  * Tests for {@link WorkflowStateParameterResolver}.
  */
-class WorkflowStateParameterResolverTest {
+class EventSourcedWorkflowStateParameterResolverTest {
 
     private WorkflowStateParameterResolver resolver;
     private ProcessingContext context;

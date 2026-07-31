@@ -16,7 +16,7 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.workflow.runtime.util;
+package io.axoniq.workflow.runtime.api.execution.context;
 
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.MessageType;
@@ -28,12 +28,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Workflow version value type. Wraps a semver string ({@code MAJOR.MINOR.PATCH} with optional
- * {@code -prerelease} suffix) together with its parsed semver-aware comparison. Use this in place
- * of raw {@code String} whenever ordering or "is-greater-than" logic is needed; the wire format
- * (e.g. {@link MessageType#version()}) stays {@code String} via {@link #value()}.
+ * Workflow version value type. Wraps a semver string ({@code MAJOR.MINOR.PATCH} with optional {@code -prerelease}
+ * suffix) together with its parsed semver-aware comparison. Use this in place of raw {@code String} whenever ordering
+ * or "is-greater-than" logic is needed; the wire format (e.g. {@link MessageType#version()}) stays {@code String} via
+ * {@link #value()}.
  *
  * @author Stefan Dragisic
+ * @since 1.0.0
  */
 public final class Version implements Comparable<Version> {
 
@@ -42,8 +43,8 @@ public final class Version implements Comparable<Version> {
     );
 
     /**
-     * The default version assigned to workflow definitions that do not declare one explicitly,
-     * aligned with {@link MessageType#DEFAULT_VERSION}.
+     * The default version assigned to workflow definitions that do not declare one explicitly, aligned with
+     * {@link MessageType#DEFAULT_VERSION}.
      */
     public static final Version DEFAULT = Version.of(MessageType.DEFAULT_VERSION);
 
@@ -93,8 +94,8 @@ public final class Version implements Comparable<Version> {
     }
 
     /**
-     * Parses {@code value} as a semver string or returns empty when unparseable. Useful for filtering
-     * collections of mixed-quality version strings (e.g. legacy event streams).
+     * Parses {@code value} as a semver string or returns empty when unparseable. Useful for filtering collections of
+     * mixed-quality version strings (e.g. legacy event streams).
      */
     @Nonnull
     public static Optional<Version> tryOf(String value) {
@@ -109,9 +110,8 @@ public final class Version implements Comparable<Version> {
     }
 
     /**
-     * Returns the <strong>highest version less than or equal to</strong> {@code target} among
-     * {@code candidates}, or empty when no candidate qualifies. This is the "closest-sibling"
-     * routing rule.
+     * Returns the <strong>highest version less than or equal to</strong> {@code target} among {@code candidates}, or
+     * empty when no candidate qualifies. This is the "closest-sibling" routing rule.
      */
     @Nonnull
     public static Optional<Version> closestNotGreaterThan(@Nonnull Collection<Version> candidates,
@@ -122,9 +122,8 @@ public final class Version implements Comparable<Version> {
     }
 
     /**
-     * Returns the <strong>lowest version strictly greater than</strong> {@code target} among
-     * {@code candidates}, or empty when no candidate qualifies. This is the
-     * "closest-higher-sibling" routing rule.
+     * Returns the <strong>lowest version strictly greater than</strong> {@code target} among {@code candidates}, or
+     * empty when no candidate qualifies. This is the "closest-higher-sibling" routing rule.
      */
     @Nonnull
     public static Optional<Version> closestHigherThan(@Nonnull Collection<Version> candidates,
@@ -135,8 +134,8 @@ public final class Version implements Comparable<Version> {
     }
 
     /**
-     * The canonical {@code String} representation, suitable for {@link MessageType#version()} and
-     * other wire-format boundaries.
+     * The canonical {@code String} representation, suitable for {@link MessageType#version()} and other wire-format
+     * boundaries.
      */
     @Nonnull
     public String value() {

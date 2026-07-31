@@ -75,8 +75,8 @@ class ExecuteDelegateDriftTest {
         when(workflowExecution.workflowId()).thenReturn("wf-1");
         when(workflowExecution.state()).thenReturn(state);
         // Break out of acceptAllPendingTasksForStep's spin loop — the loop only exits when
-        // (containsStep || hasTasks) AND isExecutable, so the mock must report both.
-        when(workflowExecution.isExecutable()).thenReturn(true);
+        // (containsStep || hasTasks) AND isRunning, so the mock must report both.
+        when(workflowExecution.isRunning()).thenReturn(true);
         when(workflowExecution.hasTasks()).thenReturn(true);
 
         delegate = new ExecuteDelegate(

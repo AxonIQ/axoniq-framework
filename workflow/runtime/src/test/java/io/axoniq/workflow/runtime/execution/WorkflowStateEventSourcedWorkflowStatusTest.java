@@ -26,6 +26,7 @@ import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -39,15 +40,16 @@ import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocal
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
-class EventSourcedWorkflowStateWorkflowStatusTest {
+class WorkflowStateEventSourcedWorkflowStatusTest {
 
+    private static final MessageType DEFINITION_ID = new MessageType(new QualifiedName("TestWorkflow"), "0.0.1");
     private final EventConverter converter = new DelegatingEventConverter(new JacksonConverter());
     private EventSourcedWorkflowState state;
     private ProcessingContext processingContext;
 
     @BeforeEach
     void setUp() {
-        state = new EventSourcedWorkflowState(Map.of("initialKey", "initialValue"));
+        state = new EventSourcedWorkflowState("wfId", Map.of("initialKey", "initialValue"), DEFINITION_ID);
         processingContext = mock(ProcessingContext.class);
         when(processingContext.component(EventConverter.class)).thenReturn(converter);
         when(processingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());

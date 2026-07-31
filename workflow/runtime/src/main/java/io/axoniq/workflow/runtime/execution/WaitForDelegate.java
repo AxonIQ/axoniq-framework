@@ -19,6 +19,7 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
@@ -33,6 +34,8 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executor;
@@ -104,9 +107,8 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             workflowStepProgress.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
             workflowExecution.appendTask(i ->
                                                  started(stepName,
-                                                         Map.of("startTime", clock.instant()),
-                                                         eventNameCustomizer)
-            );
+                                                         startedPayload(eventCondition, clock.instant(), timeout),
+                                                         eventNameCustomizer));
             try {
                 workflowExecution.awaitStateChange(s -> s.containsStep(stepName)
                         && s.getStep(stepName).status() == StepStatus.STARTED);
@@ -174,5 +176,17 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                             e.getMessage());
             }
         });
+    }
+
+    @Nonnull
+    private Map<String, Object> startedPayload(@Nonnull EventCondition eventCondition,
+                                               @Nonnull Instant startedAt,
+                                               @Nonnull Duration timeout) {
+        var payload = new LinkedHashMap<String, Object>();
+        payload.put("startTime", startedAt);
+        payload.put("eventName", eventCondition.qualifiedName().toString());
+        payload.put("associations", eventCondition.associations());
+        payload.put("timeoutTime", startedAt.plus(timeout));
+        return payload;
     }
 }

@@ -25,13 +25,14 @@ import org.axonframework.common.infra.DescribableComponent;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
- * Repository for retrieving workflow instances.
+ * Repository for retrieving workflow executions, storing new ones, and removing them.
  * <p>
- * Each workflow instance is identified by a unique workflow identifier and is represented
- * as a {@link WorkflowInstance} bundling configuration, context, and execution state.
+ * Each workflow execution is identified by a unique workflow identifier and is represented as a
+ * {@link WorkflowExecution} bundling configuration, context, and execution state.
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -40,42 +41,60 @@ import java.util.function.Supplier;
 public interface WorkflowExecutionRepository extends DescribableComponent {
 
     /**
-     * Finds a workflow handle by its identifier.
+     * Finds a workflow execution by its identifier.
      *
      * @param workflowId the workflow identifier
-     * @return an {@link Optional} containing the workflow handle, or empty if not found
+     * @return an {@link Optional} containing the workflow execution, or empty if not found
      */
     @Nonnull
     Optional<WorkflowExecution> findById(@Nonnull String workflowId);
 
     /**
-     * Returns all stored workflow handles.
+     * Returns all stored workflow executions.
      *
-     * @return an unmodifiable collection of all workflow handles
+     * @return an unmodifiable collection of all workflow executions
      */
     @Nonnull
-    Set<WorkflowExecution> findAll();
+    default Set<WorkflowExecution> findAll() {
+        return findAll(e -> true);
+    }
 
     /**
-     * Atomically stores a new workflow handle if no handle exists for the given workflow identifier.
-     * If a handle already exists, returns the existing one without invoking the factory.
+     * Returns all stored workflow executions matching the given predicate.
      *
-     * @param factory    the factory to create a new workflow handle if absent
-     * @return the existing or newly created workflow handle
+     * @param predicate the predicate to match workflow executions against
+     * @return an unmodifiable collection of all workflow executions
+     */
+    @Nonnull
+    Set<WorkflowExecution> findAll(@Nonnull Predicate<WorkflowExecution> predicate);
+
+    /**
+     * Atomically stores a new workflow execution if no execution exists for the given workflow identifier. If an
+     * execution already exists, returns the existing one without invoking the factory.
+     *
+     * @param factory the factory to create a new workflow execution if absent
+     * @return the existing or newly created workflow execution
      */
     @Nonnull
     WorkflowExecution save(@Nonnull String workflowId, @Nonnull Supplier<WorkflowExecution> factory);
 
     /**
-     * Removes the workflow handle associated with the given identifier.
+     * Removes the workflow execution associated with the given identifier.
      *
      * @param workflowId the identifier of the workflow to remove
-     * @return the removed {@link WorkflowExecution}, or {@code null} if no handle was found
+     * @return the removed {@link WorkflowExecution}, or {@code null} if no execution was found
      */
     WorkflowExecution remove(@Nonnull String workflowId);
 
     /**
-     * Removes all stored workflow handles.
+     * Removes all workflow executions matching the given predicate.
+     *
+     * @param predicate the predicate to match workflow executions against
+     */
+    void removeAll(@Nonnull Predicate<WorkflowExecution> predicate);
+
+    /**
+     * Removes all stored workflow executions.
      */
     void clear();
 }

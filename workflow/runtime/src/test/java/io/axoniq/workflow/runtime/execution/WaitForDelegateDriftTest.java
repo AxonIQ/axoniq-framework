@@ -72,7 +72,7 @@ class WaitForDelegateDriftTest {
         when(workflowExecution.workflowId()).thenReturn("wf-1");
         when(workflowExecution.state()).thenReturn(state);
         // Break out of acceptAllPendingTasksForStep's spin loop.
-        when(workflowExecution.isExecutable()).thenReturn(true);
+        when(workflowExecution.isRunning()).thenReturn(true);
         when(workflowExecution.hasTasks()).thenReturn(true);
 
         delegate = new WaitForDelegate(

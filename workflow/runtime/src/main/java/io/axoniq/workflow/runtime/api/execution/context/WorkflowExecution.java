@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.api.execution.context;
 
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -93,11 +94,11 @@ public interface WorkflowExecution extends DescribableComponent {
     Consumer<WorkflowExecution> getNextTask();
 
     /**
-     * Indicates whether the workflow execution has been started.
+     * Returns whether the workflow execution runtime is running.
      *
-     * @return {@code true} when the workflow execution is running
+     * @return true if the workflow execution runtime is running
      */
-    boolean isExecutable();
+    boolean isRunning();
 
     /**
      * Indicates whether the workflow execution has queued tasks.
@@ -106,7 +107,35 @@ public interface WorkflowExecution extends DescribableComponent {
      */
     boolean hasTasks();
 
+
     /**
+     * Appends intent to advance the checkpoint token.
+     *
+     * @param onDrained runnable to execute on completion
+     */
+    void appendCheckpointIntent(@Nonnull Runnable onDrained);
+
+    /**
+     * Checks if the pending checkpoint work is present.
+     *
+     * @return {@code true} if the pending checkpoint work is present, {@code false} otherwise.
+     */
+    boolean hasPendingCheckpointWork();
+
+    /**
+     * Cancel all running steps.
+     *
+     * @param cause optional cause of the cancellation.
+     */
+    void cancelAllRunningSteps(@Nullable Throwable cause);
+
+    /**
+     * Interrupt all running steps without producing any step/workflow cancellation events. Unlike
+     * {@link #cancelAllRunningSteps(Throwable)}, this method is for abrupt process-level teardown (e.g. an engine
+     * shutdown lifecycle hook): it completes in-flight step futures with a non-cancellation failure so the running step
+     * is removed from bookkeeping and no {@code <Step>Cancelled} event is published. The workflow's state in the event
+     * store is left at its most recent {@code <Step>Started} entry so the step can resume on the next app start. Safe
+     * to call from any thread.
      * Stops only in-memory execution as part of engine shutdown.
      * <p>
      * This operation preserves the durable workflow state for replay and produces no step or workflow cancellation
@@ -121,6 +150,13 @@ public interface WorkflowExecution extends DescribableComponent {
      */
     @Nonnull
     WorkflowState state();
+
+    /**
+     * Initializes this newly created execution with a workflow state.
+     *
+     * @param state workflow state loaded from a repository
+     */
+    void initializeState(@Nonnull WorkflowState state);
 
     /**
      * Returns the processing context of the workflow execution.

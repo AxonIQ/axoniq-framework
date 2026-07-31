@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.itest;
 
-import io.axoniq.workflow.configuration.WorkflowConfigurationDefaults;
 import io.axoniq.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
 import io.axoniq.workflow.configuration.WorkflowModule;
@@ -31,19 +30,17 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
-import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
 import org.axonframework.common.configuration.AxonConfiguration;
-import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -57,14 +54,15 @@ import org.junit.jupiter.api.*;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import static io.axoniq.workflow.dsl.api.EventAssociationsUtils.equalsTo;
 import static io.axoniq.workflow.runtime.association.Associations.associate;
-import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -75,7 +73,7 @@ import static org.awaitility.Awaitility.await;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-class WorkflowReplayPreparedStateTest {
+public class WorkflowReplayPreparedStateTest {
 
     @Test
     void restoresOnlyEarliestStillRunningWorkflow() {
@@ -87,7 +85,7 @@ class WorkflowReplayPreparedStateTest {
         prepared.appendStartReplayWorkflowEvent("second", "complete");
         prepared.appendWorkflowStarted("second", payload("second", "complete"));
         prepared.appendWorkflowCompleted("second");
-        prepared.seedSafePoint(prepared.tokenAt(1));
+        prepared.seedProcessorToken(prepared.tokenAt(1));
 
         var executedWorkflowIds = new CopyOnWriteArrayList<String>();
         try (var app = prepared.startApp(executedWorkflowIds)) {
@@ -115,7 +113,7 @@ class WorkflowReplayPreparedStateTest {
         prepared.appendStartReplayWorkflowEvent("second", "wait");
         prepared.appendWorkflowStarted("second", payload("second", "wait"));
         prepared.appendStepStarted("second", "waitForResume");
-        prepared.seedSafePoint(prepared.tokenAt(4));
+        prepared.seedProcessorToken(prepared.tokenAt(4));
 
         var executedWorkflowIds = new CopyOnWriteArrayList<String>();
         try (var app = prepared.startApp(executedWorkflowIds)) {
@@ -134,13 +132,62 @@ class WorkflowReplayPreparedStateTest {
     }
 
     @Test
-    void doesNotRestoreAnyWorkflowWhenSafePointIsLatestTrackingToken() {
+    void restoredWaitingWorkflowConsumesReplayBacklogEventDuringCatchUp() {
+        var prepared = new PreparedState();
+        prepared.appendWarmupEvents();
+        prepared.appendStartReplayWorkflowEvent("first", "wait");
+        prepared.appendWorkflowStarted("first", payload("first", "wait"));
+        prepared.appendStepStarted("first", "waitForResume");
+        prepared.appendResumeReplayWorkflowEvent("first");
+        prepared.seedProcessorToken(prepared.tokenAt(1));
+
+        var executedWorkflowIds = new CopyOnWriteArrayList<String>();
+        try (var app = prepared.startApp(executedWorkflowIds)) {
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                assertThat(app.workflowIds()).isEmpty();
+                assertThat(executedWorkflowIds).containsExactly("first");
+                assertThat(app.history("first"))
+                        .hasValueSatisfying(history -> {
+                            assertThat(history.state().workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
+                            assertThat(history.state().payload()).containsEntry("resumed", true);
+                        });
+            });
+        }
+    }
+
+    @Test
+    void restoredWaitingWorkflowTriggersTimeoutAfterStartup() {
+        var prepared = new PreparedState();
+        prepared.appendWarmupEvents();
+        prepared.appendStartReplayWorkflowEvent("first", "wait-timeout");
+        prepared.appendWorkflowStarted("first", payload("first", "wait-timeout"));
+        prepared.appendStepStarted("first", "waitForResume");
+        prepared.seedProcessorToken(prepared.tokenAt(1));
+
+        var executedWorkflowIds = new CopyOnWriteArrayList<String>();
+        try (var app = prepared.startApp(executedWorkflowIds)) {
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                assertThat(app.workflowIds()).isEmpty();
+                assertThat(executedWorkflowIds).containsExactly("first");
+                assertThat(app.history("first"))
+                        .hasValueSatisfying(history -> {
+                            assertThat(history.state().workflowStatus()).isEqualTo(WorkflowStatus.FAILED);
+                            assertThat(history.state().getStep("waitForResume").status()).isEqualTo(
+                                    StepStatus.TIMED_OUT
+                            );
+                        });
+            });
+        }
+    }
+
+    @Test
+    void doesNotRestoreAnyWorkflowWhenProcessorTokenIsLatestTrackingToken() {
         var prepared = new PreparedState();
         prepared.appendWarmupEvents();
         prepared.appendStartReplayWorkflowEvent("only", "complete");
         prepared.appendWorkflowStarted("only", payload("only", "complete"));
         prepared.appendWorkflowCompleted("only");
-        prepared.seedSafePoint(prepared.latestToken());
+        prepared.seedProcessorToken(prepared.latestToken());
 
         var executedWorkflowIds = new CopyOnWriteArrayList<String>();
         try (var app = prepared.startApp(executedWorkflowIds)) {
@@ -163,7 +210,6 @@ class WorkflowReplayPreparedStateTest {
         private final EventStorageEngine eventStorageEngine = new InMemoryEventStorageEngine();
         private final TokenStore processingTokenStore = new InMemoryTokenStore();
         private final InMemoryWorkflowHistoryRepository historyRepository = new InMemoryWorkflowHistoryRepository();
-        private final RecordingSafePointStore safePointStore = new RecordingSafePointStore();
         private final List<TrackingToken> appendedTokens = new ArrayList<>();
 
         private void appendWarmupEvents() {
@@ -175,6 +221,10 @@ class WorkflowReplayPreparedStateTest {
             appendTypedPayloadEvent(StartReplayWorkflowEvent.class, payload(id, mode));
         }
 
+        private void appendResumeReplayWorkflowEvent(String id) {
+            appendTypedPayloadEvent(ResumeReplayWorkflowEvent.class, Map.of("id", id));
+        }
+
         private void appendTypedPayloadEvent(Class<?> payloadType, Map<String, Object> payload) {
             appendEvent(new GenericEventMessage(new MessageType(payloadType), payload));
         }
@@ -183,7 +233,10 @@ class WorkflowReplayPreparedStateTest {
             appendEvent(new GenericEventMessage(
                     new MessageType("ReplayAwareWorkflowStarted"),
                     payload,
-                    MetadataUtils.create(workflowId, WorkflowStatus.STARTED)
+                    MetadataUtils.create(workflowId,
+                                         WorkflowStatus.STARTED,
+                                         new MessageType(new QualifiedName("ReplayAwareWorkflow"),
+                                                         MessageType.DEFAULT_VERSION))
                                  .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
                                       CombineGlobalAndLocalPayloadReducer.NAME)
             ));
@@ -193,7 +246,10 @@ class WorkflowReplayPreparedStateTest {
             appendEvent(new GenericEventMessage(
                     new MessageType("ReplayAwareWorkflowCompleted"),
                     Map.of(),
-                    MetadataUtils.create(workflowId, WorkflowStatus.COMPLETED)
+                    MetadataUtils.create(workflowId,
+                                         WorkflowStatus.COMPLETED,
+                                         new MessageType(new QualifiedName("ReplayAwareWorkflow"),
+                                                                  MessageType.DEFAULT_VERSION))
             ));
         }
 
@@ -218,11 +274,31 @@ class WorkflowReplayPreparedStateTest {
         }
 
         private static Set<Tag> tagsFor(EventMessage eventMessage) {
-            return Set.of(Tag.of("type", eventMessage.type().qualifiedName().toString()));
+            var tags = new LinkedHashSet<>(new WorkflowEventTagResolver().resolve(eventMessage));
+            tags.add(Tag.of("type", eventMessage.type().qualifiedName().toString()));
+            return Set.copyOf(tags);
         }
 
-        private void seedSafePoint(TrackingToken token) {
-            safePointStore.storeSafePointToken(token);
+        private void seedProcessorToken(TrackingToken token) {
+            var segments = processingTokenStore.fetchSegments(
+                    WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME,
+                    null
+            ).join();
+            if (segments.isEmpty()) {
+                processingTokenStore.initializeTokenSegments(
+                        WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME,
+                        1,
+                        token,
+                        null
+                ).join();
+            } else {
+                processingTokenStore.storeToken(
+                        token,
+                        WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME,
+                        0,
+                        null
+                ).join();
+            }
         }
 
         private TrackingToken tokenAt(int index) {
@@ -241,14 +317,10 @@ class WorkflowReplayPreparedStateTest {
                     .registerComponent(EventStorageEngine.class, cfg -> eventStorageEngine)
                     .registerComponent(MutableWorkflowHistoryRepository.class, cfg -> historyRepository)
                     .registerComponent(TokenStore.class,
-                                       WorkflowEventProcessingRegistrationEnhancer.tokenStoreComponentName(
+                                       WorkflowEventProcessingRegistrationEnhancer.tokenStoreName(
                                                WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME
                                        ),
                                        cfg -> processingTokenStore)
-
-                    .registerComponent(SafePointStore.class,
-                                       WorkflowConfigurationDefaults.COMPONENT_SAFE_POINT_STORE,
-                                       cfg -> safePointStore)
                     .registerModule(
                             WorkflowModule.defaults("replay-prepared-state", SimpleWorkflowContext.class)
                                           .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
@@ -278,10 +350,8 @@ class WorkflowReplayPreparedStateTest {
         }
 
         private void publish(Object event) {
-            var eventMessage = new GenericEventMessage(
-                    messageTypeResolver.resolveOrThrow(event),
-                    event
-            ).withConverter(eventConverter);
+            var eventMessage = new GenericEventMessage(messageTypeResolver.resolveOrThrow(event), event)
+                    .withConverter(eventConverter);
             eventSink.publish(null, eventMessage);
         }
 
@@ -289,32 +359,14 @@ class WorkflowReplayPreparedStateTest {
             return workflowEngine.workflowExecutions().stream().map(WorkflowExecution::workflowId).sorted().toList();
         }
 
+        private Optional<io.axoniq.workflow.history.api.WorkflowHistory> history(String workflowId) {
+            return configuration.getComponent(MutableWorkflowHistoryRepository.class).findById(workflowId);
+        }
+
         @Override
         public void close() {
             workflowEngine.shutdown();
             configuration.shutdown();
-        }
-    }
-
-    private static final class RecordingSafePointStore implements SafePointStore {
-
-        @Nullable
-        private volatile TrackingToken currentToken;
-
-        @Override
-        public CompletableFuture<TrackingToken> fetchSafePointToken() {
-            return CompletableFuture.completedFuture(currentToken);
-        }
-
-        @Override
-        public CompletableFuture<Void> storeSafePointToken(@Nonnull TrackingToken token) {
-            currentToken = token;
-            return CompletableFuture.completedFuture(null);
-        }
-
-        @Override
-        public void describeTo(@Nonnull ComponentDescriptor descriptor) {
-            descriptor.describeProperty("safePointTokenPresent", currentToken != null);
         }
     }
 
@@ -334,13 +386,22 @@ class WorkflowReplayPreparedStateTest {
         public void execute(SimpleWorkflowContext ctx) {
             executedWorkflowIds.add(ctx.workflowId());
 
-            if ("wait".equals(ctx.workflowPayload().get("mode"))) {
-                ctx.awaitEvent(
-                        "waitForResume",
-                        ResumeReplayWorkflowEvent.class,
-                        associate(payloadProperty("id"), equalsTo(ctx.workflowPayload().get("id"))),
-                        step -> step.timeout(Duration.ofSeconds(60))
-                );
+            var mode = String.valueOf(ctx.workflowPayload().get("mode"));
+            if ("wait".equals(mode) || "wait-timeout".equals(mode)) {
+                var timeout = "wait-timeout".equals(mode) ? Duration.ofMillis(200) : Duration.ofSeconds(60);
+                try {
+                    ctx.awaitEvent(
+                            "waitForResume",
+                            ResumeReplayWorkflowEvent.class,
+                            associate(payloadProperty("id"), equalsTo(ctx.workflowPayload().get("id"))),
+                            step -> step.timeout(timeout)
+                    );
+                } catch (Throwable t) {
+                    if ("wait-timeout".equals(mode)) {
+                        ctx.fail(t);
+                    }
+                    throw t;
+                }
                 ctx.awaitModifyPayload("markResumed", payload -> {
                     Map<String, Object> updated = new LinkedHashMap<>(payload);
                     updated.put("resumed", true);

@@ -151,7 +151,7 @@ public abstract class AbstractStepExecutor {
 
     protected void acceptAllPendingTasksForStep(@Nonnull String stepName) {
         while ((!workflowExecution.state().containsStep(stepName) && !workflowExecution.hasTasks())
-                || !workflowExecution.isExecutable()) {
+                || !workflowExecution.isRunning()) {
             var poll = workflowExecution.getNextTask();
             if (poll != null) {
                 poll.accept(this.workflowExecution);
@@ -175,6 +175,15 @@ public abstract class AbstractStepExecutor {
     }
 
     @Nonnull
+    protected CompletableFuture<Void> startedWaitForEvent(@Nonnull String stepName,
+                                                          @Nonnull Map<String, Object> payload,
+                                                          @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(stepName, startedWaitForEventStep(workflowContext, stepName, sanitize(payload),
+                                                               merge(parentEventNameCustomizer, eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
+    @Nonnull
     protected CompletableFuture<Void> completed(@Nonnull String stepName, @Nonnull Map<String, Object> payload,
                                                 @Nonnull EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, completedStep(workflowContext, stepName, sanitize(payload),
@@ -190,6 +199,20 @@ public abstract class AbstractStepExecutor {
         return sendStepEvent(stepName, completedStep(workflowContext, stepName, sanitize(payload),
                                                      payloadReducerName,
                                                      merge(parentEventNameCustomizer, eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> completedWaitForEvent(@Nonnull String stepName,
+                                                            @Nonnull Map<String, Object> payload,
+                                                            @Nullable String payloadReducerName,
+                                                            @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(stepName, completedWaitForEventStep(workflowContext,
+                                                                 stepName,
+                                                                 sanitize(payload),
+                                                                 payloadReducerName,
+                                                                 merge(parentEventNameCustomizer,
+                                                                       eventNameCustomizer)
         ), getContext(stepName));
     }
 
@@ -240,6 +263,16 @@ public abstract class AbstractStepExecutor {
     }
 
     @Nonnull
+    protected CompletableFuture<Void> cancelledWaitForEvent(@Nonnull String stepName,
+                                                            @Nullable Throwable cause,
+                                                            @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(stepName, cancelledWaitForEventStep(workflowContext, stepName, cause,
+                                                                 merge(parentEventNameCustomizer,
+                                                                       eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
+    @Nonnull
     protected CompletableFuture<Void> failed(@Nonnull String stepName, @Nonnull Throwable ex,
                                              @Nonnull EventNameCustomizer eventNameCustomizer) {
         logger.error("Step '{}' failed in workflow '{}'", stepName, workflowExecution.workflowId(), ex);
@@ -268,6 +301,21 @@ public abstract class AbstractStepExecutor {
                                                @Nonnull EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, timeoutStep(workflowContext, stepName, timeoutTimestamp,
                                                    merge(parentEventNameCustomizer, eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> timedOutWaitForEvent(@Nonnull String stepName,
+                                                           @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return timedOutWaitForEvent(stepName, Instant.now(clock), eventNameCustomizer);
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> timedOutWaitForEvent(@Nonnull String stepName,
+                                                           @Nonnull Instant timeoutTimestamp,
+                                                           @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(stepName, timeoutWaitForEventStep(workflowContext, stepName, timeoutTimestamp,
+                                                               merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 

@@ -31,7 +31,7 @@ import io.axoniq.workflow.runtime.association.ValueComparisonOperatorRegistry;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.runtime.util.WorkflowReflectionUtils;
-import io.axoniq.workflow.runtime.util.Version;
+import io.axoniq.workflow.runtime.api.execution.context.Version;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.StringUtils;
