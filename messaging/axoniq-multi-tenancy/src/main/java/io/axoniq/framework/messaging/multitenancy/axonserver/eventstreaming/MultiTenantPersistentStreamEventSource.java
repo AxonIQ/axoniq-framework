@@ -265,13 +265,13 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
         );
         TenantStream tenantStream = new TenantStream(source, scheduler);
         tenantStream.subscribe(consumer);
-        logger.info("Opened persistent stream [{}] for tenant [{}].", name, tenant.tenantId());
+        logger.debug("Opened persistent stream [{}] for tenant [{}].", name, tenant.tenantId());
         return tenantStream;
     }
 
     private void releaseTenantStream(TenantDescriptor tenant, TenantStream tenantStream) {
         tenantStream.close();
-        logger.info("Closed persistent stream [{}] for tenant [{}].", name, tenant.tenantId());
+        logger.debug("Closed persistent stream [{}] for tenant [{}].", name, tenant.tenantId());
     }
 
     /**
