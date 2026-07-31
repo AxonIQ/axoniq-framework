@@ -41,7 +41,7 @@ Verified against Axon Framework `main` (`5fca18d34e`). The `appendEvents` and `s
 
 This drops the separate `MultiTenantStreamableEventSource`, the engine-to-source adapter, and `DynamicSourcesTrackingToken`. That wrapper token only existed because `MultiStreamableEventSource.open()` rejects any token that is not a `MultiSourceTrackingToken`. Merging natively removes the constraint.
 
-The token must still be union-tolerant. A source that only one side knows is treated as at its beginning, because the processor's coordinator compares persisted tokens outside the engine. That tolerance is confined to this module-owned token, so the shared `MultiSourceTrackingToken` guardrail stays intact (the reasoning is in the [ADR 002 addendum](adr-002-addendum-dynamic-sources-token.md)). Its class name lands in customer token stores, so a later rename needs a legacy type mapping.
+The token must still be union-tolerant. A source that only one side knows is treated as at its beginning, because the processor's coordinator compares persisted tokens outside the engine. That tolerance is confined to this module-owned token, so the shared `MultiSourceTrackingToken` guardrail stays intact (the reasoning is in the [ADR 002 addendum](adr-002-addendum-multi-tenant-token.md)). Its class name lands in customer token stores, so a later rename needs a legacy type mapping.
 
 ## Snapshots
 
@@ -57,7 +57,7 @@ Second, nothing may compose above the routing engine. The framework's applicatio
 
 The engine and the snapshot store are two separate components on purpose. Satisfying the defaults' identity comparison instead would mean registering one instance under both types, and a Spring application turns each component into a bean, so both beans would resolve to the same object implementing both interfaces and injecting an `EventStorageEngine` would become ambiguous. Registering the routing engine under its own type does not work either: the defaults' decorator resolves the `SnapshotStore` while the engine is being resolved, so a single component answering both lookups re-enters its own resolution. Two components of disjoint types avoid both.
 
-Both components stay lazy, built on first use, because building them pulls in the per-tenant factories. An application registering a `SnapshotStore` of its own is rejected while the configuration is built: such a store serves every tenant from one place while sourcing keeps reading each tenant's snapshots from that tenant's own store, so snapshots would be written and read in different places. An application replacing the `EventStorageEngine` itself is not detected, since the registration simply backs off.
+Both components stay lazy, built on first use, because building them pulls in the per-tenant factories. An application registering a `SnapshotStore` of its own is rejected while the configuration is built: such a store serves every tenant from one place while sourcing keeps reading each tenant's snapshots from that tenant's own store, so snapshots would be written and read in different places. An application registering an `EventStorageEngine` of its own is rejected the same way. One engine would serve every tenant from one place, so no tenant could keep its events to itself, and the streamed events would carry no tenant for a tenant-scoped component to be resolved from.
 
 The routing engine therefore only routes, and [#213](https://github.com/AxonIQ/axoniq-framework/issues/213) can bring a snapshot resolving per-tenant engine that keeps its single round trip.
 

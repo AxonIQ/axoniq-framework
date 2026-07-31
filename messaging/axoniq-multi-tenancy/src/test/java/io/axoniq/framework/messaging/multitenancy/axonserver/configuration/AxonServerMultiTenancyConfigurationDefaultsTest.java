@@ -36,6 +36,8 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantProvider;
 import io.axoniq.framework.messaging.multitenancy.axonserver.commandhandling.MultiTenantAxonServerCommandBusConnector;
+import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AxonServerTenantEventStorageEngineFactory;
+import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AxonServerTenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.axonserver.queryhandling.MultiTenantAxonServerQueryBusConnector;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
@@ -47,8 +49,11 @@ import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.MockComponentDescriptor;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
+import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
+import org.axonframework.eventsourcing.snapshot.inmemory.InMemorySnapshotStore;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.junit.jupiter.api.*;
@@ -175,6 +180,99 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
+        void subscribesTheFactoriesBeforeTheRoutingEngineThatComposesFromThem() {
+            // The engine announces a tenant only once it holds it, and whatever acts on that announcement composes
+            // through the factories, so a factory that has not been told yet fails the merged stream for every tenant.
+            StubTenantProvider orderedProvider = new StubTenantProvider();
+            AxonConfiguration orderedConfiguration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TenantProvider.class, config -> orderedProvider)
+                                               .registerComponent(TenantComponentProvider.class,
+                                                                  config -> componentProvider))
+                                       .build();
+            orderedConfiguration.start();
+            try {
+                List<Class<?>> subscriptionOrder = orderedProvider.subscribedComponents()
+                                                                  .stream()
+                                                                  .<Class<?>>map(Object::getClass)
+                                                                  .toList();
+
+                assertThat(subscriptionOrder).containsSubsequence(AxonServerTenantSnapshotStoreFactory.class,
+                                                                  MultiTenantEventStorageEngine.class);
+                assertThat(subscriptionOrder).containsSubsequence(AxonServerTenantEventStorageEngineFactory.class,
+                                                                  MultiTenantEventStorageEngine.class);
+            } finally {
+                orderedConfiguration.shutdown();
+            }
+        }
+
+        @Test
+        void subscribesAndFollowsTheRoutingEngineItselfWhenTheEventStorageEngineIsDecorated() {
+            // A decorator returns the decorated type, so resolving the event storage engine no longer yields the
+            // tenant-routing engine. Both the tenant lifecycle subscription and the restarter's listener still have to
+            // reach the engine itself, which they do because a start handler is bound to its own component rather than
+            // to the decorated one. Resolving instead would follow a decorator that announces no tenant change.
+            StubTenantProvider decoratedProvider = new StubTenantProvider();
+            AxonConfiguration decoratedConfiguration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TenantProvider.class, config -> decoratedProvider)
+                                               .registerComponent(TenantComponentProvider.class,
+                                                                  config -> componentProvider)
+                                               .registerDecorator(EventStorageEngine.class, 0,
+                                                                  (config, name, delegate) ->
+                                                                          SnapshotCapableEventStorageEngine.decorate(
+                                                                                  delegate,
+                                                                                  new InMemorySnapshotStore())))
+                                       .build();
+            decoratedConfiguration.start();
+            try {
+                MultiTenantEventStorageEngine routingEngine =
+                        decoratedProvider.subscribedComponents()
+                                         .stream()
+                                         .filter(MultiTenantEventStorageEngine.class::isInstance)
+                                         .map(MultiTenantEventStorageEngine.class::cast)
+                                         .findFirst()
+                                         .orElseThrow();
+                MockComponentDescriptor descriptor = new MockComponentDescriptor();
+                routingEngine.describeTo(descriptor);
+
+                assertThat(decoratedConfiguration.getComponent(EventStorageEngine.class))
+                        .isInstanceOf(SnapshotCapableEventStorageEngine.class);
+                assertThat(decoratedProvider.subscribedComponents())
+                        .filteredOn(MultiTenantEventStorageEngine.class::isInstance)
+                        .hasSize(1);
+                // The restarter's listener sits on the routing engine, not on the decorator wrapping it.
+                assertThat(descriptor.getDescribedProperties()).containsEntry("tenantChangeListenerCount", 1);
+            } finally {
+                decoratedConfiguration.shutdown();
+            }
+        }
+
+        @Test
+        void subscribesTheRoutingEngineToTheTenantProviderExactlyOnce() {
+            // Registering the engine twice, or wrapping a second registration in a subscribed component, would register
+            // every tenant with it twice and recompose each tenant's engine.
+            StubTenantProvider countingProvider = new StubTenantProvider();
+            AxonConfiguration countedConfiguration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TenantProvider.class, config -> countingProvider)
+                                               .registerComponent(TenantComponentProvider.class,
+                                                                  config -> componentProvider))
+                                       .build();
+            countedConfiguration.start();
+            try {
+                assertThat(countingProvider.subscribedComponents())
+                        .filteredOn(MultiTenantEventStorageEngine.class::isInstance)
+                        .hasSize(1);
+            } finally {
+                countedConfiguration.shutdown();
+            }
+        }
+
+        @Test
         void registersTheMultiTenantSnapshotStoreAsTheSnapshotStore() {
             assertThat(configuration.getComponent(SnapshotStore.class))
                     .isInstanceOf(MultiTenantSnapshotStore.class);
@@ -207,7 +305,35 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
     }
 
     @Nested
-    class ForeignSnapshotStoreRejection {
+    class ForeignStorageComponentRejection {
+
+        // An EventStorageEngine registered elsewhere serves every tenant from one place, so no tenant keeps its events
+        // to itself and streamed events carry no tenant, which is what a tenant-scoped component is resolved from.
+        @Test
+        void rejectsAnEventStorageEngineRegisteredByTheApplication() {
+            EventStorageEngine singleTenantEngine = new InMemoryEventStorageEngine();
+            MessagingConfigurer configurer =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry.registerComponent(
+                                               EventStorageEngine.class, config -> singleTenantEngine));
+
+            assertThatThrownBy(configurer::build)
+                    .isInstanceOf(AxonConfigurationException.class)
+                    .hasMessageContaining("EventStorageEngine")
+                    .hasMessageContaining("TenantEventStorageEngineFactory");
+        }
+
+        // The rejection must not trip on the framework's own default engine: EventSourcingConfigurationDefaults
+        // registers an InMemoryEventStorageEngine, but at an order far after this enhancer, so it backs off instead.
+        @Test
+        void acceptsTheDefaultEventSourcingSetupAndYieldsTheRoutingEngine() {
+            AxonConfiguration defaultSetup =
+                    EventSourcingConfigurer.create()
+                                           .build();
+
+            assertThat(defaultSetup.getComponent(EventStorageEngine.class))
+                    .isInstanceOf(MultiTenantEventStorageEngine.class);
+        }
 
         // A SnapshotStore registered elsewhere serves every tenant from one place, while sourcing keeps reading each
         // tenant's snapshots from that tenant's own store. That has to fail loudly rather than write and read snapshots

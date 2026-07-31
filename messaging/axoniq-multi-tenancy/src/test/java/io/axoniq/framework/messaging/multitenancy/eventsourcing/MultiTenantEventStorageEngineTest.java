@@ -24,10 +24,12 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
+import io.axoniq.framework.messaging.multitenancy.eventstreaming.MultiTenantTrackingToken;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotResolvingEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
@@ -38,7 +40,10 @@ import org.axonframework.eventsourcing.eventstore.SnapshotEventMessage;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
+import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.inmemory.InMemorySnapshotStore;
+import org.axonframework.messaging.core.DelegatingMessageStream;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -46,19 +51,32 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.jspecify.annotations.Nullable;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 class MultiTenantEventStorageEngineTest {
 
@@ -261,17 +279,368 @@ class MultiTenantEventStorageEngineTest {
     @Nested
     class Streaming {
 
-        private final MultiTenantEventStorageEngine testSubject = engineWith(alwaysTenant(TENANT_A));
+        private final TenantDescriptorMapping<EventStorageEngine> streamingEngines = new TenantDescriptorMapping<>();
+        private final EventStorageEngine storeA = streamingEngines.entry(TENANT_A, new InMemoryEventStorageEngine());
+        private final EventStorageEngine storeB = streamingEngines.entry(TENANT_B, new InMemoryEventStorageEngine());
+        private final MultiTenantEventStorageEngine testSubject = streamingEngineOver(streamingEngines);
 
         @Test
-        void streamingSpansAllTenantsAndIsNotSupportedByTheRoutingEngine() {
-            StreamingCondition fromStart = StreamingCondition.startingFrom(null);
+        void streamInterleavesTheTenantsByTimestamp() {
+            seed(storeA, eventAt("A1", instant(0)));
+            seed(storeB, eventAt("B1", instant(1)));
+            seed(storeA, eventAt("A2", instant(2)));
+            seed(storeB, eventAt("B2", instant(3)));
 
-            assertThatThrownBy(() -> testSubject.stream(fromStart)).isInstanceOf(UnsupportedOperationException.class);
-            assertThatThrownBy(testSubject::firstToken).isInstanceOf(UnsupportedOperationException.class);
-            assertThatThrownBy(testSubject::latestToken).isInstanceOf(UnsupportedOperationException.class);
-            assertThatThrownBy(() -> testSubject.tokenAt(Instant.EPOCH))
-                    .isInstanceOf(UnsupportedOperationException.class);
+            MessageStream<EventMessage> stream = testSubject.stream(StreamingCondition.startingFrom(null));
+
+            assertThat(payloads(stream, 4)).containsExactly("A1", "B1", "A2", "B2");
+            stream.close();
+        }
+
+        @Test
+        void streamTagsEachEventWithItsTenant() {
+            seed(storeA, eventAt("A1", instant(0)));
+            seed(storeB, eventAt("B1", instant(1)));
+
+            MessageStream<EventMessage> stream = testSubject.stream(StreamingCondition.startingFrom(null));
+
+            assertThat(tenantByPayload(stream, 2))
+                    .containsEntry("A1", TENANT_A)
+                    .containsEntry("B1", TENANT_B);
+            stream.close();
+        }
+
+        @Test
+        void streamPositionsEachEventWithAMultiTenantTrackingToken() {
+            seed(storeA, eventAt("A1", instant(0)));
+            seed(storeB, eventAt("B1", instant(1)));
+
+            MessageStream<EventMessage> stream = testSubject.stream(StreamingCondition.startingFrom(null));
+            nextEntry(stream);
+            TrackingToken token = nextEntry(stream).getResource(TrackingToken.RESOURCE_KEY);
+
+            assertThat(token).isInstanceOf(MultiTenantTrackingToken.class);
+            MultiTenantTrackingToken multiTenantToken = (MultiTenantTrackingToken) token;
+            assertThat(multiTenantToken.tokenForTenant(TENANT_A.tenantId()))
+                    .isEqualTo(new GlobalSequenceTrackingToken(1));
+            assertThat(multiTenantToken.tokenForTenant(TENANT_B.tenantId()))
+                    .isEqualTo(new GlobalSequenceTrackingToken(1));
+            stream.close();
+        }
+
+        @Test
+        void streamResumesFromAMultiTenantTrackingToken() {
+            seed(storeA, eventAt("A1", instant(0)));
+            seed(storeB, eventAt("B1", instant(1)));
+            seed(storeA, eventAt("A2", instant(2)));
+            seed(storeB, eventAt("B2", instant(3)));
+
+            MessageStream<EventMessage> firstPass = testSubject.stream(StreamingCondition.startingFrom(null));
+            nextEntry(firstPass);
+            TrackingToken resumeToken = nextEntry(firstPass).getResource(TrackingToken.RESOURCE_KEY);
+            firstPass.close();
+
+            MessageStream<EventMessage> secondPass = testSubject.stream(StreamingCondition.startingFrom(resumeToken));
+
+            assertThat(payloads(secondPass, 2)).containsExactly("A2", "B2");
+            secondPass.close();
+        }
+
+        @Test
+        void streamStartsATenantAbsentFromTheTokenAtItsBeginning() {
+            seed(storeA, eventAt("A1", instant(0)));
+            // a token from before tenant B existed, tracking only tenant A up to its only event
+            MultiTenantTrackingToken tokenKnowingOnlyTenantA = new MultiTenantTrackingToken(
+                    Map.of(TENANT_A.tenantId(), new GlobalSequenceTrackingToken(1)));
+            seed(storeB, eventAt("B1", instant(1)));
+
+            MessageStream<EventMessage> stream =
+                    testSubject.stream(StreamingCondition.startingFrom(tokenKnowingOnlyTenantA));
+
+            assertThat(tenantByPayload(stream, 1)).containsEntry("B1", TENANT_B);
+            stream.close();
+        }
+
+        @Test
+        void firstTokenStreamsEveryTenantFromItsBeginning() {
+            seed(storeA, eventAt("A1", instant(0)));
+            seed(storeB, eventAt("B1", instant(1)));
+
+            MessageStream<EventMessage> stream =
+                    testSubject.stream(StreamingCondition.startingFrom(testSubject.firstToken().join()));
+
+            assertThat(payloads(stream, 2)).containsExactly("A1", "B1");
+            stream.close();
+        }
+
+        @Test
+        void firstTokenNamesNoTenantSoItSurvivesAChangeOfTenants() {
+            seed(storeA, eventAt("A1", instant(0)));
+            seed(storeB, eventAt("B1", instant(1)));
+
+            // firstToken names no tenant: streaming from it opens each tenant at its own store beginning (filled in per
+            // tenant), while a token written before a tenant existed stays comparable, so the processor does not rehand
+            // already-handled events after a tenant change.
+            assertThat(testSubject.firstToken().join()).isEqualTo(MultiTenantTrackingToken.empty());
+        }
+
+        @Test
+        void latestTokenComposesThePerTenantLatestTokens() {
+            seed(storeA, eventAt("A1", instant(0)));
+            seed(storeB, eventAt("B1", instant(1)));
+            seed(storeB, eventAt("B2", instant(2)));
+
+            MultiTenantTrackingToken token = (MultiTenantTrackingToken) testSubject.latestToken().join();
+
+            assertThat(token.tokenForTenant(TENANT_A.tenantId())).isEqualTo(storeA.latestToken().join());
+            assertThat(token.tokenForTenant(TENANT_B.tenantId())).isEqualTo(storeB.latestToken().join());
+        }
+
+        @Test
+        void tokenAtComposesThePerTenantTokens() {
+            seed(storeA, eventAt("A1", instant(0)));
+            seed(storeA, eventAt("A2", instant(10)));
+            seed(storeB, eventAt("B1", instant(5)));
+
+            MultiTenantTrackingToken token = (MultiTenantTrackingToken) testSubject.tokenAt(instant(5)).join();
+
+            assertThat(token.tokenForTenant(TENANT_A.tenantId())).isEqualTo(storeA.tokenAt(instant(5)).join());
+            assertThat(token.tokenForTenant(TENANT_B.tenantId())).isEqualTo(storeB.tokenAt(instant(5)).join());
+        }
+
+        @Test
+        void streamOmitsATenantWhoseStoreIsEmptyWithoutError() {
+            seed(storeA, eventAt("A1", instant(0)));
+            seed(storeA, eventAt("A2", instant(1)));
+            // storeB has no events
+
+            MessageStream<EventMessage> stream = testSubject.stream(StreamingCondition.startingFrom(null));
+
+            assertThat(payloads(stream, 2)).containsExactly("A1", "A2");
+            stream.close();
+        }
+
+        @Test
+        void firstTokenStreamsATenantThatOnlyGetsItsEventsAfterwards() {
+            seed(storeA, eventAt("A1", instant(0)));
+            // storeB is still empty when the token is taken
+            TrackingToken firstToken = testSubject.firstToken().join();
+            seed(storeB, eventAt("B1", instant(1)));
+
+            MessageStream<EventMessage> stream = testSubject.stream(StreamingCondition.startingFrom(firstToken));
+
+            // the tenant that was empty is not skipped: its later event still streams from its own beginning
+            assertThat(payloads(stream, 2)).containsExactly("A1", "B1");
+            stream.close();
+        }
+
+        @Test
+        void oneTenantFailingToOpenFailsTheWholeStream() {
+            TenantDescriptorMapping<EventStorageEngine> failingEngines = new TenantDescriptorMapping<>();
+            InMemoryEventStorageEngine healthyStore = new InMemoryEventStorageEngine();
+            failingEngines.entry(TENANT_A, healthyStore);
+            failingEngines.entry(TENANT_B, new InMemoryEventStorageEngine() {
+                @Override
+                public MessageStream<EventMessage> stream(StreamingCondition condition) {
+                    throw new IllegalStateException("cannot open the stream");
+                }
+            });
+            MultiTenantEventStorageEngine failing = streamingEngineOver(failingEngines);
+            seed(healthyStore, eventAt("A1", instant(0)));
+
+            MessageStream<EventMessage> stream = failing.stream(StreamingCondition.startingFrom(null));
+
+            // the read spans all tenants, so one tenant failing to open fails the whole stream: the healthy tenant's
+            // event is not served
+            await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> assertThat(stream.error()).isPresent());
+            assertThat(stream.hasNextAvailable()).isFalse();
+            stream.close();
+        }
+
+        @Test
+        void aLaterTenantFailingToOpenClosesTheStreamsAlreadyOpened() {
+            AtomicBoolean firstStreamClosed = new AtomicBoolean(false);
+            AtomicInteger opens = new AtomicInteger();
+            // Both tenants share one engine, so its stream() is invoked once per tenant regardless of which order the
+            // tenants are merged in. The first invocation opens a stream that records when it is closed, the second
+            // throws, so an opened stream always precedes the failing open.
+            EventStorageEngine sharedEngine = new InMemoryEventStorageEngine() {
+                @Override
+                public MessageStream<EventMessage> stream(StreamingCondition condition) {
+                    if (opens.getAndIncrement() == 0) {
+                        return new DelegatingMessageStream<EventMessage, EventMessage>(MessageStream.empty()) {
+                            @Override
+                            public Optional<Entry<EventMessage>> next() {
+                                return delegate().next();
+                            }
+
+                            @Override
+                            public Optional<Entry<EventMessage>> peek() {
+                                return delegate().peek();
+                            }
+
+                            @Override
+                            public void close() {
+                                firstStreamClosed.set(true);
+                                super.close();
+                            }
+                        };
+                    }
+                    throw new IllegalStateException("cannot open the second tenant's stream");
+                }
+            };
+            TenantDescriptorMapping<EventStorageEngine> sharedEngines = new TenantDescriptorMapping<>();
+            sharedEngines.entry(TENANT_A, sharedEngine);
+            sharedEngines.entry(TENANT_B, sharedEngine);
+            MultiTenantEventStorageEngine failing = streamingEngineOver(sharedEngines);
+
+            MessageStream<EventMessage> stream = failing.stream(StreamingCondition.startingFrom(null));
+
+            await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> assertThat(stream.error()).isPresent());
+            // the stream opened for the earlier tenant is closed rather than leaked when the later tenant fails to open
+            assertThat(firstStreamClosed).isTrue();
+            stream.close();
+        }
+
+        @Test
+        void streamReturnsAFailedStreamWhenResolvingAStartPositionThrows() {
+            TenantDescriptorMapping<EventStorageEngine> failingEngines = new TenantDescriptorMapping<>();
+            failingEngines.entry(TENANT_A, new InMemoryEventStorageEngine());
+            failingEngines.entry(TENANT_B, new InMemoryEventStorageEngine() {
+                @Override
+                public CompletableFuture<TrackingToken> firstToken() {
+                    throw new IllegalStateException("cannot resolve the first token");
+                }
+            });
+            MultiTenantEventStorageEngine failing = streamingEngineOver(failingEngines);
+
+            // resolving the start position runs synchronously. A failure there must come back through the stream, so
+            // stream() returns a failed stream rather than throwing
+            MessageStream<EventMessage> stream = failing.stream(StreamingCondition.startingFrom(null));
+
+            assertThat(stream.error()).isPresent();
+            stream.close();
+        }
+
+        @Test
+        void aTenantWhoseStreamFailsSurfacesItsErrorOnTheMergedStream() {
+            TenantDescriptorMapping<EventStorageEngine> failingEngines = new TenantDescriptorMapping<>();
+            InMemoryEventStorageEngine healthyStore = new InMemoryEventStorageEngine();
+            failingEngines.entry(TENANT_A, healthyStore);
+            failingEngines.entry(TENANT_B, new InMemoryEventStorageEngine() {
+                @Override
+                public MessageStream<EventMessage> stream(StreamingCondition condition) {
+                    return MessageStream.failed(new IllegalStateException("cannot read the tenant"));
+                }
+            });
+            MultiTenantEventStorageEngine failing = streamingEngineOver(failingEngines);
+            seed(healthyStore, eventAt("A1", instant(0)));
+
+            MessageStream<EventMessage> stream = failing.stream(StreamingCondition.startingFrom(null));
+
+            // A tenant signalling failure as a failed stream, rather than throwing, surfaces its error on the merged
+            // read. The pooled streaming processor aborts on that error before draining, so no tenant progresses even
+            // though the merge itself still holds the healthy tenant's event.
+            await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> assertThat(stream.error()).isPresent());
+            stream.close();
+        }
+
+        @Test
+        void streamOpensEachTenantAtItsOwnFirstTokenNotAtZero() {
+            // A tenant whose store begins past zero, standing in for one whose early events were pruned: its engine's
+            // firstToken() is non-zero. Streaming from the (empty) multi-tenant firstToken must open it at that real
+            // position, resolved from the tenant's own engine, rather than assuming zero.
+            TrackingToken prunedFirst = new GlobalSequenceTrackingToken(7);
+            AtomicReference<TrackingToken> openedAt = new AtomicReference<>();
+            RecordingEventStorageEngine prunedTenant = new RecordingEventStorageEngine() {
+                @Override
+                public CompletableFuture<TrackingToken> firstToken() {
+                    return CompletableFuture.completedFuture(prunedFirst);
+                }
+
+                @Override
+                public MessageStream<EventMessage> stream(StreamingCondition condition) {
+                    openedAt.set(condition.position());
+                    return super.stream(condition);
+                }
+            };
+            TenantDescriptorMapping<EventStorageEngine> prunedEngines = new TenantDescriptorMapping<>();
+            prunedEngines.entry(TENANT_A, prunedTenant);
+            MultiTenantEventStorageEngine testSubject = streamingEngineOver(prunedEngines);
+
+            testSubject.stream(StreamingCondition.startingFrom(testSubject.firstToken().join())).close();
+
+            assertThat(openedAt.get()).isEqualTo(prunedFirst);
+        }
+
+        @Test
+        void latestTokenReturnsAFailedFutureWhenATenantEngineThrows() {
+            TenantDescriptorMapping<EventStorageEngine> failingEngines = new TenantDescriptorMapping<>();
+            failingEngines.entry(TENANT_A, new InMemoryEventStorageEngine());
+            failingEngines.entry(TENANT_B, new InMemoryEventStorageEngine() {
+                @Override
+                public CompletableFuture<TrackingToken> latestToken() {
+                    throw new IllegalStateException("cannot resolve the latest token");
+                }
+            });
+            MultiTenantEventStorageEngine failing = streamingEngineOver(failingEngines);
+
+            // composing the per-tenant tokens touches each engine synchronously. A failure there comes back as a failed
+            // future rather than throwing, matching appendEvents()
+            assertThat(failing.latestToken()).isCompletedExceptionally();
+        }
+    }
+
+    @Nested
+    class StreamingATenantTheFactoriesDoNotHoldYet {
+
+        @Test
+        void failsTheWholeMergedStreamWhenAFactoryDoesNotHoldTheTenantYet() {
+            // The engine and its factories are separate tenant provider subscribers, so the engine can hold a tenant the
+            // factories have not registered yet.
+            Set<TenantDescriptor> factoryTenants = new HashSet<>();
+            factoryTenants.add(TENANT_A);
+            TenantEventStorageEngineFactory engineFactory = tenant -> {
+                if (!factoryTenants.contains(tenant)) {
+                    throw new TenantNotResolvedException("Tenant [%s] is not registered with the factory",
+                                                         tenant.tenantId());
+                }
+                return new InMemoryEventStorageEngine();
+            };
+            MultiTenantEventStorageEngine testSubject =
+                    new MultiTenantEventStorageEngine(engineFactory,
+                                                      tenant -> new InMemorySnapshotStore(),
+                                                      new TenantRouter(alwaysTenant(TENANT_A), engines));
+            testSubject.registerTenant(TENANT_A);
+            testSubject.registerTenant(TENANT_B);
+
+            MessageStream<EventMessage> stream =
+                    testSubject.stream(StreamingCondition.conditionFor(MultiTenantTrackingToken.empty(),
+                                                                      EventCriteria.havingAnyTag()));
+
+            // Not just that tenant's part of it: one factory short of a tenant fails the stream for every tenant. Hence
+            // the factories are subscribed a phase before whatever announces a tenant, so they always lead.
+            assertThat(stream.error()).containsInstanceOf(TenantNotResolvedException.class);
+        }
+    }
+
+    @Nested
+    class StreamingWithoutTenants {
+
+        private final MultiTenantEventStorageEngine testSubject = streamingEngineOver(new TenantDescriptorMapping<>());
+
+        @Test
+        void streamIsEmptyWhenNoTenantsExist() {
+            MessageStream<EventMessage> stream = testSubject.stream(StreamingCondition.startingFrom(null));
+
+            assertThat(stream.hasNextAvailable()).isFalse();
+            assertThat(stream.error()).isEmpty();
+            stream.close();
+        }
+
+        @Test
+        void firstTokenIsEmptyWhenNoTenantsExist() {
+            assertThat(testSubject.firstToken().join()).isEqualTo(MultiTenantTrackingToken.empty());
         }
     }
 
@@ -419,13 +788,105 @@ class MultiTenantEventStorageEngineTest {
 
 
     @Nested
+    class AnnouncingTenantChanges {
+
+        private final MultiTenantEventStorageEngine testSubject =
+                new MultiTenantEventStorageEngine(engines::apply,
+                                                  snapshotStores,
+                                                  new TenantRouter(alwaysTenant(TENANT_A), engines));
+
+        @Test
+        void announcesARegistrationOnlyOnceItIsVisibleThroughTheEnginesTenants() {
+            List<List<TenantDescriptor>> tenantsWhenAnnounced = new ArrayList<>();
+            testSubject.subscribe(() -> tenantsWhenAnnounced.add(testSubject.tenants()));
+
+            testSubject.registerTenant(TENANT_A);
+            testSubject.registerAndStartTenant(TENANT_B);
+
+            // What a listener re-opening the merged stream depends on: the engine already holds the tenant by the time
+            // the listener runs.
+            assertThat(tenantsWhenAnnounced).hasSize(2);
+            assertThat(tenantsWhenAnnounced.getFirst()).containsExactly(TENANT_A);
+            assertThat(tenantsWhenAnnounced.getLast()).containsExactlyInAnyOrder(TENANT_A, TENANT_B);
+        }
+
+        @Test
+        void announcesACancelledRegistrationOnce() {
+            Registration registration = testSubject.registerTenant(TENANT_A);
+            List<List<TenantDescriptor>> tenantsWhenAnnounced = new ArrayList<>();
+            testSubject.subscribe(() -> tenantsWhenAnnounced.add(testSubject.tenants()));
+
+            registration.cancel();
+            // Cancelling again removes nothing, so there is no further change to announce.
+            registration.cancel();
+
+            // Pinned the same way as the addition: the engine no longer holds the tenant when the listener runs.
+            assertThat(tenantsWhenAnnounced).hasSize(1);
+            assertThat(tenantsWhenAnnounced.getFirst()).isEmpty();
+        }
+
+        @Test
+        void stopsAnnouncingToAListenerWhoseSubscriptionWasCancelled() {
+            AtomicInteger announcements = new AtomicInteger();
+            Registration listenerRegistration = testSubject.subscribe(announcements::incrementAndGet);
+            testSubject.registerTenant(TENANT_A);
+
+            listenerRegistration.cancel();
+            testSubject.registerTenant(TENANT_B);
+
+            assertThat(announcements).hasValue(1);
+        }
+
+        @Test
+        void aFailingListenerNeitherFailsTheRegistrationNorSkipsTheOtherListeners() {
+            AtomicInteger announcements = new AtomicInteger();
+            testSubject.subscribe(() -> {
+                throw new IllegalStateException("cannot follow tenants");
+            });
+            testSubject.subscribe(announcements::incrementAndGet);
+
+            testSubject.registerTenant(TENANT_A);
+
+            assertThat(announcements).hasValue(1);
+            assertThat(testSubject.tenants()).containsExactly(TENANT_A);
+        }
+
+        @Test
+        void announcesToEverySubscriptionSeparatelyAndCancelsThemIndependently() {
+            AtomicInteger announcements = new AtomicInteger();
+            TenantChangeListener listener = announcements::incrementAndGet;
+            Registration first = testSubject.subscribe(listener);
+            testSubject.subscribe(listener);
+
+            testSubject.registerTenant(TENANT_A);
+            assertThat(announcements).hasValue(2);
+
+            // Cancelling one subscription leaves what the other call added.
+            assertThat(first.cancel()).isTrue();
+            testSubject.registerTenant(TENANT_B);
+
+            assertThat(announcements).hasValue(3);
+        }
+
+        @Test
+        void rejectsANullListener() {
+            assertThatThrownBy(() -> testSubject.subscribe(null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("The tenant change listener must not be null");
+        }
+    }
+
+    @Nested
     class Construction {
 
         private final TenantRouter tenantRouter = new TenantRouter(alwaysTenant(TENANT_A), engines);
 
         @Test
         void rejectsANullEngineFactory() {
-            assertThatThrownBy(() -> new MultiTenantEventStorageEngine(null, snapshotStores, tenantRouter))
+            ThrowingCallable construction =
+                    () -> new MultiTenantEventStorageEngine(null, snapshotStores, tenantRouter);
+
+            assertThatThrownBy(construction)
                     .isInstanceOf(NullPointerException.class)
                     .hasMessage("The tenant event storage engine factory must not be null");
         }
@@ -434,7 +895,10 @@ class MultiTenantEventStorageEngineTest {
         void rejectsANullSnapshotStoreFactory() {
             TenantEventStorageEngineFactory engineFactory = tenant -> new RecordingEventStorageEngine();
 
-            assertThatThrownBy(() -> new MultiTenantEventStorageEngine(engineFactory, null, tenantRouter))
+            ThrowingCallable construction =
+                    () -> new MultiTenantEventStorageEngine(engineFactory, null, tenantRouter);
+
+            assertThatThrownBy(construction)
                     .isInstanceOf(NullPointerException.class)
                     .hasMessage("The tenant snapshot store factory must not be null");
         }
@@ -448,6 +912,50 @@ class MultiTenantEventStorageEngineTest {
         testSubject.describeTo(descriptor);
 
         assertThat(descriptor.getDescribedProperties())
-                .containsKeys("engineFactory", "snapshotStoreFactory", "tenantRouter");
+                .containsKeys("engineFactory", "snapshotStoreFactory", "tenantRouter", "tenantChangeListenerCount");
+    }
+
+    private static MultiTenantEventStorageEngine streamingEngineOver(
+            TenantDescriptorMapping<EventStorageEngine> engines) {
+        MultiTenantEventStorageEngine engine = new MultiTenantEventStorageEngine(
+                engines::apply,
+                tenant -> new InMemorySnapshotStore(),
+                new TenantRouter(alwaysTenant(TENANT_A), engines));
+        engines.tenants().forEach(engine::registerTenant);
+        return engine;
+    }
+
+    private static void seed(EventStorageEngine engine, EventMessage event) {
+        engine.appendEvents(NONE, null, tagged(event)).join().commit().join();
+    }
+
+    private static EventMessage eventAt(String payload, Instant timestamp) {
+        return new GenericEventMessage("id-" + payload, new MessageType("TestEvent"), payload, Map.of(), timestamp);
+    }
+
+    private static Instant instant(int secondsFromEpoch) {
+        return Instant.EPOCH.plusSeconds(secondsFromEpoch);
+    }
+
+    private static MessageStream.Entry<EventMessage> nextEntry(MessageStream<EventMessage> stream) {
+        await().atMost(Duration.ofSeconds(2)).until(stream::hasNextAvailable);
+        return stream.next().orElseThrow();
+    }
+
+    private static List<Object> payloads(MessageStream<EventMessage> stream, int count) {
+        List<Object> payloads = new ArrayList<>();
+        for (int index = 0; index < count; index++) {
+            payloads.add(nextEntry(stream).message().payload());
+        }
+        return payloads;
+    }
+
+    private static Map<Object, TenantDescriptor> tenantByPayload(MessageStream<EventMessage> stream, int count) {
+        Map<Object, TenantDescriptor> tenantByPayload = new HashMap<>();
+        for (int index = 0; index < count; index++) {
+            MessageStream.Entry<EventMessage> entry = nextEntry(stream);
+            tenantByPayload.put(entry.message().payload(), entry.getResource(TenantDescriptor.RESOURCE_KEY));
+        }
+        return tenantByPayload;
     }
 }
