@@ -98,6 +98,14 @@ public class PostgresStorageEngineBackedEventStoreIT extends StorageEngineBacked
     static void stopContainer() {
         if (engine != null) {
             engine.close();
+            // getStorageEngine() lazily caches this in a static field; without resetting it here, a
+            // rerun's fresh dataSource (recreated below) would be ignored in favor of this stale
+            // engine, which is still bound to the pool we're about to close.
+            engine = null;
+        }
+
+        if (dataSource instanceof HikariDataSource hikariDataSource) {
+            hikariDataSource.close();
         }
 
         if (postgresContainer != null) {

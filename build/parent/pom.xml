@@ -49,6 +49,12 @@
             -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar
         </mockito.agent.argLine>
 
+        <!-- The default common pool parallelism (availableProcessors() - 1) is sized for CPU-bound work.
+             The framework's own code is I/O-bound throughout (network/database calls), and CI runners for
+             this private repo have only 2 vCPUs, leaving a single common pool worker thread, which is
+             too easy to starve when tests race multiple concurrent transactions through it. -->
+        <common-pool.argLine>-Djava.util.concurrent.ForkJoinPool.common.parallelism=8</common-pool.argLine>
+
         <!-- Database -->
         <c3p0.version>0.9.1.2</c3p0.version>
         <hikari.version>7.1.0</hikari.version>
@@ -653,7 +659,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire.version}</version>
                 <configuration>
-                    <argLine>${mockito.agent.argLine} -Djava.awt.headless=true</argLine>
+                    <argLine>${mockito.agent.argLine} ${common-pool.argLine} -Djava.awt.headless=true</argLine>
                     <systemPropertyVariables>
                         <slf4j.version>${slf4j.version}</slf4j.version>
                         <log4j.version>${log4j.version}</log4j.version>
@@ -739,7 +745,7 @@
                         <artifactId>maven-surefire-plugin</artifactId>
                         <configuration>
                             <!--suppress MavenModelInspection -->
-                            <argLine>-Djava.awt.headless=true ${surefireArgLine} ${mockito.agent.argLine}</argLine>
+                            <argLine>-Djava.awt.headless=true ${surefireArgLine} ${mockito.agent.argLine} ${common-pool.argLine}</argLine>
                         </configuration>
                     </plugin>
                 </plugins>
@@ -787,7 +793,7 @@
                                 </goals>
                                 <configuration>
                                     <!--suppress MavenModelInspection -->
-                                    <argLine>-Djava.awt.headless=true ${failsafeArgLine} ${mockito.agent.argLine}
+                                    <argLine>-Djava.awt.headless=true ${failsafeArgLine} ${mockito.agent.argLine} ${common-pool.argLine}
                                     </argLine>
                                     <systemPropertyVariables>
                                         <test.forkNumber>${surefire.forkNumber}</test.forkNumber>
