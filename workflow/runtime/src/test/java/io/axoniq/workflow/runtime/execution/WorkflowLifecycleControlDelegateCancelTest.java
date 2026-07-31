@@ -61,7 +61,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
     private Executor executor;
     private EventNameCustomizer eventNameCustomizer;
     private RunningSteps runningSteps;
-    private Runnable terminalTeardown;
+    private WorkflowTerminalTransition terminalTransition;
     private WorkflowLifecycleControlDelegate delegate;
 
     @SuppressWarnings("unchecked")
@@ -75,7 +75,11 @@ class WorkflowLifecycleControlDelegateCancelTest {
         unitOfWorkFactory = mock(UnitOfWorkFactory.class);
         executor = Runnable::run;
         runningSteps = new RunningSteps();
-        terminalTeardown = mock(Runnable.class);
+        terminalTransition = mock(WorkflowTerminalTransition.class);
+        doAnswer(invocation -> {
+            invocation.<Runnable>getArgument(0).run();
+            return null;
+        }).when(terminalTransition).transition(any(Runnable.class));
 
         UnitOfWork unitOfWork = mock(UnitOfWork.class);
         when(unitOfWorkFactory.create(any(String.class))).thenReturn(unitOfWork);
@@ -100,7 +104,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
                 workflowExecution,
                 runningSteps,
                 new WorkflowStepProgress(),
-                terminalTeardown,
+                terminalTransition,
                 unitOfWorkFactory,
                 eventSink,
                 executor
@@ -113,7 +117,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
                 .isInstanceOf(WorkflowCancelledException.class);
 
         // Whole-workflow cancel interrupts running steps + discards the queue; no per-step cancellation is published.
-        verify(terminalTeardown).run();
+        verify(terminalTransition).transition(any(Runnable.class));
     }
 
     @Test
@@ -123,7 +127,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
         assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(cause, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
-        verify(terminalTeardown).run();
+        verify(terminalTransition).transition(any(Runnable.class));
     }
 
     @Test
@@ -152,12 +156,12 @@ class WorkflowLifecycleControlDelegateCancelTest {
 
     @Test
     void terminateCancelExecutesStepsInOrder() {
-        var order = inOrder(terminalTeardown, eventSink);
+        var order = inOrder(terminalTransition, eventSink);
 
         assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
-        order.verify(terminalTeardown).run();
+        order.verify(terminalTransition).transition(any(Runnable.class));
         order.verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
     }
 

@@ -57,7 +57,7 @@ class WorkflowLifecycleControlDelegateFailTest {
     private UnitOfWorkFactory unitOfWorkFactory;
     private Executor executor;
     private EventNameCustomizer eventNameCustomizer;
-    private Runnable terminalTeardown;
+    private WorkflowTerminalTransition terminalTransition;
     private WorkflowLifecycleControlDelegate delegate;
 
     @SuppressWarnings("unchecked")
@@ -69,7 +69,11 @@ class WorkflowLifecycleControlDelegateFailTest {
         processingContext = mock(ProcessingContext.class);
         unitOfWorkFactory = mock(UnitOfWorkFactory.class);
         executor = Runnable::run;
-        terminalTeardown = mock(Runnable.class);
+        terminalTransition = mock(WorkflowTerminalTransition.class);
+        doAnswer(invocation -> {
+            invocation.<Runnable>getArgument(0).run();
+            return null;
+        }).when(terminalTransition).transition(any(Runnable.class));
 
         UnitOfWork unitOfWork = mock(UnitOfWork.class);
         when(unitOfWorkFactory.create(any(String.class))).thenReturn(unitOfWork);
@@ -96,7 +100,7 @@ class WorkflowLifecycleControlDelegateFailTest {
                 workflowExecution,
                 new RunningSteps(),
                 new WorkflowStepProgress(),
-                terminalTeardown,
+                terminalTransition,
                 unitOfWorkFactory,
                 eventSink,
                 executor
@@ -109,7 +113,7 @@ class WorkflowLifecycleControlDelegateFailTest {
                 .isInstanceOf(WorkflowFailedException.class);
 
         // Whole-workflow fail interrupts running steps + discards the queue; no per-step cancellation is published.
-        verify(terminalTeardown).run();
+        verify(terminalTransition).transition(any(Runnable.class));
     }
 
     @Test
@@ -117,7 +121,7 @@ class WorkflowLifecycleControlDelegateFailTest {
         assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        verify(terminalTeardown).run();
+        verify(terminalTransition).transition(any(Runnable.class));
     }
 
     @Test
@@ -147,12 +151,12 @@ class WorkflowLifecycleControlDelegateFailTest {
     @Test
     void terminateFailExecutesStepsInOrder() {
         var cause = new RuntimeException("boom");
-        var order = inOrder(terminalTeardown, eventSink);
+        var order = inOrder(terminalTransition, eventSink);
 
         assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(cause, eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        order.verify(terminalTeardown).run();
+        order.verify(terminalTransition).transition(any(Runnable.class));
         order.verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
     }
 

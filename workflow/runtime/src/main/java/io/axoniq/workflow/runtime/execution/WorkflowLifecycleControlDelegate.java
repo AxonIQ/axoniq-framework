@@ -24,7 +24,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
-import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
@@ -65,7 +64,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     private final WorkflowExecution workflowExecution;
     private final RunningSteps runningSteps;
     private final WorkflowStepProgress workflowStepProgress;
-    private final Runnable terminalTeardown;
+    private final WorkflowTerminalTransition terminalTransition;
     private final EventSink eventSink;
     private final String workflowName;
     private final UnitOfWorkFactory unitOfWorkFactory;
@@ -78,7 +77,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
      * @param workflowExecution             workflow execution.
      * @param runningSteps                  running step registry
      * @param workflowStepProgress          workflow step progress tracker
-     * @param terminalTeardown              operation preparing the execution for a terminal workflow event
+     * @param terminalTransition            owner of workflow terminal-transition execution mechanics
      * @param unitOfWorkFactory             unit of work factory for creation of new processing contexts.
      * @param eventSink                     event sink for event publications.
      * @param executor                      executor to offload execution tasks from workflow thread.
@@ -89,7 +88,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
             @Nonnull WorkflowExecution workflowExecution,
             @Nonnull RunningSteps runningSteps,
             @Nonnull WorkflowStepProgress workflowStepProgress,
-            @Nonnull Runnable terminalTeardown,
+            @Nonnull WorkflowTerminalTransition terminalTransition,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
             @Nonnull EventSink eventSink,
             @Nonnull Executor executor
@@ -98,7 +97,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
         this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
         this.workflowStepProgress = Objects.requireNonNull(workflowStepProgress, "Workflow step progress is mandatory");
-        this.terminalTeardown = Objects.requireNonNull(terminalTeardown, "Terminal teardown is mandatory");
+        this.terminalTransition = Objects.requireNonNull(terminalTransition, "Terminal transition is mandatory");
         this.eventSink = Objects.requireNonNull(eventSink, "Event sink is mandatory");
         this.workflowName = Objects.requireNonNull(workflowExecution.workflowName(), "Workflow name is mandatory");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UnitOfWork factory is mandatory");
@@ -111,12 +110,13 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         // workflow whose old code already ran past this point. Throws non-terminally.
         workflowStepProgress.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), "<terminate>");
 
-        // Whole-workflow terminal: interrupt running steps (no per-step event) and discard the queue
-        // before publishing, so the awaitStateChange inside cancelled(...) pumps only the workflow-terminal evolve
-        // and no queued retry-failure/launch task runs. Running steps stay in their last recorded state.
-        terminalTeardown.run();
+        terminalTransition.transition(() -> publishCancelled(command, workflowName));
 
-        cancelled(command, workflowName);
+        var cause = command.cause();
+        if (cause != null) {
+            throw new WorkflowCancelledException(cause);
+        }
+        throw new WorkflowCancelledException("Workflow cancelled");
     }
 
     @Override
@@ -125,12 +125,13 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         // workflow whose old code already ran past this point. Throws non-terminally.
         workflowStepProgress.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), "<terminate>");
 
-        // Whole-workflow terminal: interrupt running steps (no per-step event) and discard the queue
-        // before publishing, so the awaitStateChange inside failed(...) pumps only the workflow-terminal evolve and
-        // no queued retry-failure/launch task runs. Running steps stay in their last recorded state.
-        terminalTeardown.run();
+        terminalTransition.transition(() -> publishFailed(command, workflowName));
 
-        failed(command, workflowName);
+        var cause = command.cause();
+        var exception = cause instanceof Exception
+                ? (Exception) cause
+                : cause != null ? new RuntimeException(cause) : new RuntimeException("Workflow failed");
+        throw new WorkflowFailedException(exception);
     }
 
     @Override
@@ -179,7 +180,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         return true;
     }
 
-    protected void failed(@Nonnull WorkflowLifecycleControl.FailWorkflowCommand command, @Nonnull String effectiveName) {
+    private void publishFailed(@Nonnull WorkflowLifecycleControl.FailWorkflowCommand command, @Nonnull String effectiveName) {
         var cause = command.cause();
         var eventNameCustomizer = command.eventNameCustomizer();
         var exception = cause instanceof Exception
@@ -197,16 +198,10 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
                                          failedWorkflow(workflowContext, effectiveName, exception, eventNameCustomizer))
         ).join(); // FIXME join
 
-        try {
-            workflowExecution.awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.FAILED);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        throw new WorkflowFailedException(exception);
     }
 
-    protected void cancelled(@Nonnull WorkflowLifecycleControl.CancelWorkflowCommand command, @Nonnull String effectiveName) {
+    private void publishCancelled(@Nonnull WorkflowLifecycleControl.CancelWorkflowCommand command,
+                                  @Nonnull String effectiveName) {
         var cause = command.cause();
         var eventNameCustomizer = command.eventNameCustomizer();
 
@@ -219,15 +214,5 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
                                          cancelledWorkflow(workflowContext, effectiveName, cause, eventNameCustomizer))
         ).join(); // FIXME join
 
-        try {
-            workflowExecution.awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.CANCELLED);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        if (cause != null) {
-            throw new WorkflowCancelledException(cause);
-        }
-        throw new WorkflowCancelledException("Workflow cancelled");
     }
 }

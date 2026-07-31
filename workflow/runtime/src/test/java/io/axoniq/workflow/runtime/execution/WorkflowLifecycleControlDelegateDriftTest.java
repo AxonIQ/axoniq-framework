@@ -70,7 +70,8 @@ class WorkflowLifecycleControlDelegateDriftTest {
         when(workflowExecution.state()).thenReturn(state);
 
         delegate = new WorkflowLifecycleControlDelegate(
-                workflowContext, workflowExecution, new RunningSteps(), workflowStepProgress, () -> { }, unitOfWorkFactory, eventSink, executor
+                workflowContext, workflowExecution, new RunningSteps(), workflowStepProgress,
+                terminalEventPublication -> terminalEventPublication.run(), unitOfWorkFactory, eventSink, executor
         );
     }
 

@@ -96,7 +96,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
      * @param runningSteps      running step registry
      * @param eventWaitConditions event wait condition registry
      * @param workflowStepProgress workflow step progress tracker
-     * @param terminalTeardown  operation preparing the execution for a terminal workflow event
+     * @param terminalTransition owner of workflow terminal-transition execution mechanics
      * @param processingContext processing context.
      */
     public WorkflowContextDelegation(
@@ -106,7 +106,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
             @Nonnull RunningSteps runningSteps,
             @Nonnull EventWaitConditions eventWaitConditions,
             @Nonnull WorkflowStepProgress workflowStepProgress,
-            @Nonnull Runnable terminalTeardown,
+            @Nonnull WorkflowTerminalTransition terminalTransition,
             @Nonnull ProcessingContext processingContext
     ) {
 
@@ -176,7 +176,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                                               workflowExecution,
                                                                               runningSteps,
                                                                               workflowStepProgress,
-                                                                              terminalTeardown,
+                                                                              terminalTransition,
                                                                               unitOfWorkFactory,
                                                                               eventSink,
                                                                               executorService);
