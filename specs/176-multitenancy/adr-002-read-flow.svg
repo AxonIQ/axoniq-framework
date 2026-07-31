@@ -35,9 +35,9 @@
   <rect x="612" y="42" width="176" height="46" rx="6" fill="#EEEDFE" stroke="#7F77DD"/>
   <text x="700" y="61" font-size="12" font-weight="500" fill="#26215C" text-anchor="middle">MultiTenantStreaming</text>
   <text x="700" y="77" font-size="12" font-weight="500" fill="#26215C" text-anchor="middle">ProcessorRestarter</text>
-  <path d="M711 176 L711 88" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
-  <text x="717" y="136" font-size="10" fill="#B45309">tenant added</text>
-  <text x="717" y="149" font-size="10" fill="#B45309">or removed</text>
+  <path d="M550 186 L624 186 L624 88" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="628" y="130" font-size="10" fill="#B45309">tenant change,</text>
+  <text x="628" y="143" font-size="10" fill="#B45309">once registered</text>
   <path d="M612 65 L534 65" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
   <text x="559" y="60" font-size="10" font-weight="500" fill="#B45309">restart</text>
 

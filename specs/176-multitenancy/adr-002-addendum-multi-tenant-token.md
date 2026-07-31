@@ -9,7 +9,7 @@ This addendum records why the shared-processor read side positions its stream wi
 
 ## Context
 
-One pooled streaming processor reads every tenant's events, so all tenants' positions live inside one combined token. The tenant set is not fixed: the `TenantProvider` starts after the processors and discovers tenants asynchronously, so the very first token is always written with zero tenants, and tenants are then added and removed at runtime. The processor's coordinator reads and compares the persisted tokens directly, outside the engine, so whatever token type positions the stream has to survive being compared against a token written for a different set of tenants.
+One pooled streaming processor reads every tenant's events, so all tenants' positions live inside one combined token. The tenant set is not fixed: the `TenantProvider` discovers tenants asynchronously, so the first token can be written before any tenant is known, and tenants are then added and removed at runtime. The processor's coordinator reads and compares the persisted tokens directly, outside the engine, so whatever token type positions the stream has to survive being compared against a token written for a different set of tenants.
 
 `MultiSourceTrackingToken`, the framework's combined token, refuses on purpose to be compared with a token that tracks a different set of sources. It throws. That strict behaviour is a deliberate guardrail: it has been there since Axon Framework 4.2, and it makes a renamed source fail loudly rather than silently replay from the beginning. So it cannot position this stream unchanged.
 
