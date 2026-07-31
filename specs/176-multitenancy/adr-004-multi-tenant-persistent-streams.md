@@ -71,7 +71,11 @@ That single resource is all the tenant labelling this path needs. `TenantCompone
 
 ### A scheduler per tenant
 
-Each tenant's segment gets its own `ScheduledExecutorService`, built through the `PersistentStreamScheduledExecutorBuilder`. Sharing one pool across tenants would make the configured `thread-count` mean "threads for all tenants together" and let one tenant whose stream is retrying occupy threads the others need. Per tenant, `thread-count` keeps meaning "threads for this stream", which is what it means without multi-tenancy, and a tenant's slowness stays its own. The pool is shut down when the tenant's segment is evicted.
+Each tenant's segment gets its own `ScheduledExecutorService`. Sharing one pool across tenants would make the configured `thread-count` mean "threads for all tenants together" and let one tenant whose stream is retrying occupy threads the others need. Per tenant, `thread-count` keeps meaning "threads for this stream", which is what it means without multi-tenancy, and a tenant's slowness stays its own. The pool is shut down when the tenant's segment is evicted.
+
+That needs the source to be able to ask for more than one pool, which the `PersistentStreamEventSourceFactory` contract could not express: it handed over one already-created `ScheduledExecutorService`. So `build` now takes a `Function<String, ScheduledExecutorService>` instead, and the scheduler-based signature stays as a `default` delegating to it with a factory handing out that one pool. Three things follow. The multi-tenant factory no longer has to discard a pool built for a single stream, which previously left it alive on the caller's shutdown list without a stream to serve. It no longer has to recover the thread count by scanning `AxonServerConfiguration` for the settings the stream was configured under, because the caller pre-binds the count into the factory it supplies. And because the requested pool name reaches the builder, each tenant's threads are still named `stream@tenant`, so a thread dump says whose stream a thread is working on.
+
+`PersistentStreamConfigurationEnhancer` supplies a factory that records every pool it hands out, so its existing `DisposableBean` shutdown still covers all of them, per-tenant pools included, and a source that is never built causes no pool to be created at all.
 
 ### The same stream name in every tenant
 
@@ -103,7 +107,7 @@ Both are breaking changes to types introduced in 5.2.0, taken deliberately while
 
 - The customizer on `PersistentStreamConnection`: invoked once per batch, before any event reaches the consumer, and its resource visible on every event's context.
 - The multi-tenant source: `subscribe` opens a stream for every tenant known to the provider; a tenant's events carry that tenant and never another's; a tenant added while subscribed joins the running consumer; cancelling one tenant's registration closes only that tenant's stream and scheduler while the others keep running; unsubscribing closes all of them, as does the provider's shutdown; a conflicting consumer is rejected while the same one is idempotent; subscribing with no tenants is a no-op that later tenants join.
-- The factory: the per-tenant thread count is taken from the settings the stream was configured under, whether by map key or explicit name, and falls back to the auto-persistent-stream settings.
+- The factory: a pool is taken from the supplied factory per tenant, named after the stream and that tenant, none is taken before the source is subscribed, and a caller passing a single scheduler through the delegating signature has it shared across the tenants.
 - The configuration wiring: the multi-tenant factory replaces the default only while multi-tenancy is active, and an application-supplied factory takes precedence over both.
 - A two-tenant `MultiTenantPersistentStreamIT` over a real multi-context Axon Server: one subscribing processor consumes both tenants, every event is labelled with the tenant whose stream delivered it, no event is attributed to another tenant, and a tenant created at runtime is consumed too.
 

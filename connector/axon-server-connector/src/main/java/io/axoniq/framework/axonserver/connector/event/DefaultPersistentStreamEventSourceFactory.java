@@ -22,6 +22,7 @@ package io.axoniq.framework.axonserver.connector.event;
 import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.messaging.core.SubscribableEventSource;
@@ -33,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.function.Function;
 
 /**
  * Default implementation of {@link PersistentStreamEventSourceFactory}, building one source per Axon Server stream.
@@ -40,11 +42,14 @@ import java.util.concurrent.ScheduledExecutorService;
  * Tracks all stream names that have been used to create a source and logs a warning when the same Axon Server stream
  * name is used more than once. Two sources sharing the same server-side stream name will join the same stream, which is
  * typically a misconfiguration.
+ * <p>
+ * Marked {@link Internal} as concrete, internal implementation of the {@link PersistentStreamEventSourceFactory}.
  *
  * @author Jakob Hatzl
  * @see PersistentStreamEventSourceFactory
  * @since 5.2.0
  */
+@Internal
 public class DefaultPersistentStreamEventSourceFactory implements PersistentStreamEventSourceFactory {
 
     /**
@@ -59,7 +64,7 @@ public class DefaultPersistentStreamEventSourceFactory implements PersistentStre
     @Override
     public SubscribableEventSource build(String name,
                                          PersistentStreamProperties properties,
-                                         ScheduledExecutorService scheduler,
+                                         Function<String, ScheduledExecutorService> schedulerFactory,
                                          int batchSize,
                                          Configuration configuration) {
         if (!seenStreamNames.add(name)) {
@@ -76,7 +81,7 @@ public class DefaultPersistentStreamEventSourceFactory implements PersistentStre
                 configuration.getOptionalComponent(EventTypeResolver.class)
                              .orElse(EventTypeResolver.DEFAULT),
                 properties,
-                scheduler,
+                schedulerFactory.apply(name),
                 configuration.getComponent(UnitOfWorkFactory.class),
                 batchSize
         );

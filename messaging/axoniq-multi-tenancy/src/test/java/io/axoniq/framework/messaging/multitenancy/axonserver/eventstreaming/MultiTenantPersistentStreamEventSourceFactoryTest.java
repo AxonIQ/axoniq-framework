@@ -22,7 +22,6 @@ package io.axoniq.framework.messaging.multitenancy.axonserver.eventstreaming;
 import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
-import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingPersistentStreams;
@@ -46,11 +45,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiFunction;
-import java.util.function.Supplier;
+import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -61,28 +60,27 @@ class MultiTenantPersistentStreamEventSourceFactoryTest {
 
     private static final String STREAM_NAME = "test-stream";
     private static final TenantDescriptor TENANT_A = TenantDescriptor.tenantWithId("tenant-a");
+    private static final TenantDescriptor TENANT_B = TenantDescriptor.tenantWithId("tenant-b");
 
     private final MultiTenantPersistentStreamEventSourceFactory testSubject =
             new MultiTenantPersistentStreamEventSourceFactory();
 
     private RecordingPersistentStreams streams;
     private StubTenantProvider tenantProvider;
-    private AxonServerConfiguration serverConfiguration;
-    private RecordingSchedulerBuilder schedulerBuilder;
+    private RecordingSchedulerFactory schedulerFactory;
     private ScheduledExecutorService suppliedScheduler;
 
     @BeforeEach
     void setUp() {
         streams = new RecordingPersistentStreams();
         tenantProvider = new StubTenantProvider();
-        serverConfiguration = new AxonServerConfiguration();
-        schedulerBuilder = new RecordingSchedulerBuilder();
+        schedulerFactory = new RecordingSchedulerFactory();
         suppliedScheduler = Executors.newSingleThreadScheduledExecutor();
     }
 
     @AfterEach
     void tearDown() {
-        schedulerBuilder.shutdownAll();
+        schedulerFactory.shutdownAll();
         suppliedScheduler.shutdownNow();
     }
 
@@ -100,46 +98,91 @@ class MultiTenantPersistentStreamEventSourceFactoryTest {
     }
 
     @Nested
-    class ThreadCountResolution {
+    class SchedulerFactoryUsage {
 
         @Test
-        void takesTheThreadCountConfiguredUnderTheStreamsMapKey() {
+        void takesAPoolPerTenantFromTheSuppliedFactory() {
             // given
-            serverConfiguration.getPersistentStreams().put(STREAM_NAME, settingsWithThreadCount(4, null));
             tenantProvider.addTenant(TENANT_A);
+            tenantProvider.addTenant(TENANT_B);
 
             // when
             build(STREAM_NAME).subscribe(noOpConsumer());
 
-            // then — the tenant's own pool is sized as configured for the stream, not shared across tenants
-            assertThat(schedulerBuilder.threadCountFor(STREAM_NAME + "@tenant-a")).isEqualTo(4);
+            // then — one pool per tenant, each named after the stream and the tenant it serves
+            assertThat(schedulerFactory.requestedPoolNames())
+                    .containsExactlyInAnyOrder(STREAM_NAME + "@tenant-a", STREAM_NAME + "@tenant-b");
         }
 
         @Test
-        void takesTheThreadCountOfTheSettingsWhoseExplicitNameMatches() {
-            // given — the map key differs from the configured stream name
-            serverConfiguration.getPersistentStreams()
-                               .put("someBeanName", settingsWithThreadCount(6, STREAM_NAME));
+        void takesNoPoolBeforeTheSourceIsSubscribed() {
+            // given
             tenantProvider.addTenant(TENANT_A);
 
-            // when
-            build(STREAM_NAME).subscribe(noOpConsumer());
+            // when — a source is built, but nothing consumes it yet
+            build(STREAM_NAME);
 
-            // then
-            assertThat(schedulerBuilder.threadCountFor(STREAM_NAME + "@tenant-a")).isEqualTo(6);
+            // then — no tenant stream exists, so no pool was created for one
+            assertThat(schedulerFactory.requestedPoolNames()).isEmpty();
         }
 
         @Test
-        void fallsBackToTheAutoPersistentStreamSettingsForAnUnconfiguredStream() {
-            // given — the stream is in neither map, as an automatically created one is
-            serverConfiguration.getAutoPersistentStreamsSettings().setThreadCount(3);
+        void rejectsTheDirectSchedulerContract() {
+            // given — a caller passing an already created scheduler rather than a factory
             tenantProvider.addTenant(TENANT_A);
+            tenantProvider.addTenant(TENANT_B);
 
+            // when / then — sharing one scheduler across every tenant would defeat the per-tenant isolation this
+            // factory exists to provide, so the contract is refused outright rather than silently honored
+            assertThatThrownBy(() -> testSubject.build(STREAM_NAME, properties(STREAM_NAME), suppliedScheduler, 100,
+                                                       configuration()))
+                    .isInstanceOf(AxonConfigurationException.class)
+                    .hasMessageContaining("schedulerFactory-based build");
+            assertThat(streams.openedContexts()).isEmpty();
+        }
+    }
+
+    @Nested
+    class DuplicateStreamNameWarning {
+
+        private ListAppender logAppender;
+
+        @BeforeEach
+        void attachAppender() {
+            logAppender = new ListAppender("MultiTenantDuplicateStreamNameWarningLog");
+            logAppender.start();
+            ((Logger) LogManager.getLogger(MultiTenantPersistentStreamEventSourceFactory.class))
+                    .addAppender(logAppender);
+        }
+
+        @AfterEach
+        void detachAppender() {
+            ((Logger) LogManager.getLogger(MultiTenantPersistentStreamEventSourceFactory.class))
+                    .removeAppender(logAppender);
+        }
+
+        @Test
+        void noWarningOnFirstBuild() {
             // when
-            build("MyProcessor-stream").subscribe(noOpConsumer());
+            build(STREAM_NAME);
 
             // then
-            assertThat(schedulerBuilder.threadCountFor("MyProcessor-stream@tenant-a")).isEqualTo(3);
+            assertThat(logAppender.getEvents())
+                    .noneMatch(event -> event.getLevel() == Level.WARN);
+        }
+
+        @Test
+        void warnsWhenSameStreamNameUsedTwice() {
+            // given
+            build(STREAM_NAME);
+
+            // when
+            testSubject.build(STREAM_NAME, properties(STREAM_NAME), suppliedScheduler, 100, configuration())
+                       .subscribe(noOpConsumer());
+
+            // then — both tenants get their stream, sharing that single scheduler
+            assertThat(streams.openedContexts()).containsExactlyInAnyOrder("tenant-a", "tenant-b");
+            assertThat(schedulerFactory.requestedPoolNames()).isEmpty();
         }
     }
 
@@ -148,69 +191,45 @@ class MultiTenantPersistentStreamEventSourceFactoryTest {
     }
 
     private SubscribableEventSource build(String streamName) {
-        return testSubject.build(streamName,
-                                 new PersistentStreamProperties(streamName,
-                                                                1,
-                                                                "Seq",
-                                                                Collections.emptyList(),
-                                                                "0",
-                                                                null),
-                                 suppliedScheduler,
-                                 100,
-                                 configuration());
+        return testSubject.build(streamName, properties(streamName), schedulerFactory, 100, configuration());
     }
 
-    private static AxonServerConfiguration.PersistentStreamSettings settingsWithThreadCount(int threadCount,
-                                                                                           String name) {
-        AxonServerConfiguration.PersistentStreamSettings settings =
-                new AxonServerConfiguration.PersistentStreamSettings();
-        settings.setThreadCount(threadCount);
-        if (name != null) {
-            settings.setName(name);
-        }
-        return settings;
+    private static PersistentStreamProperties properties(String streamName) {
+        return new PersistentStreamProperties(streamName, 1, "Seq", Collections.emptyList(), "0", null);
     }
 
     private Configuration configuration() {
         Configuration configuration = mock(Configuration.class);
         when(configuration.getComponent(AxonServerConnectionManager.class)).thenReturn(streams.connectionManager());
-        when(configuration.getComponent(AxonServerConfiguration.class)).thenReturn(serverConfiguration);
+        when(configuration.getComponent(AxonServerConfiguration.class)).thenReturn(new AxonServerConfiguration());
         when(configuration.getComponent(EventConverter.class))
                 .thenReturn(new DelegatingEventConverter(new JacksonConverter()));
         when(configuration.getComponent(UnitOfWorkFactory.class)).thenReturn(UnitOfWorkTestUtils.SIMPLE_FACTORY);
         when(configuration.getComponent(TenantProvider.class)).thenReturn(tenantProvider);
-        when(configuration.getComponent(eq(PersistentStreamScheduledExecutorBuilder.class), any(Supplier.class)))
-                .thenReturn(schedulerBuilder);
         when(configuration.getOptionalComponent(any(Class.class))).thenReturn(Optional.empty());
         return configuration;
     }
 
     /**
-     * Records the thread count each scheduler was requested with, per stream name, so the per-tenant sizing is
-     * observable.
+     * Records the pool name each scheduler was requested for, so which pools a source takes is observable.
      */
-    private static final class RecordingSchedulerBuilder implements PersistentStreamScheduledExecutorBuilder {
+    private static final class RecordingSchedulerFactory implements Function<String, ScheduledExecutorService> {
 
-        private record Request(String streamName, int threadCount, ScheduledExecutorService scheduler) {
+        private record Request(String poolName, ScheduledExecutorService scheduler) {
 
         }
 
         private final List<Request> requests = new CopyOnWriteArrayList<>();
 
         @Override
-        public ScheduledExecutorService apply(Integer threadCount, String streamName) {
-            ScheduledExecutorService scheduler =
-                    PersistentStreamScheduledExecutorBuilder.defaultFactory().build(threadCount, streamName);
-            requests.add(new Request(streamName, threadCount, scheduler));
+        public ScheduledExecutorService apply(String poolName) {
+            ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+            requests.add(new Request(poolName, scheduler));
             return scheduler;
         }
 
-        private int threadCountFor(String streamName) {
-            return requests.stream()
-                           .filter(request -> request.streamName().equals(streamName))
-                           .map(Request::threadCount)
-                           .findFirst()
-                           .orElseThrow(() -> new AssertionError("No scheduler was built for [" + streamName + "]."));
+        private List<String> requestedPoolNames() {
+            return requests.stream().map(Request::poolName).toList();
         }
 
         private void shutdownAll() {

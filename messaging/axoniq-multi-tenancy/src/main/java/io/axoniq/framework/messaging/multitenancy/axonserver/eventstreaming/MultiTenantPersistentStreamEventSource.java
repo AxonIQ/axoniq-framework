@@ -23,7 +23,6 @@ import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSource;
-import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
@@ -47,6 +46,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 /**
  * A {@link SubscribableEventSource} consuming one persistent stream per tenant, labelling every event it delivers with
@@ -80,8 +80,7 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
 
     private final String name;
     private final PersistentStreamProperties properties;
-    private final PersistentStreamScheduledExecutorBuilder schedulerBuilder;
-    private final int threadCount;
+    private final Function<String, ScheduledExecutorService> schedulerFactory;
     private final int batchSize;
     private final Configuration configuration;
     private final TenantProvider tenantProvider;
@@ -106,20 +105,17 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
      * @param name             the name of the persistent stream, used as the stream identifier in every tenant's Axon
      *                         Server context
      * @param properties       the properties applied when creating each tenant's persistent stream
-     * @param schedulerBuilder the builder constructing a tenant's {@link ScheduledExecutorService}
-     * @param threadCount      the number of threads requested for each tenant's stream, so the configured thread count
-     *                         keeps meaning "threads for this stream" rather than being shared across tenants
+     * @param schedulerFactory the factory creating a tenant's {@link ScheduledExecutorService} for the pool name given
+     *                         to it, so each tenant's stream runs on threads of its own rather than sharing one pool
      * @param batchSize        the maximum number of events to deliver per batch
      * @param configuration    the configuration supplying the components each tenant's stream is built from
      * @param tenantProvider   the provider whose tenants this source opens a stream for while it has a subscriber
      * @throws NullPointerException     if any of the given arguments is {@code null}
-     * @throws IllegalArgumentException if the given {@code name} is empty, or {@code threadCount} or {@code batchSize}
-     *                                  is not positive
+     * @throws IllegalArgumentException if the given {@code name} is empty or {@code batchSize} is not positive
      */
     public MultiTenantPersistentStreamEventSource(String name,
                                                   PersistentStreamProperties properties,
-                                                  PersistentStreamScheduledExecutorBuilder schedulerBuilder,
-                                                  int threadCount,
+                                                  Function<String, ScheduledExecutorService> schedulerFactory,
                                                   int batchSize,
                                                   Configuration configuration,
                                                   TenantProvider tenantProvider) {
@@ -128,11 +124,7 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
             throw new IllegalArgumentException("The name must not be empty.");
         }
         this.properties = Objects.requireNonNull(properties, "The persistent stream properties must not be null");
-        this.schedulerBuilder = Objects.requireNonNull(schedulerBuilder, "The scheduler builder must not be null");
-        if (threadCount <= 0) {
-            throw new IllegalArgumentException("The thread count must be positive, but was: " + threadCount);
-        }
-        this.threadCount = threadCount;
+        this.schedulerFactory = Objects.requireNonNull(schedulerFactory, "The scheduler factory must not be null");
         if (batchSize <= 0) {
             throw new IllegalArgumentException("The batch size must be positive, but was: " + batchSize);
         }
@@ -257,7 +249,7 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
     // Runs inside the cache update, so the segment is subscribed here rather than by the caller: whichever tenant
     // triggers the creation gets a stream that is already open and feeding the consumer.
     private TenantStreamSegment createSegment(TenantDescriptor tenant) {
-        ScheduledExecutorService scheduler = schedulerBuilder.build(threadCount, name + "@" + tenant.tenantId());
+        ScheduledExecutorService scheduler = schedulerFactory.apply(name + "@" + tenant.tenantId());
         PersistentStreamEventSource tenantSource = new PersistentStreamEventSource(
                 name,
                 configuration.getComponent(AxonServerConnectionManager.class),

@@ -49,6 +49,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -68,19 +69,18 @@ class MultiTenantPersistentStreamEventSourceTest {
 
     private RecordingPersistentStreams streams;
     private StubTenantProvider tenantProvider;
-    private RecordingSchedulerBuilder schedulerBuilder;
+    private RecordingSchedulerFactory schedulerFactory;
     private MultiTenantPersistentStreamEventSource testSubject;
 
     @BeforeEach
     void setUp() {
         streams = new RecordingPersistentStreams();
         tenantProvider = new StubTenantProvider();
-        schedulerBuilder = new RecordingSchedulerBuilder();
+        schedulerFactory = new RecordingSchedulerFactory();
         testSubject = new MultiTenantPersistentStreamEventSource(
                 STREAM_NAME,
                 new PersistentStreamProperties(STREAM_NAME, 1, "Seq", Collections.emptyList(), "0", null),
-                schedulerBuilder,
-                1,
+                schedulerFactory,
                 100,
                 configurationWith(streams.connectionManager()),
                 tenantProvider
@@ -89,7 +89,7 @@ class MultiTenantPersistentStreamEventSourceTest {
 
     @AfterEach
     void tearDown() {
-        schedulerBuilder.shutdownAll();
+        schedulerFactory.shutdownAll();
     }
 
     @Nested
@@ -150,7 +150,7 @@ class MultiTenantPersistentStreamEventSourceTest {
             testSubject.subscribe(consumer);
 
             // then — still exactly one scheduler, so the tenant's stream was not opened a second time
-            assertThat(schedulerBuilder.buildCount()).isEqualTo(1);
+            assertThat(schedulerFactory.createCount()).isEqualTo(1);
         }
 
         @Test
@@ -268,8 +268,8 @@ class MultiTenantPersistentStreamEventSourceTest {
             tenantProvider.removeTenant(TENANT_A);
 
             // then — the removed tenant's threads are released, the remaining tenant keeps its own
-            assertThat(schedulerBuilder.isShutdown(STREAM_NAME + "@tenant-a")).isTrue();
-            assertThat(schedulerBuilder.isShutdown(STREAM_NAME + "@tenant-b")).isFalse();
+            assertThat(schedulerFactory.isShutdown(STREAM_NAME + "@tenant-a")).isTrue();
+            assertThat(schedulerFactory.isShutdown(STREAM_NAME + "@tenant-b")).isFalse();
         }
 
         @Test
@@ -284,7 +284,7 @@ class MultiTenantPersistentStreamEventSourceTest {
 
             // then — a re-added tenant is served by a newly built stream, not the one bound to the dropped connection
             assertThat(streams.hasOpenStream("tenant-a")).isTrue();
-            assertThat(schedulerBuilder.buildCount()).isEqualTo(2);
+            assertThat(schedulerFactory.createCount()).isEqualTo(2);
         }
     }
 
@@ -317,8 +317,8 @@ class MultiTenantPersistentStreamEventSourceTest {
             registration.cancel();
 
             // then
-            assertThat(schedulerBuilder.isShutdown(STREAM_NAME + "@tenant-a")).isTrue();
-            assertThat(schedulerBuilder.isShutdown(STREAM_NAME + "@tenant-b")).isTrue();
+            assertThat(schedulerFactory.isShutdown(STREAM_NAME + "@tenant-a")).isTrue();
+            assertThat(schedulerFactory.isShutdown(STREAM_NAME + "@tenant-b")).isTrue();
         }
 
         @Test
@@ -382,23 +382,29 @@ class MultiTenantPersistentStreamEventSourceTest {
 
         @Test
         void rejectsAnEmptyName() {
-            assertThatThrownBy(() -> sourceWith("", 1, 100))
+            assertThatThrownBy(() -> sourceWith("", 100))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("name");
         }
 
         @Test
-        void rejectsANonPositiveThreadCount() {
-            assertThatThrownBy(() -> sourceWith(STREAM_NAME, 0, 100))
+        void rejectsANonPositiveBatchSize() {
+            assertThatThrownBy(() -> sourceWith(STREAM_NAME, 0))
                     .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("thread count");
+                    .hasMessageContaining("batch size");
         }
 
         @Test
-        void rejectsANonPositiveBatchSize() {
-            assertThatThrownBy(() -> sourceWith(STREAM_NAME, 1, 0))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("batch size");
+        void rejectsANullSchedulerFactory() {
+            assertThatThrownBy(() -> new MultiTenantPersistentStreamEventSource(
+                    STREAM_NAME,
+                    new PersistentStreamProperties(STREAM_NAME, 1, "Seq", Collections.emptyList(), "0", null),
+                    null,
+                    100,
+                    configurationWith(streams.connectionManager()),
+                    tenantProvider))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("scheduler factory");
         }
 
         @Test
@@ -406,8 +412,7 @@ class MultiTenantPersistentStreamEventSourceTest {
             assertThatThrownBy(() -> new MultiTenantPersistentStreamEventSource(
                     STREAM_NAME,
                     new PersistentStreamProperties(STREAM_NAME, 1, "Seq", Collections.emptyList(), "0", null),
-                    schedulerBuilder,
-                    1,
+                    schedulerFactory,
                     100,
                     configurationWith(streams.connectionManager()),
                     null))
@@ -415,12 +420,11 @@ class MultiTenantPersistentStreamEventSourceTest {
                     .hasMessageContaining("tenant provider");
         }
 
-        private MultiTenantPersistentStreamEventSource sourceWith(String name, int threadCount, int batchSize) {
+        private MultiTenantPersistentStreamEventSource sourceWith(String name, int batchSize) {
             return new MultiTenantPersistentStreamEventSource(
                     name,
                     new PersistentStreamProperties(STREAM_NAME, 1, "Seq", Collections.emptyList(), "0", null),
-                    schedulerBuilder,
-                    threadCount,
+                    schedulerFactory,
                     batchSize,
                     configurationWith(streams.connectionManager()),
                     tenantProvider
@@ -495,34 +499,34 @@ class MultiTenantPersistentStreamEventSourceTest {
     }
 
     /**
-     * Builds real single-threaded schedulers while recording them per name, so a test can assert that the scheduler of a
-     * specific tenant was released.
+     * Creates real single-threaded schedulers while recording them per requested pool name, so a test can assert that
+     * the scheduler of a specific tenant was released.
      */
-    private static final class RecordingSchedulerBuilder implements PersistentStreamScheduledExecutorBuilder {
+    private static final class RecordingSchedulerFactory implements Function<String, ScheduledExecutorService> {
 
-        private final Map<String, ScheduledExecutorService> built = new ConcurrentHashMap<>();
-        private final AtomicInteger buildCount = new AtomicInteger();
+        private final Map<String, ScheduledExecutorService> created = new ConcurrentHashMap<>();
+        private final AtomicInteger createCount = new AtomicInteger();
 
         @Override
-        public ScheduledExecutorService apply(Integer threadCount, String streamName) {
-            buildCount.incrementAndGet();
+        public ScheduledExecutorService apply(String poolName) {
+            createCount.incrementAndGet();
             ScheduledExecutorService scheduler =
-                    PersistentStreamScheduledExecutorBuilder.defaultFactory().build(threadCount, streamName);
-            built.put(streamName, scheduler);
+                    PersistentStreamScheduledExecutorBuilder.defaultFactory().build(1, poolName);
+            created.put(poolName, scheduler);
             return scheduler;
         }
 
-        private int buildCount() {
-            return buildCount.get();
+        private int createCount() {
+            return createCount.get();
         }
 
-        private boolean isShutdown(String streamName) {
-            ScheduledExecutorService scheduler = built.get(streamName);
+        private boolean isShutdown(String poolName) {
+            ScheduledExecutorService scheduler = created.get(poolName);
             return scheduler != null && scheduler.isShutdown();
         }
 
         private void shutdownAll() {
-            built.values().forEach(ScheduledExecutorService::shutdownNow);
+            created.values().forEach(ScheduledExecutorService::shutdownNow);
         }
     }
 }

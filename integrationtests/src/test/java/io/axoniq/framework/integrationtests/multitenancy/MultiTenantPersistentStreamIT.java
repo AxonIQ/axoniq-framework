@@ -212,10 +212,13 @@ class MultiTenantPersistentStreamIT {
                 "TAIL",
                 null  // no server-side filter
         );
+        // A factory rather than one scheduler, so every tenant's stream runs on threads of its own, named after the
+        // tenant it serves. The source shuts a tenant's pool down when that tenant's stream closes.
         return new MultiTenantPersistentStreamEventSourceFactory()
                 .build(streamName,
                        properties,
-                       PersistentStreamScheduledExecutorBuilder.defaultFactory().build(segmentCount, streamName),
+                       poolName -> PersistentStreamScheduledExecutorBuilder.defaultFactory()
+                                                                          .build(segmentCount, poolName),
                        10,
                        configuration);
     }

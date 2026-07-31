@@ -24,6 +24,7 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.SubscribableEventSource;
 
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.function.Function;
 
 /**
  * Factory for creating the {@link SubscribableEventSource} that consumes a persistent stream on Axon Server.
@@ -43,12 +44,37 @@ import java.util.concurrent.ScheduledExecutorService;
 public interface PersistentStreamEventSourceFactory {
 
     /**
-     * Builds the {@link SubscribableEventSource} consuming the persistent stream described by the given parameters.
+     * Builds the {@link SubscribableEventSource} consuming the persistent stream described by the given parameters,
+     * taking the {@link ScheduledExecutorService} instances it needs from the given {@code schedulerFactory}.
      * <p>
      * The supplied {@link Configuration} provides access to all registered framework components, such as the
      * {@link io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager} and
      * {@link org.axonframework.messaging.eventhandling.conversion.EventConverter}, so implementations do not need to
      * receive those as constructor arguments.
+     * <p>
+     * A factory is handed a scheduler factory rather than a scheduler, so implementations can create pools under their
+     * control. The requested pool name is used to name the pool's threads, so the source a thread belongs to is
+     * visible in a thread dump; pass the stream name for a single stream and a name distinguishing them for several.
+     *
+     * @param name             the unique stream name on Axon Server
+     * @param properties       the persistent stream properties (segment count, sequencing policy, filter, etc.)
+     * @param schedulerFactory the factory creating a {@link ScheduledExecutorService} for the pool name given to it
+     * @param batchSize        the maximum number of events to deliver per batch
+     * @param configuration    the framework configuration from which additional components can be retrieved
+     * @return a new {@link SubscribableEventSource} consuming the described persistent stream
+     */
+    SubscribableEventSource build(String name,
+                                  PersistentStreamProperties properties,
+                                  Function<String, ScheduledExecutorService> schedulerFactory,
+                                  int batchSize,
+                                  Configuration configuration);
+
+    /**
+     * Builds the {@link SubscribableEventSource} consuming the persistent stream described by the given parameters, on
+     * the given, already created {@code scheduler}.
+     * <p>
+     * Delegates to {@link #build(String, PersistentStreamProperties, Function, int, Configuration)} with a factory
+     * handing out that one {@code scheduler}.
      *
      * @param name          the unique stream name on Axon Server
      * @param properties    the persistent stream properties (segment count, sequencing policy, filter, etc.)
@@ -57,11 +83,13 @@ public interface PersistentStreamEventSourceFactory {
      * @param configuration the framework configuration from which additional components can be retrieved
      * @return a new {@link SubscribableEventSource} consuming the described persistent stream
      */
-    SubscribableEventSource build(String name,
-                                  PersistentStreamProperties properties,
-                                  ScheduledExecutorService scheduler,
-                                  int batchSize,
-                                  Configuration configuration);
+    default SubscribableEventSource build(String name,
+                                          PersistentStreamProperties properties,
+                                          ScheduledExecutorService scheduler,
+                                          int batchSize,
+                                          Configuration configuration) {
+        return build(name, properties, ignoredPoolName -> scheduler, batchSize, configuration);
+    }
 
     /**
      * The default {@link PersistentStreamEventSourceFactory} (a {@link DefaultPersistentStreamEventSourceFactory}) to

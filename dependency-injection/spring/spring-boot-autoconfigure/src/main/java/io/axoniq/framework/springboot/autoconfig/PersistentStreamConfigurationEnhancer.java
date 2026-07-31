@@ -37,11 +37,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.ObjectProvider;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.function.Function;
 
 /**
  * A {@link ConfigurationEnhancer} that registers a {@link SubscribableEventSource} component consuming a persistent
@@ -79,9 +80,9 @@ import java.util.concurrent.ScheduledExecutorService;
  * Actual construction of each source is delegated to a {@link PersistentStreamEventSourceFactory} to allow
  * customization if needed. The default factory builds a {@link PersistentStreamEventSource}.
  * <p>
- * The {@link PersistentStreamConfigurationEnhancer} also implements {@link DisposableBean} and keeps a reference of all
- * {@link ScheduledExecutorService} instances created during {@link #enhance(ComponentRegistry)} to shut them down again
- * when the Spring application context closes.
+ * The {@link PersistentStreamConfigurationEnhancer} also implements {@link DisposableBean} and keeps a reference of every
+ * {@link ScheduledExecutorService} a source asked it for, to shut them down again when the Spring application context
+ * closes.
  * <p>
  * Marked {@link Internal} because instances are created by {@link PersistentStreamAutoConfiguration} and should not be
  * constructed directly in application code.
@@ -100,7 +101,8 @@ public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhan
     private final ObjectProvider<AxonServerConfiguration> axonServerConfigProvider;
     private final PersistentStreamScheduledExecutorBuilder schedulerBuilder;
     private final PersistentStreamEventSourceFactory factory;
-    private final List<ScheduledExecutorService> schedulers = new ArrayList<>();
+    // Pools are added whenever a source is built, which is not necessarily the thread that ran the enhancement.
+    private final List<ScheduledExecutorService> schedulers = new CopyOnWriteArrayList<>();
 
     /**
      * Instantiates a {@code PersistentStreamConfigurationEnhancer}.
@@ -141,14 +143,11 @@ public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhan
                                     PersistentStreamProperties properties = toPersistentStreamProperties(
                                             desiredStreamName,
                                             autoPersistentStreamsSettings);
-                                    ScheduledExecutorService scheduler = schedulerBuilder.build(
-                                            autoPersistentStreamsSettings.getThreadCount(),
-                                            desiredStreamName);
-                                    schedulers.add(scheduler);
                                     SubscribableEventSource streamSource = factory.build(
                                             desiredStreamName,
                                             properties,
-                                            scheduler,
+                                            trackedSchedulerFactory(
+                                                    autoPersistentStreamsSettings.getThreadCount()),
                                             autoPersistentStreamsSettings.getBatchSize(),
                                             axonConfig
                                     );
@@ -181,20 +180,37 @@ public class PersistentStreamConfigurationEnhancer implements ConfigurationEnhan
             String streamName = settings.getName() != null ? settings.getName() : beanName;
 
             PersistentStreamProperties properties = toPersistentStreamProperties(streamName, settings);
-            ScheduledExecutorService scheduler = schedulerBuilder.build(settings.getThreadCount(), streamName);
-            schedulers.add(scheduler);
 
             registry.registerComponent(
                     ComponentDefinition.ofTypeAndName(SubscribableEventSource.class, beanName)
                                        .withBuilder(config -> factory.build(
                                                streamName,
                                                properties,
-                                               scheduler,
+                                               trackedSchedulerFactory(settings.getThreadCount()),
                                                settings.getBatchSize(),
                                                config
                                        ))
             );
         }
+    }
+
+    /**
+     * Returns a scheduler factory creating pools of the given {@code threadCount}, keeping a reference to every pool it
+     * hands out so {@link #destroy()} can shut them all down again.
+     * <p>
+     * A factory rather than a ready-made pool, because a {@link PersistentStreamEventSourceFactory} building more than
+     * one stream from a single declaration, as the multi-tenant one does per tenant, needs a pool per stream. Creating
+     * them on request also means no pool exists for a source that was never built.
+     *
+     * @param threadCount the number of threads each pool this factory creates holds
+     * @return a scheduler factory whose pools are shut down when the application context closes
+     */
+    private Function<String, ScheduledExecutorService> trackedSchedulerFactory(int threadCount) {
+        return poolName -> {
+            ScheduledExecutorService scheduler = schedulerBuilder.build(threadCount, poolName);
+            schedulers.add(scheduler);
+            return scheduler;
+        };
     }
 
     @Override

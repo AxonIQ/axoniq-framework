@@ -20,15 +20,15 @@
 package io.axoniq.framework.messaging.multitenancy.axonserver.eventstreaming;
 
 import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
-import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSourceFactory;
-import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.SubscribableEventSource;
 
-import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.function.Function;
 
 /**
  * A {@link PersistentStreamEventSourceFactory} building a {@link MultiTenantPersistentStreamEventSource}, so a
@@ -38,35 +38,51 @@ import java.util.concurrent.ScheduledExecutorService;
  * persistent-stream-backed event processors multi-tenant: streams stay configured under
  * {@code axon.axonserver.persistent-streams} exactly as they are without multi-tenancy.
  * <p>
- * Each tenant's stream gets a {@link ScheduledExecutorService} of its own, so the configured {@code thread-count} keeps
- * meaning "threads for this stream" and a tenant whose stream is retrying cannot occupy the threads the other tenants
- * need. Because that thread count is not part of the
- * {@link #build(String, PersistentStreamProperties, ScheduledExecutorService, int, Configuration)} contract, it is read
- * back from the {@link AxonServerConfiguration} settings the stream was configured with. The pre-built
- * {@code scheduler} that contract supplies is left unused: it is built for a single stream, while this source needs one
- * pool per tenant. A {@link java.util.concurrent.Executors#newScheduledThreadPool(int) scheduled thread pool} starts no
- * threads until work is submitted, so the unused pool costs nothing, and the caller that built it still owns its
- * shutdown.
+ * Marked {@link Internal} as concrete, internal implementation of the {@link PersistentStreamEventSourceFactory}.
  *
  * @author Jakob Hatzl
  * @see MultiTenantPersistentStreamEventSource
  * @since 5.3.0
  */
+@Internal
 public class MultiTenantPersistentStreamEventSourceFactory implements PersistentStreamEventSourceFactory {
 
+    /**
+     * Builds the {@link SubscribableEventSource} consuming the persistent stream described by the given parameters,
+     * taking the {@link ScheduledExecutorService} instances it needs from the given {@code schedulerFactory}.
+     * <p>
+     * The supplied {@link Configuration} provides access to all registered framework components, such as the
+     * {@link io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager} and
+     * {@link org.axonframework.messaging.eventhandling.conversion.EventConverter}, so implementations do not need to
+     * receive those as constructor arguments.
+     * <p>
+     * A factory is handed a scheduler factory rather than a scheduler, so implementations can create pools under their
+     * control. The requested pool name is used to name the pool's threads, so the source a thread belongs to is visible
+     * in a thread dump; pass the stream name for a single stream and a name distinguishing them for several.
+     * <p>
+     * For the {@code MultiTenantPersistentStreamEventSourceFactory} each tenant's stream gets a
+     * {@link ScheduledExecutorService} of its own, taken from the scheduler factory the contract supplies, so the
+     * configured {@code thread-count} keeps meaning "threads for this stream" and a tenant whose stream is retrying
+     * cannot occupy the threads the other tenants need. Pools are named after the stream and the tenant they belong to,
+     * so a thread dump shows whose stream a thread is working on.
+     *
+     * @param name             the unique stream name on Axon Server
+     * @param properties       the persistent stream properties (segment count, sequencing policy, filter, etc.)
+     * @param schedulerFactory the factory creating a {@link ScheduledExecutorService} for the pool name given to it
+     * @param batchSize        the maximum number of events to deliver per batch
+     * @param configuration    the framework configuration from which additional components can be retrieved
+     * @return a new {@link SubscribableEventSource} consuming the described persistent stream
+     */
     @Override
     public SubscribableEventSource build(String name,
                                          PersistentStreamProperties properties,
-                                         ScheduledExecutorService scheduler,
+                                         Function<String, ScheduledExecutorService> schedulerFactory,
                                          int batchSize,
                                          Configuration configuration) {
-        AxonServerConfiguration serverConfiguration = configuration.getComponent(AxonServerConfiguration.class);
         return new MultiTenantPersistentStreamEventSource(
                 name,
                 properties,
-                configuration.getComponent(PersistentStreamScheduledExecutorBuilder.class,
-                                           PersistentStreamScheduledExecutorBuilder::defaultFactory),
-                threadCountFor(name, serverConfiguration),
+                schedulerFactory,
                 batchSize,
                 configuration,
                 configuration.getComponent(TenantProvider.class)
@@ -74,25 +90,19 @@ public class MultiTenantPersistentStreamEventSourceFactory implements Persistent
     }
 
     /**
-     * Resolves the thread count configured for the stream with the given {@code streamName}.
-     * <p>
-     * Streams are configured under a map key that doubles as the stream name unless
-     * {@link AxonServerConfiguration.PersistentStreamSettings#getName()} overrides it, so both are matched, the same way
-     * the stream's name was resolved when it was registered. A stream that is in neither, which is the case for an
-     * automatically created one, takes the thread count of the auto-persistent-stream settings.
+     * Always throws, since a single {@link ScheduledExecutorService} shared across every tenant would defeat the
+     * per-tenant thread isolation this factory exists to provide.
      *
-     * @param streamName          the resolved name of the stream to find the thread count for
-     * @param serverConfiguration the Axon Server configuration holding the persistent stream settings
-     * @return the thread count configured for the given {@code streamName}
+     * @throws AxonConfigurationException always, directing the caller to the {@link Function}-based {@code build}
+     *                                    overload instead
      */
-    private static int threadCountFor(String streamName, AxonServerConfiguration serverConfiguration) {
-        for (Map.Entry<String, AxonServerConfiguration.PersistentStreamSettings> entry
-                : serverConfiguration.getPersistentStreams().entrySet()) {
-            String configuredName = entry.getValue().getName() != null ? entry.getValue().getName() : entry.getKey();
-            if (configuredName.equals(streamName)) {
-                return entry.getValue().getThreadCount();
-            }
-        }
-        return serverConfiguration.getAutoPersistentStreamsSettings().getThreadCount();
+    @Override
+    public SubscribableEventSource build(String name, PersistentStreamProperties properties,
+                                         ScheduledExecutorService scheduler, int batchSize,
+                                         Configuration configuration) {
+        throw new AxonConfigurationException(
+                "MultiTenantPersistentStreamEventSourceFactory requires a scheduler per tenant; build the source "
+                        + "through the schedulerFactory-based build(...) overload instead of handing it a single "
+                        + "ScheduledExecutorService.");
     }
 }
