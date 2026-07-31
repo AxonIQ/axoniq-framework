@@ -64,15 +64,21 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
      *
      * @param context                   workflow context.
      * @param workflowExecution         workflow state.
+     * @param runningSteps              running step registry
+     * @param workflowStepProgress      workflow step progress tracker
      * @param parentEventNameCustomizer event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
      * @param eventSink                 event sink for event publications.
      * @param executor                  executor to offload execution tasks from workflow thread.
+     * @param timeoutScheduler          scheduler for workflow step timeouts
+     * @param actionResolver            resolver for execute step actions
      */
     @Internal
     public ExecuteDelegate(@Nonnull WorkflowContext context,
                            @Nonnull WorkflowExecution workflowExecution,
+                           @Nonnull RunningSteps runningSteps,
+                           @Nonnull WorkflowStepProgress workflowStepProgress,
                            @Nonnull EventNameCustomizer parentEventNameCustomizer,
                            @Nonnull Clock clock,
                            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -83,6 +89,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     ) {
         super(context,
               workflowExecution,
+              runningSteps,
+              workflowStepProgress,
               parentEventNameCustomizer,
               clock,
               unitOfWorkFactory,
@@ -129,17 +137,17 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         boolean resumedInFlight = workflowExecution.state().containsStep(stepName)
                 && workflowExecution.state().getStep(stepName).status() == StepStatus.STARTED;
 
-        workflowExecution.recordStepReference(stepName);
+        workflowStepProgress.record(stepName);
 
         acceptAllPendingTasksForStep(stepName);
 
         if (resumedInFlight) {
             failureHandler.onFailure(stepName, new StepIndeterminateException(stepName), eventNameCustomizer);
-            return stateBased(stepName, workflowExecution);
+            return stateBased(stepName, eventNameCustomizer, workflowExecution);
         }
 
         if (!workflowExecution.state().containsStep(stepName)) {
-            workflowExecution.guardAgainstReplayDrift(stepName);
+            workflowStepProgress.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
             workflowExecution.appendTask(i ->
                                                  started(stepName, sanitize(local), eventNameCustomizer)
             );
@@ -181,7 +189,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                         }
                     });
 
-            workflowExecution.registerRunningStep(stepName, result);
+            runningSteps.register(stepName, result);
 
             if (remainingTimeout.isNegative()) {
                 workflowExecution.appendTask(i -> {
@@ -201,7 +209,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                 );
                 result.whenComplete((r, e) -> {
                             timeoutTask.cancel();
-                            workflowExecution.removeRunningStep(stepName);
+                            runningSteps.remove(stepName);
                             if (e == null) {
                                 // Normal completion — a null action result sanitizes to an empty map in completed(),
                                 // so a null-returning action COMPLETES rather than wedging on a null-e dereference.
@@ -232,6 +240,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
             }
         }
 
-        return stateBased(stepName, workflowExecution);
+        return stateBased(stepName, eventNameCustomizer, workflowExecution);
     }
 }

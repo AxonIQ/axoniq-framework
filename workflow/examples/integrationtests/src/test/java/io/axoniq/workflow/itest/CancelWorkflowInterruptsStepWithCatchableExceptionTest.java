@@ -92,14 +92,8 @@ class CancelWorkflowInterruptsStepWithCatchableExceptionTest extends AbstractWor
 
         awaitParked(id);
 
-        var execution = workflowEngine.workflowExecutions()
-                                      .stream()
-                                      .filter(w -> w.workflowId().equals(id))
-                                      .findFirst().orElseThrow(() -> new IllegalStateException(
-                        "no workflow found with id " + id));
-
-        execution.requestWorkflowCancellation(
-                new WorkflowCancelledException("operator cancelled while step running")
+        workflowCancellationService.cancelWorkflow(
+                id, new WorkflowCancelledException("operator cancelled while step running")
         ).join();
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {

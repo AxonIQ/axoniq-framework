@@ -33,6 +33,7 @@ import java.lang.reflect.Type;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 
 import static io.axoniq.workflow.runtime.api.execution.status.StepStatus.*;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.PAYLOAD_TYPE;
@@ -50,11 +51,24 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     private final String stepName;
     private final Callable<Void> stateChangeTrigger;
+    private final Consumer<Throwable> cancellation;
     private final WorkflowExecution workflowExecution;
 
-    public StateBasedWorkflowStepResult(String stepName, Callable<Void> stateChangeTrigger, WorkflowExecution state) {
+    /**
+     * Creates a result backed by the current workflow execution state.
+     *
+     * @param stepName           step represented by this result
+     * @param stateChangeTrigger operation that waits for the next state change
+     * @param cancellation       operation that requests cancellation of this step
+     * @param state              workflow execution providing the state
+     */
+    public StateBasedWorkflowStepResult(String stepName,
+                                        Callable<Void> stateChangeTrigger,
+                                        Consumer<Throwable> cancellation,
+                                        WorkflowExecution state) {
         this.stepName = stepName;
         this.stateChangeTrigger = stateChangeTrigger;
+        this.cancellation = cancellation;
         this.workflowExecution = state;
     }
 
@@ -148,11 +162,11 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     @Override
     public void cancel() {
-        workflowExecution.cancelStep(stepName, new StepCancellationException("Step cancelled"));
+        cancellation.accept(new StepCancellationException("Step cancelled"));
     }
 
     @Override
     public void cancel(@Nonnull String reason) {
-        workflowExecution.cancelStep(stepName, new StepCancellationException(reason));
+        cancellation.accept(new StepCancellationException(reason));
     }
 }

@@ -49,11 +49,23 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
 
     /**
      * Constructs the primitive implementation.
+     *
+     * @param workflowContext           workflow context
+     * @param workflowExecution         workflow execution
+     * @param runningSteps              running step registry
+     * @param workflowStepProgress      workflow step progress tracker
+     * @param parentEventNameCustomizer parent event name customizer
+     * @param clock                     clock for time calculations
+     * @param unitOfWorkFactory         unit of work factory for processing contexts
+     * @param eventSink                 event sink for event publications
+     * @param executor                  executor for step work
      */
     @Internal
     public PayloadDelegate(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
+            @Nonnull WorkflowStepProgress workflowStepProgress,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -62,6 +74,8 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
     ) {
         this(workflowContext,
              workflowExecution,
+             runningSteps,
+             workflowStepProgress,
              parentEventNameCustomizer,
              clock,
              unitOfWorkFactory,
@@ -72,11 +86,24 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
 
     /**
      * Constructs the primitive implementation.
+     *
+     * @param workflowContext           workflow context
+     * @param workflowExecution         workflow execution
+     * @param runningSteps              running step registry
+     * @param workflowStepProgress      workflow step progress tracker
+     * @param parentEventNameCustomizer parent event name customizer
+     * @param clock                     clock for time calculations
+     * @param unitOfWorkFactory         unit of work factory for processing contexts
+     * @param eventSink                 event sink for event publications
+     * @param executor                  executor for step work
+     * @param timeoutScheduler          scheduler for step timeouts
      */
     @Internal
     public PayloadDelegate(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
+            @Nonnull WorkflowStepProgress workflowStepProgress,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -86,6 +113,8 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
     ) {
         super(workflowContext,
               workflowExecution,
+              runningSteps,
+              workflowStepProgress,
               parentEventNameCustomizer,
               clock,
               unitOfWorkFactory,
@@ -100,12 +129,12 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
         var stepName = command.stepName();
         var payloadModification = command.payloadModification();
         var eventNameCustomizer = command.eventNameCustomizer();
-        workflowExecution.recordStepReference(stepName);
+        workflowStepProgress.record(stepName);
         // Drift guard + replay-skip gate: payload publishes COMPLETED directly, so gate both the guard and the
         // publish on the first live run. On a post-crash live re-run the step is already present, so skip
         // re-publishing (the replay-skip gate the other primitives have) to avoid a duplicate terminal record.
         if (!workflowExecution.state().containsStep(stepName)) {
-            workflowExecution.guardAgainstReplayDrift(stepName);
+            workflowStepProgress.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
             workflowExecution.appendTask(e -> {
                                              // apply modification right away
                                              var newPayload = payloadModification.apply(workflowExecution.workflowContext().workflowPayload());

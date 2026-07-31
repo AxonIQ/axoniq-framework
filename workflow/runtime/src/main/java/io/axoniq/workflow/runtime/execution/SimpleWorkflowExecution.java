@@ -18,9 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
@@ -30,37 +27,29 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowReplayDriftExcep
 import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
-import io.axoniq.workflow.runtime.util.Version;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import static io.axoniq.workflow.configuration.WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.*;
-import static io.axoniq.workflow.runtime.util.ProcessingContextUtils.resolveRestartToken;
 import static java.lang.Thread.currentThread;
 
 /**
@@ -72,17 +61,15 @@ import static java.lang.Thread.currentThread;
  * @author Steven van Beelen
  * @since 1.0.0
  */
-public final class SimpleWorkflowExecution implements WorkflowExecution {
+public final class SimpleWorkflowExecution implements WorkflowExecution, WorkflowCancellationProvider {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleWorkflowExecution.class);
 
     // State variables
-    private final WorkflowState workflowState;
+    private EventSourcedWorkflowState workflowState;
     // Attributes
     private final String workflowId;
     private final String workflowName;
-    @Nullable
-    private final TrackingToken restartToken;
     private final WorkflowConfiguration<?> workflowConfiguration;
 
     // Execution
@@ -92,9 +79,29 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
     private final RunningSteps runningSteps = new RunningSteps();
-    private final Set<String> referencedStepNames = ConcurrentHashMap.newKeySet();
+    private final WorkflowStepProgress workflowStepProgress = new WorkflowStepProgress();
+    private final WorkflowTerminalTransition terminalTransition = this::transitionToTerminalState;
+    private final WorkflowCancellation.External workflowCancellation;
+    private final WorkflowExecutionCheckpointSupport checkpointSupport =
+            new WorkflowExecutionCheckpointSupport(new WorkflowExecutionCheckpointSupport.Host() {
+                @Override
+                public boolean isExecutable() {
+                    return running;
+                }
 
-    private boolean executable = false;
+                @Override
+                public boolean hasQueuedTasks() {
+                    return !taskQueue.isEmpty();
+                }
+
+                @Override
+                public void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
+                    SimpleWorkflowExecution.this.appendTask(task);
+                }
+            });
+
+    private boolean running = false;
+    private volatile Thread workflowThread;
 
     /**
      * Constructs a new instance.
@@ -117,17 +124,26 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         var configuredName = Objects.requireNonNull(workflowConfiguration.workflowName(),
                                                     "Workflow name must not be null");
         this.workflowName = configuredName.isEmpty() ? workflowId : configuredName; // FIXME
-        this.restartToken = resolveRestartToken(processingContext);
 
         this.contextDelegate = new WorkflowContextDelegation(
                 workflowConfiguration,
                 workflowContext,
                 this,
+                runningSteps,
+                eventWaitConditions,
+                workflowStepProgress,
+                terminalTransition,
                 processingContext
         );
+        this.workflowCancellation = new DefaultWorkflowCancellation(this, contextDelegate, runningSteps);
+        var workflowDefinitionId = new org.axonframework.messaging.core.MessageType(
+                new org.axonframework.messaging.core.QualifiedName(configuredName),
+                workflowConfiguration.workflowVersion()
+        );
         this.workflowState = new EventSourcedWorkflowState(
+                workflowId,
                 initial,
-                workflowConfiguration.workflowVersion(),
+                workflowDefinitionId,
                 this.contextDelegate.typedWorkflowContext(),
                 workflowConfiguration.workflowStatusChangeListeners()
         );
@@ -143,7 +159,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
      */
     @Override
     public void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler) {
-        this.executable = true;
+        this.running = true;
         // run in a separate thread to avoid blocking the replay status change handler thread ( = WorkPackage)
 
         ProcessingContextUtils
@@ -153,6 +169,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                         contextDelegate.executorService(),
                         this.processingContext(),
                         ctx -> {
+                            workflowThread = currentThread();
+                            if (workflowCancellation.hasPendingWorkflowCancellation()) {
+                                workflowThread.interrupt();
+                            }
 
                             if (this.state().workflowStatus().isTerminal()) {
                                 logger.trace(
@@ -186,7 +206,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         if (this.state().workflowStatus() == WorkflowStatus.NONE) {
             // FIXME join without timeout?
-            sendWorkflowEvent(startedWorkflow(this.workflowContext(), workflowName, eventNameCustomizer), ctx).join();
+            sendWorkflowEvent(startedWorkflow(this.workflowContext(),
+                                              workflowName,
+                                              workflowState.workflowDefinitionId(),
+                                              eventNameCustomizer), ctx).join();
             try {
                 awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
             } catch (Exception e) {
@@ -209,7 +232,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                     currentThread());
 
         // Reset the runtime "book" — step-reference tracker for the drift guard.
-        this.referencedStepNames.clear();
+        this.workflowStepProgress.clear();
 
         // Dispatch to the definition matching state.workflowDefinitionVersion().
         var definition = WorkflowConfigurationRegistry.resolveOrFallback(
@@ -217,23 +240,16 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         ).workflowDefinition();
         definition.accept(this.contextDelegate.typedWorkflowContext());
 
+        if (completeExternalCancellation(ctx)) {
+            return;
+        }
         if (!this.state().workflowStatus().isTerminal()) {
-            // Whole-workflow terminal: publish only the workflow-level terminal event. Any async steps
-            // still running are interrupted (no per-step terminal event) and the task queue is discarded before the
-            // terminal event is published, so a queued retry-failure/launch task can never run. Running steps are
-            // left in their last recorded (STARTED) state — single-step cancel is the way to get a step terminal.
-            interruptStepsAndDiscardQueue();
-
-            sendWorkflowEvent(
-                    completedWorkflow(this.workflowContext(),
-                                      workflowName,
-                                      eventNameCustomizer),
-                    ctx).get(5, TimeUnit.SECONDS); // FIXME constant?
-            try {
-                awaitStateChange(s -> s.workflowStatus().isTerminal());
-            } catch (Exception e) {
-                logger.error("Error waiting for completion of workflow instance {}", workflowId, e);
-            }
+            terminalTransition.transition(() -> {
+                sendWorkflowEvent(
+                        completedWorkflow(this.workflowContext(), workflowName, workflowState.workflowDefinitionId(),
+                                          eventNameCustomizer), ctx
+                ).join(); // FIXME join without timeout
+            });
         }
         logger.info("Workflow executed. Resulting workflow payload {}.", this.workflowContext().workflowPayload());
     }
@@ -245,63 +261,41 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
      * @param exception exception to handle.
      */
     private void handleWorkflowException(@Nonnull ProcessingContext ctx, @Nonnull Throwable exception) {
+        if (completeExternalCancellation(ctx)) {
+            return;
+        }
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         switch (exception) {
             case WorkflowFailedException wfe -> {
-                // if Events are already sent by TerminateDelegate, just let it propagate
+                // if events are already sent by WorkflowLifecycleControlDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
-                    // Whole-workflow terminal: interrupt running steps (no per-step terminal event) and
-                    // discard the queue, then publish only the workflow-level FAILED event.
-                    interruptStepsAndDiscardQueue();
-                    sendWorkflowEvent(failedWorkflow(
-                                              this.workflowContext(),
-                                              workflowName,
-                                              wfe,
-                                              eventNameCustomizer),
-                                      ctx).join(); // FIXME join without timeout
-                    try {
-                        awaitStateChange(s -> s.workflowStatus().isTerminal());
-                    } catch (Exception e) {
-                        logger.error("Error waiting for termination of workflow instance {}", workflowId, e);
-                    }
+                    terminalTransition.transition(() -> {
+                        sendWorkflowEvent(failedWorkflow(
+                                this.workflowContext(), workflowName, wfe,
+                                workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
+                        ).join(); // FIXME join without timeout
+                    });
                 }
             }
             case WorkflowCancelledException wce -> {
-                // if Events are already sent by TerminateDelegate, just let it propagate
+                // if events are already sent by WorkflowLifecycleControlDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
-                    // Whole-workflow terminal: interrupt running steps (no per-step terminal event) and
-                    // discard the queue, then publish only the workflow-level CANCELLED event.
-                    interruptStepsAndDiscardQueue();
-                    sendWorkflowEvent(
-                            cancelledWorkflow(this.workflowContext(),
-                                              workflowName,
-                                              wce,
-                                              eventNameCustomizer),
-                            ctx).join(); // FIXME join without timeout
-                    try {
-                        awaitStateChange(s -> s.workflowStatus().isTerminal());
-                    } catch (Exception e) {
-                        logger.error("Error waiting for termination of workflow instance {}", workflowId, e);
-                    }
+                    terminalTransition.transition(() -> {
+                        sendWorkflowEvent(cancelledWorkflow(
+                                this.workflowContext(), workflowName, wce,
+                                workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
+                        ).join(); // FIXME join without timeout
+                    });
                 }
             }
             case TimeoutException te -> {
                 if (!this.state().workflowStatus().isTerminal()) {
-                    // Whole-workflow terminal: interrupt running steps (no per-step terminal event) and
-                    // discard the queue, then publish only the workflow-level TIMED_OUT event.
-                    interruptStepsAndDiscardQueue();
-                    sendWorkflowEvent(timeoutWorkflow(
-                                              this.workflowContext(),
-                                              workflowName,
-                                              contextDelegate.clock().instant(),
-                                              eventNameCustomizer),
-                                      ctx).join(); // FIXME join without timeout
-
-                    try {
-                        awaitStateChange(s -> s.workflowStatus().isTerminal());
-                    } catch (Exception e) {
-                        logger.error("Error waiting for termination of workflow instance {}", workflowId, e);
-                    }
+                    terminalTransition.transition(() -> {
+                        sendWorkflowEvent(timeoutWorkflow(
+                                this.workflowContext(), workflowName, contextDelegate.clock().instant(),
+                                workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
+                        ).join(); // FIXME join without timeout
+                    });
                 }
             }
             case WorkflowReplayDriftException drift -> {
@@ -342,6 +336,33 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         }
     }
 
+    /**
+     * Completes a cancellation request previously registered by the cancellation coordinator.
+     * <p>
+     * This method is called only by the workflow driver after it has been woken from a blocking workflow operation.
+     * It consumes the request, clears the wake-up interrupt, and publishes the durable workflow cancellation event on
+     * the driver thread. Completing the request future after the terminal transition ensures callers observe a
+     * terminal workflow state before their cancellation future completes.
+     *
+     * @param ctx processing context used to publish the terminal event
+     * @return {@code true} when an external cancellation was completed, otherwise {@code false}
+     */
+    private boolean completeExternalCancellation(@Nonnull ProcessingContext ctx) {
+        var cancellation = workflowCancellation.consumeWorkflowCancellation();
+        if (cancellation == null) {
+            return false;
+        }
+        Thread.interrupted();
+        terminalTransition.transition(() -> {
+            sendWorkflowEvent(cancelledWorkflow(
+                    this.workflowContext(), workflowName, cancellation.cause(),
+                    workflowState.workflowDefinitionId(), workflowConfiguration.eventNameCustomizer()), ctx
+            ).join();
+        });
+        cancellation.done().complete(null);
+        return true;
+    }
+
 
     /**
      * Finish the workflow execution, clean up everything, and call the termination handler.
@@ -349,15 +370,27 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
      * @param terminationHandler termination handler to call.
      */
     private void finishWorkflow(Consumer<WorkflowExecution> terminationHandler) {
-        this.executable = false; // mark we are done and are not executable anymore
+        this.running = false; // mark we are done and are not executable anymore
         // TODO -> how do we recognize workflow executions which came to this point bit haven't reach the terminal states?
         this.taskQueue.clear();
+        this.checkpointSupport.completePendingCheckpointIntent();
         this.eventWaitConditions.clear();
         this.runningSteps.cancelAll(null, s -> {
         });
         terminationHandler.accept(this);
     }
 
+    private void transitionToTerminalState(@Nonnull Runnable terminalEventPublication) {
+        runningSteps.cancelAll(new StepInterruptedException("Workflow reached terminal state"), cancelled -> {
+        });
+        this.taskQueue.removeIf(task -> !checkpointSupport.isCheckpointIntent(task));
+        terminalEventPublication.run();
+        try {
+            awaitStateChange(s -> s.workflowStatus().isTerminal());
+        } catch (Exception e) {
+            logger.error("Error waiting for termination of workflow instance {}", workflowId, e);
+        }
+    }
 
     @Override
     public void awaitStateChange(
@@ -365,165 +398,25 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     ) throws InterruptedException {
         do {
             var taken = taskQueue.take();
-            taken.accept(this);
+            checkpointSupport.runTask(taken, this);
         } while (!predicate.test(this.state()));
     }
 
     @Override
     public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
-        if (executable) {
+        if (running) {
             // live mode
 
             eventWaitConditions.evaluateAndApply(eventMessage, processingContext, contextDelegate::eventReceived);
             appendTask(i -> state().evolve(eventMessage, processingContext));
         } else {
             // replay mode
-            state().evolve(eventMessage, processingContext);
+            workflowState.evolve(eventMessage, processingContext, false);
         }
     }
 
     @Override
-    public void registerRunningStep(@Nonnull String stepName, @Nonnull CompletableFuture<?> future) {
-        runningSteps.register(stepName, future);
-    }
-
-    @Override
-    public void removeRunningStep(@Nonnull String stepName) {
-        runningSteps.remove(stepName);
-    }
-
-    @Override
-    public boolean cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause) {
-        return runningSteps.cancelWithCause(stepName, cause);
-    }
-
-    @Override
-    public boolean cancelStep(@Nonnull String stepName, @Nullable Throwable cause) {
-        // In-body single-step cancel: complete the step's future on the control thread and await the durable
-        // <step>:CANCELLED record (published by the owning executor's handler) so it is durable before the body
-        // proceeds.
-        return contextDelegate.cancelStep(new TerminatePrimitive.CancelStep(
-                stepName, cause, workflowConfiguration.eventNameCustomizer()));
-    }
-
-    @Override
-    public CompletableFuture<Boolean> requestStepCancellation(@Nonnull String stepName, @Nullable Throwable cause) {
-        // External single-step cancel: the control thread is the single consumer, so we never pump the queue from
-        // the caller thread. A step unknown or already terminal at request time is a no-op fast path. Otherwise the
-        // cancellation is enqueued and the returned future completes once the control thread has run the task to
-        // completion (durable <step>:CANCELLED record included) with the outcome the task actually computed, bounded
-        // by a timeout so it cannot hang forever if the control thread is stuck. The caller decides whether to block
-        // on the result or compose it asynchronously.
-        if (!state().containsStep(stepName) || state().getStep(stepName).status().isTerminal()) {
-            return CompletableFuture.completedFuture(false);
-        }
-        var done = new CompletableFuture<Boolean>();
-        appendTask(i -> {
-            try {
-                done.complete(contextDelegate.cancelStep(new TerminatePrimitive.CancelStep(
-                        stepName, cause, workflowConfiguration.eventNameCustomizer())));
-            } catch (Throwable t) {
-                done.completeExceptionally(t);
-            }
-        });
-        return done.orTimeout(5, TimeUnit.SECONDS); // FIXME constant?
-    }
-
-    @Override
-    public CompletableFuture<Integer> requestAllRunningStepsCancellation(@Nullable Throwable cause) {
-        // Cooperative cancel of every currently-running step (the workflow stays alive): snapshot the running step
-        // names now, enqueue one control-thread task that single-step-cancels each still-running step, and return a
-        // future that completes once that task has fully run (every durable <step>:CANCELLED record included) with
-        // the number of steps the task actually cancelled, bounded by a timeout so it cannot hang forever if the
-        // control thread is stuck. The caller decides whether to block on the result or compose it asynchronously.
-        var stepNames = runningSteps.stepNames();
-        if (stepNames.isEmpty()) {
-            return CompletableFuture.completedFuture(0);
-        }
-        var done = new CompletableFuture<Integer>();
-        appendTask(i -> {
-            try {
-                var cancelled = 0;
-                for (var stepName : stepNames) {
-                    if (contextDelegate.cancelStep(new TerminatePrimitive.CancelStep(
-                            stepName, cause, workflowConfiguration.eventNameCustomizer()))) {
-                        cancelled++;
-                    }
-                }
-                done.complete(cancelled);
-            } catch (Throwable t) {
-                done.completeExceptionally(t);
-            }
-        });
-        return done.orTimeout(5, TimeUnit.SECONDS); // FIXME constant?
-    }
-
-    @Override
-    public CompletableFuture<Void> requestWorkflowCancellation(@Nullable Throwable cause) {
-        // The control thread is the single consumer of the task queue, so we never pump the queue from
-        // the caller thread (reuses the control-thread-safe cancellation). When the task runs it drives the
-        // whole-workflow terminal: interrupt any running steps (no per-step terminal event), discard the
-        // queue, publish only the durable <workflow>:CANCELLED event, then unblock the parked body thread so it
-        // unwinds and exits. The returned future completes once the task has fully run, so the durable record is
-        // committed by the time it completes, bounded by a timeout so it cannot hang forever if the control thread
-        // is stuck. The caller decides whether to block on the result or compose it asynchronously.
-        var done = new CompletableFuture<Void>();
-        appendTask(i -> {
-            try {
-                if (state().workflowStatus().isTerminal()) {
-                    return;
-                }
-                // Do not double-wrap: an operator reason arrives as a WorkflowCancelledException whose message
-                // already is that reason, so reuse it as-is and keep the reason the top-level message. Only a foreign
-                // cause is wrapped.
-                WorkflowCancelledException wce;
-                if (cause instanceof WorkflowCancelledException already) {
-                    wce = already;
-                } else if (cause != null) {
-                    wce = new WorkflowCancelledException("Workflow cancelled externally", cause);
-                } else {
-                    wce = new WorkflowCancelledException("Workflow cancelled externally");
-                }
-                interruptStepsAndDiscardQueue();
-                sendWorkflowEvent(
-                        cancelledWorkflow(workflowContext(), workflowName, wce,
-                                          workflowConfiguration.eventNameCustomizer()),
-                        processingContext()
-                ).join();
-                try {
-                    awaitStateChange(s -> s.workflowStatus().isTerminal());
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                // Unblock the workflow driver thread parked on taskQueue.take() inside a step's await() loop: it sets
-                // the driver thread's interrupt flag; the next taskQueue.take() observes it and throws
-                // InterruptedException, propagating up so the (already-terminal) driver thread exits cleanly.
-                taskQueue.offer(x -> Thread.currentThread().interrupt());
-            } finally {
-                done.complete(null);
-            }
-        });
-        return done.orTimeout(5, TimeUnit.SECONDS); // FIXME constant?
-    }
-
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Interrupts every still-running step future with a non-cancellation cause so the step-completion handlers publish
-     * no per-step terminal event ({@link AbstractStepExecutor#isCancellation} is false — they merely deregister), then
-     * discards every queued task so a queued retry-failure/launch task never runs. Running steps are left in their
-     * last recorded (STARTED) state in the event log; callers publish the single {@code <workflow>:<terminal>} event
-     * afterwards.
-     */
-    @Override
-    public void interruptStepsAndDiscardQueue() {
-        runningSteps.cancelAll(new StepInterruptedException("Workflow reached terminal state"), cancelled -> {
-        });
-        this.taskQueue.clear();
-    }
-
-    @Override
-    public void interrupt() {
+    public void stopForShutdown() {
         runningSteps.cancelAll(new StepInterruptedException("Workflow engine shutdown"), s -> {
         });
         // Unblock the workflow driver thread parked on taskQueue.take() inside the current step's await() loop.
@@ -533,14 +426,18 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
     @Override
-    public void cancelAndRemoveRunningStep(@Nonnull String stepName, boolean mayInterruptIfRunning) {
-        runningSteps.cancelAndRemove(stepName, mayInterruptIfRunning);
+    public void interruptWorkflowDriver() {
+        var driver = workflowThread;
+        if (driver != null) {
+            driver.interrupt();
+        }
     }
 
     @Override
     @Nullable
     public Consumer<WorkflowExecution> getNextTask() {
-        return this.taskQueue.poll(); // FIXME: forever?
+        var task = this.taskQueue.poll();
+        return task == null ? null : execution -> checkpointSupport.runTask(task, execution);
     }
 
     @Override
@@ -552,26 +449,32 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
     @Override
-    public void registerWaitCondition(@Nonnull String stepName,
-                                      @Nonnull EventCondition eventCondition,
-                                      @Nonnull PayloadReducer resultPayloadReducer,
-                                      @Nonnull EventNameCustomizer eventNameCustomizer) {
-        eventWaitConditions.add(stepName, eventCondition, resultPayloadReducer, eventNameCustomizer);
-    }
-
-    @Override
-    public void removeWaitCondition(@Nonnull String stepName) {
-        eventWaitConditions.remove(stepName);
-    }
-
-    @Override
     public boolean hasTasks() {
         return this.taskQueue.isEmpty();
     }
 
     @Override
-    public boolean isExecutable() {
-        return executable;
+    public boolean isRunning() {
+        return running;
+    }
+
+    @Override
+    public void appendCheckpointIntent(@Nonnull Runnable onDrained) {
+        checkpointSupport.appendCheckpointIntent(onDrained);
+    }
+
+    @Override
+    public boolean hasPendingCheckpointWork() {
+        return checkpointSupport.hasPendingCheckpointWork();
+    }
+
+    @Override
+    public void initializeState(@Nonnull WorkflowState state) {
+        this.workflowState = new EventSourcedWorkflowState(
+                state,
+                this.contextDelegate.typedWorkflowContext(),
+                workflowConfiguration.workflowStatusChangeListeners()
+        );
     }
 
     private CompletableFuture<Void> sendWorkflowEvent(
@@ -624,12 +527,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         return this.workflowId;
     }
 
-    @Override
-    @Nullable
-    public TrackingToken restartToken() {
-        return restartToken;
-    }
-
     @Nonnull
     @Override
     public WorkflowConfiguration<?> workflowConfiguration() {
@@ -637,23 +534,18 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
     @Override
-    public void recordStepReference(@Nonnull String stepName) {
-        this.referencedStepNames.add(stepName);
-    }
-
-    @Override
-    @Nonnull
-    public Set<String> referencedStepNames() {
-        // Live read-only view: reflects ongoing recordStepReference() calls but cannot be mutated by callers.
-        return Collections.unmodifiableSet(this.referencedStepNames);
-    }
-
-    @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         descriptor.describeProperty("delegate", contextDelegate);
-        descriptor.describeProperty("executable", executable);
+        descriptor.describeProperty("running", running);
         descriptor.describeProperty("state", state());
         eventWaitConditions.describeTo(descriptor);
         runningSteps.describeTo(descriptor);
+        workflowStepProgress.describeTo(descriptor);
+    }
+
+    @Nonnull
+    @Override
+    public WorkflowCancellation workflowCancellation() {
+        return workflowCancellation;
     }
 }

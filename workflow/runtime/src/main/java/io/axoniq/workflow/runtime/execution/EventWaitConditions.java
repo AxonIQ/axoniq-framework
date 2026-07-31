@@ -41,7 +41,7 @@ import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Bu
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public class EventWaitConditions implements DescribableComponent {
+final class EventWaitConditions implements DescribableComponent {
 
     private final ConcurrentHashMap<String, EventConditionWithStepNameCustomizer> waitConditions = new ConcurrentHashMap<>();
 
@@ -169,8 +169,8 @@ public class EventWaitConditions implements DescribableComponent {
         @Override
         public void describeTo(@Nonnull ComponentDescriptor descriptor) {
             var description = condition.qualifiedName().toString();
-            if (!condition.serializedAssociations().isEmpty()) {
-                description += " where " + String.join(" && ", condition.serializedAssociations());
+            if (!condition.associations().isEmpty()) {
+                description += " where " + String.join(" && ", condition.associations());
             }
             descriptor.describeProperty(stepName, description);
         }

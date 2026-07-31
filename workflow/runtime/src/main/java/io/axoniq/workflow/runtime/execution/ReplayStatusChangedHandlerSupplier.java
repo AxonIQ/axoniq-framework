@@ -20,32 +20,22 @@ package io.axoniq.workflow.runtime.execution;
 
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.common.infra.DescribableComponent;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-
-import java.util.concurrent.CompletableFuture;
+import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 
 /**
- * Store for the persisted safe point token of a workflow engine.
+ * Supplies the replay-status handling aspect of a component.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
  */
 @Internal
-public interface SafePointStore extends DescribableComponent {
+public interface ReplayStatusChangedHandlerSupplier {
 
     /**
-     * Fetches the currently stored engine safe point tracking token.
+     * Returns the replay-status handling aspect of this component.
      *
-     * @return future of stored safe point tracking token, or empty future if none has been stored yet
+     * @return replay-status changed handler
      */
-    CompletableFuture<TrackingToken> fetchSafePointToken();
-
-    /**
-     * Stores the given engine safe point tracking token.
-     *
-     * @param token safe point tracking token to store
-     * @return future indicating completion of token storage
-     */
-    CompletableFuture<Void> storeSafePointToken(@Nonnull TrackingToken token);
+    @Nonnull
+    ReplayStatusChangedHandler replayStatusChangedHandler();
 }

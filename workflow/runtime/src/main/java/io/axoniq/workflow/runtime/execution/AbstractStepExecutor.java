@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledExcepti
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
@@ -62,6 +63,8 @@ public abstract class AbstractStepExecutor {
     private static final Logger logger = LoggerFactory.getLogger(AbstractStepExecutor.class);
     protected final WorkflowContext workflowContext;
     protected final WorkflowExecution workflowExecution;
+    protected final RunningSteps runningSteps;
+    protected final WorkflowStepProgress workflowStepProgress;
     protected final Clock clock;
     protected final EventNameCustomizer parentEventNameCustomizer;
     protected final UnitOfWorkFactory unitOfWorkFactory;
@@ -74,6 +77,8 @@ public abstract class AbstractStepExecutor {
      *
      * @param workflowContext           workflow context.
      * @param workflowExecution         workflow execution.
+     * @param runningSteps              running step registry
+     * @param workflowStepProgress      workflow step progress tracker
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
@@ -84,6 +89,8 @@ public abstract class AbstractStepExecutor {
     public AbstractStepExecutor(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
+            @Nonnull WorkflowStepProgress workflowStepProgress,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -92,6 +99,8 @@ public abstract class AbstractStepExecutor {
     ) {
         this(workflowContext,
              workflowExecution,
+             runningSteps,
+             workflowStepProgress,
              parentEventNameCustomizer,
              clock,
              unitOfWorkFactory,
@@ -105,6 +114,8 @@ public abstract class AbstractStepExecutor {
      *
      * @param workflowContext           workflow context.
      * @param workflowExecution         workflow execution.
+     * @param runningSteps              running step registry
+     * @param workflowStepProgress      workflow step progress tracker
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
@@ -116,6 +127,8 @@ public abstract class AbstractStepExecutor {
     public AbstractStepExecutor(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
+            @Nonnull WorkflowStepProgress workflowStepProgress,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -126,6 +139,8 @@ public abstract class AbstractStepExecutor {
         this.clock = Objects.requireNonNull(clock, "Clock is mandatory");
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
+        this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
+        this.workflowStepProgress = Objects.requireNonNull(workflowStepProgress, "Workflow step progress is mandatory");
         this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,
                                                                 "Event name customizer is mandatory");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UoW Factory state is mandatory");
@@ -136,7 +151,7 @@ public abstract class AbstractStepExecutor {
 
     protected void acceptAllPendingTasksForStep(@Nonnull String stepName) {
         while ((!workflowExecution.state().containsStep(stepName) && !workflowExecution.hasTasks())
-                || !workflowExecution.isExecutable()) {
+                || !workflowExecution.isRunning()) {
             var poll = workflowExecution.getNextTask();
             if (poll != null) {
                 poll.accept(this.workflowExecution);
@@ -160,6 +175,15 @@ public abstract class AbstractStepExecutor {
     }
 
     @Nonnull
+    protected CompletableFuture<Void> startedWaitForEvent(@Nonnull String stepName,
+                                                          @Nonnull Map<String, Object> payload,
+                                                          @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(stepName, startedWaitForEventStep(workflowContext, stepName, sanitize(payload),
+                                                               merge(parentEventNameCustomizer, eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
+    @Nonnull
     protected CompletableFuture<Void> completed(@Nonnull String stepName, @Nonnull Map<String, Object> payload,
                                                 @Nonnull EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, completedStep(workflowContext, stepName, sanitize(payload),
@@ -175,6 +199,20 @@ public abstract class AbstractStepExecutor {
         return sendStepEvent(stepName, completedStep(workflowContext, stepName, sanitize(payload),
                                                      payloadReducerName,
                                                      merge(parentEventNameCustomizer, eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> completedWaitForEvent(@Nonnull String stepName,
+                                                            @Nonnull Map<String, Object> payload,
+                                                            @Nullable String payloadReducerName,
+                                                            @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(stepName, completedWaitForEventStep(workflowContext,
+                                                                 stepName,
+                                                                 sanitize(payload),
+                                                                 payloadReducerName,
+                                                                 merge(parentEventNameCustomizer,
+                                                                       eventNameCustomizer)
         ), getContext(stepName));
     }
 
@@ -209,7 +247,7 @@ public abstract class AbstractStepExecutor {
                                       @Nonnull EventNameCustomizer eventNameCustomizer,
                                       @Nonnull Runnable onCancelled) {
         future.whenComplete((result, e) -> {
-            workflowExecution.removeRunningStep(stepName);
+            runningSteps.remove(stepName);
             if (e != null && isCancellation(e)) {
                 onCancelled.run();
                 var terminationCause = unwrapCancellation(e);
@@ -221,7 +259,17 @@ public abstract class AbstractStepExecutor {
                 });
             }
         });
-        workflowExecution.registerRunningStep(stepName, future);
+        runningSteps.register(stepName, future);
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> cancelledWaitForEvent(@Nonnull String stepName,
+                                                            @Nullable Throwable cause,
+                                                            @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(stepName, cancelledWaitForEventStep(workflowContext, stepName, cause,
+                                                                 merge(parentEventNameCustomizer,
+                                                                       eventNameCustomizer)
+        ), getContext(stepName));
     }
 
     @Nonnull
@@ -253,6 +301,21 @@ public abstract class AbstractStepExecutor {
                                                @Nonnull EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, timeoutStep(workflowContext, stepName, timeoutTimestamp,
                                                    merge(parentEventNameCustomizer, eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> timedOutWaitForEvent(@Nonnull String stepName,
+                                                           @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return timedOutWaitForEvent(stepName, Instant.now(clock), eventNameCustomizer);
+    }
+
+    @Nonnull
+    protected CompletableFuture<Void> timedOutWaitForEvent(@Nonnull String stepName,
+                                                           @Nonnull Instant timeoutTimestamp,
+                                                           @Nonnull EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(stepName, timeoutWaitForEventStep(workflowContext, stepName, timeoutTimestamp,
+                                                               merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
@@ -317,11 +380,24 @@ public abstract class AbstractStepExecutor {
         return e instanceof CompletionException ? e.getCause() : e;
     }
 
-    public static WorkflowStepResult stateBased(@Nonnull String stepName, WorkflowExecution workflowExecution) {
+    /**
+     * Creates a durable result handle for a step while retaining its event-name customizer for later cancellation.
+     *
+     * @param stepName            logical name of the step
+     * @param eventNameCustomizer customizer originally supplied for the step primitive
+     * @param workflowExecution   execution providing state access and cancellation delegation
+     * @return state-backed step result handle
+     */
+    @Nonnull
+    public static WorkflowStepResult stateBased(@Nonnull String stepName,
+                                                @Nonnull EventNameCustomizer eventNameCustomizer,
+                                                @Nonnull WorkflowExecution workflowExecution) {
         return new StateBasedWorkflowStepResult(stepName, () -> {
             workflowExecution.awaitStateChange(s -> true);
             return null;
-        }, workflowExecution);
+        }, cause -> workflowExecution.workflowContext().cancelStep(PrimitiveCommands.cancelStep(
+                stepName, cause, eventNameCustomizer
+        )), workflowExecution);
     }
 
 }

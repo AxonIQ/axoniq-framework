@@ -60,17 +60,22 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
      * @param delegate executoion delegate.
      * @param workflowContext workflow context.
      * @param workflowExecution workflow execution.
+     * @param runningSteps running step registry
+     * @param workflowStepProgress workflow step progress tracker
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock clock for time calculations.
      * @param unitOfWorkFactory unit of work factory for creation of new processing contexts.
      * @param eventSink event sink for event publications.
      * @param executor executor to offload execution tasks from workflow thread.
+     * @param timeoutScheduler scheduler for workflow step timeouts
      */
     @Internal
     public RetryableExecuteDelegate(
             @Nonnull ExecuteDelegate delegate,
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
+            @Nonnull WorkflowStepProgress workflowStepProgress,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -78,7 +83,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             @Nonnull ExecutorService executor,
             @Nonnull WorkflowScheduler timeoutScheduler
     ) {
-        super(workflowContext, workflowExecution, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink,
+        super(workflowContext, workflowExecution, runningSteps, workflowStepProgress, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink,
               executor, timeoutScheduler);
         this.delegate = delegate;
     }
@@ -99,7 +104,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             if (step.status() == StepStatus.RETRYING && step.result() instanceof StepRetryInfo info) {
                 Instant retryReadyAt = computeRetryReadyAt(retryPolicy, info.attempt(), step.timestamp());
                 scheduleRetryAttempt(command, info.attempt() + 1, retryReadyAt);
-                return stateBased(stepName, workflowExecution);
+                return stateBased(stepName, command.eventNameCustomizer(), workflowExecution);
             }
         }
 

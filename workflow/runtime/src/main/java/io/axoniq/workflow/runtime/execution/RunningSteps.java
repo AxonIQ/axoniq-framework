@@ -36,7 +36,7 @@ import java.util.function.Consumer;
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-public class RunningSteps implements DescribableComponent {
+final class RunningSteps implements DescribableComponent {
 
     private final ConcurrentHashMap<String, CompletableFuture<?>> runningFutures = new ConcurrentHashMap<>();
 

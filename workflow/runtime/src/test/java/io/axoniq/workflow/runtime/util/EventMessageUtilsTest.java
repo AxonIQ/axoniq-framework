@@ -24,6 +24,7 @@ import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.*;
@@ -42,12 +43,12 @@ import static org.mockito.Mockito.*;
  * Unit test class for the {@code EventMessageUtils} utility class.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class EventMessageUtilsTest {
 
     private WorkflowContext context;
     private EventNameCustomizer customizer;
+    private MessageType workflowDefinitionId;
     private final String workflowId = "wf123";
     private final Map<String, Object> payload = Map.of("key", "value");
 
@@ -55,6 +56,7 @@ class EventMessageUtilsTest {
     void setUp() {
         context = mock(WorkflowContext.class);
         customizer = mock(EventNameCustomizer.class);
+        workflowDefinitionId = new MessageType(new QualifiedName("myWorkflow"), "0.0.1");
 
         when(context.workflowId()).thenReturn(workflowId);
         when(context.workflowPayload()).thenReturn(payload);
@@ -72,7 +74,7 @@ class EventMessageUtilsTest {
     }
 
     @Test
-    void testConstructorIsPrivate() throws NoSuchMethodException {
+    void constructorIsPrivate() throws NoSuchMethodException {
         Constructor<EventMessageUtils> constructor = EventMessageUtils.class.getDeclaredConstructor();
         assertThat(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers())).isTrue();
         constructor.setAccessible(true);
@@ -80,7 +82,7 @@ class EventMessageUtilsTest {
     }
 
     @Test
-    void testWorkflowIdFilter() {
+    void workflowIdFilter() {
         EventMessage messageMatch = mock(EventMessage.class);
         when(messageMatch.metadata()).thenReturn(MetadataUtils.create(workflowId));
 
@@ -93,28 +95,40 @@ class EventMessageUtilsTest {
     }
 
     @Test
-    void testStartedWorkflow() {
-        EventMessage message = EventMessageUtils.startedWorkflow(context, "myWorkflow", customizer);
+    void startedWorkflow() {
+        EventMessage message = EventMessageUtils.startedWorkflow(context,
+                                                                 "myWorkflow",
+                                                                 workflowDefinitionId,
+                                                                 customizer);
         assertThat(message.type().toString()).startsWith("myWorkflow.STARTED");
         assertThat(message.payload()).isEqualTo(payload);
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.STARTED);
+        assertThat(MetadataUtils.getWorkflowDefinitionId(message.metadata())).contains(workflowDefinitionId);
         assertThat(MetadataUtils.payloadReducer(message.metadata())).contains(NAME);
     }
 
     @Test
-    void testCompletedWorkflow() {
-        EventMessage message = EventMessageUtils.completedWorkflow(context, "myWorkflow", customizer);
+    void completedWorkflow() {
+        EventMessage message = EventMessageUtils.completedWorkflow(context,
+                                                                   "myWorkflow",
+                                                                   workflowDefinitionId,
+                                                                   customizer);
         assertThat(message.type().toString()).startsWith("myWorkflow.COMPLETED");
         assertThat(message.payload()).isEqualTo(Map.of());
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.COMPLETED);
+        assertThat(MetadataUtils.getWorkflowDefinitionId(message.metadata())).contains(workflowDefinitionId);
     }
 
     @Test
-    void testFailedWorkflow() {
+    void failedWorkflow() {
         Exception ex = new RuntimeException("fail");
-        EventMessage message = EventMessageUtils.failedWorkflow(context, "myWorkflow", ex, customizer);
+        EventMessage message = EventMessageUtils.failedWorkflow(context,
+                                                                "myWorkflow",
+                                                                ex,
+                                                                workflowDefinitionId,
+                                                                customizer);
         assertThat(message.type().toString()).startsWith("myWorkflow.FAILED");
         assertThat(message.payload()).isInstanceOfSatisfying(WorkflowError.class, err -> {
             assertThat(err.type()).isEqualTo(RuntimeException.class.getName());
@@ -123,13 +137,18 @@ class EventMessageUtilsTest {
         });
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.FAILED);
+        assertThat(MetadataUtils.getWorkflowDefinitionId(message.metadata())).contains(workflowDefinitionId);
     }
 
     @Test
-    void testFailedWorkflowCompactsCauseChain() {
+    void failedWorkflowCompactsCauseChain() {
         Throwable root = new IllegalStateException("root");
         Throwable wrapped = new RuntimeException("wrap", root);
-        EventMessage message = EventMessageUtils.failedWorkflow(context, "myWorkflow", (Exception) wrapped, customizer);
+        EventMessage message = EventMessageUtils.failedWorkflow(context,
+                                                                "myWorkflow",
+                                                                (Exception) wrapped,
+                                                                workflowDefinitionId,
+                                                                customizer);
         WorkflowError err = (WorkflowError) message.payload();
         assertThat(err.type()).isEqualTo(RuntimeException.class.getName());
         assertThat(err.cause()).isNotNull();
@@ -139,38 +158,52 @@ class EventMessageUtilsTest {
     }
 
     @Test
-    void testTimeoutWorkflow() {
+    void timeoutWorkflow() {
         Instant now = Instant.now();
-        EventMessage message = EventMessageUtils.timeoutWorkflow(context, "myWorkflow", now, customizer);
+        EventMessage message = EventMessageUtils.timeoutWorkflow(context,
+                                                                 "myWorkflow",
+                                                                 now,
+                                                                 workflowDefinitionId,
+                                                                 customizer);
         assertThat(message.type().toString()).startsWith("myWorkflow.TIMED_OUT");
         assertThat(message.payload()).isEqualTo(now);
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.TIMED_OUT);
+        assertThat(MetadataUtils.getWorkflowDefinitionId(message.metadata())).contains(workflowDefinitionId);
     }
 
     @Test
-    void testCancelledWorkflow() {
-        EventMessage message = EventMessageUtils.cancelledWorkflow(context, "myWorkflow", customizer);
+    void cancelledWorkflow() {
+        EventMessage message = EventMessageUtils.cancelledWorkflow(context,
+                                                                   "myWorkflow",
+                                                                   workflowDefinitionId,
+                                                                   customizer);
         assertThat(message.type().toString()).startsWith("myWorkflow.CANCELLED");
         assertThat(message.payload()).isEqualTo(Map.of());
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
         assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.CANCELLED);
+        assertThat(MetadataUtils.getWorkflowDefinitionId(message.metadata())).contains(workflowDefinitionId);
     }
 
     @Test
-    void testCancelledWorkflowWithCause() {
+    void cancelledWorkflowWithCause() {
         Throwable cause = new RuntimeException("cancelled");
-        EventMessage message = EventMessageUtils.cancelledWorkflow(context, "myWorkflow", cause, customizer);
+        EventMessage message = EventMessageUtils.cancelledWorkflow(context,
+                                                                   "myWorkflow",
+                                                                   cause,
+                                                                   workflowDefinitionId,
+                                                                   customizer);
         assertThat(message.type().toString()).startsWith("myWorkflow.CANCELLED");
         assertThat(message.payload()).isInstanceOfSatisfying(WorkflowError.class, err -> {
             assertThat(err.type()).isEqualTo(RuntimeException.class.getName());
             assertThat(err.message()).isEqualTo("cancelled");
         });
         assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getWorkflowDefinitionId(message.metadata())).contains(workflowDefinitionId);
     }
 
     @Test
-    void testStartedStep() {
+    void startedStep() {
         Map<String, Object> local = Map.of("localKey", "localVal");
         EventMessage message = EventMessageUtils.startedStep(context, "step1", local, customizer);
         assertThat(message.type().toString()).startsWith("step1.STARTED");
@@ -181,7 +214,19 @@ class EventMessageUtilsTest {
     }
 
     @Test
-    void testCompletedStep() {
+    void startedWaitForEventStep() {
+        Map<String, Object> local = Map.of("localKey", "localVal");
+        EventMessage message = EventMessageUtils.startedWaitForEventStep(context, "step1", local, customizer);
+        assertThat(message.type().toString()).startsWith("step1.STARTED");
+        assertThat(message.payload()).isEqualTo(local);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.STARTED);
+        assertThat(MetadataUtils.isWaitForEventStep(message.metadata())).isTrue();
+    }
+
+    @Test
+    void completedStep() {
         Map<String, Object> result = Map.of("res", "val");
         EventMessage message = EventMessageUtils.completedStep(context, "step1", result, "myReducer", customizer);
         assertThat(message.type().toString()).startsWith("step1.COMPLETED");
@@ -193,14 +238,37 @@ class EventMessageUtilsTest {
     }
 
     @Test
-    void testCompletedStepNoReducer() {
+    void completedWaitForEventStep() {
+        Map<String, Object> result = Map.of("res", "val");
+        EventMessage message = EventMessageUtils.completedWaitForEventStep(context, "step1", result, "myReducer",
+                                                                           customizer);
+        assertThat(message.type().toString()).startsWith("step1.COMPLETED");
+        assertThat(message.payload()).isEqualTo(result);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.COMPLETED);
+        assertThat(MetadataUtils.payloadReducer(message.metadata())).contains("myReducer");
+        assertThat(MetadataUtils.isWaitForEventStep(message.metadata())).isTrue();
+    }
+
+    @Test
+    void completedStepNoReducer() {
         Map<String, Object> result = Map.of("res", "val");
         EventMessage message = EventMessageUtils.completedStep(context, "step1", result, null, customizer);
         assertThat(MetadataUtils.payloadReducer(message.metadata())).isEmpty();
     }
 
     @Test
-    void testFailStep() {
+    void completedWaitForEventStepNoReducer() {
+        Map<String, Object> result = Map.of("res", "val");
+        EventMessage message = EventMessageUtils.completedWaitForEventStep(context, "step1", result, null,
+                                                                           customizer);
+        assertThat(MetadataUtils.payloadReducer(message.metadata())).isEmpty();
+        assertThat(MetadataUtils.isWaitForEventStep(message.metadata())).isTrue();
+    }
+
+    @Test
+    void failStep() {
         Throwable ex = new RuntimeException("step fail");
         EventMessage message = EventMessageUtils.failStep(context, "step1", ex, customizer);
         assertThat(message.type().toString()).startsWith("step1.FAILED");
@@ -214,7 +282,7 @@ class EventMessageUtilsTest {
     }
 
     @Test
-    void testCancelledStep() {
+    void cancelledStep() {
         EventMessage message = EventMessageUtils.cancelledStep(context, "step1", customizer);
         assertThat(message.type().toString()).startsWith("step1.CANCELLED");
         assertThat(message.payload()).isEqualTo(Map.of());
@@ -224,7 +292,7 @@ class EventMessageUtilsTest {
     }
 
     @Test
-    void testCancelledStepWithCause() {
+    void cancelledStepWithCause() {
         Throwable cause = new RuntimeException("step cancelled");
         EventMessage message = EventMessageUtils.cancelledStep(context, "step1", cause, customizer);
         assertThat(message.type().toString()).startsWith("step1.CANCELLED");
@@ -236,7 +304,33 @@ class EventMessageUtilsTest {
     }
 
     @Test
-    void testRetryingStep() {
+    void cancelledWaitForEventStep() {
+        EventMessage message = EventMessageUtils.cancelledWaitForEventStep(context, "step1", null, customizer);
+        assertThat(message.type().toString()).startsWith("step1.CANCELLED");
+        assertThat(message.payload()).isEqualTo(Map.of());
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.CANCELLED);
+        assertThat(MetadataUtils.isWaitForEventStep(message.metadata())).isTrue();
+    }
+
+    @Test
+    void cancelledWaitForEventStepWithCause() {
+        Throwable cause = new RuntimeException("step cancelled");
+        EventMessage message = EventMessageUtils.cancelledWaitForEventStep(context, "step1", cause, customizer);
+        assertThat(message.type().toString()).startsWith("step1.CANCELLED");
+        assertThat(message.payload()).isInstanceOfSatisfying(WorkflowError.class, err -> {
+            assertThat(err.type()).isEqualTo(RuntimeException.class.getName());
+            assertThat(err.message()).isEqualTo("step cancelled");
+        });
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.CANCELLED);
+        assertThat(MetadataUtils.isWaitForEventStep(message.metadata())).isTrue();
+    }
+
+    @Test
+    void retryingStep() {
         StepRetryInfo retryInfo = mock(StepRetryInfo.class);
         EventMessage message = EventMessageUtils.retryingStep(context, "step1", retryInfo, customizer);
         assertThat(message.type().toString()).startsWith("step1.RETRYING");
@@ -247,7 +341,7 @@ class EventMessageUtilsTest {
     }
 
     @Test
-    void testTimeoutStep() {
+    void timeoutStep() {
         Instant now = Instant.now();
         EventMessage message = EventMessageUtils.timeoutStep(context, "step1", now, customizer);
         assertThat(message.type().toString()).startsWith("step1.TIMED_OUT");
@@ -258,7 +352,43 @@ class EventMessageUtilsTest {
     }
 
     @Test
-    void testMigrationStep_eventNameDerivedFromChangeId() {
+    void timeoutWaitForEventStep() {
+        Instant now = Instant.now();
+        EventMessage message = EventMessageUtils.timeoutWaitForEventStep(context, "step1", now, customizer);
+        assertThat(message.type().toString()).startsWith("step1.TIMED_OUT");
+        assertThat(message.payload()).isEqualTo(now);
+        assertThat(MetadataUtils.getWorkflowId(message.metadata())).isEqualTo(workflowId);
+        assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
+        assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.TIMED_OUT);
+        assertThat(MetadataUtils.isWaitForEventStep(message.metadata())).isTrue();
+    }
+
+    @Test
+    void testStartedWorkflowDefaultsMessageTypeVersionWhenContextVersionIsBlank() {
+        when(context.workflowVersion()).thenReturn(" ");
+
+        EventMessage message = EventMessageUtils.startedWorkflow(context,
+                                                                 "myWorkflow",
+                                                                 workflowDefinitionId,
+                                                                 customizer);
+
+        assertThat(message.type().version()).isEqualTo(org.axonframework.messaging.core.MessageType.DEFAULT_VERSION);
+    }
+
+    @Test
+    void startedWorkflowDefaultsMessageTypeVersionWhenContextVersionIsBlank() {
+        when(context.workflowVersion()).thenReturn(" ");
+
+        EventMessage message = EventMessageUtils.startedWorkflow(context,
+                                                                 "myWorkflow",
+                                                                 workflowDefinitionId,
+                                                                 customizer);
+
+        assertThat(message.type().version()).isEqualTo(org.axonframework.messaging.core.MessageType.DEFAULT_VERSION);
+    }
+
+    @Test
+    void migrationStepEventNameDerivedFromChangeId() {
         EventMessage message = EventMessageUtils.versionMigrationStep(context, "payment-redesign", "0.0.2", customizer);
 
         // The wire-level event name is the changeId + .Versioned suffix — business-meaningful "what changed".

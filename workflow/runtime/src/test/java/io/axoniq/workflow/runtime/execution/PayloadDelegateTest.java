@@ -97,6 +97,8 @@ class PayloadDelegateTest {
         delegate = new PayloadDelegate(
                 workflowContext,
                 workflowExecution,
+                new RunningSteps(),
+                new WorkflowStepProgress(),
                 parentEventNameCustomizer,
                 clock,
                 unitOfWorkFactory,

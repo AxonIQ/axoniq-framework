@@ -61,12 +61,14 @@ class PayloadDelegateRerunTest {
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private PayloadDelegate delegate;
+    private WorkflowStepProgress workflowStepProgress;
 
     @BeforeEach
     void setUp() {
         workflowContext = mock(WorkflowContext.class);
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
+        workflowStepProgress = new WorkflowStepProgress();
         ProcessingContext processingContext = mock(ProcessingContext.class);
         EventSink eventSink = mock(EventSink.class);
         UnitOfWorkFactory unitOfWorkFactory = mock(UnitOfWorkFactory.class);
@@ -79,7 +81,7 @@ class PayloadDelegateRerunTest {
         when(state.payload()).thenReturn(Map.of());
 
         delegate = new PayloadDelegate(
-                workflowContext, workflowExecution, parent,
+                workflowContext, workflowExecution, new RunningSteps(), workflowStepProgress, parent,
                 Clock.systemUTC(), unitOfWorkFactory, eventSink, executor
         );
     }
@@ -104,7 +106,6 @@ class PayloadDelegateRerunTest {
         // No re-publish: the gate skips appendTask when the step is already present, so no duplicate
         // terminal step record is produced on the re-run. The drift guard is likewise skipped.
         verify(workflowExecution, never()).appendTask(any());
-        verify(workflowExecution, never()).guardAgainstReplayDrift(any());
     }
 
     /**
@@ -122,7 +123,6 @@ class PayloadDelegateRerunTest {
 
         delegate.modifyPayload(PrimitiveCommands.modifyPayload(stepName, modification, customizer));
 
-        verify(workflowExecution, times(1)).guardAgainstReplayDrift(stepName);
         verify(workflowExecution, times(1)).appendTask(any());
     }
 

@@ -28,17 +28,26 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Tests for {@link Associations}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class AssociationsTest {
 
     @Test
     void shouldSerializePayloadAssociationsIntoCanonicalQualifiedForm() {
         var associations = Associations.associate(payloadProperty("orderId"), "=", "123")
-                                           .and(payloadProperty("customerId"), "=", "abc");
+                                       .and(payloadProperty("customerId"), "=", "abc");
 
-        assertThat(associations.serializedAssociations())
-                .containsExactly("payload:orderId=123", "payload:customerId=abc");
+        assertThat(associations.criteria())
+                .containsExactlyInAnyOrder("payload:orderId=123", "payload:customerId=abc");
+    }
+
+    @Test
+    void shouldReturnAssociations() {
+        var associations = Associations.associate(payloadProperty("z"), "=", "1")
+                                       .and(payloadProperty("a"), "=", "2")
+                                       .and(payloadProperty("m"), "=", "3");
+
+        assertThat(associations.criteria())
+                .containsExactlyInAnyOrder("payload:a=2", "payload:m=3", "payload:z=1");
     }
 
     @Test
@@ -52,6 +61,6 @@ class AssociationsTest {
     void shouldParseMetadataAssociationsInCanonicalForm() {
         var associations = Associations.parse(new ValueComparisonOperatorRegistry(), "metadata:tenantId=acme");
 
-        assertThat(associations.serializedAssociations()).containsExactly("metadata:tenantId=acme");
+        assertThat(associations.criteria()).containsExactly("metadata:tenantId=acme");
     }
 }

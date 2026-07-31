@@ -38,6 +38,14 @@ Any async steps still running are interrupted (see <<complete-with-running-steps
 
 `COMPLETED`, `FAILED`, `CANCELLED`, and `TIMED_OUT` are **terminal states**—the workflow will not be retried or resumed.
 
+[NOTE]
+====
+The engine writes workflow lifecycle events with event-store tags as well:
+`workflowId=<id>` on engine-published workflow events and
+`workflowEvent=lifecycle` on workflow lifecycle events.
+`waitForEvent` step STARTED and terminal events additionally carry `workflowEvent=waitForStep`.
+====
+
 == The workflow context
 
 The workflow context passed to your workflow method is your single entry point to all engine capabilities.

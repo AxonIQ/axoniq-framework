@@ -27,9 +27,12 @@ import io.axoniq.workflow.runtime.api.execution.context.FailWorkflowDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.Version;
 import io.axoniq.workflow.runtime.api.execution.context.VersionPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.VersionStepDefinition;
+import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
@@ -39,9 +42,7 @@ import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.util.Version;
 import jakarta.annotation.Nonnull;
-import org.axonframework.common.TypeReference;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -50,6 +51,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Predicate;
+
+import static io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState.PAYLOAD_TYPE;
 
 /**
  * Base class for DSL implementations.
@@ -200,25 +203,23 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
 
     @Override
     public void fail(@Nonnull FailWorkflowDefinition definition) {
-        delegate.failWorkflow(new FailWorkflow(
+        delegate.failWorkflow(PrimitiveCommands.failWorkflow(
                 definition.cause(),
-                definition.primitiveMetadata().eventNameCustomizer(),
-                null
+                definition.primitiveMetadata().eventNameCustomizer()
         ));
     }
 
     @Override
     public void cancel(@Nonnull CancelWorkflowDefinition definition) {
-        delegate.cancelWorkflow(new CancelWorkflow(
+        delegate.cancelWorkflow(PrimitiveCommands.cancelWorkflow(
                 definition.cause(),
-                definition.primitiveMetadata().eventNameCustomizer(),
-                null
+                definition.primitiveMetadata().eventNameCustomizer()
         ));
     }
 
     @Override
     public void cancelStep(@Nonnull CancelStepDefinition definition) {
-        delegate.cancelStep(new CancelStep(
+        delegate.cancelStep(PrimitiveCommands.cancelStep(
                 definition.primitiveMetadata().stepName(),
                 definition.cause(),
                 definition.primitiveMetadata().eventNameCustomizer()
@@ -248,17 +249,17 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     }
 
     @Override
-    public void cancelWorkflow(@Nonnull CancelWorkflow command) {
+    public void cancelWorkflow(@Nonnull WorkflowLifecycleControl.CancelWorkflowCommand command) {
         delegate.cancelWorkflow(command);
     }
 
     @Override
-    public void failWorkflow(@Nonnull FailWorkflow command) {
+    public void failWorkflow(@Nonnull WorkflowLifecycleControl.FailWorkflowCommand command) {
         delegate.failWorkflow(command);
     }
 
     @Override
-    public boolean cancelStep(@Nonnull CancelStep command) {
+    public boolean cancelStep(@Nonnull WorkflowLifecycleControl.CancelStepCommand command) {
         return delegate.cancelStep(command);
     }
 
@@ -312,8 +313,7 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     @Nonnull
     private Map<String, Object> resolveStepPayload(@Nonnull WorkflowStepResult result) {
         if (result.success()) {
-            return result.resultAs(new TypeReference<Map<String, Object>>() {
-            }, processingContext().component(EventConverter.class)).orElse(Map.of());
+            return result.resultAs(PAYLOAD_TYPE, processingContext().component(EventConverter.class)).orElse(Map.of());
         }
         if (result.timeout()) {
             throw new StepTimedOutException(
