@@ -36,6 +36,7 @@ import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenan
 import io.axoniq.framework.messaging.multitenancy.axonserver.commandhandling.MultiTenantAxonServerCommandBusConnector;
 import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AxonServerTenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AxonServerTenantSnapshotStoreFactory;
+import io.axoniq.framework.messaging.multitenancy.axonserver.queryhandling.MultiTenantAxonServerQueryBusConnector;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
@@ -97,6 +98,9 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         assertThat(configuration.getComponent(CommandBusConnector.class))
                 .extracting("delegate")
                 .isNotInstanceOf(MultiTenantAxonServerCommandBusConnector.class);
+        assertThat(configuration.getComponent(QueryBusConnector.class))
+                .extracting("delegate")
+                .isNotInstanceOf(MultiTenantAxonServerQueryBusConnector.class);
     }
 
     @Nested
@@ -255,6 +259,13 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
             assertThat(descriptor.getDescribedProperties())
                     .containsEntry("tenantRouter", configuration.getComponent(TenantRouter.class));
         }
+
+        @Test
+        void registersTheDefaultMultiTenantAxonServerQueryBusConnector() {
+            assertThat(configuration.getComponent(QueryBusConnector.class))
+                    .extracting("delegate")
+                    .isInstanceOf(MultiTenantAxonServerQueryBusConnector.class);
+        }
     }
 
     @Nested
@@ -359,6 +370,27 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
+        void subscribesTheQueryBusConnectorToTheTenantProviderAtStartup() throws Exception {
+            // given
+            MultiTenantAwareComponent connector = queryBusConnectorDelegate(configuration);
+
+            // then
+            assertThat(tenantProvider.subscribedComponents()).contains(connector);
+        }
+
+        @Test
+        void cancelsTheQueryBusConnectorSubscriptionOnShutdown() throws Exception {
+            // given
+            MultiTenantAwareComponent connector = queryBusConnectorDelegate(configuration);
+
+            // when
+            configuration.shutdown();
+
+            // then
+            assertThat(tenantProvider.subscribedComponents()).doesNotContain(connector);
+        }
+
+        @Test
         void subscribesTheEventStorageEngineFactoryToTheTenantProviderAtStartup() {
             MultiTenantAwareComponent factory =
                     (MultiTenantAwareComponent) configuration.getComponent(TenantEventStorageEngineFactory.class);
@@ -427,12 +459,6 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         private AdminChannel adminChannel;
         @Mock
         private ResultStream<ContextUpdate> contextUpdates;
-        // AxonServerConfigurationEnhancer wires a real, network-connecting QueryBusConnector on top of the (mocked)
-        // AxonServerConnectionManager; overriding it here keeps that enhancer's other real defaults (AxonServerConfiguration,
-        // MessageConverter) while short-circuiting the one component that would otherwise fail configuration.start().
-        // that will probably be removed once we implement the query handling part
-        @Mock
-        private QueryBusConnector queryBusConnector;
 
         private AxonConfiguration configuration;
 
@@ -456,9 +482,7 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
                                                .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                                .componentRegistry(registry -> registry
                                                        .registerComponent(AxonServerConnectionManager.class,
-                                                                          config -> connectionManager)
-                                                       .registerComponent(QueryBusConnector.class,
-                                                                          config -> queryBusConnector))
+                                                                          config -> connectionManager))
                                                .build();
             configuration.start();
         }
@@ -469,11 +493,25 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
-        void tenantConnectorsArePopulatedForEveryTenantTheRealProviderDiscoveredAtStartup() throws Exception {
+        void tenantConnectorsArePopulatedForEveryTenantTheRealProviderDiscoveredAtStartupForCommandConnector() throws Exception {
             // AxonServerTenantProvider#start() runs at TENANT_PROVIDER_PHASE and the connector subscribes one phase
             // later, so by the time this runs, the tenant discovered during start() must already have a connector.
             MultiTenantAxonServerCommandBusConnector connector =
                     (MultiTenantAxonServerCommandBusConnector) commandBusConnectorDelegate(configuration);
+
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+            connector.describeTo(descriptor);
+            Map<String, ?> tenantConnectors = descriptor.getProperty("tenantConnectors");
+
+            assertThat(tenantConnectors).containsOnlyKeys(tenantId);
+        }
+
+        @Test
+        void tenantConnectorsArePopulatedForEveryTenantTheRealProviderDiscoveredAtStartupForQueryConnector()
+                throws Exception {
+            // Same phase-ordering guarantee as the command bus connector, verified for its query bus counterpart.
+            MultiTenantAxonServerQueryBusConnector connector =
+                    (MultiTenantAxonServerQueryBusConnector) queryBusConnectorDelegate(configuration);
 
             MockComponentDescriptor descriptor = new MockComponentDescriptor();
             connector.describeTo(descriptor);
@@ -495,11 +533,20 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
 
     private static MultiTenantAwareComponent commandBusConnectorDelegate(AxonConfiguration configuration)
             throws Exception {
-        CommandBusConnector connector = configuration.getComponent(CommandBusConnector.class);
+        return multiTenantDelegate(configuration.getComponent(CommandBusConnector.class));
+    }
+
+    private static MultiTenantAwareComponent queryBusConnectorDelegate(AxonConfiguration configuration)
+            throws Exception {
+        return multiTenantDelegate(configuration.getComponent(QueryBusConnector.class));
+    }
+
+    private static MultiTenantAwareComponent multiTenantDelegate(Object connector) throws Exception {
         Field delegateField = delegateField(connector.getClass());
         if (delegateField == null) {
-            // No decorator in front of it (e.g. PayloadConvertingCommandBusConnector, wired by the AxonServerConnector
-            // module's own enhancer): the resolved component already is the multi-tenant connector itself.
+            // No decorator in front of it (e.g. PayloadConvertingCommandBusConnector or
+            // PayloadConvertingQueryBusConnector, wired by the AxonServerConnector module's own enhancer): the
+            // resolved component already is the multi-tenant connector itself.
             return (MultiTenantAwareComponent) connector;
         }
         delegateField.setAccessible(true);

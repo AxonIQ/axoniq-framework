@@ -26,6 +26,8 @@ See xref:multi-tenancy:tenant-command-handling.adoc[Tenant-aware command process
 
 Covers routing each query to the Axon Server context of its resolved tenant, mirroring the approach used for commands.
 
+See xref:multi-tenancy:tenant-query-handling.adoc[Tenant-aware query processing] for details.
+
 == Event storage
 
 Covers per-tenant event stores: appending to and sourcing from the event store of the tenant resolved from the message, including per-tenant snapshots.

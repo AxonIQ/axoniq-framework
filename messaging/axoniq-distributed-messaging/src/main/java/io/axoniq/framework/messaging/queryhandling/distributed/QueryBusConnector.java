@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageStream;
@@ -29,6 +28,7 @@ import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -131,7 +131,7 @@ public interface QueryBusConnector extends DescribableComponent {
     /**
      * Defines a callback mechanism to handle update messages for subscription queries
      * in a reactive and asynchronous manner.
-     * <p/>
+     * <p>
      * The {@code UpdateCallback} interface is used to send update, complete the processing,
      * or handle exceptional completion during subscription queries.
      */

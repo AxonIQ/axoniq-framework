@@ -31,12 +31,14 @@ import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenan
 import io.axoniq.framework.messaging.multitenancy.axonserver.commandhandling.MultiTenantAxonServerCommandBusConnector;
 import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AxonServerTenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AxonServerTenantSnapshotStoreFactory;
+import io.axoniq.framework.messaging.multitenancy.axonserver.queryhandling.MultiTenantAxonServerQueryBusConnector;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenantStreamingProcessorRestarter;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
+import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.Registration;
@@ -70,6 +72,7 @@ import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTena
  *     writes the same way</li>
  *     <li>the {@link TenantEventStorageEngineFactory} and {@link TenantSnapshotStoreFactory} building those per-tenant
  *     components against the tenant's Axon Server context</li>
+ *     <li>the {@link MultiTenantAxonServerQueryBusConnector} which fans out queries to a connector per tenant</li>
  * </ul>
  * It also disables the {@link SnapshotSourcingConfigurationEnhancer}, since snapshot sourcing is composed per tenant by
  * the routing engine rather than once for the application.
@@ -112,6 +115,9 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
 
         // Register the tenant-routing event storage components, and take over snapshot composition from the framework.
         registerMultiTenantEventStorageEngine(componentRegistry);
+
+        // Register the MultiTenantAxonServerQueryBusConnector
+        componentRegistry.registerIfNotPresent(multiTenantQueryBusConnector(), SearchScope.ALL);
     }
 
     /**
@@ -345,6 +351,53 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                                   .onShutdown(subscriberPhase,
                                               (config, ignored) -> {
                                                   Registration registration = subscription.getAndSet(null);
+                                                  if (registration != null) {
+                                                      registration.cancel();
+                                                  }
+                                                  return FutureUtils.emptyCompletedFuture();
+                                              });
+    }
+
+    /**
+     * Builds the {@link MultiTenantAxonServerQueryBusConnector}, subscribing it to the {@link TenantProvider} at
+     * startup so it follows the tenant lifecycle: known tenants are replayed on subscription and tenants added or
+     * removed at runtime reach it. Shutdown handlers run in descending phase order, so at shutdown the connector is
+     * disconnected first ({@link Phase#INBOUND_QUERY_CONNECTOR}), then its dispatching is shut down
+     * ({@link Phase#OUTBOUND_QUERY_CONNECTORS}), before the retained tenant-provider subscription is cancelled last.
+     * <p>
+     * The tenant-provider subscription is retained on the {@code connector} instance received by the lifecycle handlers
+     * directly, rather than re-resolved through {@link Configuration#getComponent(Class)} for
+     * {@link QueryBusConnector}: other {@link ConfigurationEnhancer ConfigurationEnhancers} may decorate that type
+     * (for example to convert payloads), and looking it up again would subscribe the decorator instead of the
+     * underlying, multi-tenant aware connector built here.
+     *
+     * @return a {@link ComponentDefinition} for the {@link MultiTenantAxonServerQueryBusConnector}
+     */
+    private static ComponentDefinition<QueryBusConnector> multiTenantQueryBusConnector() {
+        AtomicReference<@Nullable Registration> tenantSubscription = new AtomicReference<>();
+        return ComponentDefinition.ofType(QueryBusConnector.class)
+                                  .withBuilder(config -> new MultiTenantAxonServerQueryBusConnector(
+                                          config.getComponent(TenantRouter.class),
+                                          config.getComponent(AxonServerConnectionManager.class),
+                                          config.getComponent(AxonServerConfiguration.class),
+                                          config.getComponent(MessageConverter.class)))
+                                  .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
+                                           (config, connector) -> {
+                                               tenantSubscription.set(config.getComponent(TenantProvider.class)
+                                                                            .subscribe((MultiTenantAxonServerQueryBusConnector) connector));
+                                               return FutureUtils.emptyCompletedFuture();
+                                           })
+                                  .onStart(Phase.INBOUND_QUERY_CONNECTOR,
+                                           connector -> ((MultiTenantAxonServerQueryBusConnector) connector).start())
+                                  .onShutdown(Phase.OUTBOUND_QUERY_CONNECTORS,
+                                              (ComponentLifecycleHandler<QueryBusConnector>) (config, connector) ->
+                                                      ((MultiTenantAxonServerQueryBusConnector) connector).shutdownDispatching())
+                                  .onShutdown(Phase.INBOUND_QUERY_CONNECTOR,
+                                              (ComponentLifecycleHandler<QueryBusConnector>) (config, connector) ->
+                                                      ((MultiTenantAxonServerQueryBusConnector) connector).disconnect())
+                                  .onShutdown(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
+                                              (config, connector) -> {
+                                                  Registration registration = tenantSubscription.get();
                                                   if (registration != null) {
                                                       registration.cancel();
                                                   }

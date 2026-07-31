@@ -74,6 +74,7 @@ Maven wrapper is used (`./mvnw`). Key commands:
     - **Always create sample events using EventTestUtils**
     - **Always use JUnit5 @Nested classes to group logically connected tests cases (like for same method, same given section etc.)**
     - Do not add @DisplayName for test methods, try to make method names self-explanatory and add meaningful comments in given-when-then sections if needed
+    - **Never add `@since` tags to test classes or test methods.** `@since` documents when a *published API element* became available to consumers; tests are not published, so the tag carries no information and only goes stale. `@author` on a test class is fine.
 
 Test naming conventions:
 - **Unit tests** (Surefire): `*Test.java`, `*Tests.java`, `*Test_*.java`, `*Tests_*.java`
@@ -305,7 +306,7 @@ BDD-style testing:
     - Main benefits/use cases
     - Framework integration details (who creates it, when, how to access)
     - Complete usage example with proper API calls
-    - `@author` and `@since` tags
+    - `@author` and `@since` tags — `@since` applies to **published API elements only**. Never add it to test classes or test methods (see [Test Guidelines](#test-guidelines)); `@author` on a test class is fine.
 8. **Method Documentation Should Include**:
     - Clear purpose statement
     - Parameter descriptions with types linked

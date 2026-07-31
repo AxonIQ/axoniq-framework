@@ -18,9 +18,11 @@
  */
 
 /**
- * Part of the Axoniq Multi-Tenancy folder.
+ * Micrometer {@link io.micrometer.tracing.propagation.Propagator} carrier over Axon message metadata: the
+ * {@code Propagator.Getter}/{@code Propagator.Setter} pair used to extract and inject trace context to and from a
+ * message's metadata, so a trace continues across message and service boundaries.
  */
 @NullMarked
-package io.axoniq.framework.messaging.multitenancy.query;
+package io.axoniq.framework.tracing.micrometer.propagator;
 
 import org.jspecify.annotations.NullMarked;

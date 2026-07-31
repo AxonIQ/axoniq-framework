@@ -18,3 +18,4 @@
 #
 io.axoniq.framework.messaging.commandhandling.distributed.DistributedCommandBusConfigurationEnhancer
 io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfigurationEnhancer
+io.axoniq.framework.messaging.distributed.tracing.DistributedTracingConfigurationEnhancer

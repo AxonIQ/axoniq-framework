@@ -1,0 +1,46 @@
+[.axoniq-feature]
+= Tenant-Aware Query Processing
+:navtitle: Tenant-aware query processing
+:reftext: Tenant-aware query processing
+
+Tenant-aware query handling covers how queries can be dispatched and handled in a tenant aware Axon application, mirroring the approach used for xref:tenant-command-handling.adoc[commands].
+
+== Query dispatching
+
+With multi-tenancy enabled, query dispatching is automatically tenant-aware. No changes to how you use the `QueryGateway` or `QueryBus` are required. This applies to direct queries as well as subscription queries.
+
+Each known tenant has its own Axon Server connection. When a query handler is subscribed, that subscription is applied across every known tenant, so a single subscription serves queries for all tenants. A tenant that becomes known after a handler was subscribed, automatically receives that same subscription, so newly added tenants are served without any extra configuration.
+
+When a query is dispatched, the tenant is resolved as described in the xref:tenant-management.adoc#tenant-resolution[tenant resolution] section, and the query is routed to the Axon Server context of that tenant. For a subscription query, the tenant is resolved once, from the initial query, and both the initial result and the subsequent updates are routed to that tenant's context.
+
+Emitting updates for a subscription query, for example through the `QueryUpdateEmitter`, is scoped to the tenant resolved for the message being handled when the update is emitted. An update only reaches subscription queries belonging to that same tenant, even if another tenant has an identical subscription active at the same time.
+
+[NOTE]
+====
+The tenant resolved for a query must be one of the currently known tenants.
+If the resolved tenant is not currently known, for example because its context was removed after the tenant was resolved, dispatch fails with a `TenantNotResolvedException`.
+====
+
+== Query handling
+
+Query handling methods are registered the same way as in a single-tenant application. No change to how you declare or register a query handler is required.
+
+During handling, the tenant of the query is resolved again on the handling side and made available for the rest of that message's processing.
+This is what allows a tenant-scoped component, such as a per-tenant external service, to be injected into a handler's parameters: the framework knows which tenant's instance to provide because the tenant has already been established for that message.
+
+[source,java]
+----
+@QueryHandler
+public CourseStatistics on(FindCourseStatistics query, @TenantScoped CourseStatsRepository repository) { // <1>
+    return repository.findById(query.courseId());
+}
+----
+<1> `repository` is the `CourseStatsRepository` instance specific for the current tenant. The `@TenantScoped` annotation marks it as tenant scoped, transparently resolved by a tenant aware parameter resolver.
+
+See xref:tenant-scoped-components.adoc[Tenant-scoped components] for more details on how to register such components and inject them into a handler.
+
+[NOTE]
+====
+If the tenant cannot be resolved on the handling side, handling proceeds without a tenant available for that message.
+Injecting a tenant-scoped component parameter then fails with a `TenantNotResolvedException`, as described in xref:tenant-scoped-components.adoc[Tenant-scoped components].
+====

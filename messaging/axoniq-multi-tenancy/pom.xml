@@ -55,6 +55,11 @@
             <artifactId>axoniq-event-streaming</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-distributed-messaging</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!-- Core Axon Framework -->
         <dependency>
