@@ -25,7 +25,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenantStreamingProcessorRestarter;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.AxonConfiguration;
@@ -103,7 +102,6 @@ class MultiTenantPooledStreamingEventProcessingTest {
         configuration = EventSourcingConfigurer
                 .create()
                 .componentRegistry(registry -> {
-                    MultiTenancyEnabled.enableMultiTenancyEnhancer(registry);
                     // Keep the whole flow in memory: the routing engine registered below is the streamed source.
                     registry.disableEnhancer(AxonServerConfigurationEnhancer.class)
                             .disableEnhancer(AxonServerMultiTenancyConfigurationDefaults.class)

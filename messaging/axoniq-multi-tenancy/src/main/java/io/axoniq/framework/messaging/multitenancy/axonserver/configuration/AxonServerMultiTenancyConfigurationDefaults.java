@@ -60,8 +60,6 @@ import org.jspecify.annotations.Nullable;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
-import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled.isEnabled;
-
 /**
  * {@link ConfigurationEnhancer} registering the default Axon Server-backed multi-tenancy components:
  * <ul>
@@ -76,6 +74,11 @@ import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTena
  * </ul>
  * It also disables the {@link SnapshotSourcingConfigurationEnhancer}, since snapshot sourcing is composed per tenant by
  * the routing engine rather than once for the application.
+ * <p>
+ * Contributed through the {@link java.util.ServiceLoader}, so multi-tenancy is active as soon as the
+ * {@code axoniq-multi-tenancy} module is on the classpath. Use
+ * {@link io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils#disable(ComponentRegistry)} to opt out, for instance
+ * when running against an infrastructure without Axon Server.
  *
  * @author Jan Galinski
  * @author Laura Devriendt
@@ -92,8 +95,11 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
      * Runs early, so the Axon Server-backed multi-tenancy defaults registered here are in place before other enhancers
      * and user registrations that build on them, most notably before Axon Server's own
      * {@code AxonServerConfigurationEnhancer} registers its non-multi-tenant defaults for the same component types.
+     * <p>
+     * Expressed relative to {@link MultiTenancyConfigurationDefaults#ENHANCER_ORDER}, which anchors the multi-tenancy
+     * enhancer block, so this enhancer can never end up ahead of the generic defaults it builds on.
      */
-    public static final int ENHANCER_ORDER = Integer.MIN_VALUE + 7;
+    public static final int ENHANCER_ORDER = MultiTenancyConfigurationDefaults.ENHANCER_ORDER + 2;
 
     @Override
     public int order() {
@@ -102,11 +108,6 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
 
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
-        // TODO: see #258 - find a way that is not user facing but only needed for our mixed-scope itests.
-        if (!isEnabled(componentRegistry)) {
-            return;
-        }
-
         // Register the Axon Server TenantProvider, which is the default implementation for multi-tenancy in Axon Server.
         componentRegistry.registerIfNotPresent(axonServerTenantProvider(), SearchScope.ALL);
 
@@ -131,7 +132,7 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
         return ComponentDefinition
                 .ofType(TenantProvider.class)
                 .withBuilder(config -> new AxonServerTenantProvider(
-                                     config.getComponent(AxonServerConnectionManager.class),
+                                     axonServerConnectionManager(config),
                                      config.getComponent(TenantConnectPredicate.class, AxonServerTenantConnectPredicate::new)
                              )
                 )
@@ -163,7 +164,7 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
         return ComponentDefinition.ofType(CommandBusConnector.class)
                                   .withBuilder(config -> new MultiTenantAxonServerCommandBusConnector(
                                           config.getComponent(TenantRouter.class),
-                                          config.getComponent(AxonServerConnectionManager.class),
+                                          axonServerConnectionManager(config),
                                           config.getComponent(AxonServerConfiguration.class),
                                           config.getComponent(MessageConverter.class)))
                                   .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
@@ -188,6 +189,30 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                                                   }
                                                   return FutureUtils.emptyCompletedFuture();
                                               });
+    }
+
+    /**
+     * Resolves the {@link AxonServerConnectionManager} the Axon Server-backed multi-tenancy components need.
+     * <p>
+     * Tenants are Axon Server contexts, so multi-tenancy cannot function without a connection. Since multi-tenancy is
+     * active as soon as the {@code axoniq-multi-tenancy} module is on the classpath, an application that carries the
+     * module without Axon Server would otherwise fail on a bare "no component of type AxonServerConnectionManager".
+     * Naming both the cause and the two ways out turns that into a diagnosable configuration error.
+     *
+     * @param configuration the {@link Configuration} to resolve the {@link AxonServerConnectionManager} from
+     * @return the {@link AxonServerConnectionManager} backing the tenants of this application
+     * @throws AxonConfigurationException if no {@link AxonServerConnectionManager} is configured
+     */
+    private static AxonServerConnectionManager axonServerConnectionManager(Configuration configuration) {
+        return configuration
+                .getOptionalComponent(AxonServerConnectionManager.class)
+                .orElseThrow(() -> new AxonConfigurationException(
+                        """
+                        Multi-tenancy is active, but no AxonServerConnectionManager is configured. Tenants are Axon \
+                        Server contexts, so multi-tenancy cannot function without a connection to Axon Server. Either \
+                        configure Axon Server, or opt out of multi-tenancy through \
+                        MultiTenancyUtils#disable(ComponentRegistry)."""
+                ));
     }
 
     /**
@@ -273,8 +298,9 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
             throw new AxonConfigurationException("""
                     A multi-tenant application resolves snapshots per tenant, so it cannot use a SnapshotStore that \
                     serves every tenant from one place, but one is already registered. Register a \
-                    TenantSnapshotStoreFactory to control how each tenant's snapshot store is built, instead of \
-                    registering a SnapshotStore of your own.""");
+                    TenantSnapshotStoreFactory to control how each tenant's snapshot store is built instead of \
+                    registering a SnapshotStore of your own, or opt out of multi-tenancy altogether through \
+                    MultiTenancyUtils#disable(ComponentRegistry) if this application is single-tenant.""");
         }
     }
 

@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
-import io.axoniq.framework.messaging.multitenancy.annotation.TenantComponentParameterResolverFactory;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
 import io.axoniq.framework.messaging.multitenancy.queryhandling.TenantAwareQueryBus;
@@ -41,7 +40,6 @@ import org.axonframework.messaging.core.interception.HandlerInterceptorRegistry;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.queryhandling.QueryBus;
 
-import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled.isEnabled;
 import static org.axonframework.common.configuration.DecoratorDefinition.forType;
 
 /**
@@ -49,12 +47,15 @@ import static org.axonframework.common.configuration.DecoratorDefinition.forType
  * <ul>
  *     <li>the default {@link TenantResolver}, which resolves the tenant from message metadata, unless a user registered a custom {@link TenantResolver}</li>
  *     <li>the {@link TenantRouter} that every tenant-routing component shares to decide the tenant of a message</li>
- *     <li>the {@link TenantComponentParameterResolverFactory} to inject tenant-scoped components into message handlers</li>
  *     <li>the {@link TenantComponentProviderSubscriber} to subscribe every {@link TenantComponentProvider} to the {@link TenantProvider} at startup</li>
  *     <li>the {@link RegisterTenantDescriptorHandlerInterceptor} which takes the resolved {@link TenantDescriptor} from the message and stores it in the {@link ProcessingContext}</li>
  *     <li>the {@link MultiTenantStreamingProcessorRestarter} to restart the running streaming event processors when the set of tenants changes</li>
  *     <li>the {@link TenantAwareQueryBus} decorator, scoping subscription-query update emission and completion to the tenant resolved from the {@link ProcessingContext}</li>
  * </ul>
+ * <p>
+ * Contributed through the {@link java.util.ServiceLoader}, so multi-tenancy is active as soon as the
+ * {@code axoniq-multi-tenancy} module is on the classpath. Use
+ * {@link io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils#disable(ComponentRegistry)} to opt out.
  *
  * @author Stefan Dragisic
  * @author Steven van Beelen
@@ -73,8 +74,12 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      * <p>
      * Runs early, so the multi-tenancy defaults registered here are in place before other enhancers and user
      * registrations that build on them.
+     * <p>
+     * Anchors the multi-tenancy enhancer block: every other multi-tenancy enhancer expresses its order as this value
+     * plus a positive offset, so this is always the first of them to run. Anything disabling multi-tenancy from within
+     * another enhancer only has to order itself below this value.
      */
-    public static final int ENHANCER_ORDER = Integer.MIN_VALUE+5;
+    public static final int ENHANCER_ORDER = Integer.MIN_VALUE + 5;
 
     /**
      * The lifecycle phase in which the {@link TenantProvider} starts and shuts down.
@@ -144,11 +149,6 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
 
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
-        // TODO: see #258 - find a way that is not user facing but only needed for our mixed-scope itests.
-        if (!isEnabled(componentRegistry)) {
-            return;
-        }
-
         // Register the default TenantResolver, which resolves the tenant from message metadata.
         componentRegistry.registerIfNotPresent(TenantResolver.class,
                                                c -> new MetadataBasedTenantResolver(),
@@ -183,7 +183,8 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      * @param componentRegistry the registry to register the subscriber with
      */
     static void registerTenantComponentProviderSubscription(ComponentRegistry componentRegistry) {
-        // A TenantProvider is always present, since this enhancer registers one itself when none is configured.
+        // A TenantProvider is expected to be present, registered by the backend-specific enhancer for the
+        // multi-tenancy backend in use, e.g. AxonServerMultiTenancyConfigurationDefaults.
         componentRegistry.registerComponent(
                 ComponentDefinition
                         .ofType(TenantComponentProviderSubscriber.class)

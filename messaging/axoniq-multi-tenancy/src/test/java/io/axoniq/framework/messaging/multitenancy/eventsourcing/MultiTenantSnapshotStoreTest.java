@@ -25,7 +25,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
-import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;

@@ -25,7 +25,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
@@ -106,7 +105,6 @@ class PerTenantSnapshotSourcingIsolationTest {
         configuration = EventSourcingConfigurer
                 .create()
                 .componentRegistry(registry -> {
-                    MultiTenancyEnabled.enableMultiTenancyEnhancer(registry);
                     // Register the routing components as the Axon Server defaults do, but backed by recording
                     // per-tenant doubles and without reaching a real Axon Server.
                     registry.disableEnhancer(AxonServerConfigurationEnhancer.class)

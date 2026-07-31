@@ -17,7 +17,8 @@ Those contexts will be picked up as tenants whenever Axon Server reports them, e
 public void registerTenantFilter(MessagingConfigurer configurer) {
     var allowedContexts = Set.of("tenant-a", "tenant-b", "tenant-c");
     TenantConnectPredicate predicate = tenant -> allowedContexts.contains(tenant.tenantId());
-    configurer.componentRegistry(registerTenantConnectPredicate(predicate));
+    configurer.componentRegistry(registry -> registry.registerComponent(TenantConnectPredicate.class,
+                                                                        config -> predicate));
 }
 ----
 

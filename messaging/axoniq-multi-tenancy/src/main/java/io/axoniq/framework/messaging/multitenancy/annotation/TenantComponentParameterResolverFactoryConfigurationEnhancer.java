@@ -26,7 +26,20 @@ import org.axonframework.messaging.core.configuration.reflection.ParameterResolv
 
 /**
  * Configuration enhancer that registers the {@link TenantComponentParameterResolverFactory} to the
- * {@link ComponentRegistry} of the {@link org.axonframework.common.configuration.Configuration}
+ * {@link ComponentRegistry} of the {@link org.axonframework.common.configuration.Configuration}.
+ * <p>
+ * Contributed through the {@link java.util.ServiceLoader}, so handler parameters annotated with {@link TenantScoped}
+ * resolve as soon as the {@code axoniq-multi-tenancy} module is on the classpath. This enhancer keeps running even
+ * when multi-tenancy is switched off, because an unresolvable parameter fails handler inspection and with it the whole
+ * configuration.
+ * <p>
+ * Deliberately carries neither an {@link ConfigurationEnhancer#order()} nor a
+ * {@link org.axonframework.common.annotation.RegistrationScope}. An earlier order makes
+ * {@link ParameterResolverFactoryUtils#registerToComponentRegistry(ComponentRegistry, java.util.function.Function)}
+ * contribute the factory as the registry's {@code ParameterResolverFactory} component rather than as a decorator on
+ * it, and a {@code CURRENT} scope stops this enhancer running again for a child registry. A child registry copies
+ * enhancers and decorators but not components, and a module resolves handler parameters with its own registry's
+ * factory, so restricting either one costs handlers inside a module their tenant-scoped parameters.
  *
  * @author Jakob Hatzl
  * @since 5.3.0

@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.messaging.multitenancy.annotation.TenantScoped;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
@@ -29,15 +30,12 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
-import org.axonframework.messaging.core.annotation.ParameterResolver;
-import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.interception.HandlerInterceptorRegistry;
 import org.axonframework.messaging.queryhandling.QueryBus;
@@ -46,7 +44,6 @@ import org.axonframework.messaging.queryhandling.interception.InterceptingQueryB
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.time.Duration;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
@@ -56,8 +53,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Verifies the {@link MultiTenancyConfigurationDefaults} against a real {@link MessagingConfigurer}: the generic,
- * backend-agnostic multi-tenancy components are wired for a given configuration, and the enhancer only acts when
- * multi-tenancy is enabled.
+ * backend-agnostic multi-tenancy components are wired for a given configuration out of the box, and stay away once
+ * multi-tenancy is disabled.
  *
  * @author Jan Galinski
  * @author Jakob Hatzl
@@ -71,9 +68,12 @@ class MultiTenancyConfigurationDefaultsTest {
     }
 
     @Test
-    void enhanceIsANoOpWhenMultiTenancyIsNotEnabled() {
+    void enhanceIsANoOpWhenMultiTenancyIsDisabled() {
         // when
-        AxonConfiguration configuration = MessagingConfigurer.create().build();
+        AxonConfiguration configuration =
+                MessagingConfigurer.create()
+                                   .componentRegistry(MultiTenancyUtils::disable)
+                                   .build();
 
         // then none of the multi-tenancy defaults were registered
         assertThat(configuration.hasComponent(TenantResolver.class)).isFalse();
@@ -96,7 +96,6 @@ class MultiTenancyConfigurationDefaultsTest {
         @BeforeEach
         void buildConfiguration() {
             configuration = MessagingConfigurer.create()
-                                               .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                                .componentRegistry(registry -> registry.registerComponent(
                                                        TenantComponentProvider.class,
                                                        config -> componentProvider))
@@ -122,21 +121,6 @@ class MultiTenancyConfigurationDefaultsTest {
         @Test
         void registersTheStreamingProcessorRestarter() {
             assertThat(configuration.getComponent(MultiTenantStreamingProcessorRestarter.class)).isNotNull();
-        }
-
-        @Test
-        void registersAParameterResolverFactoryThatResolvesTenantScopedComponentParameters() throws Exception {
-            // given
-            ParameterResolverFactory factory = configuration.getComponent(ParameterResolverFactory.class);
-            Method handler = SampleHandlers.class.getDeclaredMethod("handle", CourseRepository.class);
-
-            // when
-            ParameterResolver<?> resolver = factory.createInstance(handler, handler.getParameters(), 0);
-
-            // then
-            assertThat(resolver)
-                    .extracting("provider")
-                    .isInstanceOf(TenantComponentProvider.class);
         }
 
         @Test
@@ -213,7 +197,6 @@ class MultiTenancyConfigurationDefaultsTest {
         void buildAndStartConfiguration() {
             tenantProvider.addTenant(TENANT_A);
             configuration = MessagingConfigurer.create()
-                                               .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                                .componentRegistry(registry -> registry
                                                        .registerComponent(TenantProvider.class,
                                                                           config -> tenantProvider)
@@ -267,7 +250,6 @@ class MultiTenancyConfigurationDefaultsTest {
         void buildAndStartConfiguration() {
             tenantProvider.addTenant(TENANT_A);
             configuration = MessagingConfigurer.create()
-                                               .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                                .componentRegistry(registry -> registry
                                                        .registerComponent(TenantProvider.class,
                                                                           config -> tenantProvider)
@@ -312,7 +294,6 @@ class MultiTenancyConfigurationDefaultsTest {
             // engine, so a tenant change re-opens no stream.
             AxonConfiguration withoutRoutingEngine =
                     MessagingConfigurer.create()
-                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                        .componentRegistry(registry -> registry
                                                .disableEnhancer(AxonServerMultiTenancyConfigurationDefaults.class)
                                                .registerComponent(TenantProvider.class, config -> tenantProvider))
@@ -356,8 +337,9 @@ class MultiTenancyConfigurationDefaultsTest {
 
     @SuppressWarnings("unused")
     private static final class SampleHandlers {
+
         void handle(@TenantScoped CourseRepository repository) {
-            // Reflection target only. The parameter type drives the matching under test.
+            // Reflection target only, for a handler that is neither a command nor a query handler.
         }
     }
 

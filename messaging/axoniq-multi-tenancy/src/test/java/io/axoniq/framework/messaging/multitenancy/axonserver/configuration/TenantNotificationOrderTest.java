@@ -25,7 +25,6 @@ import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenantStreamingProcessorRestarter;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
@@ -183,7 +182,6 @@ class TenantNotificationOrderTest {
         configuration = EventSourcingConfigurer
                 .create()
                 .componentRegistry(registry -> {
-                    MultiTenancyEnabled.enableMultiTenancyEnhancer(registry);
                     registry.disableEnhancer(AxonServerConfigurationEnhancer.class)
                             .disableEnhancer(AxonServerMultiTenancyConfigurationDefaults.class)
                             .registerComponent(TenantProvider.class, config -> tenantProvider)

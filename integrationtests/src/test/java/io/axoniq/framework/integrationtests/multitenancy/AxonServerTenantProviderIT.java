@@ -24,9 +24,9 @@ import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolve
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantProvider;
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingTenantAwareComponent;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.DefaultAxonApplication;
@@ -36,8 +36,6 @@ import org.junit.jupiter.api.extension.*;
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
 import static io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor.tenantWithId;
-import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.registerTenantConnectPredicate;
-import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.registerTenantResolver;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -45,9 +43,7 @@ import static org.awaitility.Awaitility.await;
 @Timeout(60)
 class AxonServerTenantProviderIT {
 
-    private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure(
-            MultiTenancyEnabled::enableMultiTenancyEnhancer
-    );
+    private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
 
     private AxonServerTestInfrastructure.ContextManager contextManager;
 
@@ -73,7 +69,8 @@ class AxonServerTenantProviderIT {
 
         AxonConfiguration application = new DefaultAxonApplication()
                 .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                .componentRegistry(registerTenantResolver(new MetadataBasedTenantResolver()))
+                .componentRegistry(cr -> cr.registerComponent(TenantResolver.class,
+                                                              c -> new MetadataBasedTenantResolver()))
                 .start();
 
         AxonServerTenantProvider tenantProvider = (AxonServerTenantProvider) application.getComponent(TenantProvider.class);
@@ -104,8 +101,9 @@ class AxonServerTenantProviderIT {
 
         AxonConfiguration application = new DefaultAxonApplication()
                 .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                .componentRegistry(registerTenantResolver(new MetadataBasedTenantResolver()))
-                .componentRegistry(registerTenantConnectPredicate(predicate))
+                .componentRegistry(cr -> cr.registerComponent(TenantResolver.class,
+                                                              c -> new MetadataBasedTenantResolver()))
+                .componentRegistry(cr -> cr.registerComponent(TenantConnectPredicate.class, c -> predicate))
                 .start();
 
         AxonServerTenantProvider tenantProvider = (AxonServerTenantProvider) application.getComponent(TenantProvider.class);

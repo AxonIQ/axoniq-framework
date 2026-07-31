@@ -20,6 +20,7 @@
 package io.axoniq.framework.integrationtests.queryhandling;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBus;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
@@ -83,6 +84,8 @@ public class DistributedQueryBusInterceptorTest extends AbstractQueryInterceptor
     @Override
     protected MessagingConfigurer createMessagingConfigurer() {
         return MessagingConfigurer.create()
+                                  // Not a multi-tenancy test. See MultiTenancyUtils#disable.
+                                  .componentRegistry(MultiTenancyUtils::disable)
                                   .componentRegistry(cr -> cr.registerComponent(
                                           AxonServerConfiguration.class,
                                           c -> testContainerAxonServerConfiguration()

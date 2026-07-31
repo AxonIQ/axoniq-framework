@@ -19,15 +19,15 @@
 
 package io.axoniq.framework.integrationtests.testsuite.checkpoint;
 
+import io.axoniq.framework.integrationtests.testsuite.infrastructure.SingleTenantInMemoryTestInfrastructure;
+import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
-import org.axonframework.integrationtests.testsuite.infrastructure.InMemoryTestInfrastructure;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
 import org.axonframework.integrationtests.testsuite.student.AbstractStudentIT;
 import org.axonframework.integrationtests.testsuite.student.events.StudentEnrolledEvent;
 import org.axonframework.messaging.eventhandling.annotation.EventHandler;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 import org.axonframework.messaging.eventhandling.processing.EventProcessor;
-import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.NonNull;
@@ -58,7 +58,7 @@ import static org.awaitility.Awaitility.await;
 public class MixedModeCheckpointingInMemoryIT extends AbstractStudentIT {
 
     private static final String PROCESSOR_NAME = "mixed-mode";
-    private static final TestInfrastructure INFRASTRUCTURE = new InMemoryTestInfrastructure();
+    private static final TestInfrastructure INFRASTRUCTURE = new SingleTenantInMemoryTestInfrastructure();
 
     private final CoveringCheckpointingProjection checkpointing = new CoveringCheckpointingProjection();
     private final OrdinaryProjection ordinary = new OrdinaryProjection();
