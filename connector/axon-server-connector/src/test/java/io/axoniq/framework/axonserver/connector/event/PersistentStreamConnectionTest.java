@@ -78,6 +78,7 @@ class PersistentStreamConnectionTest {
 
     private static final String STREAM_NAME = "stream-name";
     private static final String STREAM_ID = "stream-id";
+    private static final Context.ResourceKey<String> MARKER_RESOURCE_KEY = Context.ResourceKey.withLabel("marker");
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private final PersistentStreamProperties properties =
@@ -463,6 +464,35 @@ class PersistentStreamConnectionTest {
     }
 
     @Test
+    void processBatch_contextOfAnEventWithoutAggregateInformationCarriesNoneOfThePrecedingEvent() {
+        // given — a consumer recording the context of every event
+        List<ProcessingContext> capturedContexts = Collections.synchronizedList(new LinkedList<>());
+        testSubject.open((events, ctx) -> {
+            capturedContexts.add(ctx);
+            return CompletableFuture.completedFuture(null);
+        });
+        MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+        // when — an aggregate event and a plain event in one batch, enqueued before the availability notification
+        mockPersistentStream.publishBatch(0,
+                                          eventWithToken(0, "agg-1", 0, "TestAggregate"),
+                                          eventWithToken(1, "", 0, ""));
+
+        // then — the second event sees none of the first event's aggregate information
+        await().atMost(Duration.ofSeconds(2)).until(() -> capturedContexts.size() == 2);
+        ProcessingContext aggregateEventContext = capturedContexts.get(0);
+        assertThat(aggregateEventContext.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY)).isEqualTo("agg-1");
+        assertThat(aggregateEventContext.getResource(LegacyResources.AGGREGATE_TYPE_KEY)).isEqualTo("TestAggregate");
+        assertThat(aggregateEventContext.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY)).isEqualTo(0);
+        ProcessingContext plainEventContext = capturedContexts.get(1);
+        assertThat(plainEventContext.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY)).isNull();
+        assertThat(plainEventContext.getResource(LegacyResources.AGGREGATE_TYPE_KEY)).isNull();
+        assertThat(plainEventContext.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY)).isNull();
+
+        mockPersistentStream.closeSegment(0);
+    }
+
+    @Test
     void processBatch_contextExposesLegacyAggregateInformation() {
         // given — consumer records the tracking token and batch end token it receives for every invocation
         List<ProcessingContext> capturedContext = Collections.synchronizedList(new LinkedList<>());
@@ -492,11 +522,12 @@ class PersistentStreamConnectionTest {
     }
 
     @Test
-    void allEventsInBatchShareSingleProcessingContext() {
-        // given — consumer records the ProcessingContext it receives for every invocation
-        List<ProcessingContext> capturedContexts = Collections.synchronizedList(new LinkedList<>());
+    void allEventsInBatchShareSingleUnitOfWork() {
+        // given — the consumer marks the first event's context, and records what each event's context carries
+        List<String> observedMarkers = Collections.synchronizedList(new LinkedList<>());
         testSubject.open((events, ctx) -> {
-            capturedContexts.add(ctx);
+            observedMarkers.add(ctx.getResource(MARKER_RESOURCE_KEY));
+            ctx.putResourceIfAbsent(MARKER_RESOURCE_KEY, "first-event");
             return CompletableFuture.completedFuture(null);
         });
         MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
@@ -506,22 +537,23 @@ class PersistentStreamConnectionTest {
                                           eventWithToken(0, "agg-1", 0, "TestAggregate"),
                                           eventWithToken(1, "agg-1", 1, "TestAggregate"));
 
-        // then — consumer is invoked once per event, but both invocations share the same ProcessingContext
+        // then — the second event reads what the first one wrote, so both ran in one unit of work
         await().atMost(Duration.ofSeconds(2))
-               .until(() -> capturedContexts.size() == 2);
-        assertThat(capturedContexts.get(0))
-                .describedAs("both events in the same batch must share one ProcessingContext (one unit of work)")
-                .isSameAs(capturedContexts.get(1));
+               .until(() -> observedMarkers.size() == 2);
+        assertThat(observedMarkers)
+                .describedAs("both events in the same batch must share one unit of work")
+                .containsExactly(null, "first-event");
 
         mockPersistentStream.closeSegment(0);
     }
 
     @Test
-    void consecutiveBatchesGetSeparateProcessingContexts() {
-        // given — consumer records each context; each event is published individually to force separate batches
-        List<ProcessingContext> capturedContexts = Collections.synchronizedList(new LinkedList<>());
+    void consecutiveBatchesGetSeparateUnitsOfWork() {
+        // given — the same marking consumer; each event is published individually to force separate batches
+        List<String> observedMarkers = Collections.synchronizedList(new LinkedList<>());
         testSubject.open((events, ctx) -> {
-            capturedContexts.add(ctx);
+            observedMarkers.add(ctx.getResource(MARKER_RESOURCE_KEY));
+            ctx.putResourceIfAbsent(MARKER_RESOURCE_KEY, "first-batch");
             return CompletableFuture.completedFuture(null);
         });
         MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
@@ -534,12 +566,12 @@ class PersistentStreamConnectionTest {
         // when — second event published only after the first batch is fully committed
         mockPersistentStream.publish(0, eventWithToken(1, "agg-1", 1, "TestAggregate"));
         await().atMost(Duration.ofSeconds(2))
-               .until(() -> capturedContexts.size() == 2);
+               .until(() -> observedMarkers.size() == 2);
 
-        // then — each batch created a fresh unit of work, so the contexts are distinct objects
-        assertThat(capturedContexts.get(0))
-                .describedAs("each batch must run in its own unit of work with a distinct ProcessingContext")
-                .isNotSameAs(capturedContexts.get(1));
+        // then — the second batch carries none of the first one's resources, so it ran in a unit of work of its own
+        assertThat(observedMarkers)
+                .describedAs("each batch must run in its own unit of work")
+                .containsExactly(null, null);
 
         mockPersistentStream.closeSegment(0);
     }

@@ -423,8 +423,9 @@ public class PersistentStreamConnection {
                     CompletableFuture<?> result = CompletableFuture.completedFuture(null);
                     // Applied before the first event is consumed, so every event of this batch observes the
                     // batch-constant resources, such as the tenant a per-tenant stream belongs to.
-                    ProcessingContext batchContext = contextCustomizer.apply(processingContext);
-                    batchContext.putResource(TrackingToken.BATCH_END_RESOURCE_KEY, batchEndToken);
+                    ProcessingContext batchContext =
+                            contextCustomizer.apply(processingContext)
+                                             .withResource(TrackingToken.BATCH_END_RESOURCE_KEY, batchEndToken);
                     for (PersistentStreamEvent pse : batch) {
                         result = result
                                 .thenCompose(ignored ->
@@ -469,29 +470,26 @@ public class PersistentStreamConnection {
             ).withConverter(converter);
         }
 
+        // Branches off the batch context per event rather than writing into it, so an event only ever sees the
+        // information of its own, and nothing an event is given outlives the event it belongs to.
         private ProcessingContext enrichContextInformation(PersistentStreamEvent pse,
-                                                           ProcessingContext processingContext) {
+                                                           ProcessingContext batchContext) {
             // supply tracking information
-            TrackingToken token = createToken(pse);
-            processingContext.putResource(TrackingToken.RESOURCE_KEY, token);
-
-            // reset pre-existing legacy aggregate information
-            processingContext.removeResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY);
-            processingContext.removeResource(LegacyResources.AGGREGATE_TYPE_KEY);
-            processingContext.removeResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY);
+            ProcessingContext eventContext = batchContext.withResource(TrackingToken.RESOURCE_KEY, createToken(pse));
 
             String aggregateIdentifier = getAggregateIdentifier(pse);
             if (aggregateIdentifier != null && !aggregateIdentifier.isEmpty()) {
                 // supply legacy aggregate information
-                processingContext.putResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY, aggregateIdentifier);
+                eventContext = eventContext.withResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY,
+                                                         aggregateIdentifier);
                 String aggregateType = getAggregateType(pse);
                 if (aggregateType != null) {
-                    processingContext.putResource(LegacyResources.AGGREGATE_TYPE_KEY, aggregateType);
+                    eventContext = eventContext.withResource(LegacyResources.AGGREGATE_TYPE_KEY, aggregateType);
                 }
-                processingContext.putResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY,
-                                              getAggregateSequenceNumber(pse));
+                eventContext = eventContext.withResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY,
+                                                         getAggregateSequenceNumber(pse));
             }
-            return processingContext;
+            return eventContext;
         }
 
         private TrackingToken createToken(PersistentStreamEvent event) {
