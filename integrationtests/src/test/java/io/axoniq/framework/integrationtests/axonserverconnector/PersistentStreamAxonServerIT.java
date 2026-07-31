@@ -68,7 +68,7 @@ import static org.awaitility.Awaitility.await;
  */
 class PersistentStreamAxonServerIT {
 
-    private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
+    private static final TestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.singleTenant();
 
     private AxonConfiguration configuration;
     private String streamName;

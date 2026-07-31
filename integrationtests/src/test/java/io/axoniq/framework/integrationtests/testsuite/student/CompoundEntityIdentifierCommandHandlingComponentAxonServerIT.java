@@ -30,7 +30,7 @@ import org.axonframework.integrationtests.testsuite.student.CompoundEntityIdenti
 public class CompoundEntityIdentifierCommandHandlingComponentAxonServerIT
         extends CompoundEntityIdentifierCommandHandlingComponentIT {
 
-    private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
+    private static final TestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.singleTenant();
 
     @Override
     protected TestInfrastructure testInfrastructure() {
