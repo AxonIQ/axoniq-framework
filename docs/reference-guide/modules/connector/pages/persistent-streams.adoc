@@ -34,13 +34,13 @@ The state of the stream is maintained in Axon Server.
 
 == Configuration
 
-For a specific Event Processor to use a persistent stream as its source, the event source must be a `PersistentStreamEventSource`.
+For a specific Event Processor to use a persistent stream as its source, the event source must be one built by a `PersistentStreamEventSourceFactory`.
 You can configure this in three ways: xref:declarative_config_persistent[declaratively] through the Configuration API, through xref:autodetected_config_spring_properties_persistent[Spring Boot properties] or xref:bean_based_config_persistent[autodetected via Spring Boot `EventProcessorDefinition` beans].
 
 See the examples below, or consult the xref:events:event-processors/index.adoc#general_processor_configuration[general processor configuration section] for further options.
 
 Each persistent stream must be identified by a unique name within your Axon Server environment.
-The `PersistentStreamEventSource` requires a `PersistentStreamProperties` to define the initial stream creation settings:
+Building a persistent stream event source requires a `PersistentStreamProperties` to define the initial stream creation settings:
 
 * `streamName`: the unique identifier of the persistent stream in Axon Server; reusing an existing name joins the same server-side stream.
 * `segments`: the initial number of segments for parallel processing.
@@ -62,7 +62,7 @@ The `PropertySequencingPolicy` requires 4 values in the `sequencingPolicyParamet
 [#declarative_config_persistent]
 === Declarative configuration
 
-When using Axon's Configuration API directly, retrieve the infrastructure components via the `Configuration` parameter and pass them to the `PersistentStreamEventSource` constructor:
+When using Axon's Configuration API directly, build the event source through the `PersistentStreamEventSourceFactory`, passing it the `Configuration` from which it retrieves the required infrastructure components:
 
 [source,java]
 ----
@@ -73,7 +73,7 @@ include::example$connector/persistentstreams/AxonConfig.java[tag=declarative-per
 === Properties-based configuration - Spring Boot properties file
 
 The simplest way to configure a persistent stream in Spring Boot is through the properties file.
-Each entry under `axon.axonserver.persistent-streams` registers a `PersistentStreamEventSource` Spring bean named after the map key.
+Each entry under `axon.axonserver.persistent-streams` registers a `SubscribableEventSource` Spring bean named after the map key.
 The `source` value of the processor must match that key exactly.
 See the `io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.PersistentStreamSettings` Java class for all available persistent stream configuration properties.
 
@@ -126,7 +126,7 @@ axon.axonserver.auto-persistent-streams-settings.initial-segment-count=10
 === Autodetected configuration - `EventProcessorDefinition` based configuration
 
 When using Spring Boot, you can wire a persistent stream to a processor through an `EventProcessorDefinition` bean.
-The definition selects the event handlers for the processor and supplies the `PersistentStreamEventSource` as its event source in the `customized(...)` step.
+The definition selects the event handlers for the processor and supplies the persistent stream event source in the `customized(...)` step.
 
 [source,java]
 ----

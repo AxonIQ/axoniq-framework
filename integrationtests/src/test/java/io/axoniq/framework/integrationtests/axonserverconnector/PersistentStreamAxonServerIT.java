@@ -20,7 +20,6 @@
 package io.axoniq.framework.integrationtests.axonserverconnector;
 
 import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
-import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSource;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSourceFactory;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamSequencingPolicy;
@@ -31,6 +30,7 @@ import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.SubscribableEventSource;
 import org.axonframework.messaging.core.sequencing.SequentialPolicy;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
@@ -52,7 +52,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Integration test verifying that {@link PersistentStreamEventSource} receives events published to Axon Server
+ * Integration test verifying that a persistent stream event source receives events published to Axon Server
  * via a persistent stream, matching the declarative configuration documented in the connector reference guide.
  * <p>
  * Each test uses a unique stream name (UUID suffix) to prevent cross-test contamination when the shared Axon Server
@@ -195,14 +195,14 @@ class PersistentStreamAxonServerIT {
     }
 
     /**
-     * Constructs a {@link PersistentStreamEventSource} for the given {@code streamName} using the same pattern as
+     * Constructs a persistent stream event source for the given {@code streamName} using the same pattern as
      * the declarative configuration documented in the connector reference guide.
      *
      * @param streamName the unique persistent stream identifier in Axon Server
      * @param c the running application configuration
-     * @return a ready-to-subscribe {@link PersistentStreamEventSource}
+     * @return a ready-to-subscribe {@link SubscribableEventSource}
      */
-    private PersistentStreamEventSource buildPersistentStreamSource(String streamName, Configuration c) {
+    private SubscribableEventSource buildPersistentStreamSource(String streamName, Configuration c) {
         int segmentCount = 1;
         int batchSize = 100;
 

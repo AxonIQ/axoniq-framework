@@ -103,9 +103,9 @@ public class TenantScopedCache<C> implements MultiTenantAwareComponent {
      *                         for a tenant that is not registered
      * @throws NullPointerException if any of the given arguments is {@code null}
      */
-    TenantScopedCache(Function<TenantDescriptor, C> componentFactory,
-                      BiConsumer<TenantDescriptor, C> onEviction,
-                      String owner) {
+    public TenantScopedCache(Function<TenantDescriptor, C> componentFactory,
+                             BiConsumer<TenantDescriptor, C> onEviction,
+                             String owner) {
         this.componentFactory = Objects.requireNonNull(componentFactory, "The component factory must not be null");
         this.onEviction = Objects.requireNonNull(onEviction, "The eviction callback must not be null");
         this.owner = Objects.requireNonNull(owner, "The owner must not be null");
