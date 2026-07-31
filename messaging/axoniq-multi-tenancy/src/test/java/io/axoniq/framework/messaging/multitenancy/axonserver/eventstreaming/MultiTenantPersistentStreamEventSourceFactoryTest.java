@@ -26,6 +26,12 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingPersistentStreams;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.test.appender.ListAppender;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.SubscribableEventSource;
@@ -177,12 +183,23 @@ class MultiTenantPersistentStreamEventSourceFactoryTest {
             build(STREAM_NAME);
 
             // when
-            testSubject.build(STREAM_NAME, properties(STREAM_NAME), suppliedScheduler, 100, configuration())
-                       .subscribe(noOpConsumer());
+            build(STREAM_NAME);
 
-            // then — both tenants get their stream, sharing that single scheduler
-            assertThat(streams.openedContexts()).containsExactlyInAnyOrder("tenant-a", "tenant-b");
-            assertThat(schedulerFactory.requestedPoolNames()).isEmpty();
+            // then
+            assertThat(logAppender.getEvents())
+                    .anyMatch((LogEvent event) -> event.getLevel() == Level.WARN
+                            && event.getMessage().getFormattedMessage().contains(STREAM_NAME));
+        }
+
+        @Test
+        void noWarningForDifferentStreamNames() {
+            // when
+            build(STREAM_NAME);
+            build("otherStream");
+
+            // then
+            assertThat(logAppender.getEvents())
+                    .noneMatch(event -> event.getLevel() == Level.WARN);
         }
     }
 

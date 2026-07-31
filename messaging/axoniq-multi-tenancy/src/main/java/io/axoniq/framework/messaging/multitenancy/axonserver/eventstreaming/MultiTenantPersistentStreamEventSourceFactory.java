@@ -26,7 +26,11 @@ import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.SubscribableEventSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Function;
 
@@ -46,6 +50,10 @@ import java.util.function.Function;
  */
 @Internal
 public class MultiTenantPersistentStreamEventSourceFactory implements PersistentStreamEventSourceFactory {
+
+    private static final Logger logger = LoggerFactory.getLogger(MultiTenantPersistentStreamEventSourceFactory.class);
+
+    private final Set<String> seenStreamNames = new CopyOnWriteArraySet<>();
 
     /**
      * Builds the {@link SubscribableEventSource} consuming the persistent stream described by the given parameters,
@@ -79,6 +87,13 @@ public class MultiTenantPersistentStreamEventSourceFactory implements Persistent
                                          Function<String, ScheduledExecutorService> schedulerFactory,
                                          int batchSize,
                                          Configuration configuration) {
+        if (!seenStreamNames.add(name)) {
+            logger.warn("""
+                                A multi-tenant persistent stream event source with stream name '{}' has already \
+                                been created. Two sources sharing the same Axon Server stream name will join the \
+                                same server-side stream in every tenant's context, which may cause unexpected \
+                                behavior.""", name);
+        }
         return new MultiTenantPersistentStreamEventSource(
                 name,
                 properties,
