@@ -92,7 +92,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
     private final RunningSteps runningSteps = new RunningSteps();
-    private final Set<String> referencedStepNames = ConcurrentHashMap.newKeySet();
+    private final WorkflowStepProgress workflowStepProgress = new WorkflowStepProgress();
 
     private boolean executable = false;
 
@@ -125,6 +125,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                 this,
                 runningSteps,
                 eventWaitConditions,
+                workflowStepProgress,
                 this::beginTerminalTeardown,
                 processingContext
         );
@@ -212,7 +213,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                     currentThread());
 
         // Reset the runtime "book" — step-reference tracker for the drift guard.
-        this.referencedStepNames.clear();
+        this.workflowStepProgress.clear();
 
         // Dispatch to the definition matching state.workflowDefinitionVersion().
         var definition = WorkflowConfigurationRegistry.resolveOrFallback(
@@ -588,23 +589,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
     @Override
-    public void recordStepReference(@Nonnull String stepName) {
-        this.referencedStepNames.add(stepName);
-    }
-
-    @Override
-    @Nonnull
-    public Set<String> referencedStepNames() {
-        // Live read-only view: reflects ongoing recordStepReference() calls but cannot be mutated by callers.
-        return Collections.unmodifiableSet(this.referencedStepNames);
-    }
-
-    @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         descriptor.describeProperty("delegate", contextDelegate);
         descriptor.describeProperty("executable", executable);
         descriptor.describeProperty("state", state());
         eventWaitConditions.describeTo(descriptor);
         runningSteps.describeTo(descriptor);
+        workflowStepProgress.describeTo(descriptor);
     }
 }

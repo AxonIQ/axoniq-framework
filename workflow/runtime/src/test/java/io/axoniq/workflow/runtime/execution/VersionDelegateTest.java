@@ -37,9 +37,7 @@ import org.mockito.*;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -75,7 +73,7 @@ class VersionDelegateTest {
     private EventNameCustomizer parentCustomizer;
     private VersionDelegate delegate;
 
-    private final Set<String> referencedStepNames = new HashSet<>();
+    private final WorkflowStepProgress workflowStepProgress = new WorkflowStepProgress();
 
     @SuppressWarnings("unchecked")
     @BeforeEach
@@ -104,18 +102,13 @@ class VersionDelegateTest {
         when(workflowExecution.processingContext()).thenReturn(processingContext);
         when(workflowExecution.workflowContext()).thenReturn(workflowContext);
         when(workflowExecution.state()).thenReturn(state);
-        when(workflowExecution.referencedStepNames()).thenReturn(referencedStepNames);
-        // Wire the default-method helpers through Mockito so the real implementation runs against
-        // the mocked state() / referencedStepNames() stubs above.
-        when(workflowExecution.unreferencedTerminalSteps()).thenCallRealMethod();
-        when(workflowExecution.hasUnreferencedTerminalStep()).thenCallRealMethod();
-        doCallRealMethod().when(workflowExecution).guardAgainstReplayDrift(anyString());
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         delegate = new VersionDelegate(
                 workflowContext,
                 workflowExecution,
+                workflowStepProgress,
                 parentCustomizer,
                 Clock.systemUTC(),
                 unitOfWorkFactory,
@@ -231,7 +224,7 @@ class VersionDelegateTest {
      */
     @Test
     void downstreamStepsGuard_blocksEmission_whenLaterStepsArePresentInState() {
-        referencedStepNames.add("A");
+        workflowStepProgress.record("A");
         when(state.hasVersionMigrationStep("x")).thenReturn(false);
         when(state.workflowDefinitionVersion()).thenReturn("0.0.1");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B", "C"));
@@ -253,7 +246,7 @@ class VersionDelegateTest {
      */
     @Test
     void downstreamStepsGuard_allowsEmissionWhenAllStateStepsReferenced() throws InterruptedException {
-        referencedStepNames.add("A");
+        workflowStepProgress.record("A");
         when(state.hasVersionMigrationStep("x")).thenReturn(false, true);
         when(state.currentWorkflowVersion("x")).thenReturn("0.0.2");
         when(state.workflowDefinitionVersion()).thenReturn("0.0.1");
@@ -289,7 +282,7 @@ class VersionDelegateTest {
      */
     @Test
     void downstreamStepsGuard_ignoresNonTerminalStepsAhead() throws InterruptedException {
-        referencedStepNames.add("A");
+        workflowStepProgress.record("A");
         when(state.hasVersionMigrationStep("x")).thenReturn(false, true);
         when(state.currentWorkflowVersion("x")).thenReturn("0.0.2");
         when(state.workflowDefinitionVersion()).thenReturn("0.0.1");

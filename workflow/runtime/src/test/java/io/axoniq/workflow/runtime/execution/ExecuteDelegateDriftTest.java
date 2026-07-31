@@ -38,10 +38,8 @@ import org.junit.jupiter.api.*;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,7 +60,7 @@ class ExecuteDelegateDriftTest {
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private ExecuteDelegate delegate;
-    private final Set<String> referencedStepNames = new HashSet<>();
+    private final WorkflowStepProgress workflowStepProgress = new WorkflowStepProgress();
 
     @BeforeEach
     void setUp() {
@@ -76,10 +74,6 @@ class ExecuteDelegateDriftTest {
 
         when(workflowExecution.workflowId()).thenReturn("wf-1");
         when(workflowExecution.state()).thenReturn(state);
-        when(workflowExecution.referencedStepNames()).thenReturn(referencedStepNames);
-        when(workflowExecution.unreferencedTerminalSteps()).thenCallRealMethod();
-        when(workflowExecution.hasUnreferencedTerminalStep()).thenCallRealMethod();
-        doCallRealMethod().when(workflowExecution).guardAgainstReplayDrift(anyString());
         // Break out of acceptAllPendingTasksForStep's spin loop — the loop only exits when
         // (containsStep || hasTasks) AND isExecutable, so the mock must report both.
         when(workflowExecution.isExecutable()).thenReturn(true);
@@ -89,6 +83,7 @@ class ExecuteDelegateDriftTest {
                 workflowContext,
                 workflowExecution,
                 new RunningSteps(),
+                workflowStepProgress,
                 parent,
                 Clock.systemUTC(),
                 unitOfWorkFactory,
@@ -102,7 +97,7 @@ class ExecuteDelegateDriftTest {
     @Test
     void execute_throwsDriftException_whenUnreferencedTerminalStepsInState() {
         // History has A and B terminal; invocation has only referenced A so far; about to run new step "C".
-        referencedStepNames.add("A");
+        workflowStepProgress.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
@@ -124,7 +119,8 @@ class ExecuteDelegateDriftTest {
         // The full delegate path needs more mocks to run; we only assert the drift guard does NOT
         // fire (any downstream NPE from incomplete mock setup is fine — it proves the guard let us
         // through).
-        referencedStepNames.addAll(List.of("A", "B"));
+        workflowStepProgress.record("A");
+        workflowStepProgress.record("B");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));

@@ -95,6 +95,7 @@ class TerminateDelegateFailTest {
                 workflowContext,
                 workflowExecution,
                 new RunningSteps(),
+                new WorkflowStepProgress(),
                 terminalTeardown,
                 unitOfWorkFactory,
                 eventSink,

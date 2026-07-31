@@ -65,16 +65,20 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
      * @param context                   workflow context.
      * @param workflowExecution         workflow state.
      * @param runningSteps              running step registry
+     * @param workflowStepProgress      workflow step progress tracker
      * @param parentEventNameCustomizer event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
      * @param eventSink                 event sink for event publications.
      * @param executor                  executor to offload execution tasks from workflow thread.
+     * @param timeoutScheduler          scheduler for workflow step timeouts
+     * @param actionResolver            resolver for execute step actions
      */
     @Internal
     public ExecuteDelegate(@Nonnull WorkflowContext context,
                            @Nonnull WorkflowExecution workflowExecution,
                            @Nonnull RunningSteps runningSteps,
+                           @Nonnull WorkflowStepProgress workflowStepProgress,
                            @Nonnull EventNameCustomizer parentEventNameCustomizer,
                            @Nonnull Clock clock,
                            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -86,6 +90,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         super(context,
               workflowExecution,
               runningSteps,
+              workflowStepProgress,
               parentEventNameCustomizer,
               clock,
               unitOfWorkFactory,
@@ -132,7 +137,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         boolean resumedInFlight = workflowExecution.state().containsStep(stepName)
                 && workflowExecution.state().getStep(stepName).status() == StepStatus.STARTED;
 
-        workflowExecution.recordStepReference(stepName);
+        workflowStepProgress.record(stepName);
 
         acceptAllPendingTasksForStep(stepName);
 
@@ -142,7 +147,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         }
 
         if (!workflowExecution.state().containsStep(stepName)) {
-            workflowExecution.guardAgainstReplayDrift(stepName);
+            workflowStepProgress.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
             workflowExecution.appendTask(i ->
                                                  started(stepName, sanitize(local), eventNameCustomizer)
             );

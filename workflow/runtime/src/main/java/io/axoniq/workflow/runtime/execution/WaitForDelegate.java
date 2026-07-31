@@ -58,11 +58,13 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
      * @param workflowExecution         workflow state.
      * @param runningSteps              running step registry
      * @param eventWaitConditions       event wait condition registry
+     * @param workflowStepProgress      workflow step progress tracker
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new process contexts.
      * @param eventSink                 event sink to publish events.
      * @param executor                  executor to offload threads from main thread.
+     * @param timeoutScheduler          scheduler for workflow step timeouts
      */
     @Internal
     public WaitForDelegate(
@@ -70,6 +72,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             @Nonnull WorkflowExecution workflowExecution,
             @Nonnull RunningSteps runningSteps,
             @Nonnull EventWaitConditions eventWaitConditions,
+            @Nonnull WorkflowStepProgress workflowStepProgress,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -78,7 +81,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             @Nonnull WorkflowScheduler timeoutScheduler
     ) {
         super(workflowContext,
-              workflowExecution, runningSteps, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink, executor,
+              workflowExecution, runningSteps, workflowStepProgress, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink, executor,
               timeoutScheduler);
         this.eventWaitConditions = Objects.requireNonNull(eventWaitConditions, "Event wait conditions are mandatory");
     }
@@ -93,12 +96,12 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         var eventNameCustomizer = command.eventNameCustomizer();
         logger.trace("WaitFor {} called from thread {}", stepName, Thread.currentThread());
 
-        workflowExecution.recordStepReference(stepName);
+        workflowStepProgress.record(stepName);
 
         acceptAllPendingTasksForStep(stepName);
 
         if (!workflowExecution.state().containsStep(stepName)) {
-            workflowExecution.guardAgainstReplayDrift(stepName);
+            workflowStepProgress.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
             workflowExecution.appendTask(i ->
                                                  started(stepName,
                                                          Map.of("startTime", clock.instant()),

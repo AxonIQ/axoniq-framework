@@ -44,7 +44,7 @@ import static io.axoniq.workflow.runtime.util.EventMessageUtils.failedWorkflow;
  * Delegate that owns the full workflow termination flow: cancel futures, send event, apply state, throw.
  * <p>
  * <b>Replay-drift invariant:</b> any path that publishes a workflow- or step-level event or mutates
- * recorded state must call {@link WorkflowExecution#guardAgainstReplayDrift(String)} first. This applies
+ * recorded state must be guarded against replay drift first. This applies
  * to both step-level cancellation ({@code cancelStep} → {@code StepStatus.CANCELLED}) and
  * workflow-level termination ({@code ctx.fail()} / {@code ctx.cancel()} → terminal workflow event),
  * because in-flight workflows replaying older code through removed steps would otherwise have a terminal
@@ -61,6 +61,7 @@ public class TerminateDelegate implements TerminatePrimitive {
     private final WorkflowContext workflowContext;
     private final WorkflowExecution workflowExecution;
     private final RunningSteps runningSteps;
+    private final WorkflowStepProgress workflowStepProgress;
     private final Runnable terminalTeardown;
     private final EventSink eventSink;
     private final String workflowName;
@@ -74,6 +75,7 @@ public class TerminateDelegate implements TerminatePrimitive {
      * @param workflowContext               workflow context.
      * @param workflowExecution             workflow execution.
      * @param runningSteps                  running step registry
+     * @param workflowStepProgress          workflow step progress tracker
      * @param terminalTeardown              operation preparing the execution for a terminal workflow event
      * @param unitOfWorkFactory             unit of work factory for creation of new processing contexts.
      * @param eventSink                     event sink for event publications.
@@ -86,6 +88,7 @@ public class TerminateDelegate implements TerminatePrimitive {
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
             @Nonnull RunningSteps runningSteps,
+            @Nonnull WorkflowStepProgress workflowStepProgress,
             @Nonnull Runnable terminalTeardown,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
             @Nonnull EventSink eventSink,
@@ -95,6 +98,7 @@ public class TerminateDelegate implements TerminatePrimitive {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
         this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
+        this.workflowStepProgress = Objects.requireNonNull(workflowStepProgress, "Workflow step progress is mandatory");
         this.terminalTeardown = Objects.requireNonNull(terminalTeardown, "Terminal teardown is mandatory");
         this.eventSink = Objects.requireNonNull(eventSink, "Event sink is mandatory");
         this.workflowName = Objects.requireNonNull(workflowExecution.workflowName(), "Workflow name is mandatory");
@@ -108,7 +112,7 @@ public class TerminateDelegate implements TerminatePrimitive {
     public void cancelWorkflow(@Nonnull CancelWorkflow command) {
         // Drift guard: adding ctx.cancel() mid-body would force a terminal event onto a
         // workflow whose old code already ran past this point. Throws non-terminally.
-        workflowExecution.guardAgainstReplayDrift("<terminate>");
+        workflowStepProgress.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), "<terminate>");
 
         var effectiveName = command.workflowNameOverride() != null
                 ? command.workflowNameOverride()
@@ -126,7 +130,7 @@ public class TerminateDelegate implements TerminatePrimitive {
     public void failWorkflow(@Nonnull FailWorkflow command) {
         // Drift guard: adding ctx.fail() mid-body would force a terminal event onto a
         // workflow whose old code already ran past this point. Throws non-terminally.
-        workflowExecution.guardAgainstReplayDrift("<terminate>");
+        workflowStepProgress.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), "<terminate>");
 
         var effectiveName = command.workflowNameOverride() != null
                 ? command.workflowNameOverride()
@@ -143,8 +147,8 @@ public class TerminateDelegate implements TerminatePrimitive {
     @Override
     public boolean cancelStep(@Nonnull CancelStep command) {
         var stepName = command.stepName();
-        workflowExecution.recordStepReference(stepName);
-        workflowExecution.guardAgainstReplayDrift(stepName);
+        workflowStepProgress.record(stepName);
+        workflowStepProgress.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
 
         // Guard on the single-consumer control thread: only a present, non-terminal step can be cancelled. The check
         // and the future completion below are atomic with respect to other queue tasks.

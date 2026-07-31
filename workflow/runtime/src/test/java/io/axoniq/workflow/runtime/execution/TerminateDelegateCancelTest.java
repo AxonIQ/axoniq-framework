@@ -99,6 +99,7 @@ class TerminateDelegateCancelTest {
                 workflowContext,
                 workflowExecution,
                 runningSteps,
+                new WorkflowStepProgress(),
                 terminalTeardown,
                 unitOfWorkFactory,
                 eventSink,

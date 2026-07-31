@@ -30,9 +30,7 @@ import org.axonframework.messaging.eventhandling.EventSink;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,7 +54,7 @@ class TerminateDelegateDriftTest {
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private TerminateDelegate delegate;
-    private final Set<String> referencedStepNames = new HashSet<>();
+    private final WorkflowStepProgress workflowStepProgress = new WorkflowStepProgress();
 
     @BeforeEach
     void setUp() {
@@ -70,20 +68,16 @@ class TerminateDelegateDriftTest {
         when(workflowExecution.workflowId()).thenReturn("wf-1");
         when(workflowExecution.workflowName()).thenReturn("TestWorkflow");
         when(workflowExecution.state()).thenReturn(state);
-        when(workflowExecution.referencedStepNames()).thenReturn(referencedStepNames);
-        when(workflowExecution.unreferencedTerminalSteps()).thenCallRealMethod();
-        when(workflowExecution.hasUnreferencedTerminalStep()).thenCallRealMethod();
-        doCallRealMethod().when(workflowExecution).guardAgainstReplayDrift(anyString());
 
         delegate = new TerminateDelegate(
-                workflowContext, workflowExecution, new RunningSteps(), () -> { }, unitOfWorkFactory, eventSink, executor,
+                workflowContext, workflowExecution, new RunningSteps(), workflowStepProgress, () -> { }, unitOfWorkFactory, eventSink, executor,
                 DefaultEventNameCustomizer.Builder.defaults()
         );
     }
 
     @Test
     void terminate_throwsDrift_forWorkflowFail_whenOrphansAhead() {
-        referencedStepNames.add("A");
+        workflowStepProgress.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
@@ -102,7 +96,7 @@ class TerminateDelegateDriftTest {
 
     @Test
     void terminate_throwsDrift_forWorkflowCancel_whenOrphansAhead() {
-        referencedStepNames.add("A");
+        workflowStepProgress.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
@@ -116,7 +110,7 @@ class TerminateDelegateDriftTest {
 
     @Test
     void terminate_throwsDrift_forStepCancellation_whenOrphansAhead() {
-        referencedStepNames.add("A");
+        workflowStepProgress.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
@@ -135,7 +129,8 @@ class TerminateDelegateDriftTest {
 
     @Test
     void terminate_doesNotThrow_whenAllStepsReferenced() {
-        referencedStepNames.addAll(List.of("A", "B"));
+        workflowStepProgress.record("A");
+        workflowStepProgress.record("B");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
