@@ -28,9 +28,13 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
+import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.common.infra.MockComponentDescriptor;
+import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
@@ -43,9 +47,11 @@ import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.time.Duration;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
+import static org.awaitility.Awaitility.await;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -111,6 +117,11 @@ class MultiTenancyConfigurationDefaultsTest {
         @Test
         void registersTheTenantComponentProviderSubscriber() {
             assertThat(configuration.getComponent(TenantComponentProviderSubscriber.class)).isNotNull();
+        }
+
+        @Test
+        void registersTheStreamingProcessorRestarter() {
+            assertThat(configuration.getComponent(MultiTenantStreamingProcessorRestarter.class)).isNotNull();
         }
 
         @Test
@@ -272,6 +283,55 @@ class MultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
+        void wiresTheStreamingProcessorRestarterToTheRoutingEnginesTenantsUntilShutdown() {
+            // Asserted through what the wiring does, rather than through the restarter reporting itself as running: a
+            // tenant registered with the routing engine reaches the restarter while the configuration runs, and stops
+            // reaching it afterwards.
+            MultiTenantStreamingProcessorRestarter restarter =
+                    configuration.getComponent(MultiTenantStreamingProcessorRestarter.class);
+            MultiTenantEventStorageEngine routingEngine =
+                    (MultiTenantEventStorageEngine) configuration.getComponent(EventStorageEngine.class);
+
+            routingEngine.registerTenant(TENANT_B);
+
+            await().atMost(Duration.ofSeconds(2))
+                   .untilAsserted(() -> assertThat(restartCount(restarter)).isPositive());
+
+            configuration.shutdown();
+
+            // Asserted on the engine, since a stopped restarter ignores a restart request either way, so counting
+            // restarts cannot tell a cancelled listener from a still-registered one.
+            MockComponentDescriptor engineDescriptor = new MockComponentDescriptor();
+            routingEngine.describeTo(engineDescriptor);
+            assertThat(engineDescriptor.getDescribedProperties()).containsEntry("tenantChangeListenerCount", 0);
+        }
+
+        @Test
+        void followsNothingWhenNoEnhancerHandsOverARoutingEngine() {
+            // What the startup warning reports: multi-tenancy is on, but no backend enhancer built a tenant-routing
+            // engine, so a tenant change re-opens no stream.
+            AxonConfiguration withoutRoutingEngine =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
+                                       .componentRegistry(registry -> registry
+                                               .disableEnhancer(AxonServerMultiTenancyConfigurationDefaults.class)
+                                               .registerComponent(TenantProvider.class, config -> tenantProvider))
+                                       .build();
+            withoutRoutingEngine.start();
+            try {
+                MockComponentDescriptor descriptor = new MockComponentDescriptor();
+                withoutRoutingEngine.getComponent(MultiTenantStreamingProcessorRestarter.class)
+                                    .describeTo(descriptor);
+
+                assertThat(descriptor.getDescribedProperties())
+                        .containsEntry("followingTenantChanges", false)
+                        .doesNotContainKey("followedEngine");
+            } finally {
+                withoutRoutingEngine.shutdown();
+            }
+        }
+
+        @Test
         void shuttingDownTheConfigurationDestroysAllComponentInstances() {
             // given instances for a replayed tenant and for a tenant added at runtime
             tenantProvider.addTenant(TENANT_B);
@@ -285,6 +345,12 @@ class MultiTenancyConfigurationDefaultsTest {
             assertThat(repositoryA.closed).isTrue();
             assertThat(repositoryB.closed).isTrue();
             assertThat(componentProvider.tenants()).isEmpty();
+        }
+
+        private static long restartCount(MultiTenantStreamingProcessorRestarter restarter) {
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+            restarter.describeTo(descriptor);
+            return (long) descriptor.getDescribedProperties().get("restartCount");
         }
     }
 

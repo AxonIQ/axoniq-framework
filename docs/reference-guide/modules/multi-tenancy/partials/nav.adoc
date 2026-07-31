@@ -4,3 +4,4 @@
 ** xref:multi-tenancy:tenant-command-handling.adoc[]
 ** xref:multi-tenancy:tenant-event-storage.adoc[]
 ** xref:multi-tenancy:tenant-query-handling.adoc[]
+** xref:multi-tenancy:event-processing.adoc[]

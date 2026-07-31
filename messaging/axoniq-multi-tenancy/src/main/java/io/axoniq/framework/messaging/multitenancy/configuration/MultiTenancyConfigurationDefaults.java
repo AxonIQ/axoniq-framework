@@ -52,6 +52,7 @@ import static org.axonframework.common.configuration.DecoratorDefinition.forType
  *     <li>the {@link TenantComponentParameterResolverFactory} to inject tenant-scoped components into message handlers</li>
  *     <li>the {@link TenantComponentProviderSubscriber} to subscribe every {@link TenantComponentProvider} to the {@link TenantProvider} at startup</li>
  *     <li>the {@link RegisterTenantDescriptorHandlerInterceptor} which takes the resolved {@link TenantDescriptor} from the message and stores it in the {@link ProcessingContext}</li>
+ *     <li>the {@link MultiTenantStreamingProcessorRestarter} to restart the running streaming event processors when the set of tenants changes</li>
  *     <li>the {@link TenantAwareQueryBus} decorator, scoping subscription-query update emission and completion to the tenant resolved from the {@link ProcessingContext}</li>
  * </ul>
  *
@@ -101,6 +102,29 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
     public static final int TENANT_COMPONENT_SUBSCRIBER_PHASE = TENANT_PROVIDER_PHASE + 5;
 
     /**
+     * The start phase in which the components a tenant-routing component composes from are subscribed to the
+     * {@link io.axoniq.framework.messaging.multitenancy.api.TenantProvider TenantProvider}, one before
+     * {@link #TENANT_COMPONENT_SUBSCRIBER_PHASE}.
+     * <p>
+     * A tenant-routing component builds a tenant's parts through these factories, and announces a tenant only once it
+     * holds it. Whatever acts on that announcement therefore reaches the factories, which must already hold the tenant
+     * by then. Subscribing them a phase earlier makes that order structural rather than a consequence of the order the
+     * components happen to be registered in.
+     */
+    public static final int TENANT_COMPONENT_FACTORY_PHASE = TENANT_COMPONENT_SUBSCRIBER_PHASE - 1;
+
+    /**
+     * The start phase in which a component verifies that a tenant-routing component was handed to it, one after
+     * {@link #TENANT_COMPONENT_SUBSCRIBER_PHASE}.
+     * <p>
+     * Not public, since nothing outside this enhancer aligns to it.
+     * <p>
+     * A handover happens in {@link #TENANT_COMPONENT_SUBSCRIBER_PHASE}, which has no order within itself, so a
+     * component cannot conclude in that same phase that no handover is coming. Checking a phase later can.
+     */
+    static final int TENANT_HANDOVER_CHECK_PHASE = TENANT_COMPONENT_SUBSCRIBER_PHASE + 1;
+
+    /**
      * The order at which {@link TenantAwareQueryBus} decorates the {@code QueryBus}.
      * <p>
      * Must be higher (applied further outside) than
@@ -140,6 +164,9 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
         // Keep every TenantComponentProvider in sync with the tenants known to the TenantProvider.
         registerTenantComponentProviderSubscription(componentRegistry);
 
+        // Restart the running streaming event processors whenever the set of tenants changes.
+        registerStreamingProcessorRestarter(componentRegistry);
+
         // Register HandlerInterceptor that puts a ResourceKey with the resolved TenantDescriptor into {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}.
         registerTenantDescriptorInterceptor(componentRegistry);
 
@@ -165,6 +192,30 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
                                  TenantComponentProviderSubscriber::subscribeProviders)
                         .onShutdown(TENANT_COMPONENT_SUBSCRIBER_PHASE,
                                     TenantComponentProviderSubscriber::cancelSubscriptions)
+        );
+    }
+
+    /**
+     * Registers the {@link MultiTenantStreamingProcessorRestarter}, starting it at startup so a change in the set of
+     * tenants restarts the running streaming event processors, and stopping it at shutdown.
+     * <p>
+     * A second start handler runs in {@link #TENANT_HANDOVER_CHECK_PHASE} to report a restarter that nothing handed a
+     * tenant-routing component to, since that cannot be concluded within the phase the handover itself happens in.
+     *
+     * @param componentRegistry the registry to register the restarter with
+     */
+    static void registerStreamingProcessorRestarter(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(MultiTenantStreamingProcessorRestartConfiguration.class,
+                                               c -> MultiTenantStreamingProcessorRestartConfiguration.DEFAULT,
+                                               SearchScope.ALL);
+        componentRegistry.registerComponent(
+                ComponentDefinition
+                        .ofType(MultiTenantStreamingProcessorRestarter.class)
+                        .withBuilder(MultiTenantStreamingProcessorRestarter::new)
+                        .onStart(TENANT_COMPONENT_SUBSCRIBER_PHASE, MultiTenantStreamingProcessorRestarter::start)
+                        .onStart(TENANT_HANDOVER_CHECK_PHASE,
+                                 MultiTenantStreamingProcessorRestarter::warnWhenFollowingNothing)
+                        .onShutdown(TENANT_COMPONENT_SUBSCRIBER_PHASE, MultiTenantStreamingProcessorRestarter::stop)
         );
     }
 

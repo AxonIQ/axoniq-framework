@@ -185,17 +185,21 @@ class AxonServerAutoConfigurationTest {
 
     @Test
     void overrideDefaultAxonServerComponents() {
-        testContext.withUserConfiguration(CustomContext.class).run(context -> {
-            assertThat(context).hasSingleBean(AxonServerConnectionManager.class);
-            assertThat(context).hasBean("customAxonServerConnectionManager");
-            assertThat(context).hasSingleBean(ManagedChannelCustomizer.class);
-            assertThat(context).hasBean("customManagedChannelCustomizer");
-            assertThat(context).hasSingleBean(EventStorageEngine.class);
-            assertThat(context).hasBean("customAxonServerEventStorageEngine");
-            assertThat(context).hasSingleBean(CommandBusConnector.class);
-            assertThat(context).hasSingleBean(PayloadConvertingCommandBusConnector.class);
-            assertThat(context).hasBean("customAxonServerCommandBusConnector");
-        });
+        // Multi-tenancy is default-on with Axon Server and owns the EventStorageEngine registration; disable it so this
+        // test verifies that an application's own Axon Server components take the place of the defaults.
+        testContext.withPropertyValues("axon.multitenancy.enabled=false")
+                   .withUserConfiguration(CustomContext.class)
+                   .run(context -> {
+                       assertThat(context).hasSingleBean(AxonServerConnectionManager.class);
+                       assertThat(context).hasBean("customAxonServerConnectionManager");
+                       assertThat(context).hasSingleBean(ManagedChannelCustomizer.class);
+                       assertThat(context).hasBean("customManagedChannelCustomizer");
+                       assertThat(context).hasSingleBean(EventStorageEngine.class);
+                       assertThat(context).hasBean("customAxonServerEventStorageEngine");
+                       assertThat(context).hasSingleBean(CommandBusConnector.class);
+                       assertThat(context).hasSingleBean(PayloadConvertingCommandBusConnector.class);
+                       assertThat(context).hasBean("customAxonServerCommandBusConnector");
+                   });
     }
 
     @Configuration
