@@ -275,7 +275,6 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
         }
     }
 
-
     private static MultiTenantEventStorageEngine routingEngine(Configuration config) {
         return new MultiTenantEventStorageEngine(config.getComponent(TenantEventStorageEngineFactory.class),
                                                  config.getComponent(TenantSnapshotStoreFactory.class),

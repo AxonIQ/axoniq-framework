@@ -145,14 +145,6 @@ class MultiTenancyAutoConfigurationSpringContextTest {
     @EnableAutoConfiguration
     static class TestApplication {
 
-        /**
-         * Disables the Postgresql enhancer, which the {@code ServiceLoader} contributes because
-         * {@code axoniq-postgresql} is on this module's test classpath. It initialises a {@code PostgresqlSnapshotStore}
-         * against the in-memory database used here and fails, which has nothing to do with multi-tenancy. Ordered
-         * first, so the disable is in place before that enhancer would run.
-         *
-         * @return a configuration enhancer disabling the Postgresql enhancer
-         */
         @Bean
         TenantScopedQueryHandler tenantScopedQueryHandler() {
             return new TenantScopedQueryHandler();
@@ -164,6 +156,14 @@ class MultiTenancyAutoConfigurationSpringContextTest {
                                                        tenant -> new TenantScopedResource());
         }
 
+        /**
+         * Disables the Postgresql enhancer, which the {@code ServiceLoader} contributes because
+         * {@code axoniq-postgresql} is on this module's test classpath. It initialises a {@code PostgresqlSnapshotStore}
+         * against the in-memory database used here and fails, which has nothing to do with multi-tenancy. Ordered
+         * first, so the disable is in place before that enhancer would run.
+         *
+         * @return a configuration enhancer disabling the Postgresql enhancer
+         */
         @Bean
         ConfigurationEnhancer disablePostgresqlConfigurationEnhancer() {
             return new ConfigurationEnhancer() {

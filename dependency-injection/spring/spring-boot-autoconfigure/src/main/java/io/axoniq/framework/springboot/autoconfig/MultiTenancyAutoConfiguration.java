@@ -81,7 +81,7 @@ public class MultiTenancyAutoConfiguration {
      * @return a configuration enhancer that disables multi-tenancy
      */
     @Bean
-    @Conditional(MultiTenancyShouldNotApply.class)
+    @Conditional(MultiTenancyDoesNotApply.class)
     public ConfigurationEnhancer disableMultiTenancyConfigurationEnhancer() {
         return new ConfigurationEnhancer() {
             @Override
@@ -119,9 +119,9 @@ public class MultiTenancyAutoConfiguration {
      * An {@link AnyNestedCondition} rather than repeated {@link ConditionalOnProperty} annotations on the bean, because
      * those combine as a conjunction while either property on its own is reason enough.
      */
-    static class MultiTenancyShouldNotApply extends AnyNestedCondition {
+    static class MultiTenancyDoesNotApply extends AnyNestedCondition {
 
-        MultiTenancyShouldNotApply() {
+        MultiTenancyDoesNotApply() {
             super(ConfigurationPhase.REGISTER_BEAN);
         }
 
