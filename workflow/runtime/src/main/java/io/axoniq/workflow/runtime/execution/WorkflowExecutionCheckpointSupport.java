@@ -204,6 +204,32 @@ final class WorkflowExecutionCheckpointSupport {
     }
 
     /**
+     * Indicates whether the given queued task is a checkpoint barrier owned by this support instance.
+     *
+     * @param task queued workflow task to inspect
+     * @return {@code true} if the task is a checkpoint barrier
+     */
+    boolean isCheckpointIntent(@Nonnull Consumer<WorkflowExecution> task) {
+        return task instanceof CheckpointIntent;
+    }
+
+    /**
+     * Completes any checkpoint callbacks whose barriers cannot be consumed because the workflow driver has stopped.
+     * <p>
+     * Once the driver is no longer executable, no further queue work can make checkpoint advancement unsafe. Releasing
+     * the callbacks prevents a checkpoint waiter from being stranded by terminal cleanup.
+     */
+    void completePendingCheckpointIntent() {
+        Runnable callback;
+        synchronized (this) {
+            checkpointIntentQueued = false;
+            callback = checkpointIntentCallback;
+            checkpointIntentCallback = NO_OP;
+        }
+        callback.run();
+    }
+
+    /**
      * Executes one queue task while maintaining checkpoint bookkeeping.
      * <p>
      * This method marks a task as active for the duration of execution so

@@ -49,13 +49,6 @@ final class WorkflowEngineCheckpointingAdvancingSupport implements Checkpointing
     interface Host {
 
         /**
-         * Returns whether any owned workflow execution still makes checkpoint advancement unsafe.
-         *
-         * @return {@code true} when checkpoint advancement must wait
-         */
-        boolean hasPendingCheckpointWork();
-
-        /**
          * Schedules checkpoint barrier tasks across the owned workflow executions.
          *
          * @param onDrained callback to invoke once the scheduled barriers have been crossed
@@ -111,32 +104,21 @@ final class WorkflowEngineCheckpointingAdvancingSupport implements Checkpointing
     @Override
     public CompletableFuture<TrackingToken> onCheckpointAdvanced(@Nonnull Segment segment,
                                                                  @Nonnull TrackingToken requested) {
-        if (host.hasPendingCheckpointWork()) {
-            var result = new CompletableFuture<TrackingToken>();
-            var scheduled = host.scheduleCheckpointIntent(() -> {
-                if (result.isDone()) {
-                    return;
-                }
-                onCheckpointAdvanced(segment, requested)
-                        .whenComplete((token, cause) -> {
-                            if (cause != null) {
-                                result.completeExceptionally(cause);
-                            } else {
-                                result.complete(token);
-                            }
-                        });
-            });
-            if (!scheduled) {
-                if (!host.hasPendingCheckpointWork()) {
-                    return CompletableFuture.completedFuture(requested);
-                }
-                result.completeExceptionally(new IllegalStateException(
-                        "Checkpoint requested while workflow work is unsafe, but no checkpoint intent could be scheduled."
-                ));
+        var result = new CompletableFuture<TrackingToken>();
+        var scheduled = host.scheduleCheckpointIntent(() -> {
+            if (result.isDone()) {
+                return;
             }
-            return result;
-        }
-        return CompletableFuture.completedFuture(requested);
+            onCheckpointAdvanced(segment, requested)
+                    .whenComplete((token, cause) -> {
+                        if (cause != null) {
+                            result.completeExceptionally(cause);
+                        } else {
+                            result.complete(token);
+                        }
+                    });
+        });
+        return scheduled ? result : CompletableFuture.completedFuture(requested);
     }
 
     @Override

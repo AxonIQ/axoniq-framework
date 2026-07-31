@@ -41,6 +41,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
@@ -93,8 +94,10 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
         awaitParked(id);
         workflowCancellationService.cancelRunningSteps(
                 id, new StepCancellationException("cancel all running steps")
-        ).join();
-        workflowCancellationService.cancelWorkflow(id, new WorkflowCancelledException("cancel workflow")).join();
+        ).orTimeout(10, TimeUnit.SECONDS).join();
+        workflowCancellationService.cancelWorkflow(id, new WorkflowCancelledException("cancel workflow"))
+                                   .orTimeout(10, TimeUnit.SECONDS)
+                                   .join();
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var history = workflowHistoryRepository.findById(id);

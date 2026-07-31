@@ -20,14 +20,12 @@ package io.axoniq.workflow.runtime.api.execution.context;
 
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -35,8 +33,8 @@ import java.util.function.Predicate;
 /**
  * Represents the mechanics of a workflow execution accessed by the workflow engine and its primitives.
  * <p>
- * This contract deliberately excludes workflow and step cancellation policy. Cancellation is coordinated separately
- * so an execution remains focused on its control queue, state, event delivery, and local lifecycle.
+ * This contract deliberately excludes workflow and step cancellation policy. Cancellation is coordinated separately so
+ * an execution remains focused on its control queue, state, event delivery, and local lifecycle.
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
@@ -73,7 +71,7 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Delivers an event to the workflow execution.
      *
-     * @param eventMessage event message to deliver
+     * @param eventMessage      event message to deliver
      * @param processingContext processing context of the delivered event
      */
     void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
@@ -84,6 +82,13 @@ public interface WorkflowExecution extends DescribableComponent {
      * @param task task to execute
      */
     void appendTask(@Nonnull Consumer<WorkflowExecution> task);
+
+    /**
+     * Interrupts the workflow driver so it can re-evaluate pending external control requests.
+     * <p>
+     * This is a wake-up mechanism only. It does not mutate workflow state or publish workflow events.
+     */
+    void interruptWorkflowDriver();
 
     /**
      * Returns and removes the next queued task.
@@ -123,20 +128,12 @@ public interface WorkflowExecution extends DescribableComponent {
     boolean hasPendingCheckpointWork();
 
     /**
-     * Cancel all running steps.
-     *
-     * @param cause optional cause of the cancellation.
-     */
-    void cancelAllRunningSteps(@Nullable Throwable cause);
-
-    /**
-     * Interrupt all running steps without producing any step/workflow cancellation events. Unlike
-     * {@link #cancelAllRunningSteps(Throwable)}, this method is for abrupt process-level teardown (e.g. an engine
-     * shutdown lifecycle hook): it completes in-flight step futures with a non-cancellation failure so the running step
-     * is removed from bookkeeping and no {@code <Step>Cancelled} event is published. The workflow's state in the event
-     * store is left at its most recent {@code <Step>Started} entry so the step can resume on the next app start. Safe
-     * to call from any thread.
-     * Stops only in-memory execution as part of engine shutdown.
+     * Interrupt all running steps without producing any step/workflow cancellation events. This method is for abrupt
+     * process-level teardown (e.g. an engine shutdown lifecycle hook): it completes in-flight step futures with a
+     * non-cancellation failure so the running step is removed from bookkeeping and no {@code <Step>Cancelled} event is
+     * published. The workflow's state in the event store is left at its most recent {@code <Step>Started} entry so the
+     * step can resume on the next app start. Safe to call from any thread. Stops only in-memory execution as part of
+     * engine shutdown.
      * <p>
      * This operation preserves the durable workflow state for replay and produces no step or workflow cancellation
      * events. It must never be used to cancel or otherwise terminate a workflow.
@@ -181,14 +178,6 @@ public interface WorkflowExecution extends DescribableComponent {
      */
     @Nonnull
     String workflowId();
-
-    /**
-     * Returns the earliest tracking token required to restart this execution.
-     *
-     * @return restart token, or {@code null} when unavailable
-     */
-    @Nullable
-    TrackingToken restartToken();
 
     /**
      * Returns the workflow configuration.

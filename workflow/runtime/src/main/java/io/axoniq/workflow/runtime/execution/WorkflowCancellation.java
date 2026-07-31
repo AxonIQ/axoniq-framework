@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -66,4 +67,39 @@ public interface WorkflowCancellation {
      */
     @Nonnull
     CompletableFuture<Void> cancelWorkflow(@Nullable Throwable cause);
+
+    /**
+     * Provides the pending external workflow-cancellation request to the workflow driver.
+     * <p>
+     * The cancellation coordinator owns this state. The workflow driver only consumes it after being woken so that it
+     * can publish the terminal event on its single control thread.
+     */
+    interface External extends WorkflowCancellation {
+
+        /**
+         * Returns whether an external workflow cancellation is waiting for the workflow driver.
+         *
+         * @return {@code true} when a cancellation request is pending, otherwise {@code false}
+         */
+        boolean hasPendingWorkflowCancellation();
+
+        /**
+         * Removes and returns the pending external workflow cancellation.
+         *
+         * @return the pending cancellation request, or {@code null} when no request is pending
+         */
+        @Nullable
+        Request consumeWorkflowCancellation();
+    }
+
+    /**
+     * Represents one external workflow-cancellation request owned by the cancellation coordinator.
+     *
+     * @param cause cancellation cause to record durably
+     * @param done future completed after the workflow driver performs the terminal transition
+     */
+    record Request(@Nonnull WorkflowCancelledException cause,
+                   @Nonnull CompletableFuture<Void> done) {
+
+    }
 }

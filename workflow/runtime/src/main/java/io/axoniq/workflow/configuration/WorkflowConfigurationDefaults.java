@@ -92,10 +92,10 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     /**
      * Order for this enhancer.
      * <p>
-     * Enhancer math: we have to run AFTER the event souring part is set up and let some space for others to register.
+     * Enhancer math: register the tag-resolver decorator before event sourcing creates the event store.
      * </p>
      */
-    public static final int WORKFLOW_DEFAULTS_ENHANCER_ORDER = EventSourcingConfigurationDefaults.ENHANCER_ORDER + 50;
+    public static final int WORKFLOW_DEFAULTS_ENHANCER_ORDER = EventSourcingConfigurationDefaults.ENHANCER_ORDER - 10;
 
     /**
      * Registers default components.

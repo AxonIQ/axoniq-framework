@@ -21,13 +21,12 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Default coordinator for cancellation requests against one workflow execution.
@@ -39,20 +38,19 @@ import java.util.concurrent.TimeUnit;
  * @author Stefan Dragisic
  * @since 0.2.0
  */
-final class DefaultWorkflowCancellation implements WorkflowCancellation {
-
-    private static final long CANCELLATION_TIMEOUT_SECONDS = 5;
+final class DefaultWorkflowCancellation implements WorkflowCancellation.External {
 
     private final WorkflowExecution workflowExecution;
     private final WorkflowContextDelegation workflowContext;
     private final RunningSteps runningSteps;
+    private final AtomicReference<WorkflowCancellation.Request> pendingWorkflowCancellation = new AtomicReference<>();
 
     /**
      * Creates a cancellation coordinator for one workflow execution.
      *
      * @param workflowExecution workflow execution providing control-thread mechanics
-     * @param workflowContext workflow context delegating terminal primitive operations
-     * @param runningSteps registry of active asynchronous step executions
+     * @param workflowContext   workflow context delegating terminal primitive operations
+     * @param runningSteps      registry of active asynchronous step executions
      */
     DefaultWorkflowCancellation(@Nonnull WorkflowExecution workflowExecution,
                                 @Nonnull WorkflowContextDelegation workflowContext,
@@ -62,9 +60,6 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation {
         this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Nonnull
     @Override
     public CompletableFuture<Boolean> cancelStep(@Nonnull String stepName, @Nullable Throwable cause) {
@@ -77,17 +72,14 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation {
             try {
                 done.complete(workflowContext.cancelStep(PrimitiveCommands.cancelStep(
                         stepName, cause, workflowExecution.workflowConfiguration().eventNameCustomizer()
-                                                               .forStepInheritance())));
+                                                          .forStepInheritance())));
             } catch (Throwable t) {
                 done.completeExceptionally(t);
             }
         });
-        return withTimeout(done);
+        return done;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Nonnull
     @Override
     public CompletableFuture<Integer> cancelRunningSteps(@Nullable Throwable cause) {
@@ -102,7 +94,7 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation {
                 for (var stepName : stepNames) {
                     if (workflowContext.cancelStep(PrimitiveCommands.cancelStep(
                             stepName, cause, workflowExecution.workflowConfiguration().eventNameCustomizer()
-                                                                   .forStepInheritance()))) {
+                                                              .forStepInheritance()))) {
                         cancelled++;
                     }
                 }
@@ -111,36 +103,30 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation {
                 done.completeExceptionally(t);
             }
         });
-        return withTimeout(done);
+        return done;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Nonnull
     @Override
     public CompletableFuture<Void> cancelWorkflow(@Nullable Throwable cause) {
-        var done = new CompletableFuture<Void>();
-        workflowExecution.appendTask(ignored -> {
-            try {
-                if (workflowExecution.state().workflowStatus().isTerminal()) {
-                    done.complete(null);
-                    return;
-                }
-                try {
-                    workflowContext.cancelWorkflow(PrimitiveCommands.cancelWorkflow(
-                            cancellationCause(cause), workflowExecution.workflowConfiguration().eventNameCustomizer()));
-                } catch (WorkflowCancelledException expected) {
-                    // The workflow-body primitive signals cancellation by throwing after the durable event is recorded.
-                }
-                workflowExecution.appendTask(task -> Thread.currentThread().interrupt());
-            } catch (Throwable t) {
-                done.completeExceptionally(t);
-                return;
-            }
-            done.complete(null);
-        });
-        return withTimeout(done);
+        var cancellationCause = cancellationCause(cause);
+        var request = new WorkflowCancellation.Request(cancellationCause, new CompletableFuture<>());
+        if (pendingWorkflowCancellation.compareAndSet(null, request)) {
+            workflowExecution.interruptWorkflowDriver();
+            return request.done();
+        }
+        return pendingWorkflowCancellation.get().done();
+    }
+
+    @Override
+    public boolean hasPendingWorkflowCancellation() {
+        return pendingWorkflowCancellation.get() != null;
+    }
+
+    @Nullable
+    @Override
+    public WorkflowCancellation.Request consumeWorkflowCancellation() {
+        return pendingWorkflowCancellation.getAndSet(null);
     }
 
     @Nonnull
@@ -153,8 +139,4 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation {
                 : new WorkflowCancelledException("Workflow cancelled externally", cause);
     }
 
-    @Nonnull
-    private <T> CompletableFuture<T> withTimeout(@Nonnull CompletableFuture<T> result) {
-        return result.orTimeout(CANCELLATION_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-    }
 }

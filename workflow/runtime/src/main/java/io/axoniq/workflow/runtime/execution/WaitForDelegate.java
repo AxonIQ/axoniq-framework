@@ -106,9 +106,9 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         if (!workflowExecution.state().containsStep(stepName)) {
             workflowStepProgress.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
             workflowExecution.appendTask(i ->
-                                                 started(stepName,
-                                                         startedPayload(eventCondition, clock.instant(), timeout),
-                                                         eventNameCustomizer));
+                                                 startedWaitForEvent(stepName,
+                                                                     startedPayload(eventCondition, clock.instant(), timeout),
+                                                                     eventNameCustomizer));
             try {
                 workflowExecution.awaitStateChange(s -> s.containsStep(stepName)
                         && s.getStep(stepName).status() == StepStatus.STARTED);
@@ -127,7 +127,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                 workflowExecution.appendTask(i -> {
                     if (!i.state().getStep(stepName).status().isTerminal()) {
                         // FIXME - This is where we should publish using an append condition
-                        timedOut(stepName, clock.instant(), eventNameCustomizer);
+                        timedOutWaitForEvent(stepName, clock.instant(), eventNameCustomizer);
                     }
                 });
             } else {
@@ -141,7 +141,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                             workflowExecution.appendTask(i -> {
                                                              if (!i.state().getStep(stepName).status().isTerminal()) {
                                                                  // only timeout if we are not completed yet
-                                                                 timedOut(stepName, eventNameCustomizer);
+                                                                 timedOutWaitForEvent(stepName, eventNameCustomizer);
                                                              }
                                                          }
                             );
@@ -166,10 +166,10 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         var payload = eventMessagePayload(awaited.eventMessage());
         workflowExecution.appendTask(state -> {
             try {
-                completed(awaited.stepName(),
-                          payload,
-                          awaited.payloadReducer().name(),
-                          awaited.eventNameCustomizer()).join();
+                completedWaitForEvent(awaited.stepName(),
+                                      payload,
+                                      awaited.payloadReducer().name(),
+                                      awaited.eventNameCustomizer()).join();
             } catch (Exception e) {
                 logger.warn("Failed to publish completed event for step '{}': {}",
                             awaited.stepName(),

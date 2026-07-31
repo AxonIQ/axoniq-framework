@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState.PAYLOAD_TYPE;
 
@@ -83,23 +84,14 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
         this.workflowStore = workflowStore;
         this.replaySupport = new WorkflowEngineReplaySupport(
                 () -> {
-                    WorkflowEngine.this.workflowConfigurationRegistry.warnAboutSameVersionDuplicates();
+                    workflowConfigurationRegistry.warnAboutSameVersionDuplicates();
                     logger.info("Workflow instance replay finished. Switching to live mode.");
                     removeTerminalAndStartRestoredWorkflowExecutions("after replay catch-up");
                 }
         );
         this.checkpointingSupport = new WorkflowEngineCheckpointingAdvancingSupport(
-                new WorkflowEngineCheckpointingAdvancingSupport.Host() {
-                    @Override
-                    public boolean hasPendingCheckpointWork() {
-                        return WorkflowEngine.this.hasPendingCheckpointWork();
-                    }
-
-                    @Override
-                    public boolean scheduleCheckpointIntent(@Nonnull Runnable onDrained) {
-                        return WorkflowEngine.this.scheduleCheckpointIntent(onDrained);
-                    }
-                });
+                this::scheduleCheckpointIntent
+        );
     }
 
     @Nonnull
@@ -362,20 +354,23 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
         logger.info("Started {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
     }
 
-    private boolean hasPendingCheckpointWork() {
-        return !workflowExecutionRepository.findAll(WorkflowExecution::hasPendingCheckpointWork).isEmpty();
-    }
-
     private boolean scheduleCheckpointIntent(@NonNull Runnable onDrained) {
         var scheduledWorkflowIds = new HashSet<String>();
-        var scheduled = false;
-        for (var execution : workflowExecutionRepository.findAll(WorkflowExecution::hasPendingCheckpointWork)) {
-            if (!scheduledWorkflowIds.add(execution.workflowId())) {
-                continue;
-            }
-            execution.appendCheckpointIntent(onDrained);
-            scheduled = true;
+        var pendingExecutions = workflowExecutionRepository.findAll(WorkflowExecution::hasPendingCheckpointWork)
+                                                           .stream()
+                                                           .filter(execution -> scheduledWorkflowIds.add(execution.workflowId()))
+                                                           .toList();
+        if (pendingExecutions.isEmpty()) {
+            return false;
         }
-        return scheduled;
+        var remainingBarriers = new AtomicInteger(pendingExecutions.size());
+        for (var execution : pendingExecutions) {
+            execution.appendCheckpointIntent(() -> {
+                if (remainingBarriers.decrementAndGet() == 0) {
+                    onDrained.run();
+                }
+            });
+        }
+        return true;
     }
 }

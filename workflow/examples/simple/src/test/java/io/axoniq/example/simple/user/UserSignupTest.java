@@ -64,10 +64,7 @@ class UserSignupTest {
                         500,
                         new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip") // start
                 ),
-                ofMillis(
-                        5100,
-                        new MagicHappenedEvent("Saruman") // don't correlate
-                ),
+                ofMillis(2500, new MagicHappenedEvent("Saruman")), // don't correlate
                 ofMillis(
                         400,
                         new MagicHappenedEvent("Merlin") // correlate

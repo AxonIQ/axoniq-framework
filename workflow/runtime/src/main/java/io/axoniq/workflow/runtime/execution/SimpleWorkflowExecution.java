@@ -18,8 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
@@ -29,28 +27,22 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowReplayDriftExcep
 import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
-import io.axoniq.workflow.runtime.api.execution.context.Version;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
@@ -78,8 +70,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     // Attributes
     private final String workflowId;
     private final String workflowName;
-    @Nullable
-    private final TrackingToken restartToken;
     private final WorkflowConfiguration<?> workflowConfiguration;
 
     // Execution
@@ -91,7 +81,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final RunningSteps runningSteps = new RunningSteps();
     private final WorkflowStepProgress workflowStepProgress = new WorkflowStepProgress();
     private final WorkflowTerminalTransition terminalTransition = this::transitionToTerminalState;
-    private final WorkflowCancellation workflowCancellation;
+    private final WorkflowCancellation.External workflowCancellation;
     private final WorkflowExecutionCheckpointSupport checkpointSupport =
             new WorkflowExecutionCheckpointSupport(new WorkflowExecutionCheckpointSupport.Host() {
                 @Override
@@ -111,6 +101,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
             });
 
     private boolean running = false;
+    private volatile Thread workflowThread;
 
     /**
      * Constructs a new instance.
@@ -133,7 +124,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         var configuredName = Objects.requireNonNull(workflowConfiguration.workflowName(),
                                                     "Workflow name must not be null");
         this.workflowName = configuredName.isEmpty() ? workflowId : configuredName; // FIXME
-        this.restartToken = null;
 
         this.contextDelegate = new WorkflowContextDelegation(
                 workflowConfiguration,
@@ -179,6 +169,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                         contextDelegate.executorService(),
                         this.processingContext(),
                         ctx -> {
+                            workflowThread = currentThread();
+                            if (workflowCancellation.hasPendingWorkflowCancellation()) {
+                                workflowThread.interrupt();
+                            }
 
                             if (this.state().workflowStatus().isTerminal()) {
                                 logger.trace(
@@ -212,7 +206,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         if (this.state().workflowStatus() == WorkflowStatus.NONE) {
             // FIXME join without timeout?
-            sendWorkflowEvent(startedWorkflow(this.workflowContext(), workflowName, workflowState.workflowDefinitionId(),
+            sendWorkflowEvent(startedWorkflow(this.workflowContext(),
+                                              workflowName,
+                                              workflowState.workflowDefinitionId(),
                                               eventNameCustomizer), ctx).join();
             try {
                 awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
@@ -244,6 +240,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         ).workflowDefinition();
         definition.accept(this.contextDelegate.typedWorkflowContext());
 
+        if (completeExternalCancellation(ctx)) {
+            return;
+        }
         if (!this.state().workflowStatus().isTerminal()) {
             terminalTransition.transition(() -> {
                 sendWorkflowEvent(
@@ -262,6 +261,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param exception exception to handle.
      */
     private void handleWorkflowException(@Nonnull ProcessingContext ctx, @Nonnull Throwable exception) {
+        if (completeExternalCancellation(ctx)) {
+            return;
+        }
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         switch (exception) {
             case WorkflowFailedException wfe -> {
@@ -269,8 +271,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
                         sendWorkflowEvent(failedWorkflow(
-                                                  this.workflowContext(), workflowName, wfe,
-                                                  workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
+                                this.workflowContext(), workflowName, wfe,
+                                workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
                         ).join(); // FIXME join without timeout
                     });
                 }
@@ -280,8 +282,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
                         sendWorkflowEvent(cancelledWorkflow(
-                                                  this.workflowContext(), workflowName, wce,
-                                                  workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
+                                this.workflowContext(), workflowName, wce,
+                                workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
                         ).join(); // FIXME join without timeout
                     });
                 }
@@ -290,8 +292,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
                         sendWorkflowEvent(timeoutWorkflow(
-                                                  this.workflowContext(), workflowName, contextDelegate.clock().instant(),
-                                                  workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
+                                this.workflowContext(), workflowName, contextDelegate.clock().instant(),
+                                workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
                         ).join(); // FIXME join without timeout
                     });
                 }
@@ -334,6 +336,33 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         }
     }
 
+    /**
+     * Completes a cancellation request previously registered by the cancellation coordinator.
+     * <p>
+     * This method is called only by the workflow driver after it has been woken from a blocking workflow operation.
+     * It consumes the request, clears the wake-up interrupt, and publishes the durable workflow cancellation event on
+     * the driver thread. Completing the request future after the terminal transition ensures callers observe a
+     * terminal workflow state before their cancellation future completes.
+     *
+     * @param ctx processing context used to publish the terminal event
+     * @return {@code true} when an external cancellation was completed, otherwise {@code false}
+     */
+    private boolean completeExternalCancellation(@Nonnull ProcessingContext ctx) {
+        var cancellation = workflowCancellation.consumeWorkflowCancellation();
+        if (cancellation == null) {
+            return false;
+        }
+        Thread.interrupted();
+        terminalTransition.transition(() -> {
+            sendWorkflowEvent(cancelledWorkflow(
+                    this.workflowContext(), workflowName, cancellation.cause(),
+                    workflowState.workflowDefinitionId(), workflowConfiguration.eventNameCustomizer()), ctx
+            ).join();
+        });
+        cancellation.done().complete(null);
+        return true;
+    }
+
 
     /**
      * Finish the workflow execution, clean up everything, and call the termination handler.
@@ -344,6 +373,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         this.running = false; // mark we are done and are not executable anymore
         // TODO -> how do we recognize workflow executions which came to this point bit haven't reach the terminal states?
         this.taskQueue.clear();
+        this.checkpointSupport.completePendingCheckpointIntent();
         this.eventWaitConditions.clear();
         this.runningSteps.cancelAll(null, s -> {
         });
@@ -353,7 +383,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private void transitionToTerminalState(@Nonnull Runnable terminalEventPublication) {
         runningSteps.cancelAll(new StepInterruptedException("Workflow reached terminal state"), cancelled -> {
         });
-        this.taskQueue.clear();
+        this.taskQueue.removeIf(task -> !checkpointSupport.isCheckpointIntent(task));
         terminalEventPublication.run();
         try {
             awaitStateChange(s -> s.workflowStatus().isTerminal());
@@ -396,6 +426,14 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     @Override
+    public void interruptWorkflowDriver() {
+        var driver = workflowThread;
+        if (driver != null) {
+            driver.interrupt();
+        }
+    }
+
+    @Override
     @Nullable
     public Consumer<WorkflowExecution> getNextTask() {
         var task = this.taskQueue.poll();
@@ -428,12 +466,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     @Override
     public boolean hasPendingCheckpointWork() {
         return checkpointSupport.hasPendingCheckpointWork();
-    }
-
-    @Override
-    public void cancelAllRunningSteps(@Nullable Throwable cause) {
-        runningSteps.cancelAll(cause, ignored -> {
-        });
     }
 
     @Override
@@ -493,12 +525,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     @Override
     public String workflowId() {
         return this.workflowId;
-    }
-
-    @Override
-    @Nullable
-    public TrackingToken restartToken() {
-        return restartToken;
     }
 
     @Nonnull
