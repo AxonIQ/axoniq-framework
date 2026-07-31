@@ -85,7 +85,7 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
     private final Configuration configuration;
     private final TenantProvider tenantProvider;
 
-    private final TenantScopedCache<TenantStreamSegment> segments;
+    private final TenantScopedCache<TenantStream> tenantStreams;
 
     // Written and read outside the monitor, on either side of the tenant provider callback, so it needs to be visible
     // across threads. Which thread gets to write it is already settled by the 'consumer' field: only the call that
@@ -131,9 +131,9 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
         this.batchSize = batchSize;
         this.configuration = Objects.requireNonNull(configuration, "The configuration must not be null");
         this.tenantProvider = Objects.requireNonNull(tenantProvider, "The tenant provider must not be null");
-        this.segments = new TenantScopedCache<>(this::createSegment,
-                                                this::releaseSegment,
-                                                "the multi-tenant persistent stream event source [" + name + "]");
+        this.tenantStreams = new TenantScopedCache<>(this::createTenantStream,
+                                                     this::releaseTenantStream,
+                                                     "the multi-tenant persistent stream event source [" + name + "]");
     }
 
     /**
@@ -195,7 +195,7 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("name", name);
         descriptor.describeProperty("subscribed", consumer != NO_OP_CONSUMER);
-        segments.describeTo(descriptor);
+        tenantStreams.describeTo(descriptor);
     }
 
     // Returns true only for the call that established the subscription, so the tenant provider is subscribed once.
@@ -224,7 +224,7 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
             consumer = NO_OP_CONSUMER;
         }
         // Cancelled outside the monitor, for the lock-order reason given in subscribe. Cancelling deregisters every
-        // tenant registered on this source's behalf, so each segment is evicted, closing its stream and scheduler.
+        // tenant registered on this source's behalf, so each tenantStream is evicted, closing its stream and scheduler.
         Registration subscription = tenantSubscription;
         tenantSubscription = null;
         if (subscription != null) {
@@ -236,21 +236,21 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
     // Registered outside the monitor, since the tenant only has to be known before its stream can open. Opening it is
     // then done under the monitor, so it cannot race a subscription into opening the stream twice or not at all.
     private Registration addTenant(TenantDescriptor tenantDescriptor) {
-        Registration registration = segments.registerTenant(tenantDescriptor);
+        Registration registration = tenantStreams.registerTenant(tenantDescriptor);
         synchronized (this) {
             if (consumer != NO_OP_CONSUMER) {
-                // deliberately ignores the result, called only to force creation of the segment
-                segments.componentFor(tenantDescriptor);
+                // deliberately ignores the result, called only to force creation of the tenantStream
+                tenantStreams.componentFor(tenantDescriptor);
             }
         }
         return registration;
     }
 
-    // Runs inside the cache update, so the segment is subscribed here rather than by the caller: whichever tenant
+    // Runs inside the cache update, so the tenantStream is subscribed here rather than by the caller: whichever tenant
     // triggers the creation gets a stream that is already open and feeding the consumer.
-    private TenantStreamSegment createSegment(TenantDescriptor tenant) {
+    private TenantStream createTenantStream(TenantDescriptor tenant) {
         ScheduledExecutorService scheduler = schedulerFactory.apply(name + "@" + tenant.tenantId());
-        PersistentStreamEventSource tenantSource = new PersistentStreamEventSource(
+        PersistentStreamEventSource source = new PersistentStreamEventSource(
                 name,
                 configuration.getComponent(AxonServerConnectionManager.class),
                 configuration.getComponent(AxonServerConfiguration.class),
@@ -263,14 +263,14 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
                 batchSize,
                 tenant.tenantId()
         );
-        TenantStreamSegment segment = new TenantStreamSegment(tenantSource, scheduler);
-        segment.subscribe(consumer);
+        TenantStream tenantStream = new TenantStream(source, scheduler);
+        tenantStream.subscribe(consumer);
         logger.info("Opened persistent stream [{}] for tenant [{}].", name, tenant.tenantId());
-        return segment;
+        return tenantStream;
     }
 
-    private void releaseSegment(TenantDescriptor tenant, TenantStreamSegment segment) {
-        segment.close();
+    private void releaseTenantStream(TenantDescriptor tenant, TenantStream tenantStream) {
+        tenantStream.close();
         logger.info("Closed persistent stream [{}] for tenant [{}].", name, tenant.tenantId());
     }
 
@@ -278,7 +278,7 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
      * One tenant's share of this source: its event source, the scheduler that source runs on, and its current
      * subscription. Grouping them lets eviction release everything belonging to the tenant at once.
      */
-    private static final class TenantStreamSegment {
+    private static final class TenantStream {
 
         private final PersistentStreamEventSource eventSource;
         private final ScheduledExecutorService scheduler;
@@ -286,7 +286,7 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
         // Guarded by 'this', so a subscription is never opened twice nor cancelled while being opened.
         private @Nullable Registration subscription;
 
-        private TenantStreamSegment(PersistentStreamEventSource eventSource, ScheduledExecutorService scheduler) {
+        private TenantStream(PersistentStreamEventSource eventSource, ScheduledExecutorService scheduler) {
             this.eventSource = eventSource;
             this.scheduler = scheduler;
         }
