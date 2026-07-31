@@ -97,7 +97,8 @@ class BackoffWindowCancellationWorkflowTest extends AbstractWorkflowTestBase<Sim
 
         // Cancel the step while it is parked in the backoff window.
         executionRepository.findById(WORKFLOW_ID).orElseThrow()
-                           .cancelRunningStep("flaky", new StepCancellationException("cancelled during backoff"));
+                           .requestStepCancellation("flaky", new StepCancellationException("cancelled during backoff"))
+                           .join();
 
         // The cancellation must be honored well within the 30s backoff window: step CANCELLED, body catches and
         // compensates, workflow completes. No second attempt may ever run.

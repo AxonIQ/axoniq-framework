@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 
 
@@ -48,12 +49,15 @@ import java.util.concurrent.Executor;
 public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrimitive {
 
     private static final Logger logger = LoggerFactory.getLogger(WaitForDelegate.class);
+    private final EventWaitConditions eventWaitConditions;
 
     /**
      * Constructs the delegate.
      *
      * @param workflowContext           workflow context.
      * @param workflowExecution         workflow state.
+     * @param runningSteps              running step registry
+     * @param eventWaitConditions       event wait condition registry
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new process contexts.
@@ -64,6 +68,8 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     public WaitForDelegate(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
+            @Nonnull EventWaitConditions eventWaitConditions,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -72,8 +78,9 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             @Nonnull WorkflowScheduler timeoutScheduler
     ) {
         super(workflowContext,
-              workflowExecution, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink, executor,
+              workflowExecution, runningSteps, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink, executor,
               timeoutScheduler);
+        this.eventWaitConditions = Objects.requireNonNull(eventWaitConditions, "Event wait conditions are mandatory");
     }
 
     @Override
@@ -120,15 +127,12 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                 });
             } else {
                 // Register wait condition
-                workflowExecution.registerWaitCondition(stepName,
-                                                        eventCondition,
-                                                        resultPayloadReducer,
-                                                        eventNameCustomizer);
+                eventWaitConditions.add(stepName, eventCondition, resultPayloadReducer, eventNameCustomizer);
                 var timeoutTask = timeoutScheduler.schedule(
                         timeoutDeadline,
                         () -> {
-                            workflowExecution.removeWaitCondition(stepName);
-                            workflowExecution.removeRunningStep(stepName);
+                            eventWaitConditions.remove(stepName);
+                            runningSteps.remove(stepName);
                             workflowExecution.appendTask(i -> {
                                                              if (!i.state().getStep(stepName).status().isTerminal()) {
                                                                  // only timeout if we are not completed yet
@@ -139,7 +143,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                         }
                 );
                 registerParkedStep(stepName, timeoutTask.completion(), eventNameCustomizer,
-                                   () -> workflowExecution.removeWaitCondition(stepName));
+                                   () -> eventWaitConditions.remove(stepName));
             }
         }
 
@@ -153,7 +157,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
      */
     void eventReceived(@Nonnull EventWaitConditions.Awaited awaited) {
         // Cancel the timeout future since the awaited event has arrived
-        workflowExecution.cancelAndRemoveRunningStep(awaited.stepName(), false);
+        runningSteps.cancelAndRemove(awaited.stepName(), false);
         var payload = eventMessagePayload(awaited.eventMessage());
         workflowExecution.appendTask(state -> {
             try {

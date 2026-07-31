@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledExcepti
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
@@ -62,6 +63,7 @@ public abstract class AbstractStepExecutor {
     private static final Logger logger = LoggerFactory.getLogger(AbstractStepExecutor.class);
     protected final WorkflowContext workflowContext;
     protected final WorkflowExecution workflowExecution;
+    protected final RunningSteps runningSteps;
     protected final Clock clock;
     protected final EventNameCustomizer parentEventNameCustomizer;
     protected final UnitOfWorkFactory unitOfWorkFactory;
@@ -74,6 +76,7 @@ public abstract class AbstractStepExecutor {
      *
      * @param workflowContext           workflow context.
      * @param workflowExecution         workflow execution.
+     * @param runningSteps              running step registry
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
@@ -84,6 +87,7 @@ public abstract class AbstractStepExecutor {
     public AbstractStepExecutor(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -92,6 +96,7 @@ public abstract class AbstractStepExecutor {
     ) {
         this(workflowContext,
              workflowExecution,
+             runningSteps,
              parentEventNameCustomizer,
              clock,
              unitOfWorkFactory,
@@ -105,6 +110,7 @@ public abstract class AbstractStepExecutor {
      *
      * @param workflowContext           workflow context.
      * @param workflowExecution         workflow execution.
+     * @param runningSteps              running step registry
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
@@ -116,6 +122,7 @@ public abstract class AbstractStepExecutor {
     public AbstractStepExecutor(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -126,6 +133,7 @@ public abstract class AbstractStepExecutor {
         this.clock = Objects.requireNonNull(clock, "Clock is mandatory");
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
+        this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
         this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,
                                                                 "Event name customizer is mandatory");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UoW Factory state is mandatory");
@@ -209,7 +217,7 @@ public abstract class AbstractStepExecutor {
                                       @Nonnull EventNameCustomizer eventNameCustomizer,
                                       @Nonnull Runnable onCancelled) {
         future.whenComplete((result, e) -> {
-            workflowExecution.removeRunningStep(stepName);
+            runningSteps.remove(stepName);
             if (e != null && isCancellation(e)) {
                 onCancelled.run();
                 var terminationCause = unwrapCancellation(e);
@@ -221,7 +229,7 @@ public abstract class AbstractStepExecutor {
                 });
             }
         });
-        workflowExecution.registerRunningStep(stepName, future);
+        runningSteps.register(stepName, future);
     }
 
     @Nonnull
@@ -321,7 +329,9 @@ public abstract class AbstractStepExecutor {
         return new StateBasedWorkflowStepResult(stepName, () -> {
             workflowExecution.awaitStateChange(s -> true);
             return null;
-        }, workflowExecution);
+        }, cause -> workflowExecution.workflowContext().cancelStep(new TerminatePrimitive.CancelStep(
+                stepName, cause, workflowExecution.workflowConfiguration().eventNameCustomizer()
+        )), workflowExecution);
     }
 
 }

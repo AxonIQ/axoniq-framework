@@ -79,7 +79,7 @@ class PayloadDelegateRerunTest {
         when(state.payload()).thenReturn(Map.of());
 
         delegate = new PayloadDelegate(
-                workflowContext, workflowExecution, parent,
+                workflowContext, workflowExecution, new RunningSteps(), parent,
                 Clock.systemUTC(), unitOfWorkFactory, eventSink, executor
         );
     }

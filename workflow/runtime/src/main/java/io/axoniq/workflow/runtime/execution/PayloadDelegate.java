@@ -49,11 +49,21 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
 
     /**
      * Constructs the primitive implementation.
+     *
+     * @param workflowContext           workflow context
+     * @param workflowExecution         workflow execution
+     * @param runningSteps              running step registry
+     * @param parentEventNameCustomizer parent event name customizer
+     * @param clock                     clock for time calculations
+     * @param unitOfWorkFactory         unit of work factory for processing contexts
+     * @param eventSink                 event sink for event publications
+     * @param executor                  executor for step work
      */
     @Internal
     public PayloadDelegate(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -62,6 +72,7 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
     ) {
         this(workflowContext,
              workflowExecution,
+             runningSteps,
              parentEventNameCustomizer,
              clock,
              unitOfWorkFactory,
@@ -72,11 +83,22 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
 
     /**
      * Constructs the primitive implementation.
+     *
+     * @param workflowContext           workflow context
+     * @param workflowExecution         workflow execution
+     * @param runningSteps              running step registry
+     * @param parentEventNameCustomizer parent event name customizer
+     * @param clock                     clock for time calculations
+     * @param unitOfWorkFactory         unit of work factory for processing contexts
+     * @param eventSink                 event sink for event publications
+     * @param executor                  executor for step work
+     * @param timeoutScheduler          scheduler for step timeouts
      */
     @Internal
     public PayloadDelegate(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -86,6 +108,7 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
     ) {
         super(workflowContext,
               workflowExecution,
+              runningSteps,
               parentEventNameCustomizer,
               clock,
               unitOfWorkFactory,

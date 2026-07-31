@@ -77,7 +77,7 @@ class PayloadDelegateDriftTest {
         doCallRealMethod().when(workflowExecution).guardAgainstReplayDrift(anyString());
 
         delegate = new PayloadDelegate(
-                workflowContext, workflowExecution, parent,
+                workflowContext, workflowExecution, new RunningSteps(), parent,
                 Clock.systemUTC(), unitOfWorkFactory, eventSink, executor
         );
     }

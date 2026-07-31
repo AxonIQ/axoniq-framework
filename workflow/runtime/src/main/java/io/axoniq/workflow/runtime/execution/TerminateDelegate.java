@@ -60,6 +60,8 @@ public class TerminateDelegate implements TerminatePrimitive {
 
     private final WorkflowContext workflowContext;
     private final WorkflowExecution workflowExecution;
+    private final RunningSteps runningSteps;
+    private final Runnable terminalTeardown;
     private final EventSink eventSink;
     private final String workflowName;
     private final UnitOfWorkFactory unitOfWorkFactory;
@@ -71,6 +73,8 @@ public class TerminateDelegate implements TerminatePrimitive {
      *
      * @param workflowContext               workflow context.
      * @param workflowExecution             workflow execution.
+     * @param runningSteps                  running step registry
+     * @param terminalTeardown              operation preparing the execution for a terminal workflow event
      * @param unitOfWorkFactory             unit of work factory for creation of new processing contexts.
      * @param eventSink                     event sink for event publications.
      * @param executor                      executor to offload execution tasks from workflow thread.
@@ -81,6 +85,8 @@ public class TerminateDelegate implements TerminatePrimitive {
     public TerminateDelegate(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
+            @Nonnull Runnable terminalTeardown,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
             @Nonnull EventSink eventSink,
             @Nonnull Executor executor,
@@ -88,6 +94,8 @@ public class TerminateDelegate implements TerminatePrimitive {
     ) {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
+        this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
+        this.terminalTeardown = Objects.requireNonNull(terminalTeardown, "Terminal teardown is mandatory");
         this.eventSink = Objects.requireNonNull(eventSink, "Event sink is mandatory");
         this.workflowName = Objects.requireNonNull(workflowExecution.workflowName(), "Workflow name is mandatory");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UnitOfWork factory is mandatory");
@@ -109,7 +117,7 @@ public class TerminateDelegate implements TerminatePrimitive {
         // Whole-workflow terminal: interrupt running steps (no per-step event) and discard the queue
         // before publishing, so the awaitStateChange inside cancelled(...) pumps only the workflow-terminal evolve
         // and no queued retry-failure/launch task runs. Running steps stay in their last recorded state.
-        workflowExecution.interruptStepsAndDiscardQueue();
+        terminalTeardown.run();
 
         cancelled(command, effectiveName);
     }
@@ -127,7 +135,7 @@ public class TerminateDelegate implements TerminatePrimitive {
         // Whole-workflow terminal: interrupt running steps (no per-step event) and discard the queue
         // before publishing, so the awaitStateChange inside failed(...) pumps only the workflow-terminal evolve and
         // no queued retry-failure/launch task runs. Running steps stay in their last recorded state.
-        workflowExecution.interruptStepsAndDiscardQueue();
+        terminalTeardown.run();
 
         failed(command, effectiveName);
     }
@@ -160,14 +168,14 @@ public class TerminateDelegate implements TerminatePrimitive {
         // guarded, queue-appended sendStepEvent path (both the step-terminal and workflow-terminal guards) and runs its
         // own cleanup — exactly like every other primitive. A running execute action is not force-interrupted;
         // first-writer-wins via the terminal guard.
-        if (!workflowExecution.cancelRunningStep(stepName, stepCause)) {
+        if (!runningSteps.cancelWithCause(stepName, stepCause)) {
             // Non-terminal but nothing running to complete (e.g. a STARTED step with no registered future): no
             // cancellation is driven, so report false rather than block on a terminal that would never arrive.
             return false;
         }
 
         // Await the durable terminal record on the control thread so it cannot be lost: a result.cancel() immediately
-        // followed by a whole-workflow terminal would otherwise have interruptStepsAndDiscardQueue discard the still-
+        // followed by a whole-workflow terminal would otherwise discard the still-
         // queued CANCELLED publish. The await makes the record durable before this call returns.
         try {
             workflowExecution.awaitStateChange(s -> s.containsStep(stepName)

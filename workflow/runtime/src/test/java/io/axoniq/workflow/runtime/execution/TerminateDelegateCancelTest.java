@@ -60,6 +60,8 @@ class TerminateDelegateCancelTest {
     private UnitOfWorkFactory unitOfWorkFactory;
     private Executor executor;
     private EventNameCustomizer eventNameCustomizer;
+    private RunningSteps runningSteps;
+    private Runnable terminalTeardown;
     private TerminateDelegate delegate;
 
     @SuppressWarnings("unchecked")
@@ -72,6 +74,8 @@ class TerminateDelegateCancelTest {
         processingContext = mock(ProcessingContext.class);
         unitOfWorkFactory = mock(UnitOfWorkFactory.class);
         executor = Runnable::run;
+        runningSteps = new RunningSteps();
+        terminalTeardown = mock(Runnable.class);
 
         UnitOfWork unitOfWork = mock(UnitOfWork.class);
         when(unitOfWorkFactory.create(any(String.class))).thenReturn(unitOfWork);
@@ -94,6 +98,8 @@ class TerminateDelegateCancelTest {
         delegate = new TerminateDelegate(
                 workflowContext,
                 workflowExecution,
+                runningSteps,
+                terminalTeardown,
                 unitOfWorkFactory,
                 eventSink,
                 executor,
@@ -107,7 +113,7 @@ class TerminateDelegateCancelTest {
                 .isInstanceOf(WorkflowCancelledException.class);
 
         // Whole-workflow cancel interrupts running steps + discards the queue; no per-step cancellation is published.
-        verify(workflowExecution).interruptStepsAndDiscardQueue();
+        verify(terminalTeardown).run();
     }
 
     @Test
@@ -117,7 +123,7 @@ class TerminateDelegateCancelTest {
         assertThatThrownBy(() -> delegate.cancelWorkflow(new CancelWorkflow(cause, eventNameCustomizer, null)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
-        verify(workflowExecution).interruptStepsAndDiscardQueue();
+        verify(terminalTeardown).run();
     }
 
     @Test
@@ -146,12 +152,12 @@ class TerminateDelegateCancelTest {
 
     @Test
     void terminateCancelExecutesStepsInOrder() {
-        var order = inOrder(workflowExecution, eventSink);
+        var order = inOrder(terminalTeardown, eventSink);
 
         assertThatThrownBy(() -> delegate.cancelWorkflow(new CancelWorkflow(null, eventNameCustomizer, null)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
-        order.verify(workflowExecution).interruptStepsAndDiscardQueue();
+        order.verify(terminalTeardown).run();
         order.verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
     }
 
@@ -183,12 +189,13 @@ class TerminateDelegateCancelTest {
         when(state.containsStep("step-a")).thenReturn(true);
         when(state.getStep("step-a")).thenReturn(step);
         when(workflowExecution.state()).thenReturn(state);
-        when(workflowExecution.cancelRunningStep(eq("step-a"), isA(StepCancellationException.class))).thenReturn(true);
+        var runningFuture = new CompletableFuture<Void>();
+        runningSteps.register("step-a", runningFuture);
 
         boolean result = delegate.cancelStep(new CancelStep("step-a", null, eventNameCustomizer));
 
         org.assertj.core.api.Assertions.assertThat(result).isTrue();
-        verify(workflowExecution).cancelRunningStep(eq("step-a"), isA(StepCancellationException.class));
+        org.assertj.core.api.Assertions.assertThat(runningFuture).isCompletedExceptionally();
         verify(workflowExecution).awaitStateChange(any());
         verify(eventSink, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
     }
@@ -203,8 +210,6 @@ class TerminateDelegateCancelTest {
         when(state.containsStep("step-a")).thenReturn(true);
         when(state.getStep("step-a")).thenReturn(step);
         when(workflowExecution.state()).thenReturn(state);
-        when(workflowExecution.cancelRunningStep(eq("step-a"), isA(StepCancellationException.class))).thenReturn(false);
-
         boolean result = delegate.cancelStep(new CancelStep("step-a", null, eventNameCustomizer));
 
         org.assertj.core.api.Assertions.assertThat(result).isFalse();
@@ -225,6 +230,5 @@ class TerminateDelegateCancelTest {
 
         org.assertj.core.api.Assertions.assertThat(result).isFalse();
         verify(eventSink, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
-        verify(workflowExecution, never()).cancelRunningStep(any(), any());
     }
 }

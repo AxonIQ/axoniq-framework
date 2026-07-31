@@ -57,6 +57,7 @@ class TerminateDelegateFailTest {
     private UnitOfWorkFactory unitOfWorkFactory;
     private Executor executor;
     private EventNameCustomizer eventNameCustomizer;
+    private Runnable terminalTeardown;
     private TerminateDelegate delegate;
 
     @SuppressWarnings("unchecked")
@@ -68,6 +69,7 @@ class TerminateDelegateFailTest {
         processingContext = mock(ProcessingContext.class);
         unitOfWorkFactory = mock(UnitOfWorkFactory.class);
         executor = Runnable::run;
+        terminalTeardown = mock(Runnable.class);
 
         UnitOfWork unitOfWork = mock(UnitOfWork.class);
         when(unitOfWorkFactory.create(any(String.class))).thenReturn(unitOfWork);
@@ -92,6 +94,8 @@ class TerminateDelegateFailTest {
         delegate = new TerminateDelegate(
                 workflowContext,
                 workflowExecution,
+                new RunningSteps(),
+                terminalTeardown,
                 unitOfWorkFactory,
                 eventSink,
                 executor,
@@ -105,7 +109,7 @@ class TerminateDelegateFailTest {
                 .isInstanceOf(WorkflowFailedException.class);
 
         // Whole-workflow fail interrupts running steps + discards the queue; no per-step cancellation is published.
-        verify(workflowExecution).interruptStepsAndDiscardQueue();
+        verify(terminalTeardown).run();
     }
 
     @Test
@@ -113,7 +117,7 @@ class TerminateDelegateFailTest {
         assertThatThrownBy(() -> delegate.failWorkflow(new FailWorkflow(null, eventNameCustomizer, null)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        verify(workflowExecution).interruptStepsAndDiscardQueue();
+        verify(terminalTeardown).run();
     }
 
     @Test
@@ -143,12 +147,12 @@ class TerminateDelegateFailTest {
     @Test
     void terminateFailExecutesStepsInOrder() {
         var cause = new RuntimeException("boom");
-        var order = inOrder(workflowExecution, eventSink);
+        var order = inOrder(terminalTeardown, eventSink);
 
         assertThatThrownBy(() -> delegate.failWorkflow(new FailWorkflow(cause, eventNameCustomizer, null)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        order.verify(workflowExecution).interruptStepsAndDiscardQueue();
+        order.verify(terminalTeardown).run();
         order.verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
     }
 

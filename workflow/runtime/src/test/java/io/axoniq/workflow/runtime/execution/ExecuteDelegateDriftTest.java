@@ -88,6 +88,7 @@ class ExecuteDelegateDriftTest {
         delegate = new ExecuteDelegate(
                 workflowContext,
                 workflowExecution,
+                new RunningSteps(),
                 parent,
                 Clock.systemUTC(),
                 unitOfWorkFactory,

@@ -80,6 +80,8 @@ class DelegateInterruptedAwaitTest {
         waitForDelegate = new WaitForDelegate(
                 workflowContext,
                 workflowExecution,
+                new RunningSteps(),
+                new EventWaitConditions(),
                 parentCustomizer,
                 Clock.systemUTC(),
                 unitOfWorkFactory,
@@ -90,6 +92,7 @@ class DelegateInterruptedAwaitTest {
         executeDelegate = new ExecuteDelegate(
                 workflowContext,
                 workflowExecution,
+                new RunningSteps(),
                 parentCustomizer,
                 Clock.systemUTC(),
                 unitOfWorkFactory,

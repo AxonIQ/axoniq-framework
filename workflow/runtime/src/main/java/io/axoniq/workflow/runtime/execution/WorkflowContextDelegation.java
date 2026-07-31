@@ -91,12 +91,18 @@ public class WorkflowContextDelegation implements WorkflowContext {
      *
      * @param workflowContext   workflow context created by the factory.
      * @param workflowExecution workflow execution.
+     * @param runningSteps      running step registry
+     * @param eventWaitConditions event wait condition registry
+     * @param terminalTeardown  operation preparing the execution for a terminal workflow event
      * @param processingContext processing context.
      */
     public WorkflowContextDelegation(
             @Nonnull WorkflowConfiguration<?> workflowConfiguration,
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
+            @Nonnull EventWaitConditions eventWaitConditions,
+            @Nonnull Runnable terminalTeardown,
             @Nonnull ProcessingContext processingContext
     ) {
 
@@ -131,6 +137,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
 
         var executeDelegate = new ExecuteDelegate(workflowContext,
                                                   workflowExecution,
+                                                  runningSteps,
                                                   stepParent,
                                                   clock,
                                                   unitOfWorkFactory,
@@ -141,6 +148,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
         this.retryableExecuteDelegate = new RetryableExecuteDelegate(executeDelegate,
                                                                      workflowContext,
                                                                      workflowExecution,
+                                                                     runningSteps,
                                                                      stepParent,
                                                                      clock,
                                                                      unitOfWorkFactory,
@@ -149,6 +157,8 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                                      timeoutScheduler);
         this.waitForDelegate = new WaitForDelegate(workflowContext,
                                                    workflowExecution,
+                                                   runningSteps,
+                                                   eventWaitConditions,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,
@@ -157,12 +167,15 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                    timeoutScheduler);
         this.terminateDelegate = new TerminateDelegate(workflowContext,
                                                        workflowExecution,
+                                                       runningSteps,
+                                                       terminalTeardown,
                                                        unitOfWorkFactory,
                                                        eventSink,
                                                        executorService,
                                                        stepParent);
         this.payloadDelegate = new PayloadDelegate(workflowContext,
                                                    workflowExecution,
+                                                   runningSteps,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,

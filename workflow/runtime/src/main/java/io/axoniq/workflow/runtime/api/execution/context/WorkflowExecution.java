@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.api.execution.context;
 
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -108,70 +107,6 @@ public interface WorkflowExecution extends DescribableComponent {
     boolean hasTasks();
 
     /**
-     * Registers a new wait condition.
-     *
-     * @param stepName             waiting step name.
-     * @param eventCondition       event condition.
-     * @param resultPayloadReducer step result payload reducer.
-     * @param eventNameCustomizer  event name customizer.
-     */
-    void registerWaitCondition(@Nonnull String stepName,
-                               @Nonnull EventCondition eventCondition,
-                               @Nonnull PayloadReducer resultPayloadReducer,
-                               @Nonnull EventNameCustomizer eventNameCustomizer);
-
-    /**
-     * Remove existing wait condition.
-     *
-     * @param stepName name of the waiting step.
-     */
-    void removeWaitCondition(@Nonnull String stepName);
-
-    /**
-     * Register a running step.
-     *
-     * @param stepName step name.
-     * @param future   future of the execution.
-     */
-    void registerRunningStep(@Nonnull String stepName, @Nonnull CompletableFuture<?> future);
-
-    /**
-     * Remove a running step.
-     *
-     * @param stepName step name.
-     */
-    void removeRunningStep(@Nonnull String stepName);
-
-    /**
-     * Cancels a running step by completing its registered future exceptionally with the given cause. The owning step
-     * executor's completion handler then publishes the {@code <step>:CANCELLED} record through its guarded publish path
-     * and runs its own cleanup; nothing is published directly here.
-     *
-     * @param stepName name of the step.
-     * @param cause    optional cause of the cancellation, or {@code null} if none.
-     * @return {@code true} if a running future was registered for the step and was completed by this call;
-     * {@code false} if no running future was registered.
-     */
-    boolean cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause);
-
-    /**
-     * Cooperatively cancels a single running step from the workflow's own control thread (the in-body twin of
-     * {@link #requestStepCancellation(String, Throwable)}).
-     * <p>
-     * Unlike {@link #requestStepCancellation(String, Throwable)}, this completes the step's future and then
-     * <b>awaits</b> the durable {@code <step>:CANCELLED} record (the caller is already the control thread), so the
-     * record is durable before the caller proceeds — it cannot be lost to a subsequent whole-workflow terminal
-     * discarding the queue. The record itself is published by the owning step executor's completion handler, not
-     * authored here. Used by {@code WorkflowStepResult.cancel()}.
-     *
-     * @param stepName name of the step to cancel.
-     * @param cause    optional cause of the cancellation, or {@code null} if none.
-     * @return {@code true} if the step was non-terminal and a {@code <step>:CANCELLED} record was published;
-     * {@code false} if the step was unknown or already terminal.
-     */
-    boolean cancelStep(@Nonnull String stepName, @Nullable Throwable cause);
-
-    /**
      * Requests cooperative cancellation of a single running step from any thread.
      * <p>
      * Mirrors {@link #requestWorkflowCancellation(Throwable)}: the cancellation is enqueued as a task onto the
@@ -220,15 +155,6 @@ public interface WorkflowExecution extends DescribableComponent {
     CompletableFuture<Integer> requestAllRunningStepsCancellation(@Nullable Throwable cause);
 
     /**
-     * Whole-workflow terminal teardown. Interrupts every still-running step future with a
-     * non-cancellation cause — so the step-completion handlers publish no per-step terminal event and merely
-     * deregister — and discards every queued task so a queued retry-failure/launch task never runs. Running steps are
-     * left in their last recorded state in the event log; the caller publishes the single workflow-level terminal
-     * event afterwards. Must be invoked on the workflow control thread, before publishing the terminal event.
-     */
-    void interruptStepsAndDiscardQueue();
-
-    /**
      * Requests cooperative cancellation of this workflow from any thread.
      * <p>
      * The request is enqueued as a task onto the workflow's control thread, the single consumer of the task queue,
@@ -248,23 +174,14 @@ public interface WorkflowExecution extends DescribableComponent {
     CompletableFuture<Void> requestWorkflowCancellation(@Nullable Throwable cause);
 
     /**
-     * Interrupt all running steps without producing any step/workflow cancellation events. Unlike
-     * {@link #interruptStepsAndDiscardQueue()} (a whole-workflow terminal teardown), this method is for abrupt
-     * process-level teardown (e.g. an engine shutdown lifecycle hook): it completes in-flight step futures with a
+     * Stops local execution for engine shutdown without producing step or workflow cancellation events. This method
+     * completes in-flight step futures with a
      * non-cancellation failure so the running step is removed from bookkeeping and no {@code <Step>Cancelled} event is
      * published, and it unblocks the parked control thread. The workflow's state in the event store is left at its
      * most recent {@code <Step>Started} entry so the step can resume on the next app start. Safe to call from any
      * thread.
      */
-    void interrupt();
-
-    /**
-     * Cancel and remove a running step.
-     *
-     * @param stepName              name of the step.
-     * @param mayInterruptIfRunning whether to interrupt the step if it is running.
-     */
-    void cancelAndRemoveRunningStep(@Nonnull String stepName, boolean mayInterruptIfRunning);
+    void stopForShutdown();
 
     /**
      * Retrieves the current state of the workflow execution.

@@ -60,6 +60,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
      * @param delegate executoion delegate.
      * @param workflowContext workflow context.
      * @param workflowExecution workflow execution.
+     * @param runningSteps running step registry
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock clock for time calculations.
      * @param unitOfWorkFactory unit of work factory for creation of new processing contexts.
@@ -71,6 +72,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             @Nonnull ExecuteDelegate delegate,
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -78,7 +80,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             @Nonnull ExecutorService executor,
             @Nonnull WorkflowScheduler timeoutScheduler
     ) {
-        super(workflowContext, workflowExecution, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink,
+        super(workflowContext, workflowExecution, runningSteps, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink,
               executor, timeoutScheduler);
         this.delegate = delegate;
     }

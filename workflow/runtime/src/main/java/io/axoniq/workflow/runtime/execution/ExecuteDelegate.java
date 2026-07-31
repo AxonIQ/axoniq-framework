@@ -64,6 +64,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
      *
      * @param context                   workflow context.
      * @param workflowExecution         workflow state.
+     * @param runningSteps              running step registry
      * @param parentEventNameCustomizer event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
@@ -73,6 +74,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     @Internal
     public ExecuteDelegate(@Nonnull WorkflowContext context,
                            @Nonnull WorkflowExecution workflowExecution,
+                           @Nonnull RunningSteps runningSteps,
                            @Nonnull EventNameCustomizer parentEventNameCustomizer,
                            @Nonnull Clock clock,
                            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -83,6 +85,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     ) {
         super(context,
               workflowExecution,
+              runningSteps,
               parentEventNameCustomizer,
               clock,
               unitOfWorkFactory,
@@ -181,7 +184,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                         }
                     });
 
-            workflowExecution.registerRunningStep(stepName, result);
+            runningSteps.register(stepName, result);
 
             if (remainingTimeout.isNegative()) {
                 workflowExecution.appendTask(i -> {
@@ -201,7 +204,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                 );
                 result.whenComplete((r, e) -> {
                             timeoutTask.cancel();
-                            workflowExecution.removeRunningStep(stepName);
+                            runningSteps.remove(stepName);
                             if (e == null) {
                                 // Normal completion — a null action result sanitizes to an empty map in completed(),
                                 // so a null-returning action COMPLETES rather than wedging on a null-e dereference.

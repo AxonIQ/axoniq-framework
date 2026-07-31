@@ -76,7 +76,7 @@ class TerminateDelegateDriftTest {
         doCallRealMethod().when(workflowExecution).guardAgainstReplayDrift(anyString());
 
         delegate = new TerminateDelegate(
-                workflowContext, workflowExecution, unitOfWorkFactory, eventSink, executor,
+                workflowContext, workflowExecution, new RunningSteps(), () -> { }, unitOfWorkFactory, eventSink, executor,
                 DefaultEventNameCustomizer.Builder.defaults()
         );
     }
