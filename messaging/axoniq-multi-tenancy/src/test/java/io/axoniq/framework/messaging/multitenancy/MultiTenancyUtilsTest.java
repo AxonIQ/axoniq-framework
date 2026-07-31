@@ -80,10 +80,7 @@ class MultiTenancyUtilsTest {
         void enhancersFormOneBlockAnchoredOnTheGenericDefaults() {
             // given the anchor and the enhancers ordered against it
             int anchor = MultiTenancyConfigurationDefaults.ENHANCER_ORDER;
-            List<Integer> siblings = List.of(
-                    TenantComponentParameterResolverFactoryConfigurationEnhancer.ENHANCER_ORDER,
-                    AxonServerMultiTenancyConfigurationDefaults.ENHANCER_ORDER
-            );
+            List<Integer> siblings = List.of(AxonServerMultiTenancyConfigurationDefaults.ENHANCER_ORDER);
 
             // then the generic defaults run strictly first, so ordering below them disables the whole block
             assertThat(siblings).allSatisfy(order -> assertThat(order).isGreaterThan(anchor));

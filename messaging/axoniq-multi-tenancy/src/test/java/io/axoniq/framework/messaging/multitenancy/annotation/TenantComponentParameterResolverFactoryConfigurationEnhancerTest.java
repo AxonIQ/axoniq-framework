@@ -45,12 +45,6 @@ class TenantComponentParameterResolverFactoryConfigurationEnhancerTest {
     private final TenantComponentProvider<CourseRepository> componentProvider =
             TenantComponentProvider.withFactory(CourseRepository.class, CourseRepository::new);
 
-    @Test
-    void orderEqualsEnhancerOrderConstant() {
-        assertThat(new TenantComponentParameterResolverFactoryConfigurationEnhancer().order())
-                .isEqualTo(TenantComponentParameterResolverFactoryConfigurationEnhancer.ENHANCER_ORDER);
-    }
-
     @Nested
     class DefaultComponentRegistration {
 

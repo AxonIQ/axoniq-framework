@@ -19,9 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.annotation;
 
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
@@ -30,32 +28,24 @@ import org.axonframework.messaging.core.configuration.reflection.ParameterResolv
  * Configuration enhancer that registers the {@link TenantComponentParameterResolverFactory} to the
  * {@link ComponentRegistry} of the {@link org.axonframework.common.configuration.Configuration}.
  * <p>
- * Contributed through the {@link java.util.ServiceLoader}, so multi-tenancy is active as soon as the
- * {@code axoniq-multi-tenancy} module is on the classpath. Use
- * {@link io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils#disable(ComponentRegistry)} to opt out.
+ * Contributed through the {@link java.util.ServiceLoader}, so handler parameters annotated with {@link TenantScoped}
+ * resolve as soon as the {@code axoniq-multi-tenancy} module is on the classpath. This enhancer keeps running even
+ * when multi-tenancy is switched off, because an unresolvable parameter fails handler inspection and with it the whole
+ * configuration.
+ * <p>
+ * Deliberately carries neither an {@link ConfigurationEnhancer#order()} nor a
+ * {@link org.axonframework.common.annotation.RegistrationScope}. An earlier order makes
+ * {@link ParameterResolverFactoryUtils#registerToComponentRegistry(ComponentRegistry, java.util.function.Function)}
+ * contribute the factory as the registry's {@code ParameterResolverFactory} component rather than as a decorator on
+ * it, and a {@code CURRENT} scope stops this enhancer running again for a child registry. A child registry copies
+ * enhancers and decorators but not components, and a module resolves handler parameters with its own registry's
+ * factory, so restricting either one costs handlers inside a module their tenant-scoped parameters.
  *
  * @author Jakob Hatzl
  * @since 5.3.0
  */
 @Internal
-@RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
 public class TenantComponentParameterResolverFactoryConfigurationEnhancer implements ConfigurationEnhancer {
-
-    /**
-     * The order of {@code this} enhancer compared to others.
-     * <p>
-     * Runs just after {@link MultiTenancyConfigurationDefaults}, keeping the multi-tenancy enhancers one contiguous
-     * block so all multi-tenancy defaults are in place before other enhancers and user registrations that build on
-     * them.
-     *
-     * @since 5.3.0
-     */
-    public static final int ENHANCER_ORDER = MultiTenancyConfigurationDefaults.ENHANCER_ORDER + 1;
-
-    @Override
-    public int order() {
-        return ENHANCER_ORDER;
-    }
 
     @Override
     public void enhance(ComponentRegistry registry) {
