@@ -32,6 +32,7 @@ import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
+import io.axoniq.workflow.runtime.execution.WorkflowCancellationService;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
@@ -120,6 +121,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowTimeoutScheduler(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
         registerWorkflowExecutionRepository(componentRegistry);
+        registerWorkflowCancellationService(componentRegistry);
         registerMutableWorkflowHistoryRepository(componentRegistry);
         registerWorkflowConfigurationRegistry(componentRegistry);
         registerSafePointStore(componentRegistry);
@@ -167,6 +169,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                         .withBuilder(cfg -> new WorkflowEngine(
                                 cfg.getComponent(WorkflowConfigurationRegistry.class),
                                 cfg.getComponent(WorkflowExecutionRepository.class),
+                                cfg.getComponent(WorkflowCancellationService.class),
                                 cfg.getComponent(SafePointStore.class, COMPONENT_SAFE_POINT_STORE)
                         ))
                         .onShutdown(Phase.INBOUND_EVENT_CONNECTORS, WorkflowEngine::shutdown)
@@ -204,6 +207,11 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         componentRegistry
                 .registerComponent(WorkflowExecutionRepository.class,
                                    cfg -> new InMemoryWorkflowExecutionRepository());
+    }
+
+    void registerWorkflowCancellationService(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(WorkflowCancellationService.class,
+                                               cfg -> new WorkflowCancellationService());
     }
 
     void registerMutableWorkflowHistoryRepository(ComponentRegistry componentRegistry) {

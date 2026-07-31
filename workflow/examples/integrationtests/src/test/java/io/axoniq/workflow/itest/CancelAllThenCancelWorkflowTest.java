@@ -49,8 +49,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Verifies that joining {@code requestAllRunningStepsCancellation(reason)} immediately followed by joining
- * {@code requestWorkflowCancellation(reason)}, called back to back on the same external thread, deterministically
+ * Verifies that joining {@code cancelRunningSteps(workflowId, reason)} immediately followed by joining
+ * {@code cancelWorkflow(workflowId, reason)}, called back to back on the same external thread, deterministically
  * cancels the directly-awaited {@code awaitedStep} with a durable {@code CANCELLED} record, runs the body's
  * compensation, and drives the workflow to a terminal {@code CANCELLED} state.
  * <p>
@@ -91,14 +91,10 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
         delayedPublisher.start();
 
         awaitParked(id);
-        var execution = workflowEngine.workflowExecutions()
-                                      .stream()
-                                      .filter(w -> w.workflowId().equals(id))
-                                      .findFirst().orElseThrow(() -> new IllegalStateException(
-                        "no workflow found with id " + id));
-
-        execution.requestAllRunningStepsCancellation(new StepCancellationException("cancel all running steps")).join();
-        execution.requestWorkflowCancellation(new WorkflowCancelledException("cancel workflow")).join();
+        workflowCancellationService.cancelRunningSteps(
+                id, new StepCancellationException("cancel all running steps")
+        ).join();
+        workflowCancellationService.cancelWorkflow(id, new WorkflowCancelledException("cancel workflow")).join();
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var history = workflowHistoryRepository.findById(id);

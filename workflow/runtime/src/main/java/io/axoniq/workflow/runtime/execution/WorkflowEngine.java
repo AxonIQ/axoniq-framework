@@ -65,6 +65,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
+    private final WorkflowCancellationService workflowCancellationService;
     private final SafePointStore safePointStore;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
     private final AtomicReference<TrackingToken> currentTrackingToken = new AtomicReference<>();
@@ -75,16 +76,19 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
      *
      * @param workflowConfigurationRegistry configuration registry.
      * @param workflowExecutionRepository   execution registry.
+     * @param workflowCancellationService   workflow cancellation service.
      * @param safePointStore                engine safe point tracking token store.
      */
     public WorkflowEngine(
             @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
             @Nonnull WorkflowExecutionRepository workflowExecutionRepository,
+            @Nonnull WorkflowCancellationService workflowCancellationService,
             @Nonnull SafePointStore safePointStore
     ) {
         EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
         this.workflowExecutionRepository = workflowExecutionRepository;
+        this.workflowCancellationService = workflowCancellationService;
         this.safePointStore = safePointStore;
     }
 
@@ -163,7 +167,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
                     .stream()
                     .filter(e -> e.state().workflowStatus().isTerminal())
                     .map(WorkflowExecution::workflowId)
-                    .forEach(workflowExecutionRepository::remove);
+                    .forEach(this::removeExecution);
             persistEngineSafePoint();
 
             var allExecution = workflowExecutionRepository.findAll();
@@ -173,6 +177,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
                 logger.info("Restored {} running workflow instances, starting workflow execution.",
                             allExecution.size());
                 for (var execution : allExecution) {
+                    registerCancellation(execution);
                     execute(execution);
                 }
                 logger.info("All workflow instances started.");
@@ -194,7 +199,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
                                     logger.debug("Workflow {} finished with status {}, removing it from repository",
                                                  execution.workflowId(),
                                                  finished.state().workflowStatus());
-                                    this.workflowExecutionRepository.remove(execution.workflowId());
+                                    removeExecution(execution.workflowId());
                                     persistEngineSafePoint();
                                 }
                         );
@@ -248,6 +253,7 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
                                                   workflowId, eventMessage.payload());
                                      return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
                                  });
+                                 registerCancellation(execution);
                                  persistEngineSafePoint();
                                  if (isRunning.get()) { // if the engine is already running, start the workflow immediately
                                      execute(execution);
@@ -285,6 +291,18 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         }
         persistEngineSafePoint();
         workflowExecutionRepository.clear();
+        workflowCancellationService.clear();
+    }
+
+    private void registerCancellation(@Nonnull WorkflowExecution execution) {
+        if (execution instanceof WorkflowCancellationProvider provider) {
+            workflowCancellationService.register(execution.workflowId(), provider.workflowCancellation());
+        }
+    }
+
+    private void removeExecution(@Nonnull String workflowId) {
+        workflowExecutionRepository.remove(workflowId);
+        workflowCancellationService.unregister(workflowId);
     }
 
     /**

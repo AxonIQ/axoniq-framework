@@ -96,9 +96,9 @@ class ExternalStepCancellationWorkflowTest extends AbstractWorkflowTestBase<Simp
         });
 
         // Cancel the running step from the test thread — NOT the workflow control thread.
-        WorkflowExecution execution = executionRepository.findById(WORKFLOW_ID).orElseThrow();
-        execution.requestStepCancellation("awaitApproval", new StepCancellationException("cancelled externally"))
-                 .join();
+        workflowCancellationService.cancelStep(
+                WORKFLOW_ID, "awaitApproval", new StepCancellationException("cancelled externally")
+        ).join();
 
         // The workflow must catch the cancellation, run the compensate step, and complete normally.
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {

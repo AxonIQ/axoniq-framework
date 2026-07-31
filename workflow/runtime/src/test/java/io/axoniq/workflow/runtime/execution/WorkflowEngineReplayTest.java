@@ -77,6 +77,7 @@ class WorkflowEngineReplayTest {
         workflowEngine = new WorkflowEngine(
                 workflowConfigurationRegistry,
                 workflowExecutionRepository,
+                new WorkflowCancellationService(),
                 safePointStore
         );
     }

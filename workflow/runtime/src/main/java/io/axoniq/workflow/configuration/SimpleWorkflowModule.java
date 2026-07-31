@@ -27,6 +27,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
 import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
+import io.axoniq.workflow.runtime.execution.WorkflowCancellationService;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
@@ -134,6 +135,8 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                         workflowExecutionRepositoryBuilder
                 );
             }
+            cr.registerIfNotPresent(WorkflowCancellationService.class,
+                                    cfg -> new WorkflowCancellationService());
             cr.registerComponent(
                     SafePointStore.class,
                     COMPONENT_SAFE_POINT_STORE,
@@ -155,6 +158,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                     cfg -> new WorkflowEngine(
                             cfg.getComponent(WorkflowConfigurationRegistry.class),
                             cfg.getComponent(WorkflowExecutionRepository.class),
+                            cfg.getComponent(WorkflowCancellationService.class),
                             cfg.getComponent(SafePointStore.class, COMPONENT_SAFE_POINT_STORE)
                     )
             );

@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
-import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
@@ -72,7 +71,7 @@ import static java.lang.Thread.currentThread;
  * @author Steven van Beelen
  * @since 1.0.0
  */
-public final class SimpleWorkflowExecution implements WorkflowExecution {
+public final class SimpleWorkflowExecution implements WorkflowExecution, WorkflowCancellationProvider {
 
     private static final Logger logger = LoggerFactory.getLogger(SimpleWorkflowExecution.class);
 
@@ -93,6 +92,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
     private final RunningSteps runningSteps = new RunningSteps();
     private final WorkflowStepProgress workflowStepProgress = new WorkflowStepProgress();
+    private final WorkflowCancellation workflowCancellation;
 
     private boolean executable = false;
 
@@ -129,6 +129,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                 this::beginTerminalTeardown,
                 processingContext
         );
+        this.workflowCancellation = new DefaultWorkflowCancellation(this, contextDelegate, runningSteps);
         this.workflowState = new EventSourcedWorkflowState(
                 initial,
                 workflowConfiguration.workflowVersion(),
@@ -362,6 +363,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         terminationHandler.accept(this);
     }
 
+    private void beginTerminalTeardown() {
+        runningSteps.cancelAll(new StepInterruptedException("Workflow reached terminal state"), cancelled -> {
+        });
+        this.taskQueue.clear();
+    }
 
     @Override
     public void awaitStateChange(
@@ -384,112 +390,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
             // replay mode
             state().evolve(eventMessage, processingContext);
         }
-    }
-
-    @Override
-    public CompletableFuture<Boolean> requestStepCancellation(@Nonnull String stepName, @Nullable Throwable cause) {
-        // External single-step cancel: the control thread is the single consumer, so we never pump the queue from
-        // the caller thread. A step unknown or already terminal at request time is a no-op fast path. Otherwise the
-        // cancellation is enqueued and the returned future completes once the control thread has run the task to
-        // completion (durable <step>:CANCELLED record included) with the outcome the task actually computed, bounded
-        // by a timeout so it cannot hang forever if the control thread is stuck. The caller decides whether to block
-        // on the result or compose it asynchronously.
-        if (!state().containsStep(stepName) || state().getStep(stepName).status().isTerminal()) {
-            return CompletableFuture.completedFuture(false);
-        }
-        var done = new CompletableFuture<Boolean>();
-        appendTask(i -> {
-            try {
-                done.complete(contextDelegate.cancelStep(new TerminatePrimitive.CancelStep(
-                        stepName, cause, workflowConfiguration.eventNameCustomizer())));
-            } catch (Throwable t) {
-                done.completeExceptionally(t);
-            }
-        });
-        return done.orTimeout(5, TimeUnit.SECONDS); // FIXME constant?
-    }
-
-    @Override
-    public CompletableFuture<Integer> requestAllRunningStepsCancellation(@Nullable Throwable cause) {
-        // Cooperative cancel of every currently-running step (the workflow stays alive): snapshot the running step
-        // names now, enqueue one control-thread task that single-step-cancels each still-running step, and return a
-        // future that completes once that task has fully run (every durable <step>:CANCELLED record included) with
-        // the number of steps the task actually cancelled, bounded by a timeout so it cannot hang forever if the
-        // control thread is stuck. The caller decides whether to block on the result or compose it asynchronously.
-        var stepNames = runningSteps.stepNames();
-        if (stepNames.isEmpty()) {
-            return CompletableFuture.completedFuture(0);
-        }
-        var done = new CompletableFuture<Integer>();
-        appendTask(i -> {
-            try {
-                var cancelled = 0;
-                for (var stepName : stepNames) {
-                    if (contextDelegate.cancelStep(new TerminatePrimitive.CancelStep(
-                            stepName, cause, workflowConfiguration.eventNameCustomizer()))) {
-                        cancelled++;
-                    }
-                }
-                done.complete(cancelled);
-            } catch (Throwable t) {
-                done.completeExceptionally(t);
-            }
-        });
-        return done.orTimeout(5, TimeUnit.SECONDS); // FIXME constant?
-    }
-
-    @Override
-    public CompletableFuture<Void> requestWorkflowCancellation(@Nullable Throwable cause) {
-        // The control thread is the single consumer of the task queue, so we never pump the queue from
-        // the caller thread (reuses the control-thread-safe cancellation). When the task runs it drives the
-        // whole-workflow terminal: interrupt any running steps (no per-step terminal event), discard the
-        // queue, publish only the durable <workflow>:CANCELLED event, then unblock the parked body thread so it
-        // unwinds and exits. The returned future completes once the task has fully run, so the durable record is
-        // committed by the time it completes, bounded by a timeout so it cannot hang forever if the control thread
-        // is stuck. The caller decides whether to block on the result or compose it asynchronously.
-        var done = new CompletableFuture<Void>();
-        appendTask(i -> {
-            try {
-                if (state().workflowStatus().isTerminal()) {
-                    return;
-                }
-                // Do not double-wrap: an operator reason arrives as a WorkflowCancelledException whose message
-                // already is that reason, so reuse it as-is and keep the reason the top-level message. Only a foreign
-                // cause is wrapped.
-                WorkflowCancelledException wce;
-                if (cause instanceof WorkflowCancelledException already) {
-                    wce = already;
-                } else if (cause != null) {
-                    wce = new WorkflowCancelledException("Workflow cancelled externally", cause);
-                } else {
-                    wce = new WorkflowCancelledException("Workflow cancelled externally");
-                }
-                beginTerminalTeardown();
-                sendWorkflowEvent(
-                        cancelledWorkflow(workflowContext(), workflowName, wce,
-                                          workflowConfiguration.eventNameCustomizer()),
-                        processingContext()
-                ).join();
-                try {
-                    awaitStateChange(s -> s.workflowStatus().isTerminal());
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                // Unblock the workflow driver thread parked on taskQueue.take() inside a step's await() loop: it sets
-                // the driver thread's interrupt flag; the next taskQueue.take() observes it and throws
-                // InterruptedException, propagating up so the (already-terminal) driver thread exits cleanly.
-                taskQueue.offer(x -> Thread.currentThread().interrupt());
-            } finally {
-                done.complete(null);
-            }
-        });
-        return done.orTimeout(5, TimeUnit.SECONDS); // FIXME constant?
-    }
-
-    private void beginTerminalTeardown() {
-        runningSteps.cancelAll(new StepInterruptedException("Workflow reached terminal state"), cancelled -> {
-        });
-        this.taskQueue.clear();
     }
 
     @Override
@@ -596,5 +496,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         eventWaitConditions.describeTo(descriptor);
         runningSteps.describeTo(descriptor);
         workflowStepProgress.describeTo(descriptor);
+    }
+
+    @Nonnull
+    @Override
+    public WorkflowCancellation workflowCancellation() {
+        return workflowCancellation;
     }
 }

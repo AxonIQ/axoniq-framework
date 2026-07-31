@@ -83,9 +83,9 @@ class CancelledSleepSurfacesTest extends AbstractWorkflowTestBase<SimpleWorkflow
         });
 
         // Cancel the sleep step from the test thread — the sleep must surface, not swallow, the cancellation.
-        WorkflowExecution execution = executionRepository.findById("sleep-1").orElseThrow();
-        execution.requestStepCancellation("pacingDelay", new StepCancellationException("sleep cancelled externally"))
-                 .join();
+        workflowCancellationService.cancelStep(
+                "sleep-1", "pacingDelay", new StepCancellationException("sleep cancelled externally")
+        ).join();
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var history = workflowHistoryRepository.findById("sleep-1");

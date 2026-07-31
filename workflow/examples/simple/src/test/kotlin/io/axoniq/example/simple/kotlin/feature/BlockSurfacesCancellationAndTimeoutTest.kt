@@ -31,6 +31,7 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace
 import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository
+import io.axoniq.workflow.runtime.execution.WorkflowCancellationService
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher
 import org.assertj.core.api.Assertions.assertThat
@@ -87,8 +88,9 @@ class BlockSurfacesCancellationAndTimeoutTest : AbstractWorkflowTestBase<Workflo
             assertThat(state.getStep("cancelledWait").status()).isEqualTo(StepStatus.STARTED)
         }
 
-        executionRepository.findById("block-1").orElseThrow()
-            .cancelRunningStep("cancelledWait", StepCancellationException("cancelled externally"))
+        configuration.getComponent(WorkflowCancellationService::class.java)
+            .cancelStep("block-1", "cancelledWait", StepCancellationException("cancelled externally"))
+            .join()
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted {
             val history = workflowHistoryRepository.findById("block-1")
