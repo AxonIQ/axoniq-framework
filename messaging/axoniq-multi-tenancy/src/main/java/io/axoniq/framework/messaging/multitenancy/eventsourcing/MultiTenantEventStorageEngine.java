@@ -191,6 +191,9 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiT
      * Every call adds a listener of its own, so a listener subscribed twice is invoked twice for one change. Each
      * returned registration removes what its own call added.
      * <p>
+     * Internal, because the only listeners are the module's own components, and what they are told is a detail of how
+     * this engine holds its tenants.
+     * <p>
      * Announcing happens on the thread applying the change, so a listener must return promptly and hand off any work of
      * its own. A listener cancelled while an announcement is in flight may still be invoked for that announcement,
      * so it has to tolerate running once more after its own cancellation.
@@ -199,6 +202,7 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiT
      * @return a registration whose cancellation stops the given {@code listener} from being invoked further
      * @throws NullPointerException if the given {@code listener} is {@code null}
      */
+    @Internal
     public Registration subscribe(TenantChangeListener listener) {
         requireNonNull(listener, "The tenant change listener must not be null");
         tenantChangeListeners.add(listener);

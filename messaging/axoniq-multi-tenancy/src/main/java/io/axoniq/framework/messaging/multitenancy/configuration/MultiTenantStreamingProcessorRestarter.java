@@ -142,6 +142,7 @@ public class MultiTenantStreamingProcessorRestarter implements DescribableCompon
      * @throws NullPointerException       if the given {@code engine} is {@code null}
      * @throws AxonConfigurationException if {@code this} restarter already follows an engine
      */
+    @Internal
     public void follow(MultiTenantEventStorageEngine engine) {
         Objects.requireNonNull(engine, "The multi-tenant event storage engine must not be null");
         Registration engineSubscription = engine.subscribe(this::requestRestart);
