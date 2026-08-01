@@ -44,6 +44,7 @@ import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 import org.axonframework.modelling.annotation.InjectEntity;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -187,9 +188,9 @@ class PerTenantEventStorageIsolationTest {
 
         @CommandHandler
         void handle(EnrollStudent command,
-                    @InjectEntity(idProperty = COURSE_ID_TAG) Course course,
+                    @Nullable @InjectEntity(idProperty = COURSE_ID_TAG) Course course,
                     EventAppender eventAppender) {
-            if (course.isFull()) {
+            if (course != null && course.isFull()) {
                 throw new CourseFullException(command.courseId());
             }
             eventAppender.append(new StudentEnrolledInCourse(command.courseId(), command.studentId()));
