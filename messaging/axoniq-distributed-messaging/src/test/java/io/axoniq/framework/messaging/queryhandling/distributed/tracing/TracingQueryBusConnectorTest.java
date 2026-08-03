@@ -363,6 +363,11 @@ class TracingQueryBusConnectorTest {
         public Span createRootSpan(String operationName, @Nullable ProcessingContext context) {
             return delegate.createRootSpan(operationName, context);
         }
+
+        @Override
+        public void describeTo(ComponentDescriptor descriptor) {
+            descriptor.describeWrapperOf(delegate);
+        }
     }
 
     private static final class FailingToStartSpan implements Span {
