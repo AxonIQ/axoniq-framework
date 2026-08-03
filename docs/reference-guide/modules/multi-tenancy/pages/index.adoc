@@ -41,6 +41,12 @@ Covers routing each query to the Axon Server context of its resolved tenant, mir
 
 See xref:multi-tenancy:tenant-query-handling.adoc[Tenant-aware query processing] for details.
 
+== Example application
+
+A runnable demo runs the university domain for several tenants at once, showing these features wired into a working application.
+
+See xref:multi-tenancy:demo.adoc[University multi-tenancy example] for details.
+
 == Adding the module
 
 Multi-tenancy support ships in the `axoniq-multi-tenancy` module:

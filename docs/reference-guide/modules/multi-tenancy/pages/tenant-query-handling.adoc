@@ -2,9 +2,11 @@
 = Tenant-Aware Query Processing
 :navtitle: Tenant-aware query processing
 :reftext: Tenant-aware query processing
+:demo-core: https://github.com/AxonIQ/AxonFramework/blob/main/examples/university-multi-tenancy-examples/university-multi-tenancy-core/src/main/java/org/axonframework/examples/demo/multitenancy
 
 Tenant-aware query handling covers how queries can be dispatched and handled in a tenant aware Axon application, mirroring the approach used for xref:tenant-command-handling.adoc[commands].
 
+[#query-dispatching]
 == Query dispatching
 
 With multi-tenancy enabled, query dispatching is automatically tenant-aware. No changes to how you use the `QueryGateway` or `QueryBus` are required. This applies to direct queries as well as subscription queries.
@@ -21,6 +23,7 @@ The tenant resolved for a query must be one of the currently known tenants.
 If the resolved tenant is not currently known, for example because its context was removed after the tenant was resolved, dispatch fails with a `TenantNotResolvedException`.
 ====
 
+[#query-handling]
 == Query handling
 
 Query handling methods are registered the same way as in a single-tenant application. No change to how you declare or register a query handler is required.
@@ -30,14 +33,13 @@ This is what allows a tenant-scoped component, such as a per-tenant external ser
 
 [source,java]
 ----
-@QueryHandler
-public CourseStatistics on(FindCourseStatistics query, @TenantScoped CourseStatsRepository repository) { // <1>
-    return repository.findById(query.courseId());
-}
+include::example$multitenancy/tenantqueryhandling/CourseStatisticsQueryHandler.java[tag=tenant-scoped-query-handler,indent=0]
 ----
-<1> `repository` is the `CourseStatsRepository` instance specific for the current tenant. The `@TenantScoped` annotation marks it as tenant scoped, transparently resolved by a tenant aware parameter resolver.
+<1> `repository` is the `CourseStatisticsRepository` instance specific for the current tenant. The `@TenantScoped` annotation marks it as tenant scoped, transparently resolved by a tenant aware parameter resolver.
 
 See xref:tenant-scoped-components.adoc[Tenant-scoped components] for more details on how to register such components and inject them into a handler.
+
+TIP: To see this running, the xref:multi-tenancy:demo.adoc[university demo] answers queries through link:{demo-core}/university/read/statistics/TenantStatisticsQueryHandler.java[`TenantStatisticsQueryHandler`], and its link:{demo-core}/shared/messaging/StatisticsSubscription.java[`StatisticsSubscription`] shows subscription queries staying within one tenant.
 
 [NOTE]
 ====
