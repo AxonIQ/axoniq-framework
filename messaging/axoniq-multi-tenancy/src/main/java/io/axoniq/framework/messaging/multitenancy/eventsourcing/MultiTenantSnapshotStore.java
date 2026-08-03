@@ -23,7 +23,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.QualifiedName;
@@ -52,7 +51,7 @@ import static java.util.Objects.requireNonNull;
  * @since 5.3.0
  */
 @Internal
-public class MultiTenantSnapshotStore implements SnapshotStore, DescribableComponent {
+public class MultiTenantSnapshotStore implements SnapshotStore {
 
     private final TenantSnapshotStoreFactory snapshotStoreFactory;
     private final TenantRouter tenantRouter;
