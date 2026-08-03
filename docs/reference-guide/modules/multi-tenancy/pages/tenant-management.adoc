@@ -139,6 +139,7 @@ Declarative - Configuration API::
 include::example$multitenancy/tenantmanagement/DeclarativeTenantConfiguration.java[tag=custom-tenant-resolver,indent=0]
 ----
 <1> Application-specific logic deriving the tenant identifier from the message.
+<2> The inverse: writes the tenant back under the same header, so it survives being dispatched elsewhere. See <<tenant-propagation>>.
 --
 Autodetected - Spring Boot::
 +
@@ -150,5 +151,16 @@ Expose your `TenantResolver` as a bean:
 include::example$multitenancy/tenantmanagement/SpringCustomTenantResolverConfiguration.java[tag=custom-tenant-resolver,indent=0]
 ----
 <1> Application-specific logic deriving the tenant identifier from the message.
+<2> The inverse: writes the tenant back under the same header, so it survives being dispatched elsewhere. See <<tenant-propagation>>.
 --
 ====
+
+[#tenant-propagation]
+=== Propagating the tenant across a dispatch hop
+
+A command or query dispatched from inside a handler generally does not name its own tenant: the tenant is only known through the message being handled.
+`TenantResolver` attaches that tenant onto the outgoing message through `attachTenant`, the inverse of resolving it, so it survives a distributed round trip and is available again once the dispatched message reaches its handler.
+
+The default `MetadataBasedTenantResolver` does this out of the box: it writes the tenant identifier under the same metadata key it reads it from, so a command or query dispatched from within another tenant-owned handler, without naming a tenant of its own, stays attributed to that tenant with no further configuration.
+
+A custom `TenantResolver` must implement both `resolveTenant` and `attachTenant` itself, to allow commands and queries to propagate their tenant information when dispatched from inside another handler. The custom resolver above already does this, writing the tenant back under the same header it reads it from.
