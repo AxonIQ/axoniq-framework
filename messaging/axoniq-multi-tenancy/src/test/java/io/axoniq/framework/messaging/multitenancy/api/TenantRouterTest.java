@@ -20,6 +20,8 @@
 package io.axoniq.framework.messaging.multitenancy.api;
 
 import org.axonframework.common.infra.MockComponentDescriptor;
+import org.axonframework.messaging.commandhandling.CommandMessage;
+import org.axonframework.messaging.commandhandling.GenericCommandMessage;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
@@ -42,6 +44,14 @@ class TenantRouterTest {
     private static EventMessage eventWithTenant(@Nullable TenantDescriptor tenant) {
         return new GenericEventMessage(
                 new MessageType("TestEvent"),
+                "payload",
+                tenant == null ? Map.of() : Map.of(TENANT_ID_KEY, tenant.tenantId())
+        );
+    }
+
+    private static CommandMessage commandWithTenant(@Nullable TenantDescriptor tenant) {
+        return new GenericCommandMessage(
+                new MessageType("TestCommand"),
                 "payload",
                 tenant == null ? Map.of() : Map.of(TENANT_ID_KEY, tenant.tenantId())
         );
@@ -177,6 +187,20 @@ class TenantRouterTest {
             assertThatThrownBy(() -> resolver.resolveSharedTenant(mixed))
                     .isInstanceOf(TenantNotResolvedException.class)
                     .hasMessage(expectedMessage);
+        }
+    }
+
+    @Nested
+    class AttachTenant {
+
+        @Test
+        void delegatesToTheWrappedResolversAttachTenant() {
+            TenantRouter router = new TenantRouter(metadataResolver, TENANT_DESCRIPTORS);
+            CommandMessage message = commandWithTenant(null);
+
+            CommandMessage attached = (CommandMessage) router.attachTenant(message, TENANT_A);
+
+            assertThat(attached.metadata().get(TENANT_ID_KEY)).isEqualTo(TENANT_A.tenantId());
         }
     }
 

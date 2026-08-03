@@ -22,7 +22,9 @@ package io.axoniq.framework.messaging.multitenancy.util;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import org.axonframework.messaging.core.Message;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -66,6 +68,19 @@ public enum TestFixtures {
      * @return a {@link TenantResolver} that always resolves to the given {@link TenantDescriptor}
      */
     public static TenantResolver alwaysTenant(TenantDescriptor tenantDescriptor) {
-        return (message, tenants) -> tenantDescriptor;
+        return new AlwaysTenant(tenantDescriptor);
+    }
+
+    private record AlwaysTenant(TenantDescriptor tenantDescriptor) implements TenantResolver {
+
+        @Override
+        public TenantDescriptor resolveTenant(Message message, Collection<TenantDescriptor> tenants) {
+            return tenantDescriptor;
+        }
+
+        @Override
+        public Message attachTenant(Message message, TenantDescriptor tenant) {
+            return message.andMetadata(Map.of(TenantDescriptor.TENANT_ID_KEY, tenant.tenantId()));
+        }
     }
 }

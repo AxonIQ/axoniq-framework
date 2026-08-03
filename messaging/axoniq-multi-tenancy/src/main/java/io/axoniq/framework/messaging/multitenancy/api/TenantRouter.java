@@ -140,6 +140,18 @@ public class TenantRouter implements DescribableComponent {
         return resolvedTenants.stream().findFirst();
     }
 
+    /**
+     * Attaches the given {@code tenant} to the given {@code message}, the inverse of
+     * {@link #resolveFromMessage(Message)}, delegating to the wrapped {@link TenantResolver}.
+     *
+     * @param message the message to attach the given {@code tenant} to
+     * @param tenant  the tenant to attach to the given {@code message}
+     * @return a copy of the given {@code message} carrying the given {@code tenant}
+     */
+    public Message attachTenant(Message message, TenantDescriptor tenant) {
+        return tenantResolver.attachTenant(message, tenant);
+    }
+
     private Optional<TenantDescriptor> resolve(@Nullable Message message, List<TenantDescriptor> knownTenants) {
         if (message == null) {
             return Optional.empty();
