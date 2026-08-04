@@ -25,6 +25,7 @@ import io.micrometer.tracing.Span.Kind;
 import io.micrometer.tracing.TraceContext;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.propagation.Propagator;
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.tracing.Span;
@@ -179,6 +180,13 @@ public final class MicrometerSpanFactory implements SpanFactory {
         io.micrometer.tracing.Span.Builder builder = tracer.spanBuilder().setNoParent();
         addMessageLink(builder, message);
         return span(builder, operationName, Kind.CONSUMER, message, context);
+    }
+
+    @Override
+    public void describeTo(ComponentDescriptor descriptor) {
+        descriptor.describeProperty("tracer", tracer);
+        descriptor.describeProperty("propagator", propagator);
+        descriptor.describeProperty("spanAttributesProviders", spanAttributesProviders);
     }
 
     /**

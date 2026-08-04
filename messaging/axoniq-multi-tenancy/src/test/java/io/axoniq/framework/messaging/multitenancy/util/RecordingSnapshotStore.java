@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.util;
 
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.QualifiedName;
@@ -73,5 +74,10 @@ public class RecordingSnapshotStore implements SnapshotStore {
                                                       @Nullable ProcessingContext context) {
         loadCount++;
         return CompletableFuture.completedFuture(snapshotsByIdentifier.get(identifier));
+    }
+
+    @Override
+    public void describeTo(ComponentDescriptor descriptor) {
+        // No-op - not required for testing
     }
 }
