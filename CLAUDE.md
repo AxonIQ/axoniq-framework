@@ -252,7 +252,13 @@ BDD-style testing:
 - **Java 21** required
 - 4-space indentation, 120-character line limit, LF line endings, UTF-8
 - IntelliJ code style: import from `axon_code_style.xml` at repo root
-- Import threshold: `class_count_to_use_import_on_demand = 99` (effectively: no wildcard imports)
+- Import threshold: `class_count_to_use_import_on_demand = 99` (effectively: no wildcard class imports), except the
+  on-demand packages configured in `.editorconfig`'s `ij_java_packages_to_use_import_on_demand`
+  (currently `java.awt.*`, `org.junit.**`, `javax.swing.*`, `org.mockito.**`) — imports from those packages are
+  wildcarded (e.g. `import org.junit.jupiter.api.*;`)
+- Static imports use a separate, much lower threshold (`ij_java_names_count_to_use_import_on_demand = 3` in
+  `.editorconfig`): once 3+ static members from the same class are imported, collapse them into a single
+  `import static Foo.*;`
 
 ### Implementation Guidelines
 1. **Discover API essence** - Design for future flexibility over current completeness
