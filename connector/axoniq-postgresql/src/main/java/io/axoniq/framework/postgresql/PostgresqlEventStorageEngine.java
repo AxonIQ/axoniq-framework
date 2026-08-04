@@ -598,6 +598,8 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("dataSource", dataSource);
         descriptor.describeProperty("converter", converter);
+        descriptor.describeProperty("transactionalExecutorProvider", transactionalExecutorProvider);
+        descriptor.describeProperty("snapshotStore", snapshotStore);
     }
 
     @Override
