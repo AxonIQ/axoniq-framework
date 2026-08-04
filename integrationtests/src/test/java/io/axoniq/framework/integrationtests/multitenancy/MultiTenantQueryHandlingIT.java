@@ -112,6 +112,8 @@ class MultiTenantQueryHandlingIT {
                                                  this::resolveTenant)
                                    .queryHandler(new QualifiedName(SubscriptionTenantQuery.class),
                                                  this::resolveTenantAndCaptureEmitter)
+                                   .queryHandler(new QualifiedName(DispatchFollowUpQuery.class),
+                                                 this::dispatchFollowUpQuery)
                                    .autodetectedQueryHandlingComponent(cfg -> this);
 
         application = new DefaultAxonApplication()
@@ -264,6 +266,14 @@ class MultiTenantQueryHandlingIT {
         });
     }
 
+    @Test
+    void followUpQueryDispatchedFromWithinAHandlerStaysWithTheTenantOfTheHandledMessage() {
+        QueryGateway queryGateway = application.getComponent(QueryGateway.class);
+
+        assertThat(queryTenant(queryGateway, new DispatchFollowUpQuery("chained"), TENANT_A))
+                .isEqualTo(TENANT_A);
+    }
+
     @QueryHandler
     public String resolveTenantScopedComponent(ResolveTenantScopedComponentQuery query,
                                                @TenantScoped TenantDescriptor tenantScopedComponent) {
@@ -273,6 +283,15 @@ class MultiTenantQueryHandlingIT {
     private MessageStream<QueryResponseMessage> resolveTenant(QueryMessage query, ProcessingContext context) {
         String tenantId = TenantDescriptor.fromContext(context).get().tenantId();
         return MessageStream.just(new GenericQueryResponseMessage(new MessageType(String.class), tenantId));
+    }
+
+    // The follow-up query is dispatched without naming a tenant of its own: this handler's own result IS the
+    // follow-up's result, so the tenant it resolves to is exactly what the caller observes.
+    private MessageStream<QueryResponseMessage> dispatchFollowUpQuery(QueryMessage query, ProcessingContext context) {
+        String id = query.payloadAs(DispatchFollowUpQuery.class).id();
+        QueryMessage followUp = new GenericQueryMessage(new MessageType(RecordTenantQuery.class),
+                                                        new RecordTenantQuery(id));
+        return context.component(QueryBus.class).query(followUp, context);
     }
 
     private MessageStream<QueryResponseMessage> resolveTenantAndCaptureEmitter(QueryMessage query,
@@ -321,6 +340,10 @@ class MultiTenantQueryHandlingIT {
     }
 
     public record SubscriptionTenantQuery(String id) {
+
+    }
+
+    public record DispatchFollowUpQuery(String id) {
 
     }
 }

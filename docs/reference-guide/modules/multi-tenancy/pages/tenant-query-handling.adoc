@@ -17,6 +17,8 @@ When a query is dispatched, the tenant is resolved as described in the xref:tena
 
 Emitting updates for a subscription query, for example through the `QueryUpdateEmitter`, is scoped to the tenant resolved for the message being handled when the update is emitted. An update only reaches subscription queries belonging to that same tenant, even if another tenant has an identical subscription active at the same time.
 
+A query dispatched from within another message's handler, without naming a tenant of its own, keeps the tenant of that message across this hop: see xref:tenant-management.adoc#tenant-propagation[propagating the tenant across a dispatch hop].
+
 [NOTE]
 ====
 The tenant resolved for a query must be one of the currently known tenants.

@@ -24,13 +24,22 @@ import java.util.Collection;
 import java.util.Collections;
 
 /**
- * Resolves the target tenant of a given {@link Message}.
+ * Resolves the target tenant of a given {@link Message}, and attaches a tenant to a {@link Message} in the
+ * inverse direction.
+ * <p>
+ * A message dispatched from within a handler generally does not name its own tenant: the tenant is only
+ * known through the {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} of the message
+ * being handled. {@link #attachTenant(Message, TenantDescriptor)} is what makes that tenant survive the
+ * message being dispatched elsewhere, for example across a distributed command or query bus that carries
+ * the message to another process and back. A resolver that only resolves, and never attaches, silently
+ * drops the tenant on every such dispatch, with no signal that anything is missing until a receiving
+ * component fails to resolve a tenant it should have had.
  *
  * @author Stefan Dragisic
  * @author Jan Galinski
+ * @author Jakob Hatzl
  * @since 4.6.0
  */
-@FunctionalInterface
 public interface TenantResolver {
 
     /**
@@ -58,4 +67,15 @@ public interface TenantResolver {
     default TenantDescriptor resolveTenant(Message message) {
         return resolveTenant(message, Collections.emptyList());
     }
+
+    /**
+     * Returns a copy of the given {@code message} carrying the given {@code tenant}, the inverse of
+     * {@link #resolveTenant(Message, Collection)}: where that method determines the tenant a message
+     * belongs to, this one makes that determination survive the message being dispatched elsewhere.
+     *
+     * @param message the message to attach the given {@code tenant} to
+     * @param tenant  the tenant to attach to the given {@code message}
+     * @return a copy of the given {@code message} carrying the given {@code tenant}
+     */
+    Message attachTenant(Message message, TenantDescriptor tenant);
 }

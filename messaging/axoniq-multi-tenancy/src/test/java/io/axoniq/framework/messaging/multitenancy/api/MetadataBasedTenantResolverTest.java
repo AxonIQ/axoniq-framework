@@ -79,4 +79,66 @@ class MetadataBasedTenantResolverTest {
                 .isInstanceOf(TenantNotResolvedException.class)
                 .hasMessageContaining("No tenant identifier found in message metadata under key '" + DEFAULT_TENANT_METADATA_KEY + "'");
     }
+
+    @Nested
+    class AttachTenant {
+
+        @Test
+        void attachesTheTenantIdentifierUnderTheConfiguredMetadataKey() {
+            Message message = new GenericMessage(
+                    "message-id",
+                    new MessageType("TestCommand"),
+                    "payload".getBytes(),
+                    Collections.emptyMap()
+            );
+
+            Message attached = testSubject.attachTenant(message, TENANT_A);
+
+            assertThat(attached.metadata().get(DEFAULT_TENANT_METADATA_KEY)).isEqualTo(TENANT_A.tenantId());
+        }
+
+        @Test
+        void attachesUnderACustomMetadataKeyWhenConfiguredWithOne() {
+            MetadataBasedTenantResolver customKeyResolver = new MetadataBasedTenantResolver("customTenantKey");
+            Message message = new GenericMessage(
+                    "message-id",
+                    new MessageType("TestCommand"),
+                    "payload".getBytes(),
+                    Collections.emptyMap()
+            );
+
+            Message attached = customKeyResolver.attachTenant(message, TENANT_A);
+
+            assertThat(attached.metadata().get("customTenantKey")).isEqualTo(TENANT_A.tenantId());
+        }
+
+        @Test
+        void preservesExistingMetadataEntriesWhenAttaching() {
+            Message message = new GenericMessage(
+                    "message-id",
+                    new MessageType("TestCommand"),
+                    "payload".getBytes(),
+                    Map.of("unrelated", "value")
+            );
+
+            Message attached = testSubject.attachTenant(message, TENANT_A);
+
+            assertThat(attached.metadata().get("unrelated")).isEqualTo("value");
+            assertThat(attached.metadata().get(DEFAULT_TENANT_METADATA_KEY)).isEqualTo(TENANT_A.tenantId());
+        }
+
+        @Test
+        void attachedMessageResolvesBackToTheSameTenantThroughTheSameResolverInstance() {
+            Message message = new GenericMessage(
+                    "message-id",
+                    new MessageType("TestCommand"),
+                    "payload".getBytes(),
+                    Collections.emptyMap()
+            );
+
+            Message attached = testSubject.attachTenant(message, TENANT_A);
+
+            assertThat(testSubject.resolveTenant(attached, List.of(TENANT_A))).isSameAs(TENANT_A);
+        }
+    }
 }
