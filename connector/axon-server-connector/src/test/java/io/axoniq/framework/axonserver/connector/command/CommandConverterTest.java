@@ -42,7 +42,8 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
-import static io.axoniq.axonserver.grpc.ProcessingKey.*;
+import static io.axoniq.axonserver.grpc.ProcessingKey.PRIORITY;
+import static io.axoniq.axonserver.grpc.ProcessingKey.ROUTING_KEY;
 import static io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils.createProcessingInstruction;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -213,6 +214,34 @@ class CommandConverterTest {
                               .withThrowableOfType(ExecutionException.class)
                               .withCauseInstanceOf(CommandExecutionException.class)
                               .withMessageContaining("boom");
+        }
+
+        @Test
+        void convertsErrorCommandResponseWithPayloadToFailedFutureCarryingConvertibleDetails() {
+            // given
+            var response = CommandResponse.newBuilder()
+                                          .setMessageIdentifier(messageIdentifier)
+                                          .setErrorCode("AXONIQ-4002")
+                                          .setErrorMessage(ErrorMessage.newBuilder().setMessage("boom").build())
+                                          .setPayload(SerializedObject.newBuilder()
+                                                                      .setType("java.lang.String")
+                                                                      .setData(ByteString.copyFromUtf8("raw"))
+                                                                      .build())
+                                          .build();
+            when(converter.convert("raw".getBytes(), String.class)).thenReturn("converted details");
+
+            // when
+            var future = CommandConverter.convertCommandResponse(response, converter);
+
+            // then
+            assertThatThrownBy(() -> future.get(1, TimeUnit.SECONDS))
+                    .isInstanceOf(ExecutionException.class)
+                    .cause()
+                    .isInstanceOf(CommandExecutionException.class)
+                    .satisfies(
+                            cause -> assertThat(((CommandExecutionException) cause).getDetails(String.class))
+                                    .contains("converted details")
+                    );
         }
     }
 

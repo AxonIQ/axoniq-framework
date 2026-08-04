@@ -25,6 +25,7 @@ import io.axoniq.axonserver.grpc.SerializedObject;
 import io.axoniq.axonserver.grpc.command.Command;
 import io.axoniq.axonserver.grpc.command.CommandResponse;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
 import io.axoniq.framework.axonserver.connector.shared.ExceptionConverter;
 import io.axoniq.framework.axonserver.connector.shared.MetadataConverter;
 import io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils;
@@ -134,7 +135,8 @@ public final class CommandConverter {
             return CompletableFuture.failedFuture(ExceptionConverter.convertToAxonException(
                     commandResponse.getErrorCode(),
                     commandResponse.getErrorMessage(),
-                    commandResponsePayload
+                    commandResponsePayload,
+                    converter
             ));
         }
 
@@ -248,6 +250,40 @@ public final class CommandConverter {
         return StringUtils.nonEmptyOrNull(payload.getRevision())
                 ? payload.getRevision()
                 : MessageType.DEFAULT_VERSION;
+    }
+
+    /**
+     * Converts the given {@code cause} into a {@link CommandResponse} carrying an error, using the given
+     * {@code requestIdentifier} to correlate the {@link Command} that led to this {@link CommandResponse}.
+     * <p>
+     * Used when a {@link AxonServerCommandBusConnector#subscribe(QualifiedName, int) subscribed} command handler
+     * completes a command exceptionally.
+     *
+     * @param clientId          the identifier of this application, as specified in the {@link AxonServerConfiguration},
+     *                          used as the location reported in the resulting error message
+     * @param requestIdentifier the identifier correlating the {@link CommandResponse} to the {@link Command} that led
+     *                          to the response
+     * @param cause             the exception to convert into the error carried by the {@link CommandResponse}
+     * @param converter         the converter to use for serializing application-specific exception details onto the
+     *                          resulting {@link CommandResponse}, or {@code null} if no such conversion is available
+     * @return a {@link CommandResponse} carrying the error derived from the given {@code cause}
+     */
+    public static CommandResponse convertErrorResponse(String clientId,
+                                                       String requestIdentifier,
+                                                       Throwable cause,
+                                                       @Nullable Converter converter) {
+        ErrorCode errorCode = ErrorCode.getCommandExecutionErrorCode(cause);
+        CommandResponse.Builder responseBuilder =
+                CommandResponse.newBuilder()
+                               .setMessageIdentifier(UUID.randomUUID().toString())
+                               .setRequestIdentifier(requestIdentifier)
+                               .setErrorCode(errorCode.errorCode())
+                               .setErrorMessage(ExceptionConverter.convertToErrorMessage(clientId, errorCode, cause));
+        SerializedObject detailsPayload = ExceptionConverter.convertDetails(cause, converter);
+        if (detailsPayload != null) {
+            responseBuilder.setPayload(detailsPayload);
+        }
+        return responseBuilder.build();
     }
 
     private CommandConverter() {
