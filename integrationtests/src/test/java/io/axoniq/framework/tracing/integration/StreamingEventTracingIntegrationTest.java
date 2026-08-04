@@ -105,17 +105,16 @@ class StreamingEventTracingIntegrationTest {
     private AxonConfiguration startApplication(AsyncInMemoryStreamableEventSource eventSource,
                                                BookingProjection projection) {
         return MessagingConfigurer.create()
-                                  .componentRegistry(registry -> {
-                                      // Stay local: no Axon Server connector, so no multi-tenancy either.
-                                      MultiTenancyUtils.disable(registry);
-                                      registry.disableEnhancer(AxonServerConfigurationEnhancer.class)
-                                              .registerComponent(SpanFactory.class, c -> spanFactory)
-                                              .registerComponent(
-                                                      MessagingTracingSettings.class,
-                                                      c -> MessagingTracingSettings.enabledByDefault()
-                                              )
-                                              .registerComponent(Tracer.class, c -> tracing.tracer());
-                                  })
+                                  // Not a multi-tenancy test. See MultiTenancyUtils#disable.
+                                  .componentRegistry(MultiTenancyUtils::disable)
+                                  .componentRegistry(registry -> registry
+                                          .disableEnhancer(AxonServerConfigurationEnhancer.class)
+                                          .registerComponent(SpanFactory.class, c -> spanFactory)
+                                          .registerComponent(
+                                                  MessagingTracingSettings.class,
+                                                  c -> MessagingTracingSettings.enabledByDefault()
+                                          )
+                                          .registerComponent(Tracer.class, c -> tracing.tracer()))
                                   .eventProcessing(eventProcessing -> eventProcessing.pooledStreaming(
                                           pooledStreaming -> pooledStreaming.defaults(
                                                                                    defaults -> defaults.eventSource(

@@ -139,12 +139,11 @@ class TracingJaegerIntegrationTest {
                                      .autodetectedCommandHandlingComponent(c -> new GreetHandler())
                                      .build();
         configuration = MessagingConfigurer.create()
-                                           .componentRegistry(registry -> {
-                                               // Stay local: no Axon Server connector, so no multi-tenancy either.
-                                               MultiTenancyUtils.disable(registry);
-                                               registry.disableEnhancer(AxonServerConfigurationEnhancer.class)
-                                                       .registerComponent(SpanFactory.class, c -> spanFactory);
-                                           })
+                                           // Not a multi-tenancy test. See MultiTenancyUtils#disable.
+                                           .componentRegistry(MultiTenancyUtils::disable)
+                                           .componentRegistry(registry -> registry
+                                                   .disableEnhancer(AxonServerConfigurationEnhancer.class)
+                                                   .registerComponent(SpanFactory.class, c -> spanFactory))
                                            .registerCommandHandlingModule(() -> commands)
                                            .start();
         CommandGateway commandGateway = configuration.getComponent(CommandGateway.class);

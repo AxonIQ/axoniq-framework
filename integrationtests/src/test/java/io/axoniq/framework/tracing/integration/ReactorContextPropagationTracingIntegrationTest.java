@@ -122,15 +122,16 @@ class ReactorContextPropagationTracingIntegrationTest {
     private AxonConfiguration startApplication(AsyncInMemoryStreamableEventSource eventSource,
                                                ReactiveProjection projection) {
         return MessagingConfigurer.create()
-                                  .componentRegistry(registry -> {
-                                      // Stay local: no Axon Server connector, so no multi-tenancy either.
-                                      MultiTenancyUtils.disable(registry);
-                                      registry.disableEnhancer(AxonServerConfigurationEnhancer.class)
-                                              .registerComponent(SpanFactory.class, c -> tracing.spanFactory())
-                                              .registerComponent(MessagingTracingSettings.class,
-                                                                 c -> MessagingTracingSettings.enabledByDefault())
-                                              .registerComponent(Tracer.class, c -> tracing.tracer());
-                                  })
+                                  // Not a multi-tenancy test. See MultiTenancyUtils#disable.
+                                  .componentRegistry(MultiTenancyUtils::disable)
+                                  .componentRegistry(registry -> registry
+                                          // Stay local: no Axon Server connector.
+                                          .disableEnhancer(AxonServerConfigurationEnhancer.class)
+                                          .registerComponent(SpanFactory.class, c -> tracing.spanFactory())
+                                          .registerComponent(MessagingTracingSettings.class,
+                                                             c -> MessagingTracingSettings.enabledByDefault())
+                                          .registerComponent(Tracer.class, c -> tracing.tracer())
+                                  )
                                   .eventProcessing(ep -> ep.pooledStreaming(
                                           ps -> ps.defaults(d -> d.eventSource(eventSource))
                                                   .defaultProcessor(

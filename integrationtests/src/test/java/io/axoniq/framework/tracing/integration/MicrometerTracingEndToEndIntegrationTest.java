@@ -167,13 +167,12 @@ class MicrometerTracingEndToEndIntegrationTest {
                                    .autodetectedQueryHandlingComponent(c -> new FindRoomHandler())
                                    .build();
         return MessagingConfigurer.create()
-                                  .componentRegistry(registry -> {
-                                      // Stay local: no Axon Server connector, so no multi-tenancy either.
-                                      MultiTenancyUtils.disable(registry);
-                                      registry.disableEnhancer(AxonServerConfigurationEnhancer.class)
-                                              .registerComponent(Tracer.class, c -> tracer)
-                                              .registerComponent(Propagator.class, c -> propagator);
-                                  })
+                                  // Not a multi-tenancy test. See MultiTenancyUtils#disable.
+                                  .componentRegistry(MultiTenancyUtils::disable)
+                                  .componentRegistry(registry -> registry
+                                          .disableEnhancer(AxonServerConfigurationEnhancer.class)
+                                          .registerComponent(Tracer.class, c -> tracer)
+                                          .registerComponent(Propagator.class, c -> propagator))
                                   .registerCommandHandlingModule(() -> commandModule)
                                   .registerQueryHandlingModule(() -> queryModule)
                                   .start();
