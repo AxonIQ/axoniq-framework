@@ -2,6 +2,9 @@
 = Tenant-Aware Event Processing
 :navtitle: Tenant-aware event processing
 :reftext: Tenant-aware event processing
+:demo-core: https://github.com/AxonIQ/AxonFramework/blob/main/examples/university-multi-tenancy-examples/university-multi-tenancy-core/src/main/java/org/axonframework/examples/demo/multitenancy
+:demo-declarative: https://github.com/AxonIQ/AxonFramework/blob/main/examples/university-multi-tenancy-examples/university-multi-tenancy-declarative/src/main/java/org/axonframework/examples/demo/multitenancy
+:demo-springboot: https://github.com/AxonIQ/AxonFramework/blob/main/examples/university-multi-tenancy-examples/university-multi-tenancy-springboot/src/main/java/org/axonframework/examples/demo/multitenancy
 
 Axon Framework has two kinds of event processors. A streaming event processor pulls events from a stream and tracks its position in a token. A subscribing event processor reacts to events on the event bus as they are published.
 Multi-tenancy makes the streaming event processor tenant-aware: one event processor consumes the events of every tenant, keeping each tenant's projection separated, with no extra configuration.
@@ -13,6 +16,7 @@ There are two ways to stream a tenant's events, and the event handler you write 
 
 A subscribing event processor is not wired to the per-tenant stores at all. <<Subscribing event processors>> explains how it behaves in a multi-tenant application.
 
+[#handling-events-per-tenant]
 == Handling events per tenant
 
 Events in a multi-tenancy application are handled through regular xref:events:event-handlers.adoc[event handlers].
@@ -25,12 +29,11 @@ Write an ordinary event handler and take the tenant's own instance of whatever i
 
 [source,java]
 ----
-@EventHandler
-public void on(StudentEnrolled event, @TenantScoped EnrollmentRepository repository) { // <1>
-    repository.save(new Enrollment(event.studentId(), event.courseId()));
-}
+include::example$multitenancy/tenanteventprocessing/EnrollmentProjection.java[tag=tenant-scoped-event-handler,indent=0]
 ----
 <1> Resolved from the tenant carried on the processing context, so the enrollment lands in that tenant's own projection.
+
+TIP: To see this running, the xref:multi-tenancy:demo.adoc[university demo] projects every tenant's events through link:{demo-core}/university/read/statistics/CourseStatisticsProjection.java[`CourseStatisticsProjection`], on one processor that names no tenant.
 
 == Pooled streaming
 
@@ -56,6 +59,7 @@ A tenant that is added starts from the beginning of its store. A tenant that is 
 Renaming a tenant's context is seen as removing one tenant and adding another, so its events replay from the beginning under the new name.
 This happens automatically and requires no configuration.
 
+[#idempotent-handlers]
 [WARNING]
 .Event handlers must be idempotent
 ====
@@ -72,22 +76,36 @@ Each restart is bounded by a safety-net timeout, so a processor that never finis
 When a processor does not finish within that timeout, its restart is abandoned with a logged warning while the other processors still restart, and that processor picks up the current set of tenants on the next tenant change.
 The timeout defaults to 30 seconds.
 
+[#configuring-restart-timeout]
 === Configuring the restart timeout
 
 A deployment whose processors are slow to stop and start can raise the safety-net timeout by registering a `MultiTenantStreamingProcessorRestartConfiguration` with a longer value:
 
+[tabs]
+====
+Declarative - Configuration API::
++
+--
 [source,java]
 ----
-public void raiseRestartTimeout(MessagingConfigurer configurer) {
-    configurer.componentRegistry(registry ->
-        registry.registerComponent(
-                MultiTenantStreamingProcessorRestartConfiguration.class,
-                config -> MultiTenantStreamingProcessorRestartConfiguration.DEFAULT.restartTimeout(Duration.ofMinutes(2)) // <1>
-        )
-    );
-}
+include::example$multitenancy/tenanteventprocessing/DeclarativeRestartConfiguration.java[tag=restart-timeout,indent=0]
 ----
 <1> The bound applied to each processor's shutdown-and-start during a restart, raised here from the 30-second default.
+--
+Autodetected - Spring Boot::
++
+--
+Expose the configuration as a bean. The default is only registered when the application registers none, so this bean replaces it:
+
+[source,java]
+----
+include::example$multitenancy/tenanteventprocessing/SpringRestartConfiguration.java[tag=restart-timeout,indent=0]
+----
+<1> The bound applied to each processor's shutdown-and-start during a restart, raised here from the 30-second default.
+--
+====
+
+TIP: Both variants of the xref:multi-tenancy:demo.adoc[university demo] register this at its default, from the `UniversityConfiguration` of its link:{demo-declarative}/UniversityConfiguration.java[declarative] and link:{demo-springboot}/UniversityConfiguration.java[Spring Boot] variants, so the knob is visible without changing what the demo does.
 
 == Persistent streams
 

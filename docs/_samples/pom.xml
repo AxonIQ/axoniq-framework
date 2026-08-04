@@ -85,6 +85,10 @@
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-message-transformation</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-multi-tenancy</artifactId>
+        </dependency>
         <!-- Spring Boot auto-configuration types (EventProcessorDefinition, etc.) used by Spring samples -->
         <dependency>
             <groupId>io.axoniq.framework</groupId>
@@ -149,6 +153,7 @@
                                 <source>${project.basedir}/../reference-guide/modules/message-transformation/examples</source>
                                 <source>${project.basedir}/../reference-guide/modules/distributed-messaging/examples</source>
                                 <source>${project.basedir}/../reference-guide/modules/connector/examples</source>
+                                <source>${project.basedir}/../reference-guide/modules/multi-tenancy/examples</source>
                                 <source>${project.basedir}/../reference-guide/modules/snapshotting/examples</source>
                             </sources>
                         </configuration>
