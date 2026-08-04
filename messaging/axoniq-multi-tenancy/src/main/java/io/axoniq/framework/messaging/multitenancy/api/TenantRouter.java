@@ -25,6 +25,8 @@ import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -51,6 +53,8 @@ import java.util.Set;
  */
 @Internal
 public class TenantRouter implements DescribableComponent {
+
+    private static final Logger logger = LoggerFactory.getLogger(TenantRouter.class);
 
     private final TenantResolver tenantResolver;
     private final TenantDescriptors tenantDescriptors;
@@ -91,6 +95,20 @@ public class TenantRouter implements DescribableComponent {
                         "The processing context carries tenant [%s], which is not a known tenant",
                         tenant.tenantId());
             }
+            Message message = Message.fromContext(context);
+            resolve(message, tenantDescriptors.tenants())
+                    .ifPresent(messageAttachedTenant -> {
+                        // if a tenant is present on the message and does not equal the tenant in the context we warn
+                        if (!messageAttachedTenant.equals(tenant)) {
+                            logger.warn(
+                                    "The message-attached tenant [{}] for message [{}] with identifier [{}] differs from the tenant [{}] in the current processing context. "
+                                    + "Information might leak unintentionally to a different tenant, please check your configuration.",
+                                    messageAttachedTenant.tenantId(),
+                                    message.type(),
+                                    message.identifier(),
+                                    tenant.tenantId());
+                        }
+                    });
             return tenantOnContext;
         }
         // Only the fallback needs the tenants themselves, since the wrapped resolver is handed them to choose from.
@@ -149,6 +167,18 @@ public class TenantRouter implements DescribableComponent {
      * @return a copy of the given {@code message} carrying the given {@code tenant}
      */
     public Message attachTenant(Message message, TenantDescriptor tenant) {
+        resolve(message, tenantDescriptors.tenants()).ifPresent(messageAttachedTenant -> {
+            // if a tenant is present on the message and does not equal the tenant in the context we warn
+            if (!messageAttachedTenant.equals(tenant)) {
+                logger.warn(
+                        "Tenant [{}] is already attached to message [{}] with identifier [{}] while it should get tenant [{}] attached. "
+                        + "Information might leak unintentionally to a different tenant, please check your configuration.",
+                        messageAttachedTenant.tenantId(),
+                        message.type(),
+                        message.identifier(),
+                        tenant.tenantId());
+            }
+        });
         return tenantResolver.attachTenant(message, tenant);
     }
 

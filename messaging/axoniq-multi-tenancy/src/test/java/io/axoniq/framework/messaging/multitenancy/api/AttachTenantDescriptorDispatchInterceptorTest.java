@@ -71,7 +71,9 @@ class AttachTenantDescriptorDispatchInterceptorTest {
         void overwritesTheMessageAttachedTenantWithTheContextResolvedTenantOnCommandMessagesBeforeProceeding() {
             // given
             AttachTenantDescriptorDispatchInterceptor testSubject =
-                    new AttachTenantDescriptorDispatchInterceptor(routerKnowing(TENANT_A));
+                    new AttachTenantDescriptorDispatchInterceptor(routerKnowing(TENANT_A,
+                                                                                TenantDescriptor.tenantWithId(
+                                                                                        "myCustomTenant")));
             Message message = new GenericCommandMessage(new MessageType("TestCommand"), "payload")
                     .andMetadata(Map.of(TENANT_KEY, "myCustomTenant"));
             ProcessingContext context = new StubProcessingContext()
@@ -111,7 +113,9 @@ class AttachTenantDescriptorDispatchInterceptorTest {
         void overwritesTheMessageAttachedTenantWithTheContextResolvedTenantOnQueryMessagesBeforeProceeding() {
             // given
             AttachTenantDescriptorDispatchInterceptor testSubject =
-                    new AttachTenantDescriptorDispatchInterceptor(routerKnowing(TENANT_A));
+                    new AttachTenantDescriptorDispatchInterceptor(routerKnowing(TENANT_A,
+                                                                                TenantDescriptor.tenantWithId(
+                                                                                        "myCustomTenant")));
             Message message = new GenericQueryMessage(new GenericMessage("message-id",
                                                                          new MessageType("TestQuery"),
                                                                          "payload".getBytes(),

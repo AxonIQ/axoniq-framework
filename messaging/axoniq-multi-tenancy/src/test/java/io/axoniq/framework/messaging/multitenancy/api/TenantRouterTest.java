@@ -19,6 +19,11 @@
 
 package io.axoniq.framework.messaging.multitenancy.api;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.test.appender.ListAppender;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.GenericCommandMessage;
@@ -201,6 +206,86 @@ class TenantRouterTest {
             CommandMessage attached = (CommandMessage) router.attachTenant(message, TENANT_A);
 
             assertThat(attached.metadata().get(TENANT_ID_KEY)).isEqualTo(TENANT_A.tenantId());
+        }
+    }
+
+    @Nested
+    class LoggingConflictingTenants {
+
+        private Logger routerLogger;
+        private Level previousLevel;
+        private ListAppender appender;
+
+        @BeforeEach
+        void attachAppender() {
+            routerLogger = (Logger) LogManager.getLogger(TenantRouter.class);
+            previousLevel = routerLogger.getLevel();
+            routerLogger.setLevel(Level.WARN);
+            appender = new ListAppender("TenantRouterConflictingTenants");
+            appender.start();
+            routerLogger.addAppender(appender);
+        }
+
+        @AfterEach
+        void detachAppender() {
+            routerLogger.removeAppender(appender);
+            appender.stop();
+            routerLogger.setLevel(previousLevel);
+        }
+
+        @Test
+        void warnsWhenTheMessageAttachedTenantDiffersFromTheContextTenant() {
+            TenantRouter resolver = new TenantRouter(metadataResolver, TENANT_DESCRIPTORS);
+            ProcessingContext context = StubProcessingContext.forMessage(eventWithTenant(TENANT_B))
+                    .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
+
+            assertThat(resolver.resolveFromContext(context)).hasValue(TENANT_A);
+
+            assertThat(warnings()).hasSize(1);
+            assertThat(warnings().getFirst().getMessage().getFormattedMessage())
+                    .contains(TENANT_B.tenantId())
+                    .contains(TENANT_A.tenantId());
+        }
+
+        @Test
+        void staysSilentWhenTheMessageAttachedTenantMatchesTheContextTenant() {
+            TenantRouter resolver = new TenantRouter(metadataResolver, TENANT_DESCRIPTORS);
+            ProcessingContext context = StubProcessingContext.forMessage(eventWithTenant(TENANT_A))
+                    .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
+
+            assertThat(resolver.resolveFromContext(context)).hasValue(TENANT_A);
+
+            assertThat(warnings()).isEmpty();
+        }
+
+        @Test
+        void warnsWhenADifferentTenantIsAlreadyAttachedToTheMessage() {
+            TenantRouter router = new TenantRouter(metadataResolver, TENANT_DESCRIPTORS);
+            CommandMessage message = commandWithTenant(TENANT_A);
+
+            router.attachTenant(message, TENANT_B);
+
+            assertThat(warnings()).hasSize(1);
+            assertThat(warnings().getFirst().getMessage().getFormattedMessage())
+                    .contains(TENANT_A.tenantId())
+                    .contains(TENANT_B.tenantId());
+        }
+
+        @Test
+        void staysSilentWhenReattachingTheSameTenantToTheMessage() {
+            TenantRouter router = new TenantRouter(metadataResolver, TENANT_DESCRIPTORS);
+            CommandMessage message = commandWithTenant(TENANT_A);
+
+            router.attachTenant(message, TENANT_A);
+
+            assertThat(warnings()).isEmpty();
+        }
+
+        private List<LogEvent> warnings() {
+            return appender.getEvents()
+                           .stream()
+                           .filter(event -> event.getLevel() == Level.WARN)
+                           .toList();
         }
     }
 
