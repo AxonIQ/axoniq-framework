@@ -20,6 +20,7 @@
 package io.axoniq.framework.tracing.integration;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.micrometer.context.ContextRegistry;
 import io.micrometer.tracing.Tracer;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
@@ -121,14 +122,15 @@ class ReactorContextPropagationTracingIntegrationTest {
     private AxonConfiguration startApplication(AsyncInMemoryStreamableEventSource eventSource,
                                                ReactiveProjection projection) {
         return MessagingConfigurer.create()
-                                  .componentRegistry(registry -> registry
-                                          // Stay local: no Axon Server connector.
-                                          .disableEnhancer(AxonServerConfigurationEnhancer.class)
-                                          .registerComponent(SpanFactory.class, c -> tracing.spanFactory())
-                                          .registerComponent(MessagingTracingSettings.class,
-                                                             c -> MessagingTracingSettings.enabledByDefault())
-                                          .registerComponent(Tracer.class, c -> tracing.tracer())
-                                  )
+                                  .componentRegistry(registry -> {
+                                      // Stay local: no Axon Server connector, so no multi-tenancy either.
+                                      MultiTenancyUtils.disable(registry);
+                                      registry.disableEnhancer(AxonServerConfigurationEnhancer.class)
+                                              .registerComponent(SpanFactory.class, c -> tracing.spanFactory())
+                                              .registerComponent(MessagingTracingSettings.class,
+                                                                 c -> MessagingTracingSettings.enabledByDefault())
+                                              .registerComponent(Tracer.class, c -> tracing.tracer());
+                                  })
                                   .eventProcessing(ep -> ep.pooledStreaming(
                                           ps -> ps.defaults(d -> d.eventSource(eventSource))
                                                   .defaultProcessor(

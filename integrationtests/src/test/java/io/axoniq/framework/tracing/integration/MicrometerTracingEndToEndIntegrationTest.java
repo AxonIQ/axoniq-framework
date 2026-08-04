@@ -20,6 +20,7 @@
 package io.axoniq.framework.tracing.integration;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.tracing.micrometer.MicrometerSpanFactory;
 import io.axoniq.framework.tracing.micrometer.MicrometerTracingConfigurationEnhancer;
 import io.micrometer.context.ContextSnapshotFactory;
@@ -166,10 +167,13 @@ class MicrometerTracingEndToEndIntegrationTest {
                                    .autodetectedQueryHandlingComponent(c -> new FindRoomHandler())
                                    .build();
         return MessagingConfigurer.create()
-                                  .componentRegistry(registry -> registry
-                                          .disableEnhancer(AxonServerConfigurationEnhancer.class)
-                                          .registerComponent(Tracer.class, c -> tracer)
-                                          .registerComponent(Propagator.class, c -> propagator))
+                                  .componentRegistry(registry -> {
+                                      // Stay local: no Axon Server connector, so no multi-tenancy either.
+                                      MultiTenancyUtils.disable(registry);
+                                      registry.disableEnhancer(AxonServerConfigurationEnhancer.class)
+                                              .registerComponent(Tracer.class, c -> tracer)
+                                              .registerComponent(Propagator.class, c -> propagator);
+                                  })
                                   .registerCommandHandlingModule(() -> commandModule)
                                   .registerQueryHandlingModule(() -> queryModule)
                                   .start();
