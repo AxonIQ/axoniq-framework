@@ -154,6 +154,7 @@
                                 <source>${project.basedir}/../reference-guide/modules/distributed-messaging/examples</source>
                                 <source>${project.basedir}/../reference-guide/modules/connector/examples</source>
                                 <source>${project.basedir}/../reference-guide/modules/multi-tenancy/examples</source>
+                                <source>${project.basedir}/../reference-guide/modules/migration/examples</source>
                                 <source>${project.basedir}/../reference-guide/modules/snapshotting/examples</source>
                             </sources>
                         </configuration>
