@@ -343,6 +343,17 @@ class AxonServerCommandBusConnectorTest {
     }
 
     @Test
+    void disconnectInboundPreparesTheCommandChannelWithoutDisconnectingTheSharedConnection() {
+        when(commandChannel.prepareDisconnect()).thenReturn(CompletableFuture.completedFuture(null));
+        when(connection.isConnected()).thenReturn(true);
+
+        testSubject.disconnectInbound().join();
+
+        verify(commandChannel).prepareDisconnect();
+        verify(connection, never()).disconnect();
+    }
+
+    @Test
     void afterShutdownDispatchingAnShutdownInProgressExceptionIsThrownOnDispatchInvocation() {
         CommandMessage testCommand = new GenericCommandMessage(ANY_TEST_TYPE, ANY_TEST_PAYLOAD);
 

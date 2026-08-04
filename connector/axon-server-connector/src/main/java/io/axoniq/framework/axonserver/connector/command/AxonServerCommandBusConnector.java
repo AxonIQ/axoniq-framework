@@ -185,8 +185,7 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
      * @return A completable future that completed once the {@link AxonServerConnection#commandChannel()} has prepared
      * disconnected and handled all in-flight incoming messages.
      */
-    @Override
-    public CompletableFuture<Void> disconnect() {
+    public CompletableFuture<Void> disconnectInbound() {
         if (!connection.isConnected()) {
             return CompletableFuture.completedFuture(null);
         }
@@ -196,8 +195,12 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
                                                             .toArray(CompletableFuture[]::new);
         return connection.commandChannel()
                          .prepareDisconnect()
-                         .thenCompose(ignored -> CompletableFuture.allOf(inFlight))
-                         .thenRun(connection::disconnect);
+                         .thenCompose(ignored -> CompletableFuture.allOf(inFlight));
+    }
+
+    @Override
+    public CompletableFuture<Void> disconnect() {
+        return disconnectInbound().thenRun(connection::disconnect);
     }
 
     /**

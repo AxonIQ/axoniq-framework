@@ -460,6 +460,40 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             assertThat(connection1.disconnectCalls()).isEqualTo(1);
             assertThat(connection2.disconnectCalls()).isEqualTo(1);
         }
+
+        @Test
+        void disconnectInboundPreparesAllTenantConnectionsWithoutClosingThem() {
+            TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1, TENANT_2));
+            RecordingConnection connection1 = new RecordingConnection();
+            RecordingConnection connection2 = new RecordingConnection();
+            MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
+                                                                                Map.of(TENANT_1.tenantId(),
+                                                                                       connection1,
+                                                                                       TENANT_2.tenantId(),
+                                                                                       connection2));
+
+            testSubject.subscribe(QUERY_ONE).join();
+            testSubject.disconnectInbound().join();
+
+            assertThat(connection1.recordingQueryChannel().prepareDisconnectCalled()).isTrue();
+            assertThat(connection2.recordingQueryChannel().prepareDisconnectCalled()).isTrue();
+            assertThat(connection1.disconnectCalls()).isZero();
+            assertThat(connection2.disconnectCalls()).isZero();
+        }
+
+        @Test
+        void tenantRemovalDuringInboundDisconnectDoesNotCloseTheSharedConnection() {
+            TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1));
+            RecordingConnection connection = new RecordingConnection();
+            MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
+                                                                                Map.of(TENANT_1.tenantId(), connection));
+            Registration registration = testSubject.registerTenant(TENANT_1);
+
+            testSubject.disconnectInbound().join();
+            registration.cancel();
+
+            assertThat(connection.disconnectCalls()).isZero();
+        }
     }
 
     @Nested
