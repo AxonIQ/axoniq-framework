@@ -81,12 +81,10 @@ public final class CommandConverter {
      * Will set the {@link ProcessingKey#ROUTING_KEY routing key} and {@link ProcessingKey#PRIORITY priority} when
      * present on the given {@code command}.
      *
-     * @param command       The command message to convert to a {@link Command}.
-     * @param clientId      The identifier of this application, as specific in the
-     *                      {@link AxonServerConfiguration}.
-     * @param componentName The name of this application, as specific in the
-     *                      {@link AxonServerConfiguration}.
-     * @return The given {@code command} converted to a {@link Command}.
+     * @param command       the command message to convert to a {@link Command}
+     * @param clientId      the identifier of this application, as specific in the {@link AxonServerConfiguration}
+     * @param componentName the name of this application, as specific in the {@link AxonServerConfiguration}
+     * @return the given {@code command} converted to a {@link Command}
      */
     public static Command convertCommandMessage(CommandMessage command,
                                                 String clientId,
@@ -122,7 +120,7 @@ public final class CommandConverter {
      * {@link AxonServerCommandBusConnector#dispatch(CommandMessage, ProcessingContext) dispatching}.
      *
      * @param commandResponse the command response to convert to a {@link CommandResultMessage}
-     * @param converter the converter to use for payload conversion in the resulting {@link CommandResultMessage}
+     * @param converter       the converter to use for payload conversion in the resulting {@link CommandResultMessage}
      * @return the {@code commandResponse} converted to a {@link CommandResultMessage}, wrapped in a
      * {@link CompletableFuture} for convenience
      */
@@ -160,7 +158,7 @@ public final class CommandConverter {
      * Converts the given {@code command} into a {@link CommandMessage} for handling in
      * {@link AxonServerCommandBusConnector#subscribe(QualifiedName, int) subscribed} command handlers.
      *
-     * @param command the command to convert to a {@link CommandMessage}
+     * @param command   the command to convert to a {@link CommandMessage}
      * @param converter the converter to use for payload conversion in the resulting {@link CommandMessage}
      * @return the given {@code command} converted into a {@link CommandMessage}
      */
@@ -190,10 +188,10 @@ public final class CommandConverter {
      * returning a result from handling of a
      * {@link AxonServerCommandBusConnector#subscribe(QualifiedName, int) subscribed} command handler.
      *
-     * @param resultMessage     The result message to convert to a {@link CommandResponse}, when present.
-     * @param requestIdentifier The identifier correlating the {@link CommandResponse} to the {@link Command} that led
-     *                          to the response.
-     * @return A {@link CommandResponse} based on the given {@code resultMessage} and {@code requestIdentifier}.
+     * @param resultMessage     the result message to convert to a {@link CommandResponse}, when present
+     * @param requestIdentifier the identifier correlating the {@link CommandResponse} to the {@link Command} that led
+     *                          to the response
+     * @return a {@link CommandResponse} based on the given {@code resultMessage} and {@code requestIdentifier}
      */
     public static CommandResponse convertResultMessage(@Nullable CommandResultMessage resultMessage,
                                                        String requestIdentifier) {
