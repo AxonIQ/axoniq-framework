@@ -10,9 +10,9 @@ Axon Framework maps each of your tenants onto exactly one Axon Server context, a
 It works as it did in Axon Framework 4, and a command or query still names its tenant in the `tenantId` metadata key, so your tenant identifiers stay valid and so does the habit of tagging a message once as it enters the system.
 One default does shift, which <<step-tenant-discovery>> covers.
 
-What genuinely changes is where the fan-out happens.
+What genuinely changes is that you use the regular components again.
 The extension gave every tenant its own copy of the infrastructure, so each one had a `CommandBus`, a `QueryBus`, an `EventStore`, and an event processor for every processing group.
-Axon Framework 5 keeps a single one of each and pushes the fan-out down to the Axon Server connection, which is how xref:multi-tenancy:tenant-command-handling.adoc[command] and xref:multi-tenancy:tenant-query-handling.adoc[query] dispatching stay tenant-aware without a bus per tenant.
+Axon Framework 5 uses the ordinary `CommandBus`, `QueryBus`, and `EventStore`, and separates tenants further down at the Axon Server connection, which is how xref:multi-tenancy:tenant-command-handling.adoc[command] and xref:multi-tenancy:tenant-query-handling.adoc[query] dispatching stay tenant-aware without a bus per tenant.
 
 The xref:multi-tenancy:demo.adoc[university demo] is a small multi-tenant Axon Framework 5 application, written once against the Configuration API and once with Spring Boot.
 
@@ -40,7 +40,7 @@ On the Configuration API you register a `MultiTenantPersistentStreamEventSourceF
 
 **Your existing event processor tokens need replacing.**
 Under pooled streaming a token holds one position per tenant, which is a different type from what the extension stored, so plan the switch as a replay rather than as a resume.
-Persistent streams keep no token store at all, so there is nothing to carry over.
+Persistent streams keep no token store at all, so there is no position to carry into them either and they start with a full replay.
 
 **<<resetting-a-projection,Resetting a projection>> covers every tenant at once.**
 Under pooled streaming one processor serves all of them, so a reset replays them together rather than one at a time.
@@ -144,7 +144,7 @@ Either you listed them in `axon.axonserver.contexts`, or you registered a `Tenan
 Setting the property turned the runtime discovery off entirely.
 
 The predicate is now the single mechanism, and it handles both cases.
-The extension already filtered the contexts it discovered at startup through it, so what changed is that the property no longer bypasses it.
+The Axon Framework 4 extension already filtered the contexts it discovered at startup through it, so what changed is that the property no longer bypasses it.
 xref:multi-tenancy:tenant-management.adoc#filtering-contexts[Filtering which contexts are tenants] goes through it properly.
 
 [#static-tenants]
@@ -234,6 +234,9 @@ The method behind the tagging changed in two ways.
 Both surface as compile errors.
 An application that passed values other than strings has to convert them first.
 
+Building the message yourself is only one option.
+`CommandGateway#send` and `QueryGateway#query` both take the payload and a `Metadata` separately, so tagging a command needs no `Message` at all: `commandGateway.send(command, Metadata.with(TenantDescriptor.TENANT_ID_KEY, "tenant-a"), context)`.
+
 [tabs]
 ====
 Axon Framework 4::
@@ -257,9 +260,9 @@ include::example$migration/paths/multitenancy/TenantTagging.java[tag=tag-message
 [#different-metadata-key]
 === Reading the tenant from a different metadata key
 
-The extension had no direct equivalent, since its default resolver was hard-wired to `tenantId`.
-To read another key you had to switch the metadata helper off and write the whole resolver yourself, as the next section shows.
-Axon Framework 5 lets you keep the built-in resolver and just tell it which key to read.
+You replace the resolver in both versions. What differs is how much you have to write.
+The extension's default resolver was hard-wired to `tenantId`, so reading another key meant switching the metadata helper off and writing a resolver of your own, as the next section shows.
+In Axon Framework 5 you register a `MetadataBasedTenantResolver` constructed with the key you want, so the built-in implementation does the work.
 
 [tabs]
 ====
@@ -475,7 +478,7 @@ A few things worth knowing while you port this over:
 Handlers that inject a `QueryUpdateEmitter` need no attention at all, because an update emitted while handling a message only ever reaches subscription queries belonging to that same tenant.
 
 [#step-event-processors]
-== Step 6: Collapse the per-tenant processors
+== Step 6: Collapse the per-tenant pooled streaming processors
 
 A processing group called `course-statistics` with three tenants used to give you three processors, `course-statistics@tenant-a`, `@tenant-b`, and `@tenant-c`, each with a token and segments of its own.
 You now get one processor named `course-statistics`, reading every tenant's store as a single stream ordered by event timestamp and keeping one position per tenant inside one token, which xref:multi-tenancy:tenant-event-processing.adoc[tenant-aware event processing] covers in detail.
