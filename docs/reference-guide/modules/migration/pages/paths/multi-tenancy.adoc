@@ -6,8 +6,8 @@ Serving several tenants from one Axon Framework 4 application meant reaching for
 Axoniq Framework now ships that capability itself, as the `axoniq-multi-tenancy` module described in xref:multi-tenancy:index.adoc[].
 You still add it as a dependency, but you no longer wire anything up afterwards, because multi-tenancy switches itself on the moment the module is on the classpath.
 
-Plenty carries over.
-Tenants are still Axon Server contexts, and a command or query still names its tenant in the `tenantId` metadata key, so the identifiers you already use stay valid, along with the habit of tagging a message once as it enters the system.
+Axon Framework maps each of your tenants onto exactly one Axon Server context, and that mapping is what keeps one tenant's messages and events apart from another's.
+It works as it did in Axon Framework 4, and a command or query still names its tenant in the `tenantId` metadata key, so your tenant identifiers stay valid and so does the habit of tagging a message once as it enters the system.
 One default does shift, which <<step-tenant-discovery>> covers.
 
 What genuinely changes is where the fan-out happens.
@@ -19,34 +19,44 @@ The xref:multi-tenancy:demo.adoc[university demo] is a small multi-tenant Axon F
 [#before-you-start]
 == Before you start
 
-Sharing the infrastructure between tenants changes a few things at runtime.
-Plan for them before you change any configuration.
+The extension gave every tenant its own copy of the infrastructure.
+Axon Framework 5 shares one set of components and separates tenants at the Axon Server connection instead, which is cheaper to run but changes five things you may be relying on today.
+None of them is a setting you can flip after the fact, so read them before you start editing.
 
-Start by deciding how your projections read events, because the token and reset behaviour below depends on that choice.
+[#choose-a-stream]
+=== Decide how your projections read events
+
+Take this decision first, because the token and reset behaviour below follows from it.
 xref:multi-tenancy:tenant-event-processing.adoc[Tenant-aware event processing] offers two options.
+
 A persistent stream becomes one stream per tenant, with Axon Server tracking each tenant's position in that tenant's own context.
 A pooled streaming processor instead merges every tenant's store into a single stream and tracks all their positions in one token.
+
 If you are arriving from `tenantDataSourceResolver`, meaning a database per tenant, persistent streams are the recommended option.
 In Spring Boot the per-tenant streams are wired for you from the persistent-stream configuration.
 On the Configuration API you register a `MultiTenantPersistentStreamEventSourceFactory` yourself, since no enhancer contributes it.
 
-Your existing event processor tokens need replacing::
+=== What changes at runtime
+
+**Your existing event processor tokens need replacing.**
 Under pooled streaming a token holds one position per tenant, which is a different type from what the extension stored, so plan the switch as a replay rather than as a resume.
 Persistent streams keep no token store at all, so there is nothing to carry over.
 
-<<resetting-a-projection,Resetting a projection>> covers every tenant at once::
+**<<resetting-a-projection,Resetting a projection>> covers every tenant at once.**
 Under pooled streaming one processor serves all of them, so a reset replays them together rather than one at a time.
 With persistent streams each tenant has its own server-side position, so a reset replays that tenant only.
 
-Sequencing no longer stops at the tenant boundary::
+**Sequencing no longer stops at the tenant boundary.**
 Two tenants that happen to use the same identifier, the same course id for instance, land in the same sequence and start waiting on each other.
 There is no built-in per-tenant sequencing policy, so write one when sequencing has to stay inside a tenant.
 The tenant is available where you need it, since the processor hands your policy a `ProcessingContext` carrying the tenant the event was streamed from.
 Read it with `TenantDescriptor.fromContext` and fold the tenant identifier into the sequence identifier you return.
 
-Dead-letter queues and event scheduling are not tenant-aware::
-Nothing yet replaces the extension's `MultiTenantDeadLetterProcessor#forTenant` or its `MultiTenantEventScheduler`.
-Deadlines have no support yet either, tenant-aware or otherwise, as xref:migration:paths/index.adoc#what-is-not-yet-there[what is not yet there] covers.
+**Tenant-aware dead-letter queues are not supported yet.**
+Nothing yet replaces the extension's `MultiTenantDeadLetterProcessor#forTenant`, so a dead letter is not routed per tenant for the time being.
+
+**Event scheduling and deadlines have no equivalent.**
+The extension's `MultiTenantEventScheduler` has nothing to be made tenant-aware, since Axon Framework 5 carries neither an event scheduler nor a deadline manager, as xref:migration:paths/index.adoc#what-is-not-yet-there[what is not yet there] covers.
 
 [#step-dependency]
 == Step 1: Swap the dependency
@@ -119,11 +129,11 @@ axon.multitenancy.enabled=false
 
 Multi-tenancy cannot do anything without Axon Server, and the two configuration styles react differently when it is missing.
 
-Spring Boot handles it for you.
+**Spring Boot handles it for you.**
 Setting `axon.axonserver.enabled=false` quietly leaves multi-tenancy inactive and the application runs single-tenant.
 If you happen to set `axon.multitenancy.enabled=true` at the same time, a warning on startup points out that the two settings contradict each other.
 
-The Configuration API leaves the decision with you.
+**The Configuration API leaves the decision with you.**
 An application that carries the module but has no `AxonServerConnectionManager` fails at startup with an `AxonConfigurationException`, which names both ways forward.
 
 [#step-tenant-discovery]
@@ -334,7 +344,7 @@ On the handling side the message proceeds with a logged warning and no tenant, a
 The second is that the tenant no longer travels in the metadata of the messages your handlers produce.
 The extension registered a `TenantCorrelationProvider` that copied `tenantId` onto each of them.
 Axon Framework 5 puts the resolved `TenantDescriptor` on the `ProcessingContext` instead, so tagging at the edge is still all you have to do, but a message further down the chain no longer carries the key itself.
-Should anything outside message handling read it, log correlation or a filter for example, register a `CorrelationDataProvider` for it yourself.
+Should anything outside message handling read it, log correlation or a filter for example, register a xref:messaging-concepts:message-correlation.adoc[`CorrelationDataProvider`] for it yourself.
 
 [#step-segment-factories]
 == Step 4: Delete the tenant segment factories
@@ -543,8 +553,8 @@ Every property the extension read, to check off against your `application.proper
 | The hyphen is dropped. Still defaults to enabled, so only an application that set it explicitly needs a change.
 
 | `axon.axonserver.contexts`
-| (removed)
-| Replaced by a `TenantConnectPredicate`, see <<step-tenant-discovery>>.
+| (unused)
+| Unused by multi-tenancy. Replaced by a `TenantConnectPredicate`, see <<step-tenant-discovery>>.
 
 | `axon.multi-tenancy.use-metadata-helper`
 | (removed)
