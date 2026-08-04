@@ -33,6 +33,7 @@ import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
 import org.axonframework.messaging.queryhandling.GenericSubscriptionQueryUpdateMessage;
+import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
 import org.mockito.junit.jupiter.*;
@@ -43,9 +44,9 @@ import java.util.UUID;
 
 import static io.axoniq.axonserver.grpc.ProcessingKey.*;
 import static io.axoniq.axonserver.grpc.query.QueryResponse.newBuilder;
+import static io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils.createProcessingInstruction;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils.createProcessingInstruction;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -244,13 +245,31 @@ class QueryConverterTest {
     @Test
     void convertsClientAndThrowableToErrorQueryUpdate() {
         var throwable = new RuntimeException("boom");
-        var qu = QueryConverter.convertQueryUpdate(clientId, ErrorCode.QUERY_EXECUTION_ERROR, throwable);
+        var qu = QueryConverter.convertQueryUpdate(clientId, ErrorCode.QUERY_EXECUTION_ERROR, throwable, null);
 
         assertThat(qu.getClientId()).isEqualTo(clientId);
         assertThat(qu.hasErrorMessage()).isTrue();
         assertThat(qu.getErrorMessage().getMessage()).contains("boom");
         assertThat(qu.getErrorMessage().getErrorCode()).isEqualTo("AXONIQ-5001");
         assertThat(qu.getErrorCode()).isEqualTo("AXONIQ-5001");
+        assertThat(qu.hasPayload()).isFalse();
+    }
+
+    @Test
+    void convertsClientAndThrowableWithDetailsToErrorQueryUpdateWithPayload() {
+        // given a QueryExecutionException carrying application-specific details
+        var throwable = new QueryExecutionException("boom", null, "details");
+        when(converter.convert("details", byte[].class)).thenReturn("details".getBytes());
+
+        // when
+        var qu = QueryConverter.convertQueryUpdate(clientId, ErrorCode.QUERY_EXECUTION_ERROR, throwable, converter);
+
+        // then
+        assertThat(qu.hasPayload()).isTrue();
+        assertThat(qu.getPayload().getData().toStringUtf8()).isEqualTo("details");
+        assertThat(qu.getPayload().getType()).isEqualTo(String.class.getName());
+
+        verify(converter).convert("details", byte[].class);
     }
 
     @Test
@@ -340,7 +359,7 @@ class QueryConverterTest {
         var throwable = new RuntimeException("boom");
 
         // when
-        var qu = QueryConverter.convertQueryUpdate(clientId, null, throwable);
+        var qu = QueryConverter.convertQueryUpdate(clientId, null, throwable, null);
 
         // then
         assertThat(qu.getClientId()).isEqualTo(clientId);

@@ -22,12 +22,15 @@ package io.axoniq.framework.axonserver.connector.query;
 import io.axoniq.axonserver.connector.FlowControl;
 import io.axoniq.axonserver.connector.ReplyChannel;
 import io.axoniq.axonserver.grpc.ErrorMessage;
+import io.axoniq.axonserver.grpc.SerializedObject;
 import io.axoniq.axonserver.grpc.query.QueryResponse;
 import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
 import io.axoniq.framework.axonserver.connector.shared.ExceptionConverter;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -46,6 +49,7 @@ class FlowControlledResponseSender implements FlowControl {
     private final String queryIdentifier;
     private final MessageStream<QueryResponseMessage> upstream;
     private final ReplyChannel<QueryResponse> downstream;
+    private final @Nullable Converter converter;
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final AtomicLong requests = new AtomicLong();
     private final AtomicBoolean sendingGate = new AtomicBoolean(false);
@@ -54,11 +58,13 @@ class FlowControlledResponseSender implements FlowControl {
     public FlowControlledResponseSender(String clientId,
                                         String queryIdentifier,
                                         MessageStream<QueryResponseMessage> upstream,
-                                        ReplyChannel<QueryResponse> downstream) {
+                                        ReplyChannel<QueryResponse> downstream,
+                                        @Nullable Converter converter) {
         this.clientId = clientId;
         this.queryIdentifier = queryIdentifier;
         this.upstream = upstream;
         this.downstream = downstream;
+        this.converter = converter;
     }
 
     @Override
@@ -106,13 +112,16 @@ class FlowControlledResponseSender implements FlowControl {
                         error -> {
                             ErrorCode errorCode = ErrorCode.getQueryExecutionErrorCode(error);
                             ErrorMessage ex = ExceptionConverter.convertToErrorMessage(clientId, errorCode, error);
-                            QueryResponse errorResponse =
+                            QueryResponse.Builder errorResponseBuilder =
                                     QueryResponse.newBuilder()
                                                  .setErrorCode(errorCode.errorCode())
                                                  .setErrorMessage(ex)
-                                                 .setRequestIdentifier(queryIdentifier)
-                                                 .build();
-                            downstream.sendLast(errorResponse);
+                                                 .setRequestIdentifier(queryIdentifier);
+                            SerializedObject detailsPayload = ExceptionConverter.convertDetails(error, converter);
+                            if (detailsPayload != null) {
+                                errorResponseBuilder.setPayload(detailsPayload);
+                            }
+                            downstream.sendLast(errorResponseBuilder.build());
                         },
                         () -> {
                             if (anySent.get()) {

@@ -171,7 +171,7 @@ public final class QueryConverter {
      * includes the processed payload, metadata, and any error information, if applicable.
      * @throws IllegalArgumentException if the provided {@link QueryResponse} contains an error, in which case we use
      *                                  {@link ExceptionConverter#convertToAxonException(String, ErrorMessage,
-     *                                  SerializedObject)}.
+     *                                  SerializedObject, Converter)}.
      */
     public static QueryResponseMessage convertQueryResponse(QueryResponse queryResponse,
                                                             @Nullable Converter converter) {
@@ -323,20 +323,29 @@ public final class QueryConverter {
      * {@link QueryUpdate} containing the error message derived from the given {@link Throwable} along with the provided
      * client identifier.
      *
-     * @param clientId The identifier of the client associated with the error. Must not be null.
-     * @param errorCode The error code identifying the type of action that resulted in an error, if known.
-     * @param error    The {@link Throwable} containing error details to be translated into an error message. Must not
-     *                 be null.
-     * @return A {@link QueryUpdate} containing the client identifier and an error message derived from the provided
-     * {@link Throwable}.
+     * @param clientId  the identifier of the client associated with the error. Must not be null
+     * @param errorCode the error code identifying the type of action that resulted in an error, if known
+     * @param error     the {@link Throwable} containing error details to be translated into an error message. Must not
+     *                  be null
+     * @param converter the {@link Converter} used to serialize application-specific exception details, if present, or
+     *                  {@code null} if none is available
+     * @return a {@link QueryUpdate} containing the client identifier and an error message derived from the provided
+     * {@link Throwable}
      */
-    public static QueryUpdate convertQueryUpdate(String clientId, @Nullable ErrorCode errorCode, Throwable error) {
+    public static QueryUpdate convertQueryUpdate(String clientId,
+                                                 @Nullable ErrorCode errorCode,
+                                                 Throwable error,
+                                                 @Nullable Converter converter) {
         QueryUpdate.Builder builder =
                 QueryUpdate.newBuilder()
                            .setErrorMessage(ExceptionConverter.convertToErrorMessage(clientId, errorCode, error))
                            .setClientId(clientId);
         if (errorCode != null) {
             builder.setErrorCode(errorCode.errorCode());
+        }
+        SerializedObject detailsPayload = ExceptionConverter.convertDetails(error, converter);
+        if (detailsPayload != null) {
+            builder.setPayload(detailsPayload);
         }
         return builder.build();
     }

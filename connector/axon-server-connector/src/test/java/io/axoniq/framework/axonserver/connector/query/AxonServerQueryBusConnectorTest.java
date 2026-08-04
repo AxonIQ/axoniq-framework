@@ -27,10 +27,13 @@ import io.axoniq.axonserver.connector.query.QueryDefinition;
 import io.axoniq.axonserver.connector.query.QueryHandler;
 import io.axoniq.axonserver.connector.query.SubscriptionQueryResult;
 import io.axoniq.axonserver.grpc.SerializedObject;
+import io.axoniq.axonserver.grpc.query.QueryRequest;
 import io.axoniq.axonserver.grpc.query.QueryResponse;
 import io.axoniq.axonserver.grpc.query.QueryUpdate;
+import io.axoniq.axonserver.grpc.query.SubscriptionQuery;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.util.StubResultStream;
+import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
@@ -38,10 +41,13 @@ import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
+import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.junit.jupiter.api.*;
+import org.mockito.*;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
@@ -297,6 +303,99 @@ class AxonServerQueryBusConnectorTest {
         }
     }
 
+    @Nested
+    class UpdateCallbackErrorHandling {
+
+        @Test
+        void completeExceptionallySendsUpdateWithDetailsPayloadWhenErrorCarriesHandlerExecutionDetails() {
+            // given
+            QueryBusConnector.Handler incomingHandlerMock = mock(QueryBusConnector.Handler.class);
+            testSubject.onIncomingQuery(incomingHandlerMock);
+
+            ArgumentCaptor<QueryBusConnector.UpdateCallback> callbackCaptor =
+                    ArgumentCaptor.forClass(QueryBusConnector.UpdateCallback.class);
+            when(incomingHandlerMock.registerUpdateHandler(any(), callbackCaptor.capture()))
+                    .thenReturn(mock(org.axonframework.common.Registration.class));
+
+            SerializedObject serializedPayload =
+                    SerializedObject.newBuilder()
+                                    .setType("QueryType")
+                                    .setRevision("1")
+                                    .setData(copyFrom("query-payload".getBytes(StandardCharsets.UTF_8)))
+                                    .build();
+            QueryRequest queryRequest = QueryRequest.newBuilder()
+                                                    .setPayload(serializedPayload)
+                                                    .build();
+            SubscriptionQuery subscriptionQuery =
+                    SubscriptionQuery.newBuilder()
+                                     .setSubscriptionIdentifier(UUID.randomUUID().toString())
+                                     .setQueryRequest(queryRequest)
+                                     .build();
+            QueryHandler.UpdateHandler updateHandlerMock = mock(QueryHandler.UpdateHandler.class);
+            getLocalSegmentAdapter(testSubject).registerSubscriptionQuery(subscriptionQuery, updateHandlerMock);
+
+            when(mockConverter.convert("some details", byte[].class)).thenReturn("some details".getBytes());
+
+            // when
+            callbackCaptor.getValue().completeExceptionally(new QueryExecutionException("boom", null, "some details"));
+
+            // then
+            ArgumentCaptor<QueryUpdate> updateCaptor = ArgumentCaptor.forClass(QueryUpdate.class);
+            verify(updateHandlerMock).sendUpdate(updateCaptor.capture());
+            verify(updateHandlerMock).complete();
+            QueryUpdate sentUpdate = updateCaptor.getValue();
+            assertThat(sentUpdate.getErrorMessage().getMessage()).isEqualTo("boom");
+            assertThat(sentUpdate.hasPayload()).isTrue();
+            assertThat(sentUpdate.getPayload().getData().toStringUtf8()).isEqualTo("some details");
+        }
+
+        @Test
+        void completeExceptionallyWithoutHandlerExecutionDetailsSendsUpdateWithoutPayload() {
+            // given
+            QueryBusConnector.Handler incomingHandlerMock = mock(QueryBusConnector.Handler.class);
+            testSubject.onIncomingQuery(incomingHandlerMock);
+
+            ArgumentCaptor<QueryBusConnector.UpdateCallback> callbackCaptor =
+                    ArgumentCaptor.forClass(QueryBusConnector.UpdateCallback.class);
+            when(incomingHandlerMock.registerUpdateHandler(any(), callbackCaptor.capture()))
+                    .thenReturn(mock(org.axonframework.common.Registration.class));
+
+            SerializedObject serializedPayload =
+                    SerializedObject.newBuilder()
+                                    .setType("QueryType")
+                                    .setRevision("1")
+                                    .setData(copyFrom("query-payload".getBytes(StandardCharsets.UTF_8)))
+                                    .build();
+            QueryRequest queryRequest = QueryRequest.newBuilder()
+                                                    .setPayload(serializedPayload)
+                                                    .build();
+            SubscriptionQuery subscriptionQuery =
+                    SubscriptionQuery.newBuilder()
+                                     .setSubscriptionIdentifier(UUID.randomUUID().toString())
+                                     .setQueryRequest(queryRequest)
+                                     .build();
+            QueryHandler.UpdateHandler updateHandlerMock = mock(QueryHandler.UpdateHandler.class);
+            getLocalSegmentAdapter(testSubject).registerSubscriptionQuery(subscriptionQuery, updateHandlerMock);
+
+            // when
+            callbackCaptor.getValue().completeExceptionally(new RuntimeException("boom"));
+
+            // then
+            ArgumentCaptor<QueryUpdate> updateCaptor = ArgumentCaptor.forClass(QueryUpdate.class);
+            verify(updateHandlerMock).sendUpdate(updateCaptor.capture());
+            assertThat(updateCaptor.getValue().hasPayload()).isFalse();
+        }
+
+        private static QueryHandler getLocalSegmentAdapter(AxonServerQueryBusConnector instance) {
+            try {
+                Field field = AxonServerQueryBusConnector.class.getDeclaredField("localSegmentAdapter");
+                field.setAccessible(true);
+                return (QueryHandler) field.get(instance);
+            } catch (NoSuchFieldException | IllegalAccessException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
 
     // ---- Test support classes ----
 
