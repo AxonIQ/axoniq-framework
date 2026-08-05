@@ -55,12 +55,9 @@ import static org.awaitility.Awaitility.await;
  * attributes the missing post-restart recovery to the multi-tenant assembly; red here indicts the connector stack
  * as a whole.
  * <p>
- * A failure here looks like a permanent defect in the command-dispatch connector stack, as reported in
- * AxoniQ/axoniq-framework#320. {@link DockerRestartPortStabilityIT} and {@link ChaosSingleTenantControlFixedPortIT} show that,
- * at least on some Docker setups, it is very likely something else instead. This test restarts Axon Server on a
- * Testcontainers-assigned dynamic port, and {@code docker restart} can reassign that port. The client never
- * rediscovers the new one, so it is stuck retrying a dead port for the whole 3-minute recovery window.
- * {@link ChaosSingleTenantControlFixedPortIT} runs the identical scenario against a fixed port and recovers within seconds.
+ * A failure here looks like a permanent connector bug (AxoniQ/axoniq-framework#320), but it is not one. On macOS,
+ * {@code docker restart} reassigns this test's dynamic Axon Server port, and the client never rediscovers it. See
+ * {@link DockerRestartPortStabilityIT} and {@link ChaosSingleTenantControlFixedPortIT} for the proof.
  */
 @ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
 class ChaosSingleTenantControlIT {

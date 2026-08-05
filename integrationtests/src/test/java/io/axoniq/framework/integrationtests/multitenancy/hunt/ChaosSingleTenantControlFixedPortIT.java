@@ -49,20 +49,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * {@link ChaosSingleTenantControlIT} is the test that shows the apparent bug from AxoniQ/axoniq-framework#320:
- * command dispatch looks like it never recovers from an Axon Server restart. This test is the proof that it is not
- * a real bug. It is the same application, the same {@link ControlHandlers}, the same {@code OpenAccount} and
- * {@code DepositMoney} workload, the same two worker threads, and the same restart-under-workload sequence and
- * timeouts as {@link ChaosSingleTenantControlIT}. The only difference is the Axon Server container's port, fixed
- * here instead of Testcontainers' default dynamic one. {@link DockerRestartPortStabilityIT} shows why that matters:
- * {@code docker restart} can reassign a dynamic port, observed on macOS with Docker Desktop, and a client that
- * cached the old port at startup is then stuck retrying a dead one. With a fixed port, recovery here happens within
- * seconds, well inside the same 3-minute deadline {@link ChaosSingleTenantControlIT} never meets.
+ * Proves AxoniQ/axoniq-framework#320 is not a connector bug. Same app, same {@link ControlHandlers}, same
+ * workload, same timeouts as {@link ChaosSingleTenantControlIT}. Only the Axon Server port is fixed instead of
+ * dynamic. Recovery happens in seconds. See {@link DockerRestartPortStabilityIT} for why the port matters.
  * <p>
- * Uses its own dedicated container on hardcoded fixed ports rather than the shared
- * {@link io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure} instance, since
- * a fixed port cannot be shared safely with whatever else that infrastructure's dynamically-ported container is
- * doing. Do not run this test concurrently with another instance of itself.
+ * Uses its own container on hardcoded fixed ports instead of the shared
+ * {@link io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure} instance, so
+ * it does not conflict with that instance's dynamically-ported container. Do not run concurrently with another
+ * instance of this test.
  */
 class ChaosSingleTenantControlFixedPortIT {
 

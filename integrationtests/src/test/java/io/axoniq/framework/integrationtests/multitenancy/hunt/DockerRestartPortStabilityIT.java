@@ -31,20 +31,14 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@link ChaosSingleTenantControlIT} fails because command dispatch appears to never recover from an Axon Server
- * restart. This test isolates why. On this machine, {@code docker restart} on a container published with
- * Testcontainers' default DYNAMIC port allocation reassigns a brand-new random host port every time, rather than
- * keeping the one the client discovered at startup. A client that caches that port once, as every chaos test here
- * does, is then structurally stuck retrying a port nothing is listening on, for as long as the test is willing to
- * wait. That looks exactly like "command dispatch never recovers" without actually being one.
+ * Shows why {@link ChaosSingleTenantControlIT} looks broken. On macOS, {@code docker restart} reassigns a
+ * container's dynamic Testcontainers port every time instead of keeping it. A client that reads the port once at
+ * startup is then stuck retrying a dead port forever, which looks like a permanent recovery failure without being
+ * one.
  * <p>
- * This is environment-dependent. It was observed on macOS with Docker Desktop. Docker on Linux traditionally keeps a
- * container's iptables-based port bindings stable across a plain restart, only a full recreate reassigns them, so
- * this test may legitimately pass with a single stable port there. That outcome would not contradict the finding, it
- * would scope it to this environment. Either way, the result tells you directly whether this CI or dev machine is
- * exposed to the failure mode {@link ChaosSingleTenantControlIT} reports, instead of leaving it to be inferred.
- * {@link ChaosSingleTenantControlFixedPortIT} is the other half of the proof: it runs the same scenario with a stable port and
- * shows recovery working fine.
+ * Docker on Linux usually keeps ports stable across a plain restart, so this test may legitimately pass there. That
+ * would scope the finding to macOS, not contradict it. {@link ChaosSingleTenantControlFixedPortIT} is the other
+ * half of the proof: same scenario, stable port, fast recovery.
  */
 class DockerRestartPortStabilityIT {
 
@@ -76,14 +70,9 @@ class DockerRestartPortStabilityIT {
             observedGrpcPorts.add(publishedGrpcPort(containerId));
         }
 
-        // then: a client that discovered the port once, before any restart, would be pointed at a dead port for
-        // every restart that reassigned it. A single, stable port across all restarts is the only outcome under
-        // which the chaos tests' "record the port once at startup" approach is safe.
         assertThat(observedGrpcPorts)
-                .as("gRPC port observed before and after %d docker restart(s) of container %s: %s. More than one "
-                            + "distinct value means this Docker setup reassigns published ports across a plain "
-                            + "restart, which is what makes ChaosSingleTenantControlIT look like a permanent "
-                            + "command-dispatch failure.",
+                .as("gRPC port across %d docker restart(s) of container %s: %s. More than one value means this "
+                            + "Docker setup reassigns the port on restart.",
                     RESTARTS, containerId, observedGrpcPorts)
                 .hasSize(1);
     }
