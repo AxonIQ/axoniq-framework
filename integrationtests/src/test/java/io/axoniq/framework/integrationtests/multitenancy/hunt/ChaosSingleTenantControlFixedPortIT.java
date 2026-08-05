@@ -164,6 +164,10 @@ class ChaosSingleTenantControlFixedPortIT {
                .join();
     }
 
+    // Unlike ChaosSingleTenantControlIT, this restarts by the id of the container this test itself started, rather
+    // than looking one up with `docker ps --filter ancestor=...`. That filter would match any container running
+    // the same image, which is fragile whenever more than one is present, and this test's container shares its
+    // image with the one ChaosSingleTenantControlIT uses.
     private static void restartAxonServerContainer(String containerId) throws IOException, InterruptedException {
         Process restart = new ProcessBuilder("docker", "restart", containerId).inheritIO().start();
         if (!restart.waitFor(90, TimeUnit.SECONDS) || restart.exitValue() != 0) {
