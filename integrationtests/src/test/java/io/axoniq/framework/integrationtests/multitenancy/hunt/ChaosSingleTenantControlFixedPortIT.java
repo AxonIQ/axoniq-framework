@@ -32,6 +32,7 @@ import org.axonframework.messaging.commandhandling.configuration.CommandHandling
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.core.Metadata;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -66,6 +67,7 @@ class ChaosSingleTenantControlFixedPortIT {
 
     private final AtomicReference<String> lastError = new AtomicReference<>("none");
     private FixedPortAxonServerContainer container;
+    private String containerId;
     private AxonConfiguration application;
 
     /** Exposes {@code addFixedExposedPort}, which {@link AxonServerContainer} does not itself publish. */
@@ -76,6 +78,32 @@ class ChaosSingleTenantControlFixedPortIT {
             addFixedExposedPort(FIXED_HTTP_PORT, 8024);
             addFixedExposedPort(FIXED_GRPC_PORT, 8124);
         }
+    }
+
+    @BeforeEach
+    void setUp() {
+        container = new FixedPortAxonServerContainer();
+        container.withAxonServerHostname("localhost");
+        container.withDevMode(true);
+        container.withDcbContext(true);
+        container.start();
+        containerId = container.getContainerId();
+
+        // No purgeData() here: unlike AxonServerTestInfrastructure's container, this one is created fresh and
+        // stopped, not reused, at the end of every run, so there is never stale data from a previous run to clear.
+        AxonServerConfiguration.Builder configBuilder = builder().servers("localhost:" + FIXED_GRPC_PORT);
+        EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
+        configurer.registerEntity(EventSourcedEntityModule.autodetected(String.class, Account.class))
+                  .registerCommandHandlingModule(
+                          CommandHandlingModule.named("control-commands")
+                                               .commandHandlers()
+                                               .autodetectedCommandHandlingComponent(c -> new ControlHandlers()))
+                  .componentRegistry(registry -> registry.registerComponent(AxonServerConfiguration.class,
+                                                                            c -> configBuilder.build()))
+                  .componentRegistry(registry -> registry
+                          .disableEnhancer(io.axoniq.license.entitlement.EntitlementConfigurationEnhancer.class)
+                          .disableEnhancer(io.axoniq.license.entitlement.source.axonserver.AxonServerLicenseSourceConfigurationEnhancer.class));
+        application = configurer.start();
     }
 
     @AfterEach
@@ -90,27 +118,6 @@ class ChaosSingleTenantControlFixedPortIT {
 
     @Test
     void singleTenantApplicationRecoversCommandDispatchingAfterAxonServerRestart() throws Exception {
-        container = new FixedPortAxonServerContainer();
-        container.withAxonServerHostname("localhost");
-        container.withDevMode(true);
-        container.withDcbContext(true);
-        container.start();
-        String containerId = container.getContainerId();
-
-        AxonServerConfiguration.Builder configBuilder = builder().servers("localhost:" + FIXED_GRPC_PORT);
-        EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
-        configurer.registerEntity(EventSourcedEntityModule.autodetected(String.class, Account.class))
-                  .registerCommandHandlingModule(
-                          CommandHandlingModule.named("control-commands")
-                                               .commandHandlers()
-                                               .autodetectedCommandHandlingComponent(c -> new ControlHandlers()))
-                  .componentRegistry(registry -> registry.registerComponent(AxonServerConfiguration.class,
-                                                                            c -> configBuilder.build()))
-                  .componentRegistry(registry -> registry
-                          .disableEnhancer(io.axoniq.license.entitlement.EntitlementConfigurationEnhancer.class)
-                          .disableEnhancer(io.axoniq.license.entitlement.source.axonserver.AxonServerLicenseSourceConfigurationEnhancer.class));
-        application = configurer.start();
-
         CommandGateway gateway = application.getComponent(CommandGateway.class);
         sendAndAwait(gateway, new OpenAccount(ACCOUNT_ID));
 
