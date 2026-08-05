@@ -38,12 +38,12 @@ class MicrometerTracingAxoniqAddonTest {
 
     @Test
     void identifierReturnsExpectedValue() {
-        assertThat(addon.identifier()).isEqualTo("framework.micrometer_tracing");
+        assertThat(addon.identifier()).isEqualTo("framework.distributed_tracing");
     }
 
     @Test
     void nameReturnsExpectedValue() {
-        assertThat(addon.name()).isEqualTo("Axoniq Framework - Micrometer Distributed Tracing");
+        assertThat(addon.name()).isEqualTo("Axoniq Framework - Distributed Tracing (Micrometer)");
     }
 
     @Test
