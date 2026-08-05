@@ -20,6 +20,7 @@
 package io.axoniq.framework.tracing.micrometer;
 
 import io.axoniq.framework.tracing.micrometer.propagator.MetadataPropagatorGetter;
+import io.axoniq.license.entitlement.EntitlementManager;
 import io.micrometer.tracing.Link;
 import io.micrometer.tracing.Span.Kind;
 import io.micrometer.tracing.TraceContext;
@@ -122,6 +123,7 @@ public final class MicrometerSpanFactory implements SpanFactory {
         this.propagator = Objects.requireNonNull(propagator, "The Propagator may not be null.");
         Objects.requireNonNull(attributesProviders, "The SpanAttributesProviders may not be null.");
         this.spanAttributesProviders = List.copyOf(attributesProviders);
+        EntitlementManager.INSTANCE.registerAddon(MicrometerTracingAxoniqAddon.class);
     }
 
     @Override
