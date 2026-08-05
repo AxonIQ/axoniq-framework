@@ -87,7 +87,7 @@ public final class QueryConverter {
      * construct a QueryMessage that represents the request for querying information.
      *
      * @param queryRequest the {@link QueryRequest} to be converted into a {@link QueryMessage} (must not be null)
-     * @param converter    the converter to be used for payload conversion
+     * @param converter    the converter to be used for payload conversion, or {@code null} if none is available
      * @return a {@link QueryMessage} representation of the provided {@link QueryRequest}. The returned object contains
      * the extracted payload, metadata, and expected response type
      * @throws NullPointerException if the provided {@link QueryRequest} is null
