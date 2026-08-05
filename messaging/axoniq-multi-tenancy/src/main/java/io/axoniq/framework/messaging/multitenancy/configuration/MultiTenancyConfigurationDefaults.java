@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyAxoniqAddon;
 import io.axoniq.framework.messaging.multitenancy.api.AttachTenantDescriptorDispatchInterceptor;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
@@ -29,6 +30,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfigurationEnhancer;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
@@ -152,6 +154,9 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
 
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
+        // Register this module with the Entitlement Manager.
+        EntitlementManager.INSTANCE.registerAddon(MultiTenancyAxoniqAddon.class);
+
         // Register the default TenantResolver, which resolves the tenant from message metadata.
         componentRegistry.registerIfNotPresent(TenantResolver.class,
                                                c -> new MetadataBasedTenantResolver(),
