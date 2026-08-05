@@ -55,6 +55,16 @@ class FlowControlledResponseSender implements FlowControl {
     private final AtomicBoolean sendingGate = new AtomicBoolean(false);
     private final AtomicBoolean anySent = new AtomicBoolean(false);
 
+    /**
+     * Constructs a {@code FlowControlledResponseSender} that sends {@code upstream}'s messages to {@code downstream}.
+     *
+     * @param clientId        the identifier of this application, used as the location reported in error responses
+     * @param queryIdentifier the identifier correlating responses to the query that led to this response sender
+     * @param upstream        the {@link MessageStream} providing the {@link QueryResponseMessage}s to send
+     * @param downstream      the {@link ReplyChannel} to send converted {@link QueryResponse}s to
+     * @param converter       the {@link Converter} to use for serializing application-specific exception details onto
+     *                        an error response, or {@code null} if no such conversion is available
+     */
     public FlowControlledResponseSender(String clientId,
                                         String queryIdentifier,
                                         MessageStream<QueryResponseMessage> upstream,
