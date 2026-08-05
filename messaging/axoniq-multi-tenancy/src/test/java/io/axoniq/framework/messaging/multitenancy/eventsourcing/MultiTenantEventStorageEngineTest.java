@@ -144,8 +144,8 @@ class MultiTenantEventStorageEngineTest {
         void appendRoutesToTheTenantOnTheProcessingContext() {
             // resolver would say TENANT_B, but the context resource wins
             MultiTenantEventStorageEngine testSubject = engineWith(alwaysTenant(TENANT_B));
-            StubProcessingContext context = new StubProcessingContext();
-            context.withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
+            ProcessingContext context = new StubProcessingContext()
+                    .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
             testSubject.appendEvents(AppendCondition.none(), context, tagged(event(null)));
 
@@ -194,8 +194,8 @@ class MultiTenantEventStorageEngineTest {
         @Test
         void sourceRoutesToTheTenantOnTheProcessingContext() {
             MultiTenantEventStorageEngine testSubject = engineWith(alwaysTenant(TENANT_B));
-            StubProcessingContext context = new StubProcessingContext();
-            context.withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
+            ProcessingContext context = new StubProcessingContext()
+                    .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
             testSubject.source(ANY, context);
 
