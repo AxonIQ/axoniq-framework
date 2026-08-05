@@ -31,18 +31,20 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Direct evidence for the root cause behind the apparent non-recovery in {@link ChaosSingleTenantControlIT}: on this
- * machine, {@code docker restart} on a container published with Testcontainers' default DYNAMIC port allocation
- * reassigns a brand-new random host port every time, rather than keeping the one the client discovered at startup.
- * A client that caches that port once (as every chaos test here does) is then structurally stuck retrying a port
- * nothing is listening on, for as long as the test is willing to wait -- which looks exactly like "command dispatch
- * never recovers" without actually being one.
+ * {@link ChaosSingleTenantControlIT} fails because command dispatch appears to never recover from an Axon Server
+ * restart. This test isolates why. On this machine, {@code docker restart} on a container published with
+ * Testcontainers' default DYNAMIC port allocation reassigns a brand-new random host port every time, rather than
+ * keeping the one the client discovered at startup. A client that caches that port once, as every chaos test here
+ * does, is then structurally stuck retrying a port nothing is listening on, for as long as the test is willing to
+ * wait. That looks exactly like "command dispatch never recovers" without actually being one.
  * <p>
- * This is environment-dependent (observed on macOS with Docker Desktop). Docker on Linux traditionally keeps a
- * container's iptables-based port bindings stable across a plain restart (only a full recreate reassigns them), so
- * this test may legitimately pass with a single stable port there -- that outcome does not contradict the finding,
- * it scopes it. Either way, the result tells you directly whether this CI/dev machine is exposed to the failure mode
- * {@link ChaosSingleTenantControlIT} reports, instead of leaving it to be inferred.
+ * This is environment-dependent. It was observed on macOS with Docker Desktop. Docker on Linux traditionally keeps a
+ * container's iptables-based port bindings stable across a plain restart, only a full recreate reassigns them, so
+ * this test may legitimately pass with a single stable port there. That outcome would not contradict the finding, it
+ * would scope it to this environment. Either way, the result tells you directly whether this CI or dev machine is
+ * exposed to the failure mode {@link ChaosSingleTenantControlIT} reports, instead of leaving it to be inferred.
+ * {@link ChaosFixedPortRecoveryIT} is the other half of the proof: it runs the same scenario with a stable port and
+ * shows recovery working fine.
  */
 class DockerRestartPortStabilityIT {
 

@@ -51,16 +51,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * The counterpart to {@link ChaosSingleTenantControlIT} and direct proof of the root cause found for it (see
- * AxoniQ/axoniq-framework#320): the exact same restart-under-workload chaos, but against an Axon Server container
- * published on a FIXED host port instead of Testcontainers' default dynamic one. {@link DockerRestartPortStabilityIT}
- * shows that a dynamic port can be reassigned by {@code docker restart} on some Docker setups (observed on macOS with
- * Docker Desktop); this test shows that when the port cannot move, recovery is fast (well inside 30 seconds, not
- * "eventually within 3 minutes").
+ * {@link ChaosSingleTenantControlIT} is the test that shows the apparent bug from AxoniQ/axoniq-framework#320:
+ * command dispatch looks like it never recovers from an Axon Server restart. This test is the proof that it is not
+ * a real bug. It runs the exact same restart-under-workload chaos, but against an Axon Server container published
+ * on a FIXED host port instead of Testcontainers' default dynamic one. {@link DockerRestartPortStabilityIT} shows
+ * why the dynamic port matters: {@code docker restart} can reassign it on some Docker setups, observed on macOS
+ * with Docker Desktop. With a fixed port, recovery here is fast, well inside 30 seconds, not "eventually within 3
+ * minutes" like the dynamic-port version.
  * <p>
- * Deliberately self-contained: no dependency on {@link TenantBankFixture} or event-sourced entities, only a
- * stateless echo command handler, so this proof stays independent of anything else in this package or module.
- * Uses its own dedicated container on hardcoded fixed ports rather than the shared
+ * Deliberately self-contained. It has no dependency on {@link TenantBankFixture} or event-sourced entities, only a
+ * stateless echo command handler, so this proof stays independent of anything else in this package or module. It
+ * uses its own dedicated container on hardcoded fixed ports rather than the shared
  * {@link io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure} instance, since
  * a fixed port cannot be shared safely with whatever else that infrastructure's dynamically-ported container is
  * doing. Do not run this test concurrently with another instance of itself.
