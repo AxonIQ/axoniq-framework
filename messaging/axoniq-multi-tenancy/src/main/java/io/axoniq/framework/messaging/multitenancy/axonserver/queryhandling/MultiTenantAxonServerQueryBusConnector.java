@@ -83,7 +83,6 @@ public class MultiTenantAxonServerQueryBusConnector
     private final Set<QualifiedName> knownSubscriptions = ConcurrentHashMap.newKeySet();
 
     private final AtomicBoolean started = new AtomicBoolean(false);
-    private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
     private @Nullable Handler incomingHandler;
 
     /**
@@ -107,7 +106,6 @@ public class MultiTenantAxonServerQueryBusConnector
 
     @Override
     public void start() {
-        shuttingDown.set(false);
         started.set(true);
         tenantConnectors.values().forEach(AxonServerQueryBusConnector::start);
     }
@@ -213,23 +211,6 @@ public class MultiTenantAxonServerQueryBusConnector
         return FutureUtils.allOrEmpty(disconnects);
     }
 
-    /**
-     * Prepares every tenant query connector to stop receiving queries without closing its shared Axon Server
-     * connection.
-     * <p>
-     * Application shutdown invokes this method before the connection manager closes connections in its later lifecycle
-     * phase. Removing a tenant while the application is running uses {@link #disconnect()} instead.
-     *
-     * @return a future completed when every tenant query connector has drained its inbound work
-     */
-    public CompletableFuture<Void> disconnectInbound() {
-        shuttingDown.set(true);
-        List<CompletableFuture<Void>> disconnects = tenantConnectors.values().stream()
-                                                                    .map(AxonServerQueryBusConnector::disconnectInbound)
-                                                                    .toList();
-        return FutureUtils.allOrEmpty(disconnects);
-    }
-
     @Override
     public Registration registerTenant(TenantDescriptor tenantDescriptor) {
         return addTenant(tenantDescriptor);
@@ -305,10 +286,7 @@ public class MultiTenantAxonServerQueryBusConnector
             return false;
         }
         logger.info("Removed query bus connection for tenant [{}]", tenantDescriptor.tenantId());
-        CompletableFuture<Void> disconnect = shuttingDown.get()
-                ? connector.disconnectInbound()
-                : connector.disconnect();
-        disconnect.whenComplete((ignored, throwable) -> {
+        connector.disconnect().whenComplete((ignored, throwable) -> {
             if (throwable != null) {
                 logger.warn("Failed to disconnect query bus connection for tenant [{}].",
                             tenantDescriptor.tenantId(),

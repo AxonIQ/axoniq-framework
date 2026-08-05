@@ -180,7 +180,7 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                                                       ((MultiTenantAxonServerCommandBusConnector) connector).shutdownDispatching())
                                   .onShutdown(Phase.INBOUND_COMMAND_CONNECTOR,
                                               (ComponentLifecycleHandler<CommandBusConnector>) (config, connector) ->
-                                                      ((MultiTenantAxonServerCommandBusConnector) connector).disconnectInbound())
+                                                      ((MultiTenantAxonServerCommandBusConnector) connector).disconnect())
                                   .onShutdown(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
                                               (config, connector) -> {
                                                   Registration registration = tenantSubscription.getAndSet(null);
@@ -420,7 +420,7 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                                                       ((MultiTenantAxonServerQueryBusConnector) connector).shutdownDispatching())
                                   .onShutdown(Phase.INBOUND_QUERY_CONNECTOR,
                                               (ComponentLifecycleHandler<QueryBusConnector>) (config, connector) ->
-                                                      ((MultiTenantAxonServerQueryBusConnector) connector).disconnectInbound())
+                                                      ((MultiTenantAxonServerQueryBusConnector) connector).disconnect())
                                   .onShutdown(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
                                               (config, connector) -> {
                                                   Registration registration = tenantSubscription.get();

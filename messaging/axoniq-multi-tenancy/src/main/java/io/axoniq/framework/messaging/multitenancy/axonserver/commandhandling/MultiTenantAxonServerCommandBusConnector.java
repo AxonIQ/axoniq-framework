@@ -56,10 +56,11 @@ import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedEx
  * Multi-tenant Axon Server {@link CommandBusConnector}.
  * <p>
  * The connector composes one {@link AxonServerCommandBusConnector} per {@link TenantDescriptor}, each owning its own
- * Axon Server connection, command handler subscriptions, and in-flight command tracking. Command subscription state
- * and the incoming-command handler are replayed onto newly registered tenants.
+ * Axon Server connection, command handler subscriptions, and in-flight command tracking. Command subscription state and
+ * the incoming-command handler are replayed onto newly registered tenants.
  * <p>
- * Internal, because the connector is wired by {@link
+ * Internal, because the connector is wired by
+ * {@link
  * io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults} and
  * reached through the {@link CommandBusConnector} component, never constructed by an application itself.
  *
@@ -82,7 +83,6 @@ public class MultiTenantAxonServerCommandBusConnector
     private final Map<QualifiedName, Integer> knownSubscriptions = new ConcurrentHashMap<>();
 
     private final AtomicBoolean started = new AtomicBoolean(false);
-    private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
     private @Nullable Handler incomingHandler;
 
     /**
@@ -106,7 +106,6 @@ public class MultiTenantAxonServerCommandBusConnector
 
     @Override
     public void start() {
-        shuttingDown.set(false);
         started.set(true);
         tenantConnectors.values().forEach(AxonServerCommandBusConnector::start);
     }
@@ -203,23 +202,6 @@ public class MultiTenantAxonServerCommandBusConnector
         return FutureUtils.allOrEmpty(disconnects);
     }
 
-    /**
-     * Prepares every tenant command connector to stop receiving commands without closing its shared Axon Server
-     * connection.
-     * <p>
-     * Application shutdown invokes this method before the connection manager closes connections in its later lifecycle
-     * phase. Removing a tenant while the application is running uses {@link #disconnect()} instead.
-     *
-     * @return a future completed when every tenant command connector has drained its inbound work
-     */
-    public CompletableFuture<Void> disconnectInbound() {
-        shuttingDown.set(true);
-        List<CompletableFuture<Void>> disconnects = tenantConnectors.values().stream()
-                                                                    .map(AxonServerCommandBusConnector::disconnectInbound)
-                                                                    .toList();
-        return FutureUtils.allOrEmpty(disconnects);
-    }
-
     @Override
     public Registration registerTenant(TenantDescriptor tenantDescriptor) {
         return addTenant(tenantDescriptor);
@@ -303,10 +285,7 @@ public class MultiTenantAxonServerCommandBusConnector
             return false;
         }
         logger.info("Removed command bus connection for tenant [{}]", tenantDescriptor.tenantId());
-        CompletableFuture<Void> disconnect = shuttingDown.get()
-                ? connector.disconnectInbound()
-                : connector.disconnect();
-        disconnect.whenComplete((ignored, throwable) -> {
+        connector.disconnect().whenComplete((ignored, throwable) -> {
             if (throwable != null) {
                 logger.warn("Failed to disconnect command bus connection for tenant [{}].",
                             tenantDescriptor.tenantId(),
