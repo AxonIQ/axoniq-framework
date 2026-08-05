@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
+import io.axoniq.framework.messaging.multitenancy.api.AttachTenantDescriptorDispatchInterceptor;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
 import io.axoniq.framework.messaging.multitenancy.queryhandling.TenantAwareQueryBus;
@@ -36,6 +37,7 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.SearchScope;
 import org.axonframework.common.lifecycle.Phase;
+import org.axonframework.messaging.core.interception.DispatchInterceptorRegistry;
 import org.axonframework.messaging.core.interception.HandlerInterceptorRegistry;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.queryhandling.QueryBus;
@@ -49,6 +51,7 @@ import static org.axonframework.common.configuration.DecoratorDefinition.forType
  *     <li>the {@link TenantRouter} that every tenant-routing component shares to decide the tenant of a message</li>
  *     <li>the {@link TenantComponentProviderSubscriber} to subscribe every {@link TenantComponentProvider} to the {@link TenantProvider} at startup</li>
  *     <li>the {@link RegisterTenantDescriptorHandlerInterceptor} which takes the resolved {@link TenantDescriptor} from the message and stores it in the {@link ProcessingContext}</li>
+ *     <li>the {@link AttachTenantDescriptorDispatchInterceptor} which attaches the tenant of the dispatching {@link ProcessingContext} onto a dispatched command or query, so it survives a distributed round trip</li>
  *     <li>the {@link MultiTenantStreamingProcessorRestarter} to restart the running streaming event processors when the set of tenants changes</li>
  *     <li>the {@link TenantAwareQueryBus} decorator, scoping subscription-query update emission and completion to the tenant resolved from the {@link ProcessingContext}</li>
  * </ul>
@@ -168,7 +171,11 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
         registerStreamingProcessorRestarter(componentRegistry);
 
         // Register HandlerInterceptor that puts a ResourceKey with the resolved TenantDescriptor into {@link org.axonframework.messaging.core.unitofwork.ProcessingContext}.
-        registerTenantDescriptorInterceptor(componentRegistry);
+        registerRegisterTenantHandlerInterceptor(componentRegistry);
+
+        // Register DispatchInterceptor that puts the TenantDescriptor from {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} onto outgoing command/query messages
+        // registerTenantDescriptorInterceptor, so it survives a distributed round trip.
+        registerAttachTenantDispatchInterceptor(componentRegistry);
 
         // Scope subscription-query update emission and completion to the tenant resolved from the ProcessingContext.
         registerTenantAwareQueryBusDecorator(componentRegistry);
@@ -220,13 +227,29 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
         );
     }
 
-    static void registerTenantDescriptorInterceptor(ComponentRegistry componentRegistry) {
+    static void registerRegisterTenantHandlerInterceptor(ComponentRegistry componentRegistry) {
         componentRegistry.registerDecorator(
                 HandlerInterceptorRegistry.class,
                 0,
                 (config, name, delegate) -> delegate
-                        .registerCommandInterceptor(MultiTenancyConfigurationDefaults::interceptorFactory)
-                        .registerQueryInterceptor(MultiTenancyConfigurationDefaults::interceptorFactory)
+                        .registerCommandInterceptor(MultiTenancyConfigurationDefaults::registerTenantHandlerInterceptorFactory)
+                        .registerQueryInterceptor(MultiTenancyConfigurationDefaults::registerTenantHandlerInterceptorFactory)
+        );
+    }
+
+    /**
+     * Registers the {@link AttachTenantDescriptorDispatchInterceptor}, the dispatch-side counterpart of
+     * {@link #registerRegisterTenantHandlerInterceptor(ComponentRegistry)}.
+     *
+     * @param componentRegistry the registry to register the interceptor with
+     */
+    static void registerAttachTenantDispatchInterceptor(ComponentRegistry componentRegistry) {
+        componentRegistry.registerDecorator(
+                DispatchInterceptorRegistry.class,
+                0,
+                (config, name, delegate) -> delegate
+                        .registerCommandInterceptor(MultiTenancyConfigurationDefaults::attachTenantDispatchInterceptorFactory)
+                        .registerQueryInterceptor(MultiTenancyConfigurationDefaults::attachTenantDispatchInterceptorFactory)
         );
     }
 
@@ -249,7 +272,11 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
         );
     }
 
-    private static RegisterTenantDescriptorHandlerInterceptor interceptorFactory(Configuration config) {
+    private static RegisterTenantDescriptorHandlerInterceptor registerTenantHandlerInterceptorFactory(Configuration config) {
         return new RegisterTenantDescriptorHandlerInterceptor(config.getComponent(TenantRouter.class));
+    }
+
+    private static AttachTenantDescriptorDispatchInterceptor attachTenantDispatchInterceptorFactory(Configuration config) {
+        return new AttachTenantDescriptorDispatchInterceptor(config.getComponent(TenantRouter.class));
     }
 }

@@ -46,12 +46,14 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.common.lifecycle.ShutdownInProgressException;
 import org.axonframework.messaging.core.GenericMessage;
+import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -90,9 +92,19 @@ class MultiTenantAxonServerQueryBusConnectorTest {
                 new RecordingConnectionManager(configuration, Map.of());
         private final MessageConverter converter = Mockito.mock(MessageConverter.class);
         private final TenantRouter tenantResolver = new TenantRouter(
-                (message, tenants) -> tenants.stream()
-                                             .findFirst()
-                                             .orElseThrow(() -> new TenantNotResolvedException("no tenant")),
+                new TenantResolver() {
+                    @Override
+                    public TenantDescriptor resolveTenant(Message message, Collection<TenantDescriptor> tenants) {
+                        return tenants.stream()
+                                      .findFirst()
+                                      .orElseThrow(() -> new TenantNotResolvedException("no tenant"));
+                    }
+
+                    @Override
+                    public Message attachTenant(Message message, TenantDescriptor tenant) {
+                        return message.andMetadata(Map.of(TenantDescriptor.TENANT_ID_KEY, tenant.tenantId()));
+                    }
+                },
                 List::of);
 
         @Test
@@ -651,12 +663,21 @@ class MultiTenantAxonServerQueryBusConnectorTest {
      */
     private static TenantRouter routerFor(TenantProvider tenantProvider) {
         return new TenantRouter(
-                (message, tenants) -> tenants.stream()
-                                             .filter(tenant -> tenant.tenantId()
-                                                                     .equals(message.metadata().get("tenantId")))
-                                             .findFirst()
-                                             .orElseThrow(() -> new TenantNotResolvedException(
-                                                     "No tenant found in metadata")),
+                new TenantResolver() {
+                    @Override
+                    public TenantDescriptor resolveTenant(Message message, Collection<TenantDescriptor> tenants) {
+                        return tenants.stream()
+                                      .filter(tenant -> tenant.tenantId().equals(message.metadata().get("tenantId")))
+                                      .findFirst()
+                                      .orElseThrow(() -> new TenantNotResolvedException(
+                                              "No tenant found in metadata"));
+                    }
+
+                    @Override
+                    public Message attachTenant(Message message, TenantDescriptor tenant) {
+                        return message.andMetadata(Map.of("tenantId", tenant.tenantId()));
+                    }
+                },
                 tenantProvider);
     }
 

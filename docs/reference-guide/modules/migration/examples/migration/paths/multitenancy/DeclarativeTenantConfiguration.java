@@ -29,6 +29,8 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 
+import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
 import javax.sql.DataSource;
 
@@ -71,15 +73,23 @@ public class DeclarativeTenantConfiguration {
 
     // tag::custom-tenant-resolver[]
     public void registerCustomTenantResolver(MessagingConfigurer configurer) {
-        TenantResolver resolver = (message, tenants) -> {
-            String tenantId = extractTenantId(message);                          // <1>
-            if (tenantId == null) {
-                throw new TenantNotResolvedException("Could not resolve a tenant for the message");
+        TenantResolver resolver = new TenantResolver() {
+            @Override
+            public TenantDescriptor resolveTenant(Message message, Collection<TenantDescriptor> tenants) {
+                String tenantId = message.metadata().get("x-tenant");            // <1>
+                if (tenantId == null) {
+                    throw new TenantNotResolvedException("Could not resolve a tenant for the message");
+                }
+                return TenantDescriptor.tenantWithId(tenantId);
             }
-            return TenantDescriptor.tenantWithId(tenantId);
+
+            @Override
+            public Message attachTenant(Message message, TenantDescriptor tenant) {
+                return message.andMetadata(Map.of("x-tenant", tenant.tenantId()));     // <2>
+            }
         };
         configurer.componentRegistry(registry -> registry.registerComponent(TenantResolver.class,
-                                                                           config -> resolver));
+                                                                            config -> resolver));
     }
     // end::custom-tenant-resolver[]
 
