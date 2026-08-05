@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.tracing.integration;
+package io.axoniq.framework.integrationtests.tracing;
 
 import io.axoniq.framework.tracing.micrometer.MicrometerSpanFactory;
 import io.micrometer.tracing.Tracer;
