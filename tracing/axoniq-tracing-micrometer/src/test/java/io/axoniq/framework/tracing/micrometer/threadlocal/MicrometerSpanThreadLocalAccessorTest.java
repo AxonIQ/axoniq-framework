@@ -31,6 +31,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class MicrometerSpanThreadLocalAccessorTest {
 
@@ -100,5 +105,35 @@ class MicrometerSpanThreadLocalAccessorTest {
         }
 
         assertThat(tracer.currentSpan()).isNull();
+    }
+
+    @Test
+    void tracingScopeCloseFailureDoesNotEscapeIntoApplicationProcessing() {
+        Tracer failingTracer = mock(Tracer.class);
+        Span parent = mock(Span.class);
+        Tracer.SpanInScope failingScope = mock(Tracer.SpanInScope.class);
+        when(failingTracer.withSpan(parent)).thenReturn(failingScope);
+        doThrow(new AssertionError("broken tracing scope")).when(failingScope).close();
+        MicrometerSpanThreadLocalAccessor failingAccessor =
+                new MicrometerSpanThreadLocalAccessor(ObservationRegistry.create(), failingTracer);
+
+        failingAccessor.setValue(parent);
+
+        assertThatCode(() -> failingAccessor.restore(parent)).doesNotThrowAnyException();
+        verify(failingScope).close();
+    }
+
+    @Test
+    void tracingScopeOpenFailureDoesNotEscapeIntoApplicationProcessing() {
+        Tracer failingTracer = mock(Tracer.class);
+        Span parent = mock(Span.class);
+        when(failingTracer.withSpan(parent)).thenThrow(new AssertionError("broken tracing backend"));
+        MicrometerSpanThreadLocalAccessor failingAccessor =
+                new MicrometerSpanThreadLocalAccessor(ObservationRegistry.create(), failingTracer);
+
+        assertThatCode(() -> {
+            failingAccessor.setValue(parent);
+            failingAccessor.restore(parent);
+        }).doesNotThrowAnyException();
     }
 }
