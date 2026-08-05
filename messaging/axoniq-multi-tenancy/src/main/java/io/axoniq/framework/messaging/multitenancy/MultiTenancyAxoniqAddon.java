@@ -26,7 +26,7 @@ import io.axoniq.license.entitlement.AxoniqAddon;
  * detected and logged at startup, and to be included in the license entitlement system.
  *
  * @author Mitchell Herrijgers
- * @since 5.1.0
+ * @since 5.3.0
  */
 public class MultiTenancyAxoniqAddon implements AxoniqAddon {
 
