@@ -57,8 +57,8 @@ import static io.axoniq.framework.axonserver.connector.util.ProcessingInstructio
 /**
  * Utility class to convert queries during
  * {@link AxonServerQueryBusConnector#query(QueryMessage, ProcessingContext) dispatching} and handling of
- * {@link AxonServerQueryBusConnector#subscribe(QualifiedName) subscribed} query
- * handlers in the {@link AxonServerQueryBusConnector}.
+ * {@link AxonServerQueryBusConnector#subscribe(QualifiedName) subscribed} query handlers in the
+ * {@link AxonServerQueryBusConnector}.
  * <p>
  * This utility class is marked as {@link Internal} as it is specific for the {@link AxonServerQueryBusConnector}.
  *
@@ -87,12 +87,12 @@ public final class QueryConverter {
      * construct a QueryMessage that represents the request for querying information.
      *
      * @param queryRequest the {@link QueryRequest} to be converted into a {@link QueryMessage} (must not be null)
-     * @param converter the converter to be used for payload conversion
+     * @param converter    the converter to be used for payload conversion, or {@code null} if none is available
      * @return a {@link QueryMessage} representation of the provided {@link QueryRequest}. The returned object contains
-     * the extracted payload, metadata, and expected response type.
-     * @throws NullPointerException if the provided {@link QueryRequest} is null.
+     * the extracted payload, metadata, and expected response type
+     * @throws NullPointerException if the provided {@link QueryRequest} is null
      */
-    static QueryMessage convertQueryRequest(QueryRequest queryRequest, Converter converter) {
+    static QueryMessage convertQueryRequest(QueryRequest queryRequest, @Nullable Converter converter) {
         var payload = queryRequest.getPayload();
         Integer priority = ProcessingInstructionUtils.priority(queryRequest.getProcessingInstructionsList());
 
@@ -115,13 +115,13 @@ public final class QueryConverter {
      * This method processes the provided {@link QueryMessage} and constructs a corresponding {@link QueryRequest} with
      * all necessary details, such as metadata, payload, and other processing instructions.
      *
-     * @param query         The {@link QueryMessage} to be converted. Must not be null. The payload must be of type
-     *                      {@code byte[]}, otherwise an {@link IllegalArgumentException} is thrown.
-     * @param clientId      The identifier of the client making the query. Must not be null.
-     * @param componentName The name of the component handling the query. Must not be null.
+     * @param query         the {@link QueryMessage} to be converted. Must not be null. The payload must be of type
+     *                      {@code byte[]}, otherwise an {@link IllegalArgumentException} is thrown
+     * @param clientId      the identifier of the client making the query. Must not be null
+     * @param componentName the name of the component handling the query. Must not be null
      * @return a {@link QueryRequest} That represents the provided {@link QueryMessage}. Contains the extracted
      * metadata, payload, and other specific configurations from the original message.
-     * @throws IllegalArgumentException if the payload of the {@link QueryMessage} is not of type {@code byte[]}.
+     * @throws IllegalArgumentException if the payload of the {@link QueryMessage} is not of type {@code byte[]}
      */
     public static QueryRequest convertQueryMessage(QueryMessage query,
                                                    String clientId,
@@ -171,7 +171,7 @@ public final class QueryConverter {
      * includes the processed payload, metadata, and any error information, if applicable.
      * @throws IllegalArgumentException if the provided {@link QueryResponse} contains an error, in which case we use
      *                                  {@link ExceptionConverter#convertToAxonException(String, ErrorMessage,
-     *                                  SerializedObject)}.
+     *                                  SerializedObject, Converter)}.
      */
     public static QueryResponseMessage convertQueryResponse(QueryResponse queryResponse,
                                                             @Nullable Converter converter) {
@@ -198,12 +198,12 @@ public final class QueryConverter {
      * {@link QueryResponse}. The resulting {@link QueryResponse} contains the message identifier, request identifier,
      * processed payload, metadata, and other necessary information.
      *
-     * @param requestId            The {@link QueryMessage#identifier()} that initiated the query. Used to associate the
-     *                             resulting {@link QueryResponse} with the original request. Must not be null.
-     * @param queryResponseMessage The {@link QueryResponseMessage} to be converted into a {@link QueryResponse}. Must
-     *                             not be null.
-     * @return A {@link QueryResponse} representation of the provided {@link QueryResponseMessage}. It includes the
-     * identifier, metadata, and the serialized payload.
+     * @param requestId            the {@link QueryMessage#identifier()} that initiated the query. Used to associate the
+     *                             resulting {@link QueryResponse} with the original request. Must not be null
+     * @param queryResponseMessage the {@link QueryResponseMessage} to be converted into a {@link QueryResponse}. Must
+     *                             not be null
+     * @return a {@link QueryResponse} representation of the provided {@link QueryResponseMessage}. It includes the
+     * identifier, metadata, and the serialized payload
      */
     public static QueryResponse convertQueryResponseMessage(String requestId,
                                                             QueryResponseMessage queryResponseMessage) {
@@ -277,11 +277,11 @@ public final class QueryConverter {
      * {@link SubscriptionQueryUpdateMessage} by extracting its payload, metadata, and other relevant details to
      * construct a {@link QueryUpdate}. If the payload is unavailable, it defaults to an empty byte array.
      *
-     * @param update The {@link SubscriptionQueryUpdateMessage} to be converted. Must not be null. The payload and
-     *               metadata should be properly set in the provided update.
-     * @return A {@link QueryUpdate} representation of the given {@link SubscriptionQueryUpdateMessage}. It includes the
-     * extracted payload, metadata, and other necessary information.
-     * @throws NullPointerException if the provided {@link SubscriptionQueryUpdateMessage} is null.
+     * @param update the {@link SubscriptionQueryUpdateMessage} to be converted. Must not be null. The payload and
+     *               metadata should be properly set in the provided update
+     * @return a {@link QueryUpdate} representation of the given {@link SubscriptionQueryUpdateMessage}. It includes the
+     * extracted payload, metadata, and other necessary information
+     * @throws NullPointerException if the provided {@link SubscriptionQueryUpdateMessage} is null
      */
     public static QueryUpdate convertQueryUpdate(SubscriptionQueryUpdateMessage update) {
         byte[] payload = Objects.requireNonNullElseGet(update.payloadAs(byte[].class), () -> new byte[0]);
@@ -299,9 +299,9 @@ public final class QueryConverter {
     /**
      * Converts a {@link QueryUpdate} object into a {@link SubscriptionQueryUpdateMessage}.
      *
-     * @param queryUpdate The {@link QueryUpdate} object to be converted; must not be null.
-     * @param converter the converter to be used for payload conversion
-     * @return A {@link SubscriptionQueryUpdateMessage} created from the provided {@link QueryUpdate}.
+     * @param queryUpdate the {@link QueryUpdate} object to be converted; must not be null
+     * @param converter   the converter to be used for payload conversion
+     * @return a {@link SubscriptionQueryUpdateMessage} created from the provided {@link QueryUpdate}
      */
     public static SubscriptionQueryUpdateMessage convertQueryUpdate(QueryUpdate queryUpdate,
                                                                     @Nullable Converter converter) {
@@ -323,20 +323,29 @@ public final class QueryConverter {
      * {@link QueryUpdate} containing the error message derived from the given {@link Throwable} along with the provided
      * client identifier.
      *
-     * @param clientId The identifier of the client associated with the error. Must not be null.
-     * @param errorCode The error code identifying the type of action that resulted in an error, if known.
-     * @param error    The {@link Throwable} containing error details to be translated into an error message. Must not
-     *                 be null.
-     * @return A {@link QueryUpdate} containing the client identifier and an error message derived from the provided
-     * {@link Throwable}.
+     * @param clientId  the identifier of the client associated with the error. Must not be null
+     * @param errorCode the error code identifying the type of action that resulted in an error, if known
+     * @param error     the {@link Throwable} containing error details to be translated into an error message. Must not
+     *                  be null
+     * @param converter the {@link Converter} used to serialize application-specific exception details, if present, or
+     *                  {@code null} if none is available
+     * @return a {@link QueryUpdate} containing the client identifier and an error message derived from the provided
+     * {@link Throwable}
      */
-    public static QueryUpdate convertQueryUpdate(String clientId, @Nullable ErrorCode errorCode, Throwable error) {
+    public static QueryUpdate convertQueryUpdate(String clientId,
+                                                 @Nullable ErrorCode errorCode,
+                                                 Throwable error,
+                                                 @Nullable Converter converter) {
         QueryUpdate.Builder builder =
                 QueryUpdate.newBuilder()
                            .setErrorMessage(ExceptionConverter.convertToErrorMessage(clientId, errorCode, error))
                            .setClientId(clientId);
         if (errorCode != null) {
             builder.setErrorCode(errorCode.errorCode());
+        }
+        SerializedObject detailsPayload = ExceptionConverter.convertToDetails(error, converter);
+        if (detailsPayload != null) {
+            builder.setPayload(detailsPayload);
         }
         return builder.build();
     }
