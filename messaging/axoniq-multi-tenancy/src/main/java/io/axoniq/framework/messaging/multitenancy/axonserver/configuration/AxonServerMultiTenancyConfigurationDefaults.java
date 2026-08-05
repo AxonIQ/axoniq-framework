@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.multitenancy.axonserver.configuration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyAxoniqAddon;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
@@ -39,6 +40,7 @@ import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnaps
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.Registration;
@@ -108,6 +110,9 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
 
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
+        // Register this module with the Entitlement Manager.
+        EntitlementManager.INSTANCE.registerAddon(MultiTenancyAxoniqAddon.class);
+
         // Register the Axon Server TenantProvider, which is the default implementation for multi-tenancy in Axon Server.
         componentRegistry.registerIfNotPresent(axonServerTenantProvider(), SearchScope.ALL);
 

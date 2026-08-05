@@ -19,11 +19,13 @@
 
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyAxoniqAddon;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
 import io.axoniq.framework.messaging.multitenancy.eventstreaming.MultiTenantTrackingToken;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -129,6 +131,7 @@ public class MultiTenantEventStorageEngine implements EventStorageEngine, MultiT
                                                    "The tenant snapshot store factory must not be null");
         this.tenantRouter = requireNonNull(tenantRouter, "The tenant router must not be null");
         this.composedEngines = new TenantScopedCache<>(this::compose, "the multi-tenant event storage engine");
+        EntitlementManager.INSTANCE.registerAddon(MultiTenancyAxoniqAddon.class);
     }
 
     @Override
