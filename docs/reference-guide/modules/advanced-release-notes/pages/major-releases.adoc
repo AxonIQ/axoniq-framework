@@ -64,17 +64,17 @@ All the enhancements and features which have been introduced to our major releas
 
 === Dependency upgrades
 
-- Bump actions/setup-java from 5.4.0 to 5.5.0 in the github-dependencies group across 1 directory (link:https://github.com/AxonIQ/axoniq-framework/pull/231[PR #231], by link:https://github.com/apps/dependabot[@app/dependabot])
-- Bump the maven-dependencies group with 3 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/232[PR #232], by link:https://github.com/apps/dependabot[@app/dependabot])
-- Bump slackapi/slack-github-action from 3.0.3 to 3.0.5 in the github-dependencies group (link:https://github.com/AxonIQ/axoniq-framework/pull/246[PR #246], by link:https://github.com/apps/dependabot[@app/dependabot])
-- Bump the maven-dependencies group with 2 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/247[PR #247], by link:https://github.com/apps/dependabot[@app/dependabot])
-- chore(deps): bump the github-dependencies group with 3 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/272[PR #272], by link:https://github.com/apps/dependabot[@app/dependabot])
-- chore(deps): bump the maven-dependencies group with 2 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/273[PR #273], by link:https://github.com/apps/dependabot[@app/dependabot])
-- chore(deps-dev): bump body-parser from 2.2.1 to 2.3.0 in /docs/_playbook (link:https://github.com/AxonIQ/axoniq-framework/pull/275[PR #275], by link:https://github.com/apps/dependabot[@app/dependabot])
-- chore(deps): bump brace-expansion and @asciidoctor/core in /docs/_playbook (link:https://github.com/AxonIQ/axoniq-framework/pull/276[PR #276], by link:https://github.com/apps/dependabot[@app/dependabot])
-- chore(deps): bump the maven-dependencies group with 4 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/290[PR #290], by link:https://github.com/apps/dependabot[@app/dependabot])
+- Bump actions/setup-java from 5.4.0 to 5.5.0 in the GitHub-dependencies group across 1 directory (link:https://github.com/AxonIQ/axoniq-framework/pull/231[PR #231])
+- Bump the maven-dependencies group with 3 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/232[PR #232])
+- Bump slackapi/slack-GitHub-action from 3.0.3 to 3.0.5 in the github-dependencies group (link:https://github.com/AxonIQ/axoniq-framework/pull/246[PR #246])
+- Bump the maven-dependencies group with 2 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/247[PR #247])
+- chore(deps): bump the GitHub-dependencies group with 3 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/272[PR #272])
+- chore(deps): bump the maven-dependencies group with 2 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/273[PR #273])
+- chore(deps-dev): bump body-parser from 2.2.1 to 2.3.0 in /docs/_playbook (link:https://github.com/AxonIQ/axoniq-framework/pull/275[PR #275])
+- chore(deps): bump brace-expansion and @asciidoctor/core in /docs/_playbook (link:https://github.com/AxonIQ/axoniq-framework/pull/276[PR #276])
+- chore(deps): bump the maven-dependencies group with 4 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/290[PR #290])
 - Upgrade the entitlement manager to 1.1.0 (link:https://github.com/AxonIQ/axoniq-framework/pull/304[PR #304], by link:https://github.com/smcvb[@smcvb])
-- chore(deps): bump the maven-dependencies group across 1 directory with 7 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/311[PR #311], by link:https://github.com/apps/dependabot[@app/dependabot])
+- chore(deps): bump the maven-dependencies group across 1 directory with 7 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/311[PR #311])
 
 === Contributors
 
