@@ -453,7 +453,7 @@ class MultiTenantAxonServerQueryBusConnectorTest {
     class Disconnect {
 
         @Test
-        void disconnectDisconnectsAllTenantConnections() {
+        void disconnectPreparesAllTenantQueryChannelsWithoutClosingConnections() {
             TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1, TENANT_2));
             RecordingConnection connection1 = new RecordingConnection();
             RecordingConnection connection2 = new RecordingConnection();
@@ -469,9 +469,10 @@ class MultiTenantAxonServerQueryBusConnectorTest {
 
             assertThat(connection1.recordingQueryChannel().prepareDisconnectCalled()).isTrue();
             assertThat(connection2.recordingQueryChannel().prepareDisconnectCalled()).isTrue();
-            assertThat(connection1.disconnectCalls()).isEqualTo(1);
-            assertThat(connection2.disconnectCalls()).isEqualTo(1);
+            assertThat(connection1.disconnectCalls()).isZero();
+            assertThat(connection2.disconnectCalls()).isZero();
         }
+
     }
 
     @Nested
@@ -528,7 +529,7 @@ class MultiTenantAxonServerQueryBusConnectorTest {
     class TenantRemoval {
 
         @Test
-        void cancellingRegistrationRemovesTenantAndDisconnectsItsConnector() {
+        void cancellingRegistrationRemovesTenantAndPreparesItsConnectorForDisconnect() {
             // given
             TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1, TENANT_2));
             RecordingConnection connection1 = new RecordingConnection();
@@ -545,7 +546,8 @@ class MultiTenantAxonServerQueryBusConnectorTest {
 
             // then
             assertThat(cancelled).isTrue();
-            assertThat(connection1.disconnectCalls()).isEqualTo(1);
+            assertThat(connection1.recordingQueryChannel().prepareDisconnectCalled()).isTrue();
+            assertThat(connection1.disconnectCalls()).isZero();
             assertThatThrownBy(() -> testSubject.query(queryFor(TENANT_1.tenantId()), null))
                     .isInstanceOf(TenantNotResolvedException.class);
             assertThatCode(() -> testSubject.query(queryFor(TENANT_2.tenantId()), null))

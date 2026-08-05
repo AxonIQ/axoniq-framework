@@ -515,7 +515,7 @@ class MultiTenantAxonServerCommandBusConnectorTest {
     class Disconnect {
 
         @Test
-        void disconnectDisconnectsAllTenantConnections() {
+        void disconnectPreparesAllTenantCommandChannelsWithoutClosingConnections() {
             TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1, TENANT_2));
             RecordingConnection connection1 = new RecordingConnection();
             RecordingConnection connection2 = new RecordingConnection();
@@ -531,9 +531,10 @@ class MultiTenantAxonServerCommandBusConnectorTest {
 
             assertThat(connection1.recordingCommandChannel().prepareDisconnectCalled()).isTrue();
             assertThat(connection2.recordingCommandChannel().prepareDisconnectCalled()).isTrue();
-            assertThat(connection1.disconnectCalls()).isEqualTo(1);
-            assertThat(connection2.disconnectCalls()).isEqualTo(1);
+            assertThat(connection1.disconnectCalls()).isZero();
+            assertThat(connection2.disconnectCalls()).isZero();
         }
+
     }
 
     @Nested
@@ -590,7 +591,7 @@ class MultiTenantAxonServerCommandBusConnectorTest {
     class TenantRemoval {
 
         @Test
-        void cancellingRegistrationRemovesTenantAndDisconnectsItsConnector() {
+        void cancellingRegistrationRemovesTenantAndPreparesItsConnectorForDisconnect() {
             // given
             TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1, TENANT_2));
             RecordingConnection connection1 = new RecordingConnection();
@@ -607,7 +608,8 @@ class MultiTenantAxonServerCommandBusConnectorTest {
 
             // then
             assertThat(cancelled).isTrue();
-            assertThat(connection1.disconnectCalls()).isEqualTo(1);
+            assertThat(connection1.recordingCommandChannel().prepareDisconnectCalled()).isTrue();
+            assertThat(connection1.disconnectCalls()).isZero();
             assertThatThrownBy(() -> testSubject.dispatch(commandFor(TENANT_1.tenantId()), null))
                     .isInstanceOf(TenantNotResolvedException.class);
             assertThat(testSubject.dispatch(commandFor(TENANT_2.tenantId()), null)).isCompleted();

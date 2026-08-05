@@ -213,7 +213,6 @@ public class AxonServerQueryBusConnector implements QueryBusConnector, Connector
                                 + "Going to cancel remaining queries in progress.");
             localSegmentAdapter.cancel();
         }
-        connection.disconnect();
         return FutureUtils.emptyCompletedFuture();
     }
 

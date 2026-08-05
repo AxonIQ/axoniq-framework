@@ -123,6 +123,22 @@ class AxonServerQueryBusConnectorTest {
     }
 
     @Nested
+    class Disconnect {
+
+        @Test
+        void disconnectPreparesTheQueryChannelWithoutDisconnectingTheSharedConnection() {
+            when(connection.isConnected()).thenReturn(true);
+            when(mockQueryChannel.prepareDisconnect()).thenReturn(CompletableFuture.completedFuture(null));
+
+            testSubject.disconnect().join();
+
+            verify(mockQueryChannel).prepareDisconnect();
+            verify(connection, never()).disconnect();
+        }
+
+    }
+
+    @Nested
     class QueryDispatching {
 
         @Test

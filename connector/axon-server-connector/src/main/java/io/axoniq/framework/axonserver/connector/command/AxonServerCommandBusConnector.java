@@ -196,8 +196,7 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
                                                             .toArray(CompletableFuture[]::new);
         return connection.commandChannel()
                          .prepareDisconnect()
-                         .thenCompose(ignored -> CompletableFuture.allOf(inFlight))
-                         .thenRun(connection::disconnect);
+                         .thenCompose(ignored -> CompletableFuture.allOf(inFlight));
     }
 
     /**

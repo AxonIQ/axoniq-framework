@@ -32,8 +32,8 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.FutureUtils;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.Registration;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
@@ -58,10 +58,11 @@ import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedEx
  * Multi-tenant Axon Server {@link CommandBusConnector}.
  * <p>
  * The connector composes one {@link AxonServerCommandBusConnector} per {@link TenantDescriptor}, each owning its own
- * Axon Server connection, command handler subscriptions, and in-flight command tracking. Command subscription state
- * and the incoming-command handler are replayed onto newly registered tenants.
- *
- * Internal, because the connector is wired by {@link
+ * Axon Server connection, command handler subscriptions, and in-flight command tracking. Command subscription state and
+ * the incoming-command handler are replayed onto newly registered tenants.
+ * <p>
+ * Internal, because the connector is wired by
+ * {@link
  * io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults} and
  * reached through the {@link CommandBusConnector} component, never constructed by an application itself.
  *
@@ -151,7 +152,7 @@ public class MultiTenantAxonServerCommandBusConnector
                                                                                 commandName,
                                                                                 loadFactor))
                                                                         .toList();
-        return allOrEmpty(acknowledgments);
+        return FutureUtils.allOrEmpty(acknowledgments);
     }
 
     /**
@@ -193,7 +194,7 @@ public class MultiTenantAxonServerCommandBusConnector
         List<CompletableFuture<Void>> shutdowns = tenantConnectors.values().stream()
                                                                   .map(AxonServerCommandBusConnector::shutdownDispatching)
                                                                   .toList();
-        return allOrEmpty(shutdowns);
+        return FutureUtils.allOrEmpty(shutdowns);
     }
 
     @Override
@@ -201,20 +202,7 @@ public class MultiTenantAxonServerCommandBusConnector
         List<CompletableFuture<Void>> disconnects = tenantConnectors.values().stream()
                                                                     .map(AxonServerCommandBusConnector::disconnect)
                                                                     .toList();
-        return allOrEmpty(disconnects);
-    }
-
-    /**
-     * Combines the given per-tenant {@code futures} into a single future, without allocating a no-op
-     * {@link CompletableFuture#allOf(CompletableFuture[])} call when there are no tenants to combine.
-     *
-     * @param futures the per-tenant futures to combine
-     * @return a future that completes once every future in {@code futures} completes
-     */
-    private static CompletableFuture<Void> allOrEmpty(List<CompletableFuture<Void>> futures) {
-        return futures.isEmpty()
-                ? FutureUtils.emptyCompletedFuture()
-                : CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new));
+        return FutureUtils.allOrEmpty(disconnects);
     }
 
     @Override
