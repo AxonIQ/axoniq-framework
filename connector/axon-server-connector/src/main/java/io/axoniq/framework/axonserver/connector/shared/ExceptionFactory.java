@@ -50,6 +50,12 @@ import java.util.function.Supplier;
 final class ExceptionFactory {
 
     /**
+     * A reconstructed remote exception's local stack trace would only point at this gRPC deserialization code, not
+     * at the actual failure on the remote handler, so it's suppressed to avoid misleading callers.
+     */
+    private static final boolean SUPPRESS_LOCAL_STACK_TRACE = false;
+
+    /**
      * Converts the {@code throwable} to the relevant AxonException
      *
      * @param throwable the descriptor of the error
@@ -161,7 +167,7 @@ final class ExceptionFactory {
                     new AxonServerRemoteCommandHandlingException(errorCode.errorCode(), errorMessage),
                     safeDetails.get(),
                     converter,
-                    false
+                    SUPPRESS_LOCAL_STACK_TRACE
             );
 
             case COMMAND_EXECUTION_NON_TRANSIENT_ERROR -> new CommandExecutionException(
@@ -169,7 +175,7 @@ final class ExceptionFactory {
                     new AxonServerNonTransientRemoteCommandHandlingException(errorCode.errorCode(), errorMessage),
                     safeDetails.get(),
                     converter,
-                    false
+                    SUPPRESS_LOCAL_STACK_TRACE
             );
 
             case COMMAND_DISPATCH_ERROR -> new AxonServerCommandDispatchException(errorCode.errorCode(), errorMessage);
@@ -187,7 +193,7 @@ final class ExceptionFactory {
                     new AxonServerRemoteQueryHandlingException(errorCode.errorCode(), errorMessage),
                     safeDetails.get(),
                     converter,
-                    false
+                    SUPPRESS_LOCAL_STACK_TRACE
             );
 
             case QUERY_EXECUTION_NON_TRANSIENT_ERROR -> new QueryExecutionException(
@@ -195,7 +201,7 @@ final class ExceptionFactory {
                     new AxonServerNonTransientRemoteQueryHandlingException(errorCode.errorCode(), errorMessage),
                     safeDetails.get(),
                     converter,
-                    false
+                    SUPPRESS_LOCAL_STACK_TRACE
             );
 
             case QUERY_DISPATCH_ERROR -> new AxonServerQueryDispatchException(errorCode.errorCode(), errorMessage);
