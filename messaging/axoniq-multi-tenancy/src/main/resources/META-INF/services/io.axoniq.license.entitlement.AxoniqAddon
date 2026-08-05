@@ -17,4 +17,4 @@
 #  https://www.axoniq.io/pricing
 #
 
-io.axoniq.framework.messaging.multitenancy.MultiTenancyAxoniqAddon
+io.axoniq.framework.messaging.multitenancy.api.MultiTenancyAxoniqAddon

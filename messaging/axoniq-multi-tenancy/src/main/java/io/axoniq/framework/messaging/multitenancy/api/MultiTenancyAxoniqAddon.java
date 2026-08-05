@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.messaging.multitenancy;
+package io.axoniq.framework.messaging.multitenancy.api;
 
 import io.axoniq.license.entitlement.AxoniqAddon;
 

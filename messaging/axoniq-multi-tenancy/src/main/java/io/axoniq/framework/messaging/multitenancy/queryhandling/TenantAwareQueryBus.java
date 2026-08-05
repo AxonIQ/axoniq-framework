@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.messaging.multitenancy.queryhandling;
 
-import io.axoniq.framework.messaging.multitenancy.MultiTenancyAxoniqAddon;
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyAxoniqAddon;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;

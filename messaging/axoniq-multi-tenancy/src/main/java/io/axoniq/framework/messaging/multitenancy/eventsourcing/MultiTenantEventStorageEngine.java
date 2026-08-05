@@ -19,7 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
-import io.axoniq.framework.messaging.multitenancy.MultiTenancyAxoniqAddon;
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyAxoniqAddon;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
