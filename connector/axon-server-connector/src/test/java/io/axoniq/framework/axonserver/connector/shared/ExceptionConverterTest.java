@@ -26,6 +26,7 @@ import org.axonframework.common.AxonException;
 import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.conversion.ConversionException;
 import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.commandhandling.CommandExecutionException;
 import org.junit.jupiter.api.*;
 
@@ -63,7 +64,7 @@ class ExceptionConverterTest {
         @Test
         void returnsNullWhenNoDetailsPresent() {
             SerializedObject result = ExceptionConverter.convertToDetails(
-                    new RuntimeException("boom"), mock(Converter.class)
+                    new RuntimeException("boom"), spy(new JacksonConverter())
             );
 
             assertThat(result).isNull();
@@ -81,10 +82,8 @@ class ExceptionConverterTest {
         @Test
         void returnsPopulatedSerializedObjectWhenConverterAvailable() {
             var cause = new CommandExecutionException("boom", null, "some details");
-            Converter converter = mock(Converter.class);
-            when(converter.convert("some details", byte[].class)).thenReturn("some details".getBytes());
 
-            SerializedObject result = ExceptionConverter.convertToDetails(cause, converter);
+            SerializedObject result = ExceptionConverter.convertToDetails(cause, spy(new JacksonConverter()));
 
             assertThat(result).isNotNull();
             assertThat(result.getType()).isEqualTo(String.class.getName());
@@ -105,9 +104,8 @@ class ExceptionConverterTest {
         @Test
         void returnsNullWhenConversionFails() {
             var cause = new CommandExecutionException("boom", null, "some details");
-            Converter converter = mock(Converter.class);
-            when(converter.convert("some details", byte[].class))
-                    .thenThrow(new ConversionException("cannot convert"));
+            Converter converter = spy(new JacksonConverter());
+            doThrow(new ConversionException("cannot convert")).when(converter).convert("some details", byte[].class);
 
             SerializedObject result = ExceptionConverter.convertToDetails(cause, converter);
 
