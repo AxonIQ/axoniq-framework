@@ -972,6 +972,7 @@ The following files in `axon-5/` describe the API changes:
 - Moved every Java snippet to tagged files under the tracing module's `examples` directory.
 - Registered the tracing examples as integration-test sources so Maven compiles them.
 - Documented distributed subscription-query update parenting, linking, and `messaging.message.conversation_id`.
+- Documented trace context propagation for WebFlux applications.
 - Included the Jaeger capture and executable Jaeger integration-test reference.
 
 ---
