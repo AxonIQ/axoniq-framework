@@ -105,7 +105,9 @@ class MultiTenantSnapshotSourcingIT {
                                                                        .criteriaResolver(c -> (id, context) ->
                                                                                EventCriteria.havingTags(
                                                                                        Tag.of("account", id)))
-                                                                       .snapshotPolicy(SnapshotPolicy.afterEvents(3))
+                                                                       // afterEvents is exclusive: after two means the
+                                                                       // three events below create the snapshot.
+                                                                       .snapshotPolicy(SnapshotPolicy.afterEvents(2))
                                                                        .build())
                                                .start();
 
