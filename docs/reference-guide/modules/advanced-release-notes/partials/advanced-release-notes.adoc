@@ -4,7 +4,8 @@
 |===
 |Release Type |Version
 
-|**Major** |xref:major-releases.adoc#release_5_2[5.2]
+|**Major** |xref:major-releases.adoc#release_5_3[5.3]
+| |xref:major-releases.adoc#release_5_2[5.2]
 | |xref:major-releases.adoc#release_5_1[5.1]
 |**Minor** |xref:minor-releases.adoc#release_5_2[5.2]
 | |xref:minor-releases.adoc#release_5_1[5.1]

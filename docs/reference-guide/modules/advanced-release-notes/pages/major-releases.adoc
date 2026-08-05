@@ -3,6 +3,92 @@
 
 All the enhancements and features which have been introduced to our major releases of the Axoniq Framework are noted here.
 
+[#release_5_3]
+== Release 5.3
+
+=== Features
+
+- Relocate event-handler checkpointing into axoniq-event-streaming (link:https://github.com/AxonIQ/axoniq-framework/pull/203[PR #203], by link:https://github.com/abuijze[@abuijze])
+- split event transformation (link:https://github.com/AxonIQ/axoniq-framework/issues/216[#216], link:https://github.com/AxonIQ/axoniq-framework/pull/218[PR #218], by link:https://github.com/laura-devriendt-lemon[@laura-devriendt-lemon])
+- multitenancy module scaffolding + integration branch (link:https://github.com/AxonIQ/axoniq-framework/issues/204[#204], link:https://github.com/AxonIQ/axoniq-framework/pull/219[PR #219], by link:https://github.com/hatzlj[@hatzlj])
+- Infrastructure: tenant registration, resolution and wiring skeleton (link:https://github.com/AxonIQ/axoniq-framework/pull/226[PR #226], by link:https://github.com/jangalinski[@jangalinski])
+- Add tenant aware components (link:https://github.com/AxonIQ/axoniq-framework/pull/245[PR #245], by link:https://github.com/laura-devriendt-lemon[@laura-devriendt-lemon])
+- Distributed tracing based on Micrometer Tracing (link:https://github.com/AxonIQ/axoniq-framework/pull/259[PR #259], by link:https://github.com/MateuszNaKodach[@MateuszNaKodach])
+- Migration logic for spliting type into `type` and `type_version` and maintaining an internal type tag `__T` in the tags table (link:https://github.com/AxonIQ/axoniq-framework/pull/262[PR #262], by link:https://github.com/hjohn[@hjohn])
+- Multi-Tenancy event storage (link:https://github.com/AxonIQ/axoniq-framework/pull/263[PR #263], by link:https://github.com/jangalinski[@jangalinski])
+- spring boot auto config (link:https://github.com/AxonIQ/axoniq-framework/issues/211[#211], link:https://github.com/AxonIQ/axoniq-framework/pull/265[PR #265], by link:https://github.com/laura-devriendt-lemon[@laura-devriendt-lemon])
+- Multi-Tenancy command handling (link:https://github.com/AxonIQ/axoniq-framework/issues/207[#207], link:https://github.com/AxonIQ/axoniq-framework/pull/266[PR #266], by link:https://github.com/hatzlj[@hatzlj])
+- Multi-Tenancy query handling (link:https://github.com/AxonIQ/axoniq-framework/issues/208[#208], link:https://github.com/AxonIQ/axoniq-framework/pull/281[PR #281], by link:https://github.com/hatzlj[@hatzlj])
+- Add multi-tenant pooled streaming read side (link:https://github.com/AxonIQ/axoniq-framework/pull/283[PR #283], by link:https://github.com/laura-devriendt-lemon[@laura-devriendt-lemon])
+- Implement type queries and type appends for Postgres ESE (link:https://github.com/AxonIQ/axoniq-framework/issues/52[#52], link:https://github.com/AxonIQ/axoniq-framework/pull/287[PR #287], by link:https://github.com/hjohn[@hjohn])
+- Add multi-tenant persistent streams (link:https://github.com/AxonIQ/axoniq-framework/issues/210[#210], link:https://github.com/AxonIQ/axoniq-framework/pull/307[PR #307], by link:https://github.com/hatzlj[@hatzlj])
+- Attach the tenant to a message dispatched from within a handler (link:https://github.com/AxonIQ/axoniq-framework/issues/315[#315], link:https://github.com/AxonIQ/axoniq-framework/pull/316[PR #316], by link:https://github.com/hatzlj[@hatzlj])
+- Add entitlement checks for Multi-tenancy (link:https://github.com/AxonIQ/axoniq-framework/pull/335[PR #335], by link:https://github.com/CodeDrivenMitch[@CodeDrivenMitch])
+- Feature/backport action (link:https://github.com/AxonIQ/axoniq-framework/pull/336[PR #336], by link:https://github.com/hjohn[@hjohn])
+
+=== Enhancements
+
+- Split off big parts from `PostgresqlEventStorageEngine` to reduce the main engine code size (link:https://github.com/AxonIQ/axoniq-framework/pull/248[PR #248], by link:https://github.com/hjohn[@hjohn])
+- EventStorageEngine#source and SnapshotStore methods - add ProcessingContext parameter (link:https://github.com/AxonIQ/axoniq-framework/pull/255[PR #255], by link:https://github.com/MateuszNaKodach[@MateuszNaKodach])
+- Add mutual TLS configuration properties for Axon Server connections (link:https://github.com/AxonIQ/axoniq-framework/pull/256[PR #256], by link:https://github.com/abuijze[@abuijze])
+- Disable some tests for coordination with Axon Framework (link:https://github.com/AxonIQ/axoniq-framework/pull/264[PR #264], by link:https://github.com/hjohn[@hjohn])
+- Improve watch.js for local doc rendering / improve docs readme / gitignore localLinks (link:https://github.com/AxonIQ/axoniq-framework/pull/267[PR #267], by link:https://github.com/hatzlj[@hatzlj])
+- Switch default test SLF4J binding from Logback to Log4j2 (link:https://github.com/AxonIQ/axoniq-framework/pull/269[PR #269], by link:https://github.com/hjohn[@hjohn])
+- `DistributedQueryBus` include and-count `emit`, `complete`, and `completeExceptionally` operations (link:https://github.com/AxonIQ/axoniq-framework/pull/277[PR #277], by link:https://github.com/smcvb[@smcvb])
+- Enable multi-tenancy by default when on the classpath a... (link:https://github.com/AxonIQ/axoniq-framework/issues/258[#258], link:https://github.com/AxonIQ/axoniq-framework/pull/303[PR #303], by link:https://github.com/hatzlj[@hatzlj])
+- Fix connection-pool leak and starved common pool on CI (link:https://github.com/AxonIQ/axoniq-framework/pull/306[PR #306], by link:https://github.com/hjohn[@hjohn])
+- Make all `SnapshotStore` implementations `DescribableComponents` (link:https://github.com/AxonIQ/axoniq-framework/pull/312[PR #312], by link:https://github.com/smcvb[@smcvb])
+- Implement describeTo for SpanFactory implementations (link:https://github.com/AxonIQ/axoniq-framework/pull/314[PR #314], by link:https://github.com/MateuszNaKodach[@MateuszNaKodach])
+- Align CLAUDE.md wildcard-import rule with .editorconfig (link:https://github.com/AxonIQ/axoniq-framework/pull/328[PR #328], by link:https://github.com/hatzlj[@hatzlj])
+- Add entitlement checks for Micrometer Tracing (link:https://github.com/AxonIQ/axoniq-framework/pull/334[PR #334], by link:https://github.com/MateuszNaKodach[@MateuszNaKodach])
+
+=== Bug fixes
+
+- Release notes fix - Move bug fix from 5.1.2 to 5.2.0 (link:https://github.com/AxonIQ/axoniq-framework/pull/249[PR #249], by link:https://github.com/smcvb[@smcvb])
+- Fix incorrect token position assumption in `MultiStreamableEventSourceTest` (link:https://github.com/AxonIQ/axoniq-framework/pull/297[PR #297], by link:https://github.com/hjohn[@hjohn])
+- Increase AxonServerContainer startup timeout to 2 minutes and log slow starts (link:https://github.com/AxonIQ/axoniq-framework/pull/301[PR #301], by link:https://github.com/hjohn[@hjohn])
+- Fix tracing integration tests failing under default-on multi-tenancy (link:https://github.com/AxonIQ/axoniq-framework/pull/325[PR #325], by link:https://github.com/laura-devriendt-lemon[@laura-devriendt-lemon])
+- `HandlerExecutionException` details are carried over (link:https://github.com/AxonIQ/axoniq-framework/issues/323[#323], link:https://github.com/AxonIQ/axoniq-framework/pull/326[PR #326], by link:https://github.com/smcvb[@smcvb])
+- Fix event metadata dropped on append in AggregateBasedAxonServerEventStorageEngine (link:https://github.com/AxonIQ/axoniq-framework/issues/330[#330], link:https://github.com/AxonIQ/axoniq-framework/pull/332[PR #332], by link:https://github.com/hatzlj[@hatzlj])
+- Multi-tenant application shutdown blows the lifecycle phase budget and can leak live connectors (link:https://github.com/AxonIQ/axoniq-framework/issues/319[#319], link:https://github.com/AxonIQ/axoniq-framework/pull/333[PR #333], by link:https://github.com/jangalinski[@jangalinski])
+
+=== Documentation
+
+- Include AAF 5.2.0 release notes (link:https://github.com/AxonIQ/axoniq-framework/pull/233[PR #233], by link:https://github.com/smcvb[@smcvb])
+- Externalize reference-guide code samples into compilable sources (link:https://github.com/AxonIQ/axoniq-framework/pull/268[PR #268], by link:https://github.com/abuijze[@abuijze])
+- Add 5.2.1 release notes (link:https://github.com/AxonIQ/axoniq-framework/pull/291[PR #291], by link:https://github.com/smcvb[@smcvb])
+- Add 5.2.2 Release Notes (link:https://github.com/AxonIQ/axoniq-framework/pull/294[PR #294], by link:https://github.com/smcvb[@smcvb])
+- Externalize the multi-tenancy code samples + reference demo (link:https://github.com/AxonIQ/axoniq-framework/issues/280[#280], link:https://github.com/AxonIQ/axoniq-framework/pull/313[PR #313], by link:https://github.com/laura-devriendt-lemon[@laura-devriendt-lemon])
+- Documentation multi tenancy migration path (link:https://github.com/AxonIQ/axoniq-framework/issues/212[#212], link:https://github.com/AxonIQ/axoniq-framework/pull/324[PR #324], by link:https://github.com/laura-devriendt-lemon[@laura-devriendt-lemon])
+- Add 5.2.3 release notes (link:https://github.com/AxonIQ/axoniq-framework/pull/331[PR #331], by link:https://github.com/smcvb[@smcvb])
+
+=== Dependency upgrades
+
+- Bump actions/setup-java from 5.4.0 to 5.5.0 in the github-dependencies group across 1 directory (link:https://github.com/AxonIQ/axoniq-framework/pull/231[PR #231], by link:https://github.com/apps/dependabot[@app/dependabot])
+- Bump the maven-dependencies group with 3 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/232[PR #232], by link:https://github.com/apps/dependabot[@app/dependabot])
+- Bump slackapi/slack-github-action from 3.0.3 to 3.0.5 in the github-dependencies group (link:https://github.com/AxonIQ/axoniq-framework/pull/246[PR #246], by link:https://github.com/apps/dependabot[@app/dependabot])
+- Bump the maven-dependencies group with 2 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/247[PR #247], by link:https://github.com/apps/dependabot[@app/dependabot])
+- chore(deps): bump the github-dependencies group with 3 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/272[PR #272], by link:https://github.com/apps/dependabot[@app/dependabot])
+- chore(deps): bump the maven-dependencies group with 2 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/273[PR #273], by link:https://github.com/apps/dependabot[@app/dependabot])
+- chore(deps-dev): bump body-parser from 2.2.1 to 2.3.0 in /docs/_playbook (link:https://github.com/AxonIQ/axoniq-framework/pull/275[PR #275], by link:https://github.com/apps/dependabot[@app/dependabot])
+- chore(deps): bump brace-expansion and @asciidoctor/core in /docs/_playbook (link:https://github.com/AxonIQ/axoniq-framework/pull/276[PR #276], by link:https://github.com/apps/dependabot[@app/dependabot])
+- chore(deps): bump the maven-dependencies group with 4 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/290[PR #290], by link:https://github.com/apps/dependabot[@app/dependabot])
+- Upgrade the entitlement manager to 1.1.0 (link:https://github.com/AxonIQ/axoniq-framework/pull/304[PR #304], by link:https://github.com/smcvb[@smcvb])
+- chore(deps): bump the maven-dependencies group across 1 directory with 7 updates (link:https://github.com/AxonIQ/axoniq-framework/pull/311[PR #311], by link:https://github.com/apps/dependabot[@app/dependabot])
+
+=== Contributors
+
+A heartfelt thank you to all contributors who worked on this section:
+
+- link:https://github.com/abuijze[@abuijze]
+- link:https://github.com/CodeDrivenMitch[@CodeDrivenMitch]
+- link:https://github.com/hatzlj[@hatzlj]
+- link:https://github.com/hjohn[@hjohn]
+- link:https://github.com/jangalinski[@jangalinski]
+- link:https://github.com/laura-devriendt-lemon[@laura-devriendt-lemon]
+- link:https://github.com/MateuszNaKodach[@MateuszNaKodach]
+- link:https://github.com/smcvb[@smcvb]
+
 [#release_5_2]
 == Release 5.2
 
