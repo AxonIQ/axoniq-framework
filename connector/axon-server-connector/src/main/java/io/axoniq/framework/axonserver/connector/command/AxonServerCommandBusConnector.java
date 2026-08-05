@@ -238,7 +238,9 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
                 logger.info("Command [{}] raised an exception [{}]",
                             command.getName(),
                             cause.getMessage());
-                result.completeExceptionally(cause);
+                result.complete(CommandConverter.convertErrorResponse(
+                        clientId, command.getMessageIdentifier(), cause, converter
+                ));
             }
         };
     }

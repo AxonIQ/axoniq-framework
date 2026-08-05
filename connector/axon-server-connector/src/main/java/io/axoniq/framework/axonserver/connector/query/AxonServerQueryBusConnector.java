@@ -165,10 +165,8 @@ public class AxonServerQueryBusConnector implements QueryBusConnector, Connector
         try (ShutdownLatch.ActivityHandle queryInTransit = shutdownLatch.registerActivity()) {
             ResultStream<QueryResponse> resultStream = connection.queryChannel()
                                                                  .query(QueryConverter.convertQueryMessage(
-                                                                         query,
-                                                                         clientId,
-                                                                         componentName)
-                                                                 );
+                                                                         query, clientId, componentName
+                                                                 ));
             return new QueryResponseMessageStream(resultStream, converter).onClose(queryInTransit::end);
         }
     }
@@ -259,9 +257,13 @@ public class AxonServerQueryBusConnector implements QueryBusConnector, Connector
             if (previous != null) {
                 previous.run();
             }
-            return new FlowControlledResponseSender(clientId, query.getMessageIdentifier(),
-                                                    result.onClose(queriesInProgress.remove(query.getMessageIdentifier())),
-                                                    responseHandler);
+            return new FlowControlledResponseSender(
+                    clientId,
+                    query.getMessageIdentifier(),
+                    result.onClose(queriesInProgress.remove(query.getMessageIdentifier())),
+                    responseHandler,
+                    converter
+            );
         }
 
         @Override
@@ -319,7 +321,8 @@ public class AxonServerQueryBusConnector implements QueryBusConnector, Connector
 
         @Override
         public CompletableFuture<Void> completeExceptionally(Throwable error) {
-            updateHandler.sendUpdate(QueryConverter.convertQueryUpdate(clientId, ErrorCode.QUERY_EXECUTION_ERROR, error));
+            ErrorCode errorCode = ErrorCode.getQueryExecutionErrorCode(error);
+            updateHandler.sendUpdate(QueryConverter.convertQueryUpdate(clientId, errorCode, error, converter));
             updateHandler.complete();
             return FutureUtils.emptyCompletedFuture();
         }

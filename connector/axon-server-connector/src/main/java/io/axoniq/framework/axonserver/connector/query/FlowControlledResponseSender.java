@@ -22,12 +22,15 @@ package io.axoniq.framework.axonserver.connector.query;
 import io.axoniq.axonserver.connector.FlowControl;
 import io.axoniq.axonserver.connector.ReplyChannel;
 import io.axoniq.axonserver.grpc.ErrorMessage;
+import io.axoniq.axonserver.grpc.SerializedObject;
 import io.axoniq.axonserver.grpc.query.QueryResponse;
 import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
 import io.axoniq.framework.axonserver.connector.shared.ExceptionConverter;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -46,19 +49,32 @@ class FlowControlledResponseSender implements FlowControl {
     private final String queryIdentifier;
     private final MessageStream<QueryResponseMessage> upstream;
     private final ReplyChannel<QueryResponse> downstream;
+    private final @Nullable Converter converter;
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final AtomicLong requests = new AtomicLong();
     private final AtomicBoolean sendingGate = new AtomicBoolean(false);
     private final AtomicBoolean anySent = new AtomicBoolean(false);
 
+    /**
+     * Constructs a {@code FlowControlledResponseSender} that sends {@code upstream}'s messages to {@code downstream}.
+     *
+     * @param clientId        the identifier of this application, used as the location reported in error responses
+     * @param queryIdentifier the identifier correlating responses to the query that led to this response sender
+     * @param upstream        the {@link MessageStream} providing the {@link QueryResponseMessage}s to send
+     * @param downstream      the {@link ReplyChannel} to send converted {@link QueryResponse}s to
+     * @param converter       the {@link Converter} to use for serializing application-specific exception details onto
+     *                        an error response, or {@code null} if no such conversion is available
+     */
     public FlowControlledResponseSender(String clientId,
                                         String queryIdentifier,
                                         MessageStream<QueryResponseMessage> upstream,
-                                        ReplyChannel<QueryResponse> downstream) {
+                                        ReplyChannel<QueryResponse> downstream,
+                                        @Nullable Converter converter) {
         this.clientId = clientId;
         this.queryIdentifier = queryIdentifier;
         this.upstream = upstream;
         this.downstream = downstream;
+        this.converter = converter;
     }
 
     @Override
@@ -106,13 +122,16 @@ class FlowControlledResponseSender implements FlowControl {
                         error -> {
                             ErrorCode errorCode = ErrorCode.getQueryExecutionErrorCode(error);
                             ErrorMessage ex = ExceptionConverter.convertToErrorMessage(clientId, errorCode, error);
-                            QueryResponse errorResponse =
+                            QueryResponse.Builder errorResponseBuilder =
                                     QueryResponse.newBuilder()
                                                  .setErrorCode(errorCode.errorCode())
                                                  .setErrorMessage(ex)
-                                                 .setRequestIdentifier(queryIdentifier)
-                                                 .build();
-                            downstream.sendLast(errorResponse);
+                                                 .setRequestIdentifier(queryIdentifier);
+                            SerializedObject detailsPayload = ExceptionConverter.convertToDetails(error, converter);
+                            if (detailsPayload != null) {
+                                errorResponseBuilder.setPayload(detailsPayload);
+                            }
+                            downstream.sendLast(errorResponseBuilder.build());
                         },
                         () -> {
                             if (anySent.get()) {

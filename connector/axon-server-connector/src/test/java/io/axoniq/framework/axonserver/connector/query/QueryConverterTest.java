@@ -26,6 +26,8 @@ import io.axoniq.axonserver.grpc.SerializedObject;
 import io.axoniq.axonserver.grpc.query.QueryRequest;
 import io.axoniq.axonserver.grpc.query.QueryUpdate;
 import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
+import io.axoniq.framework.axonserver.connector.shared.ExceptionConverter;
+import org.axonframework.common.AxonException;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
@@ -33,19 +35,21 @@ import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
 import org.axonframework.messaging.queryhandling.GenericSubscriptionQueryUpdateMessage;
+import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
 import org.mockito.junit.jupiter.*;
 
 import java.lang.reflect.Type;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static io.axoniq.axonserver.grpc.ProcessingKey.*;
 import static io.axoniq.axonserver.grpc.query.QueryResponse.newBuilder;
+import static io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils.createProcessingInstruction;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils.createProcessingInstruction;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -244,13 +248,56 @@ class QueryConverterTest {
     @Test
     void convertsClientAndThrowableToErrorQueryUpdate() {
         var throwable = new RuntimeException("boom");
-        var qu = QueryConverter.convertQueryUpdate(clientId, ErrorCode.QUERY_EXECUTION_ERROR, throwable);
+        var qu = QueryConverter.convertQueryUpdate(clientId, ErrorCode.QUERY_EXECUTION_ERROR, throwable, null);
 
         assertThat(qu.getClientId()).isEqualTo(clientId);
         assertThat(qu.hasErrorMessage()).isTrue();
         assertThat(qu.getErrorMessage().getMessage()).contains("boom");
         assertThat(qu.getErrorMessage().getErrorCode()).isEqualTo("AXONIQ-5001");
         assertThat(qu.getErrorCode()).isEqualTo("AXONIQ-5001");
+        assertThat(qu.hasPayload()).isFalse();
+    }
+
+    @Test
+    void convertsClientAndThrowableWithDetailsToErrorQueryUpdateWithPayload() {
+        // given a QueryExecutionException carrying application-specific details
+        var throwable = new QueryExecutionException("boom", null, "details");
+        when(converter.convert("details", byte[].class)).thenReturn("details".getBytes());
+
+        // when
+        var qu = QueryConverter.convertQueryUpdate(clientId, ErrorCode.QUERY_EXECUTION_ERROR, throwable, converter);
+
+        // then
+        assertThat(qu.hasPayload()).isTrue();
+        assertThat(qu.getPayload().getData().toStringUtf8()).isEqualTo("details");
+        assertThat(qu.getPayload().getType()).isEqualTo(String.class.getName());
+
+        verify(converter).convert("details", byte[].class);
+    }
+
+    @Test
+    void roundTripsHandlerExecutionDetailsThroughConvertToAxonException() {
+        // given a handler-side exception carrying application-specific details
+        var throwable = new QueryExecutionException("boom", null, "details");
+        when(converter.convert("details", byte[].class)).thenReturn("details".getBytes());
+
+        // when the error update produced on the send side is parsed again on the receive side
+        var queryUpdate = QueryConverter.convertQueryUpdate(clientId, ErrorCode.QUERY_EXECUTION_ERROR, throwable,
+                                                            converter);
+        byte[] rawDetails = queryUpdate.getPayload().getData().toByteArray();
+        when(converter.convert(rawDetails, (Type) String.class)).thenReturn("details");
+
+        AxonException result = ExceptionConverter.convertToAxonException(
+                queryUpdate.getErrorCode(), queryUpdate.getErrorMessage(), queryUpdate.getPayload(), converter
+        );
+
+        // then the original details are recovered through the round trip
+        assertThat(result).isInstanceOf(QueryExecutionException.class);
+        Optional<String> details = ((QueryExecutionException) result).getDetails(String.class);
+        assertThat(details).hasValue("details");
+
+        verify(converter).convert("details", byte[].class);
+        verify(converter).convert(rawDetails, (Type) String.class);
     }
 
     @Test
@@ -340,7 +387,7 @@ class QueryConverterTest {
         var throwable = new RuntimeException("boom");
 
         // when
-        var qu = QueryConverter.convertQueryUpdate(clientId, null, throwable);
+        var qu = QueryConverter.convertQueryUpdate(clientId, null, throwable, null);
 
         // then
         assertThat(qu.getClientId()).isEqualTo(clientId);
