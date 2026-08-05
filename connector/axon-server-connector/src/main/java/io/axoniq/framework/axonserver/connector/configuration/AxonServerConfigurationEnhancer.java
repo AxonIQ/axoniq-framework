@@ -132,7 +132,7 @@ public class AxonServerConfigurationEnhancer implements ConfigurationEnhancer {
                                            connector -> ((AxonServerCommandBusConnector) connector).start())
                                   .onShutdown(Phase.INBOUND_COMMAND_CONNECTOR,
                                               (ComponentLifecycleHandler<CommandBusConnector>) (config, connector) ->
-                                                      ((AxonServerCommandBusConnector) connector).disconnectInbound())
+                                                      ((AxonServerCommandBusConnector) connector).disconnect())
                                   .onShutdown(Phase.OUTBOUND_COMMAND_CONNECTORS,
                                               (ComponentLifecycleHandler<CommandBusConnector>) (config, connector) ->
                                                       ((AxonServerCommandBusConnector) connector).shutdownDispatching());
@@ -149,7 +149,7 @@ public class AxonServerConfigurationEnhancer implements ConfigurationEnhancer {
                                            connector -> ((AxonServerQueryBusConnector) connector).start())
                                   .onShutdown(Phase.INBOUND_QUERY_CONNECTOR,
                                               (ComponentLifecycleHandler<QueryBusConnector>) (config, connector) ->
-                                                      ((AxonServerQueryBusConnector) connector).disconnectInbound())
+                                                      ((AxonServerQueryBusConnector) connector).disconnect())
                                   .onShutdown(Phase.OUTBOUND_QUERY_CONNECTORS,
                                               (ComponentLifecycleHandler<QueryBusConnector>) (config, connector) ->
                                                       ((AxonServerQueryBusConnector) connector).shutdownDispatching());

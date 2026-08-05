@@ -333,23 +333,12 @@ class AxonServerCommandBusConnectorTest {
     }
 
     @Test
-    void disconnectAlsoDisconnectsTheConnectionOnceCommandChannelPreparationCompletes() {
+    void disconnectDoesNotCloseTheConnectionOnceCommandChannelPreparationCompletes() {
         when(commandChannel.prepareDisconnect()).thenReturn(CompletableFuture.completedFuture(null));
         when(connection.isConnected()).thenReturn(true);
 
         testSubject.disconnect().join();
 
-        verify(connection).disconnect();
-    }
-
-    @Test
-    void disconnectInboundPreparesTheCommandChannelWithoutDisconnectingTheSharedConnection() {
-        when(commandChannel.prepareDisconnect()).thenReturn(CompletableFuture.completedFuture(null));
-        when(connection.isConnected()).thenReturn(true);
-
-        testSubject.disconnectInbound().join();
-
-        verify(commandChannel).prepareDisconnect();
         verify(connection, never()).disconnect();
     }
 

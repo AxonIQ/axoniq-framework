@@ -203,23 +203,19 @@ public class AxonServerQueryBusConnector implements QueryBusConnector, Connector
      * @return a completable future that resolves once the {@link AxonServerConnection#queryChannel()} has prepared
      * disconnecting
      */
-    public CompletableFuture<Void> disconnectInbound() {
+    @Override
+    public CompletableFuture<Void> disconnect() {
         if (!connection.isConnected()) {
             return FutureUtils.emptyCompletedFuture();
         }
         logger.trace("Disconnecting the AxonServerQueryBusConnector.");
-        CompletableFuture<Void> preparedDisconnect = connection.queryChannel().prepareDisconnect();
+        connection.queryChannel().prepareDisconnect();
         if (!localSegmentAdapter.awaitTermination(queryInProgressAwait)) {
             logger.info("Awaited termination of queries in progress without success. "
                                 + "Going to cancel remaining queries in progress.");
             localSegmentAdapter.cancel();
         }
-        return preparedDisconnect;
-    }
-
-    @Override
-    public CompletableFuture<Void> disconnect() {
-        return disconnectInbound().thenRun(connection::disconnect);
+        return FutureUtils.emptyCompletedFuture();
     }
 
     /**
