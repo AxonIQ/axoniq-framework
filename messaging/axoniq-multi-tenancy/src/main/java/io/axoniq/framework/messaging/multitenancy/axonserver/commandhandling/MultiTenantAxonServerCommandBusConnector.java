@@ -25,10 +25,12 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.api.ConnectorLifecycle;
 import io.axoniq.framework.axonserver.connector.command.AxonServerCommandBusConnector;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyAxoniqAddon;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.Registration;
@@ -101,6 +103,7 @@ public class MultiTenantAxonServerCommandBusConnector
         this.connectionManager = Objects.requireNonNull(connectionManager, "The connectionManager must not be null.");
         this.configuration = Objects.requireNonNull(configuration, "The configuration must not be null.");
         this.converter = Objects.requireNonNull(converter, "The converter must not be null.");
+        EntitlementManager.INSTANCE.registerAddon(MultiTenancyAxoniqAddon.class);
     }
 
     @Override
