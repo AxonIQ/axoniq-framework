@@ -56,11 +56,11 @@ import static org.awaitility.Awaitility.await;
  * as a whole.
  * <p>
  * A failure here looks like a permanent defect in the command-dispatch connector stack, as reported in
- * AxoniQ/axoniq-framework#320. {@link DockerRestartPortStabilityIT} and {@link ChaosFixedPortRecoveryIT} show that,
+ * AxoniQ/axoniq-framework#320. {@link DockerRestartPortStabilityIT} and {@link ChaosSingleTenantControlFixedPortIT} show that,
  * at least on some Docker setups, it is very likely something else instead. This test restarts Axon Server on a
  * Testcontainers-assigned dynamic port, and {@code docker restart} can reassign that port. The client never
  * rediscovers the new one, so it is stuck retrying a dead port for the whole 3-minute recovery window.
- * {@link ChaosFixedPortRecoveryIT} runs the identical scenario against a fixed port and recovers within seconds.
+ * {@link ChaosSingleTenantControlFixedPortIT} runs the identical scenario against a fixed port and recovers within seconds.
  */
 @ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
 class ChaosSingleTenantControlIT {

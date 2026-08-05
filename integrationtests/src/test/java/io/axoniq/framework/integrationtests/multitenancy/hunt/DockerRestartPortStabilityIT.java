@@ -43,7 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * this test may legitimately pass with a single stable port there. That outcome would not contradict the finding, it
  * would scope it to this environment. Either way, the result tells you directly whether this CI or dev machine is
  * exposed to the failure mode {@link ChaosSingleTenantControlIT} reports, instead of leaving it to be inferred.
- * {@link ChaosFixedPortRecoveryIT} is the other half of the proof: it runs the same scenario with a stable port and
+ * {@link ChaosSingleTenantControlFixedPortIT} is the other half of the proof: it runs the same scenario with a stable port and
  * shows recovery working fine.
  */
 class DockerRestartPortStabilityIT {

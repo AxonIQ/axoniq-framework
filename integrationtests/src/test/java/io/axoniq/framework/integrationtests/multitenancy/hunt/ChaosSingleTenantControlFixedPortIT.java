@@ -64,7 +64,7 @@ import static org.awaitility.Awaitility.await;
  * a fixed port cannot be shared safely with whatever else that infrastructure's dynamically-ported container is
  * doing. Do not run this test concurrently with another instance of itself.
  */
-class ChaosFixedPortRecoveryIT {
+class ChaosSingleTenantControlFixedPortIT {
 
     private static final int FIXED_HTTP_PORT = 19024;
     private static final int FIXED_GRPC_PORT = 19124;
