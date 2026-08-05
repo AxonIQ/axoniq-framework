@@ -25,33 +25,43 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
-import io.axoniq.framework.messaging.multitenancy.util.RecordingEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.TenantDescriptorMapping;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.eventsourcing.configuration.SnapshotSourcingConfigurationEnhancer;
+import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SnapshotEventMessage;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
+import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
+import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
+import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
@@ -86,8 +96,8 @@ class PerTenantSnapshotSourcingIsolationTest {
     @BeforeEach
     void setUp() {
         // Per-tenant engines that resolve no snapshots of their own, as a real Axon Server engine does not.
-        tenantEngines.entry(TENANT_A, new RecordingEventStorageEngine());
-        tenantEngines.entry(TENANT_B, new RecordingEventStorageEngine());
+        tenantEngines.entry(TENANT_A, new InMemoryEventStorageEngine());
+        tenantEngines.entry(TENANT_B, new InMemoryEventStorageEngine());
         TenantRouter tenantRouter = new TenantRouter(new MetadataBasedTenantResolver(), tenantEngines);
         StubTenantProvider tenantProvider = new StubTenantProvider();
         tenantProvider.addTenant(TENANT_A);
@@ -168,9 +178,26 @@ class PerTenantSnapshotSourcingIsolationTest {
         MessageStream<EventMessage> streamForB = sourcingEngine.source(snapshotCondition(), contextFor(TENANT_B));
 
         // tenant B has neither a snapshot nor events, so its stream is empty rather than snapshot-led
-        assertThat(streamForB.next()).isEmpty();
+        assertThat(payloads(streamForB)).isEmpty();
         assertThat(snapshotStoreB.loadCount()).isEqualTo(1);
         assertThat(snapshotStoreA.loadCount()).isZero();
+    }
+
+    @Test
+    void snapshotSourcingReplaysEventsStoredAfterTheSnapshotForTheSameTenant() {
+        EventStorageEngine tenantAEngine = tenantEngines.apply(TENANT_A);
+        append(tenantAEngine, "event-1");
+        append(tenantAEngine, "event-2");
+        append(tenantAEngine, "event-3");
+        snapshotStoreA.store(SNAPSHOT_NAME, IDENTIFIER, snapshotAt(3, "snapshot-after-event-3"), null).join();
+        append(tenantAEngine, "event-4");
+        append(tenantAEngine, "event-5");
+
+        List<Object> payloads = payloads(sourcingEngine.source(snapshotCondition(), contextFor(TENANT_A)));
+
+        assertThat(payloads).containsExactly("snapshot-after-event-3", "event-4", "event-5");
+        assertThat(snapshotStoreA.loadCount()).isEqualTo(1);
+        assertThat(snapshotStoreB.loadCount()).isZero();
     }
 
     private static SourcingCondition snapshotCondition() {
@@ -184,6 +211,30 @@ class PerTenantSnapshotSourcingIsolationTest {
 
     private static Snapshot snapshot(Object payload) {
         return new Snapshot(new GlobalIndexPosition(0L), "0", payload, Instant.EPOCH, Map.of());
+    }
+
+    private static Snapshot snapshotAt(long resumePosition, Object payload) {
+        return new Snapshot(new GlobalIndexPosition(resumePosition), "0", payload, Instant.EPOCH, Map.of());
+    }
+
+    private static void append(EventStorageEngine engine, String payload) {
+        EventMessage event = new GenericEventMessage(new MessageType("TestEvent"), payload);
+        List<TaggedEventMessage<?>> events = List.of(new GenericTaggedEventMessage<>(event, Set.of()));
+        engine.appendEvents(AppendCondition.none(), null, events).join().commit().join();
+    }
+
+    private static List<Object> payloads(MessageStream<EventMessage> stream) {
+        List<Object> payloads = new ArrayList<>();
+        Optional<MessageStream.Entry<EventMessage>> next;
+        while ((next = stream.next()).isPresent()) {
+            EventMessage message = next.orElseThrow().message();
+            if (message instanceof SnapshotEventMessage snapshotEvent) {
+                payloads.add(snapshotEvent.payload().payload());
+            } else if (!(message instanceof TerminalEventMessage)) {
+                payloads.add(message.payload());
+            }
+        }
+        return payloads;
     }
 
     private static Snapshot leadingSnapshot(MessageStream<EventMessage> stream) {
