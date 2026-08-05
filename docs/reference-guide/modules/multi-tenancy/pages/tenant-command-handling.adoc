@@ -14,6 +14,8 @@ Each known tenant has its own Axon Server connection. When a command handler is 
 
 When a command is dispatched, the tenant is resolved as described in the xref:tenant-management.adoc#tenant-resolution[tenant resolution] section, and the command is routed to the Axon Server context of that tenant.
 
+A command dispatched from within another message's handler, without naming a tenant of its own, keeps the tenant of that message across this hop: see xref:tenant-management.adoc#tenant-propagation[propagating the tenant across a dispatch hop].
+
 [NOTE]
 ====
 The tenant resolved for a command must be one of the currently known tenants.

@@ -26,18 +26,29 @@ import org.axonframework.messaging.core.Message;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.Collection;
+import java.util.Map;
+
 @Configuration
 public class SpringCustomTenantResolverConfiguration {
 
     // tag::custom-tenant-resolver[]
     @Bean
     public TenantResolver tenantResolver() {
-        return (message, tenants) -> {
-            String tenantId = extractTenantId(message);            // <1>
-            if (tenantId == null) {
-                throw new TenantNotResolvedException("Could not resolve a tenant for the message");
+        return new TenantResolver() {
+            @Override
+            public TenantDescriptor resolveTenant(Message message, Collection<TenantDescriptor> tenants) {
+                String tenantId = message.metadata().get("x-tenant");            // <1>
+                if (tenantId == null) {
+                    throw new TenantNotResolvedException("Could not resolve a tenant for the message");
+                }
+                return TenantDescriptor.tenantWithId(tenantId);
             }
-            return TenantDescriptor.tenantWithId(tenantId);
+
+            @Override
+            public Message attachTenant(Message message, TenantDescriptor tenant) {
+                return message.andMetadata(Map.of("x-tenant", tenant.tenantId()));     // <2>
+            }
         };
     }
     // end::custom-tenant-resolver[]

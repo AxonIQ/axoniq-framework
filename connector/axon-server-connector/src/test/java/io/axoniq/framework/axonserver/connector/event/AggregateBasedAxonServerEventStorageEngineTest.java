@@ -20,22 +20,36 @@
 package io.axoniq.framework.axonserver.connector.event;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
+import io.axoniq.axonserver.connector.event.AppendEventsTransaction;
 import io.axoniq.axonserver.connector.event.EventChannel;
 import io.axoniq.axonserver.connector.event.EventStream;
+import io.axoniq.axonserver.grpc.MetaDataValue;
 import io.axoniq.axonserver.grpc.SerializedObject;
 import io.axoniq.axonserver.grpc.event.Event;
 import io.axoniq.axonserver.grpc.event.EventWithToken;
 import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
+import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
+import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.messaging.core.FluxUtils;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
+import org.axonframework.messaging.eventstreaming.Tag;
 import org.junit.jupiter.api.*;
+import org.mockito.ArgumentCaptor;
 import reactor.test.StepVerifier;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,6 +67,7 @@ class AggregateBasedAxonServerEventStorageEngineTest {
 
     private static final String EVENT_NAME = "test-event";
 
+    private EventChannel eventChannel;
     private EventStream eventStream;
 
     private AggregateBasedAxonServerEventStorageEngine testSubject;
@@ -60,7 +75,7 @@ class AggregateBasedAxonServerEventStorageEngineTest {
     @BeforeEach
     void setUp() {
         AxonServerConnection connection = mock(AxonServerConnection.class);
-        EventChannel eventChannel = mock(EventChannel.class);
+        eventChannel = mock(EventChannel.class);
         eventStream = mock(EventStream.class);
 
         when(connection.eventChannel()).thenReturn(eventChannel);
@@ -103,5 +118,26 @@ class AggregateBasedAxonServerEventStorageEngineTest {
                                 .isEqualTo(EventTypeResolver.MISSING_VERSION_DEFAULT);
                     })
                     .verifyComplete();
+    }
+
+    @Test
+    void appendEventsIncludesEventMetadataOnTheAppendedEvent() {
+        // given
+        AppendEventsTransaction transaction = mock(AppendEventsTransaction.class);
+        when(eventChannel.startAppendEventsTransaction()).thenReturn(transaction);
+
+        Metadata metadata = Metadata.from(Map.of("correlationId", "correlation-1"));
+        EventMessage event = new GenericEventMessage(new MessageType(EVENT_NAME), "payload", metadata);
+        TaggedEventMessage<?> taggedEvent =
+                new GenericTaggedEventMessage<>(event, Set.of(Tag.of("TEST_AGGREGATE", UUID.randomUUID().toString())));
+
+        // when
+        testSubject.appendEvents(AppendCondition.none(), null, List.of(taggedEvent));
+
+        // then
+        ArgumentCaptor<Event> appendedEvent = ArgumentCaptor.forClass(Event.class);
+        verify(transaction).appendEvent(appendedEvent.capture());
+        assertThat(appendedEvent.getValue().getMetaDataMap())
+                .containsEntry("correlationId", MetaDataValue.newBuilder().setTextValue("correlation-1").build());
     }
 }
