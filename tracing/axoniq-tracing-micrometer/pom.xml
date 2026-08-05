@@ -39,6 +39,12 @@
     </description>
 
     <dependencies>
+        <!-- Axoniq Entitlement -->
+        <dependency>
+            <groupId>io.axoniq.license</groupId>
+            <artifactId>entitlement-manager</artifactId>
+        </dependency>
+
         <!-- Tracing API (org.axonframework.messaging.tracing) + UnitOfWork SPI -->
         <dependency>
             <groupId>org.axonframework</groupId>
