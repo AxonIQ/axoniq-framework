@@ -47,7 +47,6 @@ import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
@@ -332,7 +331,7 @@ class AxonServerQueryBusConnectorTest {
                                      .setQueryRequest(queryRequest)
                                      .build();
             QueryHandler.UpdateHandler updateHandlerMock = mock(QueryHandler.UpdateHandler.class);
-            getLocalSegmentAdapter(testSubject).registerSubscriptionQuery(subscriptionQuery, updateHandlerMock);
+            registerLocalSegmentAdapter().registerSubscriptionQuery(subscriptionQuery, updateHandlerMock);
 
             when(mockConverter.convert("some details", byte[].class)).thenReturn("some details".getBytes());
 
@@ -375,7 +374,7 @@ class AxonServerQueryBusConnectorTest {
                                      .setQueryRequest(queryRequest)
                                      .build();
             QueryHandler.UpdateHandler updateHandlerMock = mock(QueryHandler.UpdateHandler.class);
-            getLocalSegmentAdapter(testSubject).registerSubscriptionQuery(subscriptionQuery, updateHandlerMock);
+            registerLocalSegmentAdapter().registerSubscriptionQuery(subscriptionQuery, updateHandlerMock);
 
             // when
             callbackCaptor.getValue().completeExceptionally(new RuntimeException("boom"));
@@ -386,14 +385,23 @@ class AxonServerQueryBusConnectorTest {
             assertThat(updateCaptor.getValue().hasPayload()).isFalse();
         }
 
-        private static QueryHandler getLocalSegmentAdapter(AxonServerQueryBusConnector instance) {
-            try {
-                Field field = AxonServerQueryBusConnector.class.getDeclaredField("localSegmentAdapter");
-                field.setAccessible(true);
-                return (QueryHandler) field.get(instance);
-            } catch (NoSuchFieldException | IllegalAccessException e) {
-                throw new RuntimeException(e);
-            }
+        /**
+         * Subscribes {@link #testSubject} and captures the {@link QueryHandler} it registers with the (mocked)
+         * {@link io.axoniq.axonserver.connector.query.QueryChannel}, i.e. its private {@code LocalSegmentAdapter}.
+         */
+        private QueryHandler registerLocalSegmentAdapter() {
+            Registration reg = mock(Registration.class);
+            when(reg.onAck(any(Runnable.class))).thenAnswer(i -> {
+                i.getArgument(0, Runnable.class).run();
+                return null;
+            });
+            ArgumentCaptor<QueryHandler> handlerCaptor = ArgumentCaptor.forClass(QueryHandler.class);
+            when(mockQueryChannel.registerQueryHandler(handlerCaptor.capture(), any(QueryDefinition.class)))
+                    .thenReturn(reg);
+
+            testSubject.subscribe(new QualifiedName("TestQuery"));
+
+            return handlerCaptor.getValue();
         }
     }
 
