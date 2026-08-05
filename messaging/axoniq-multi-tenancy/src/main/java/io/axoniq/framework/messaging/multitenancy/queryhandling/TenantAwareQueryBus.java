@@ -18,10 +18,12 @@
  */
 package io.axoniq.framework.messaging.multitenancy.queryhandling;
 
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyAxoniqAddon;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.Message;
@@ -106,6 +108,7 @@ public class TenantAwareQueryBus implements QueryBus {
         this.delegate = requireNonNull(delegate, "The QueryBus delegate must not be null.");
         this.tenantResolver = requireNonNull(tenantResolver, "The TenantResolver must not be null.");
         this.tenantDescriptors = requireNonNull(tenantDescriptors, "The TenantDescriptors must not be null.");
+        EntitlementManager.INSTANCE.registerAddon(MultiTenancyAxoniqAddon.class);
     }
 
     @Override

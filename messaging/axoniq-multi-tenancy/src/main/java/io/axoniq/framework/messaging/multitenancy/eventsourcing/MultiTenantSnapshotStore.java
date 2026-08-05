@@ -19,8 +19,10 @@
 
 package io.axoniq.framework.messaging.multitenancy.eventsourcing;
 
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyAxoniqAddon;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
+import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
@@ -65,6 +67,7 @@ public class MultiTenantSnapshotStore implements SnapshotStore {
     public MultiTenantSnapshotStore(TenantSnapshotStoreFactory snapshotStoreFactory, TenantRouter tenantRouter) {
         this.snapshotStoreFactory = requireNonNull(snapshotStoreFactory, "The snapshot store factory must not be null");
         this.tenantRouter = requireNonNull(tenantRouter, "The tenant router must not be null");
+        EntitlementManager.INSTANCE.registerAddon(MultiTenancyAxoniqAddon.class);
     }
 
     @Override
