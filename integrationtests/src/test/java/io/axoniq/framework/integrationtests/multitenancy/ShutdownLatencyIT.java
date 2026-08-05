@@ -22,6 +22,7 @@ package io.axoniq.framework.integrationtests.multitenancy;
 import io.axoniq.framework.integrationtests.multitenancy.TenantBankFixture.BalanceStore;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.common.lifecycle.Phase;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
 
@@ -35,10 +36,9 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Hunt scenario on claim MT-C8 / gap MT-M4: shutting down an IDLE multi-tenant application must complete within the
- * framework's own per-phase budget (5s), like any other application. During the scenario batteries every single
- * multi-tenant application shutdown logged "Timed out during shutdown phase [536870911]" (the inbound-connector
- * phase), leaking live per-tenant connectors into subsequent tests.
+ * Shutting down an idle multi-tenant application must complete within the framework's own per-phase budget, like any
+ * other application. A timeout during {@link Phase#INBOUND_COMMAND_CONNECTOR} leaves live per-tenant connectors in
+ * subsequent tests.
  * <p>
  * A watchdog dumps all thread stacks to stderr when shutdown exceeds 4s, so a red run carries the blocking frame.
  */
@@ -78,6 +78,7 @@ class ShutdownLatencyIT {
     }
 
     @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
     void idleMultiTenantApplicationShutsDownWithinThePhaseBudget() throws InterruptedException {
         // given an idle two-tenant application that has fully started (setUp), with no in-flight work
 
