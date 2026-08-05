@@ -26,6 +26,7 @@ import io.axoniq.axonserver.grpc.SerializedObject;
 import io.axoniq.axonserver.grpc.command.Command;
 import io.axoniq.axonserver.grpc.command.CommandResponse;
 import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.commandhandling.CommandExecutionException;
 import org.axonframework.messaging.commandhandling.GenericCommandMessage;
 import org.axonframework.messaging.commandhandling.GenericCommandResultMessage;
@@ -38,6 +39,7 @@ import org.mockito.junit.jupiter.*;
 import java.lang.reflect.Type;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -53,14 +55,15 @@ import static org.mockito.Mockito.*;
 class CommandConverterTest {
 
     private final String messageIdentifier = UUID.randomUUID().toString();
-    private final byte[] payload = "payload".getBytes();
+    private final String stringPayload = "payload";
+    private final byte[] payload = stringPayload.getBytes();
     private final String clientId = "clientId";
     private final String componentName = "componentName";
     private Converter converter;
 
     @BeforeEach
     void setUp() {
-        converter = mock(Converter.class);
+        converter = spy(new JacksonConverter());
     }
 
     @AfterEach
@@ -136,17 +139,16 @@ class CommandConverterTest {
         @Test
         void convertsCommandResponseToCommandResultMessage() {
             // given
-            String exObjectPayload = "exObjectPayload";
+            String expectedPayload = "ok";
             var response = CommandResponse.newBuilder()
                                           .setMessageIdentifier(messageIdentifier)
                                           .setPayload(SerializedObject.newBuilder()
                                                                       .setType("java.lang.String")
                                                                       .setRevision("1")
-                                                                      .setData(ByteString.copyFrom("ok".getBytes()))
+                                                                      .setData(ByteString.copyFrom(expectedPayload.getBytes()))
                                                                       .build())
                                           .putMetaData("m", MetaDataValue.newBuilder().setTextValue("v").build())
                                           .build();
-            when(converter.convert(any(), eq((Type) String.class))).thenReturn(exObjectPayload);
 
             // when
             var future = CommandConverter.convertCommandResponse(response, converter);
@@ -156,9 +158,9 @@ class CommandConverterTest {
             assertThat(resultMessage.identifier()).isEqualTo(messageIdentifier);
             assertThat(resultMessage.type().name()).isEqualTo("java.lang.String");
             assertThat(resultMessage.type().version()).isEqualTo("1");
-            assertThat(resultMessage.payloadAs(byte[].class)).isEqualTo("ok".getBytes());
+            assertThat(resultMessage.payloadAs(byte[].class)).isEqualTo(expectedPayload.getBytes());
             assertThat(resultMessage.metadata()).containsEntry("m", "v");
-            assertThat(resultMessage.payloadAs(String.class)).isEqualTo(exObjectPayload);
+            assertThat(resultMessage.payloadAs(String.class)).isEqualTo(expectedPayload);
 
             verify(converter).convert(resultMessage.payload(), (Type) String.class);
         }
@@ -219,29 +221,29 @@ class CommandConverterTest {
         @Test
         void convertsErrorCommandResponseWithPayloadToFailedFutureCarryingConvertibleDetails() {
             // given
+            String expectedDetails = "converted details";
             var response = CommandResponse.newBuilder()
                                           .setMessageIdentifier(messageIdentifier)
                                           .setErrorCode("AXONIQ-4002")
                                           .setErrorMessage(ErrorMessage.newBuilder().setMessage("boom").build())
                                           .setPayload(SerializedObject.newBuilder()
                                                                       .setType("java.lang.String")
-                                                                      .setData(ByteString.copyFromUtf8("raw"))
+                                                                      .setData(ByteString.copyFromUtf8(expectedDetails))
                                                                       .build())
                                           .build();
-            when(converter.convert("raw".getBytes(), String.class)).thenReturn("converted details");
 
             // when
-            var future = CommandConverter.convertCommandResponse(response, converter);
+            var result = CommandConverter.convertCommandResponse(response, converter);
 
             // then
-            assertThatThrownBy(() -> future.get(1, TimeUnit.SECONDS))
-                    .isInstanceOf(ExecutionException.class)
-                    .cause()
-                    .isInstanceOf(CommandExecutionException.class)
-                    .satisfies(
-                            cause -> assertThat(((CommandExecutionException) cause).getDetails(String.class))
-                                    .contains("converted details")
-                    );
+            assertThat(result).failsWithin(Duration.ofSeconds(1));
+            Throwable resultThrowable = result.exceptionNow();
+            assertThat(resultThrowable).isInstanceOf(CommandExecutionException.class);
+            Optional<String> optionalDetails = ((CommandExecutionException) resultThrowable).getDetails(String.class);
+            assertThat(optionalDetails).isPresent();
+            assertThat(optionalDetails).hasValue(expectedDetails);
+
+            verify(converter).convert(expectedDetails.getBytes(), (Type) String.class);
         }
     }
 
@@ -251,7 +253,6 @@ class CommandConverterTest {
         @Test
         void convertsCommandToCommandMessage() {
             // given
-            String exObjectPayload = "exObjectPayload";
             var grpcCommand = Command.newBuilder()
                                      .setMessageIdentifier(messageIdentifier)
                                      .setName("CommandType")
@@ -264,7 +265,6 @@ class CommandConverterTest {
                                      .addProcessingInstructions(createProcessingInstruction(ROUTING_KEY, "routingKey"))
                                      .addProcessingInstructions(createProcessingInstruction(PRIORITY, 5))
                                      .build();
-            when(converter.convert(any(), eq((Type) String.class))).thenReturn(exObjectPayload);
 
             // when
             var commandMessage = CommandConverter.convertCommand(grpcCommand, converter);
@@ -277,7 +277,7 @@ class CommandConverterTest {
             assertThat(commandMessage.metadata()).containsEntry("k", "v");
             assertThat(commandMessage.routingKey()).hasValue("routingKey");
             assertThat(commandMessage.priority()).hasValue(5);
-            assertThat(commandMessage.payloadAs(String.class)).isEqualTo(exObjectPayload);
+            assertThat(commandMessage.payloadAs(String.class)).isEqualTo(stringPayload);
 
             verify(converter).convert(commandMessage.payload(), (Type) String.class);
         }

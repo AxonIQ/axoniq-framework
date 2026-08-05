@@ -343,7 +343,7 @@ public final class QueryConverter {
         if (errorCode != null) {
             builder.setErrorCode(errorCode.errorCode());
         }
-        SerializedObject detailsPayload = ExceptionConverter.convertDetails(error, converter);
+        SerializedObject detailsPayload = ExceptionConverter.convertToDetails(error, converter);
         if (detailsPayload != null) {
             builder.setPayload(detailsPayload);
         }

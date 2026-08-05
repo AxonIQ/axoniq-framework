@@ -277,7 +277,7 @@ public final class CommandConverter {
                                .setRequestIdentifier(requestIdentifier)
                                .setErrorCode(errorCode.errorCode())
                                .setErrorMessage(ExceptionConverter.convertToErrorMessage(clientId, errorCode, cause));
-        SerializedObject detailsPayload = ExceptionConverter.convertDetails(cause, converter);
+        SerializedObject detailsPayload = ExceptionConverter.convertToDetails(cause, converter);
         if (detailsPayload != null) {
             responseBuilder.setPayload(detailsPayload);
         }

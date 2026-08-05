@@ -117,7 +117,7 @@ class FlowControlledResponseSender implements FlowControl {
                                                  .setErrorCode(errorCode.errorCode())
                                                  .setErrorMessage(ex)
                                                  .setRequestIdentifier(queryIdentifier);
-                            SerializedObject detailsPayload = ExceptionConverter.convertDetails(error, converter);
+                            SerializedObject detailsPayload = ExceptionConverter.convertToDetails(error, converter);
                             if (detailsPayload != null) {
                                 errorResponseBuilder.setPayload(detailsPayload);
                             }

@@ -84,7 +84,7 @@ public final class ExceptionConverter {
     }
 
     /**
-     * Serializes a given {@link Throwable} into an {@link ErrorMessage}.
+     * Convert a given {@link Throwable} into an {@link ErrorMessage}.
      *
      * @param clientLocation the name of the client were the {@link ErrorMessage} originates from
      * @param errorCode      the error code identifying the type of action that resulted in an error, if known
@@ -92,7 +92,7 @@ public final class ExceptionConverter {
      * @return the {@link ErrorMessage} originating from the given {@code clientLocation} and based on the
      * {@link Throwable}
      */
-    public static ErrorMessage convertToErrorMessage(String clientLocation,
+    public static ErrorMessage convertToErrorMessage(@Nullable String clientLocation,
                                                      @Nullable ErrorCode errorCode,
                                                      Throwable t) {
         ErrorMessage.Builder builder =
@@ -124,8 +124,8 @@ public final class ExceptionConverter {
      * @return a {@link SerializedObject} carrying the serialized details, or {@code null} if there are no details, or
      * the details could not be serialized
      */
-    public static @Nullable SerializedObject convertDetails(Throwable cause,
-                                                            @Nullable Converter converter) {
+    public static @Nullable SerializedObject convertToDetails(Throwable cause,
+                                                              @Nullable Converter converter) {
         Object details = HandlerExecutionException.resolveDetails(cause).orElse(null);
         if (details == null) {
             return null;

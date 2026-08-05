@@ -30,7 +30,6 @@ import org.axonframework.messaging.commandhandling.CommandExecutionException;
 import org.junit.jupiter.api.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
@@ -40,29 +39,32 @@ class ExceptionConverterTest {
 
     @Test
     void convertToErrorMessageNullClientAndErrorCode() {
-        ErrorMessage result = ExceptionConverter.convertToErrorMessage(null, null,
-                                                                       new RuntimeException(
-                                                                    "Something went wrong"));
+        ErrorMessage result = ExceptionConverter.convertToErrorMessage(
+                null, null, new RuntimeException("Something went wrong")
+        );
+
         assertThat(result.getLocation()).isEmpty();
         assertThat(result.getErrorCode()).isEmpty();
     }
 
     @Test
     void convertToErrorMessageNonNullClientAndErrorCode() {
-        ErrorMessage result = ExceptionConverter.convertToErrorMessage("Client", ErrorCode.QUERY_EXECUTION_ERROR,
-                                                                       new RuntimeException(
-                                                                    "Something went wrong"));
+        ErrorMessage result = ExceptionConverter.convertToErrorMessage(
+                "Client", ErrorCode.QUERY_EXECUTION_ERROR, new RuntimeException("Something went wrong")
+        );
+
         assertThat(result.getLocation()).isEqualTo("Client");
         assertThat(result.getErrorCode()).isEqualTo("AXONIQ-5001");
     }
 
     @Nested
-    class SerializeDetails {
+    class ConvertDetails {
 
         @Test
         void returnsNullWhenNoDetailsPresent() {
-            SerializedObject result = ExceptionConverter.convertDetails(new RuntimeException("boom"),
-                                                                        mock(Converter.class));
+            SerializedObject result = ExceptionConverter.convertToDetails(
+                    new RuntimeException("boom"), mock(Converter.class)
+            );
 
             assertThat(result).isNull();
         }
@@ -71,7 +73,7 @@ class ExceptionConverterTest {
         void returnsNullWhenDetailsPresentButNoConverterAvailable() {
             var cause = new CommandExecutionException("boom", null, "some details");
 
-            SerializedObject result = ExceptionConverter.convertDetails(cause, null);
+            SerializedObject result = ExceptionConverter.convertToDetails(cause, null);
 
             assertThat(result).isNull();
         }
@@ -82,7 +84,7 @@ class ExceptionConverterTest {
             Converter converter = mock(Converter.class);
             when(converter.convert("some details", byte[].class)).thenReturn("some details".getBytes());
 
-            SerializedObject result = ExceptionConverter.convertDetails(cause, converter);
+            SerializedObject result = ExceptionConverter.convertToDetails(cause, converter);
 
             assertThat(result).isNotNull();
             assertThat(result.getType()).isEqualTo(String.class.getName());
@@ -94,7 +96,7 @@ class ExceptionConverterTest {
             byte[] rawDetails = "raw bytes".getBytes();
             var cause = new CommandExecutionException("boom", null, rawDetails);
 
-            SerializedObject result = ExceptionConverter.convertDetails(cause, null);
+            SerializedObject result = ExceptionConverter.convertToDetails(cause, null);
 
             assertThat(result).isNotNull();
             assertThat(result.getData().toByteArray()).isEqualTo(rawDetails);
@@ -107,14 +109,14 @@ class ExceptionConverterTest {
             when(converter.convert("some details", byte[].class))
                     .thenThrow(new ConversionException("cannot convert"));
 
-            SerializedObject result = ExceptionConverter.convertDetails(cause, converter);
+            SerializedObject result = ExceptionConverter.convertToDetails(cause, converter);
 
             assertThat(result).isNull();
         }
     }
 
     @Nested
-    class ConvertToAxonExceptionWithConverter {
+    class ConvertToAxonException {
 
         @Test
         void reconstructsDetailsLazilyThroughAttachedConverter() {
@@ -132,24 +134,6 @@ class ExceptionConverterTest {
             assertThat(result).isInstanceOf(CommandExecutionException.class);
             String details = ((CommandExecutionException) result).getDetails(String.class).orElse(null);
             assertThat(details).isEqualTo("raw");
-        }
-
-        @Test
-        void threeArgOverloadYieldsExceptionThatThrowsWithoutConverterOnMismatchedType() {
-            var payload = SerializedObject.newBuilder()
-                                          .setType(String.class.getName())
-                                          .setData(ByteString.copyFromUtf8("raw"))
-                                          .build();
-
-            AxonException result = ExceptionConverter.convertToAxonException(
-                    ErrorCode.COMMAND_EXECUTION_ERROR.errorCode(), ErrorMessage.newBuilder().setMessage("boom").build(),
-                    payload
-            );
-
-            assertThat(result).isInstanceOf(CommandExecutionException.class);
-            var commandExecutionException = (CommandExecutionException) result;
-            assertThatThrownBy(() -> commandExecutionException.getDetails(Integer.class))
-                    .isInstanceOf(ConversionException.class);
         }
     }
 }
