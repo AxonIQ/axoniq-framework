@@ -40,7 +40,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Tests {@link MicrometerThreadLocalContextPropagationConfigurationEnhancer}: when a Micrometer backend is configured it
  * registers a {@link ContextSnapshotFactory} and, when that factory is built, installs the
- * {@link ObservationAwareSpanThreadLocalAccessor} on the global {@link ContextRegistry} idempotently and after the
+ * {@link MicrometerSpanThreadLocalAccessor} on the global {@link ContextRegistry} idempotently and after the
  * ServiceLoader-registered {@link ObservationThreadLocalAccessor} (so it defers to observation-scoped spans).
  *
  * @author Mateusz Nowak
@@ -57,10 +57,10 @@ class MicrometerThreadLocalContextPropagationConfigurationEnhancerTest {
         configuration.getComponent(ContextSnapshotFactory.class);
 
         // then exactly one span thread-local accessor is present on the global registry
-        long spanAccessors = ContextRegistry.getInstance().getThreadLocalAccessors().stream()
+        List<ThreadLocalAccessor<?>> spanAccessors = ContextRegistry.getInstance().getThreadLocalAccessors().stream()
                 .filter(accessor -> ObservationAwareSpanThreadLocalAccessor.KEY.equals(accessor.key()))
-                .count();
-        assertThat(spanAccessors).isEqualTo(1);
+                .toList();
+        assertThat(spanAccessors).singleElement().isInstanceOf(MicrometerSpanThreadLocalAccessor.class);
     }
 
     @Test

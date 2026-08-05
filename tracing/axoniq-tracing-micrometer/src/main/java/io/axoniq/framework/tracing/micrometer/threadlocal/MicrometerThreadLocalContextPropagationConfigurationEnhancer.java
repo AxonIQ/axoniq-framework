@@ -22,6 +22,7 @@ package io.axoniq.framework.tracing.micrometer.threadlocal;
 import io.axoniq.framework.tracing.micrometer.MicrometerSpanFactory;
 import io.micrometer.context.ContextRegistry;
 import io.micrometer.context.ContextSnapshotFactory;
+import io.micrometer.context.ThreadLocalAccessor;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.contextpropagation.ObservationAwareSpanThreadLocalAccessor;
@@ -124,7 +125,7 @@ public final class MicrometerThreadLocalContextPropagationConfigurationEnhancer 
     }
 
     /**
-     * Registers the {@link ObservationAwareSpanThreadLocalAccessor} on {@code contextRegistry} when not already present.
+     * Registers the {@link MicrometerSpanThreadLocalAccessor} on {@code contextRegistry}.
      * This is the thread-local accessor that restores a captured span as the current span on
      * {@link io.micrometer.context.ContextSnapshot#setThreadLocals()}; it is added through a {@link ContextRegistry}
      * decorator, applied when that component is resolved (when the {@link ContextSnapshotFactory} is built), so it can
@@ -132,14 +133,22 @@ public final class MicrometerThreadLocalContextPropagationConfigurationEnhancer 
      */
     private static void registerSpanThreadLocalAccessor(Configuration config, ContextRegistry contextRegistry) {
         Object spanAccessorKey = ObservationAwareSpanThreadLocalAccessor.KEY;
-        boolean alreadyRegistered = contextRegistry.getThreadLocalAccessors().stream()
-                                                   .anyMatch(accessor -> spanAccessorKey.equals(accessor.key()));
-        if (!alreadyRegistered) {
-            ObservationRegistry observationRegistry = config.getOptionalComponent(ObservationRegistry.class)
-                                                             .orElseGet(ObservationRegistry::create);
-            contextRegistry.registerThreadLocalAccessor(
-                    new ObservationAwareSpanThreadLocalAccessor(observationRegistry, config.getComponent(Tracer.class)));
+        ThreadLocalAccessor<?> existing = contextRegistry.getThreadLocalAccessors().stream()
+                                                         .filter(accessor -> spanAccessorKey.equals(accessor.key()))
+                                                         .findFirst()
+                                                         .orElse(null);
+        if (existing instanceof MicrometerSpanThreadLocalAccessor) {
+            return;
         }
+        // The standard Micrometer accessor uses this same key. Replace it so ContextSnapshot always selects the
+        // balanced implementation; registering both would leave selection dependent on registry order.
+        if (existing != null) {
+            contextRegistry.removeThreadLocalAccessor(spanAccessorKey);
+        }
+        ObservationRegistry observationRegistry = config.getOptionalComponent(ObservationRegistry.class)
+                                                         .orElseGet(ObservationRegistry::create);
+        contextRegistry.registerThreadLocalAccessor(
+                new MicrometerSpanThreadLocalAccessor(observationRegistry, config.getComponent(Tracer.class)));
     }
 
     /**
