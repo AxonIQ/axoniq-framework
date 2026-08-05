@@ -6,6 +6,7 @@
 Tenant management covers how tenants become known to the application and how the tenant of a message is resolved during processing.
 A tenant is represented by a `TenantDescriptor`, identified by its `tenantId`, which corresponds to an Axon Server context.
 
+[#enabling-multi-tenancy]
 == Enabling and disabling multi-tenancy
 
 Multi-tenancy is active by default: with the `axoniq-multi-tenancy` module on the classpath, no code or configuration is needed to switch it on.
@@ -24,9 +25,7 @@ Disable multi-tenancy on the configurer:
 
 [source,java]
 ----
-public void disableMultiTenancy(MessagingConfigurer configurer) {
-    configurer.componentRegistry(MultiTenancyUtils::disable);
-}
+include::example$multitenancy/tenantmanagement/DeclarativeTenantConfiguration.java[tag=disable-multi-tenancy,indent=0]
 ----
 --
 Autodetected - Spring Boot::
@@ -49,11 +48,13 @@ With the Configuration API, an application that carries the module without Axon 
 With multi-tenancy active, tenants are taken from your Axon Server contexts and the tenant of each message is resolved automatically.
 The sections below show how to customize which contexts become tenants and how the tenant of a message is resolved.
 
+[#how-tenants-become-known]
 == How tenants become known
 
 Each tenant maps to an Axon Server context.
 With multi-tenancy active, the contexts of the connected Axon Server are discovered as tenants at startup, and the set is kept current at runtime: contexts xref:axon-server-reference:ROOT:axon-server/administration/multi-context.adoc[added or removed on Axon Server] become tenants that are added or removed in the running application, without further configuration.
 
+[#filtering-contexts]
 === Filtering which contexts are tenants
 
 By default, every Axon Server context except the `_admin` context is treated as a tenant.
@@ -66,11 +67,7 @@ Declarative - Configuration API::
 --
 [source,java]
 ----
-public void registerTenantFilter(MessagingConfigurer configurer) {
-    configurer.componentRegistry(registry -> registry.registerComponent(
-            TenantConnectPredicate.class,
-            config -> tenant -> tenant.tenantId().startsWith("tenant-")));
-}
+include::example$multitenancy/tenantmanagement/DeclarativeTenantConfiguration.java[tag=tenant-connect-predicate,indent=0]
 ----
 --
 Autodetected - Spring Boot::
@@ -80,10 +77,7 @@ Expose the predicate as a bean of type `TenantConnectPredicate`:
 
 [source,java]
 ----
-@Bean
-public TenantConnectPredicate tenantConnectPredicate() {
-    return tenant -> tenant.tenantId().startsWith("tenant-");
-}
+include::example$multitenancy/tenantmanagement/SpringTenantConfiguration.java[tag=tenant-connect-predicate,indent=0]
 ----
 --
 ====
@@ -98,12 +92,14 @@ Resolution is performed by a `TenantResolver`, and the same resolved tenant is u
 
 When no tenant can be resolved for a message, resolution fails with a `TenantNotResolvedException`, and the message is not handled for any tenant.
 
+[#default-resolver]
 === The default resolver
 
 When multi-tenancy is active and no other resolver is registered, the default is a `MetadataBasedTenantResolver`.
 It reads the tenant identifier from the message metadata under the `tenantId` key.
 A message whose metadata does not contain that key cannot be resolved and fails with a `TenantNotResolvedException`.
 
+[#customizing-resolution]
 === Customizing tenant resolution
 
 To read the tenant from a different metadata key, register a `MetadataBasedTenantResolver` with that key:
@@ -115,11 +111,7 @@ Declarative - Configuration API::
 --
 [source,java]
 ----
-public void registerTenantResolverForKey(MessagingConfigurer configurer) {
-    configurer.componentRegistry(registry -> registry.registerComponent(
-            TenantResolver.class,
-            config -> new MetadataBasedTenantResolver("tenant")));
-}
+include::example$multitenancy/tenantmanagement/DeclarativeTenantConfiguration.java[tag=metadata-tenant-resolver,indent=0]
 ----
 --
 Autodetected - Spring Boot::
@@ -129,10 +121,7 @@ Expose the resolver as a bean of type `TenantResolver`:
 
 [source,java]
 ----
-@Bean
-public TenantResolver tenantResolver() {
-    return new MetadataBasedTenantResolver("tenant");
-}
+include::example$multitenancy/tenantmanagement/SpringTenantConfiguration.java[tag=metadata-tenant-resolver,indent=0]
 ----
 --
 ====
@@ -147,19 +136,10 @@ Declarative - Configuration API::
 --
 [source,java]
 ----
-public void registerCustomTenantResolver(MessagingConfigurer configurer) {
-    TenantResolver resolver = (message, tenants) -> {
-        String tenantId = extractTenantId(message);            // <1>
-        if (tenantId == null) {
-            throw new TenantNotResolvedException("Could not resolve a tenant for the message");
-        }
-        return TenantDescriptor.tenantWithId(tenantId);
-    };
-    configurer.componentRegistry(registry -> registry.registerComponent(TenantResolver.class,
-                                                                        config -> resolver));
-}
+include::example$multitenancy/tenantmanagement/DeclarativeTenantConfiguration.java[tag=custom-tenant-resolver,indent=0]
 ----
 <1> Application-specific logic deriving the tenant identifier from the message.
+<2> The inverse: writes the tenant back under the same header, so it survives being dispatched elsewhere. See <<tenant-propagation>>.
 --
 Autodetected - Spring Boot::
 +
@@ -168,17 +148,19 @@ Expose your `TenantResolver` as a bean:
 
 [source,java]
 ----
-@Bean
-public TenantResolver tenantResolver() {
-    return (message, tenants) -> {
-        String tenantId = extractTenantId(message);            // <1>
-        if (tenantId == null) {
-            throw new TenantNotResolvedException("Could not resolve a tenant for the message");
-        }
-        return TenantDescriptor.tenantWithId(tenantId);
-    };
-}
+include::example$multitenancy/tenantmanagement/SpringCustomTenantResolverConfiguration.java[tag=custom-tenant-resolver,indent=0]
 ----
 <1> Application-specific logic deriving the tenant identifier from the message.
+<2> The inverse: writes the tenant back under the same header, so it survives being dispatched elsewhere. See <<tenant-propagation>>.
 --
 ====
+
+[#tenant-propagation]
+=== Propagating the tenant across a dispatch hop
+
+A command or query dispatched from inside a handler generally does not name its own tenant: the tenant is only known through the message being handled.
+`TenantResolver` attaches that tenant onto the outgoing message through `attachTenant`, the inverse of resolving it, so it survives a distributed round trip and is available again once the dispatched message reaches its handler.
+
+The default `MetadataBasedTenantResolver` does this out of the box: it writes the tenant identifier under the same metadata key it reads it from, so a command or query dispatched from within another tenant-owned handler, without naming a tenant of its own, stays attributed to that tenant with no further configuration.
+
+A custom `TenantResolver` must implement both `resolveTenant` and `attachTenant` itself, to allow commands and queries to propagate their tenant information when dispatched from inside another handler. The custom resolver above already does this, writing the tenant back under the same header it reads it from.

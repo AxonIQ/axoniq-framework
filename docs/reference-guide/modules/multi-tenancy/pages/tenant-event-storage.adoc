@@ -6,6 +6,7 @@
 Tenant-aware event storage covers how events and snapshots are stored per tenant.
 Each tenant keeps its events in its own Axon Server context, so no tenant can read or write another tenant's events.
 
+[#sourcing-and-appending]
 == Sourcing and appending events
 
 With multi-tenancy enabled, the event store is automatically tenant-aware.
@@ -25,6 +26,7 @@ If no tenant can be resolved, the operation fails with a `TenantNotResolvedExcep
 All events in a single append must belong to the same tenant.
 ====
 
+[#snapshots]
 == Snapshots
 
 Snapshots follow the events they summarize.

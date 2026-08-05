@@ -39,7 +39,7 @@ import static org.mockito.Mockito.*;
 
 class RegisterTenantDescriptorHandlerInterceptorTest {
 
-    private static final String TENANT_KEY = "lateTenantKey";
+    private static final String TENANT_KEY = "MyTenantKey";
     private static final TenantDescriptor TENANT_A = new TenantDescriptor(
             "foo-a",
             Map.of("replicationGroup", "rg-a")

@@ -279,7 +279,7 @@ class TenantAwareQueryBusTest {
         @Test
         void emitUpdateDelegatesResolutionToTheInjectedResolverRatherThanReadingMetadataDirectly() {
             // given a resolver that ignores message metadata entirely and always resolves to TENANT_A
-            TenantResolver alwaysTenantA = (message, tenants) -> TENANT_A;
+            TenantResolver alwaysTenantA = TestFixtures.alwaysTenant(TENANT_A);
             RecordingQueryBus delegate = new RecordingQueryBus();
             TenantAwareQueryBus testSubject = new TenantAwareQueryBus(delegate, alwaysTenantA, servedTenants());
             ProcessingContext context = contextForTenant(TENANT_A);
@@ -295,7 +295,7 @@ class TenantAwareQueryBusTest {
         @Test
         void completeSubscriptionsDelegatesResolutionToTheInjectedResolver() {
             // given
-            TenantResolver alwaysTenantA = (message, tenants) -> TENANT_A;
+            TenantResolver alwaysTenantA = TestFixtures.alwaysTenant(TENANT_A);
             RecordingQueryBus delegate = new RecordingQueryBus();
             TenantAwareQueryBus testSubject = new TenantAwareQueryBus(delegate, alwaysTenantA, servedTenants());
             ProcessingContext context = contextForTenant(TENANT_A);
@@ -451,7 +451,7 @@ class TenantAwareQueryBusTest {
         void queryIsAcceptedWhenTheResolverReturnsADescriptorMatchingAServedTenantByIdentifierOnly() {
             // given a resolver constructing its own, property-less descriptor rather than returning a served one
             TenantResolver identifierOnlyResolver =
-                    (message, tenants) -> TenantDescriptor.tenantWithId(TENANT_A.tenantId());
+                    TestFixtures.alwaysTenant(TenantDescriptor.tenantWithId(TENANT_A.tenantId()));
             TenantAwareQueryBus testSubject = new TenantAwareQueryBus(delegate, identifierOnlyResolver, () -> served);
             QueryMessage query = queryMessageForTenant(TENANT_A.tenantId());
 

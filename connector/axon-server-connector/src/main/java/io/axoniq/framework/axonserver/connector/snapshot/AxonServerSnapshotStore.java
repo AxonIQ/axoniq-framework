@@ -25,6 +25,7 @@ import io.axoniq.axonserver.grpc.event.dcb.AddSnapshotRequest;
 import io.axoniq.axonserver.grpc.event.dcb.GetLastSnapshotRequest;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.eventstore.AggregateSequenceNumberPosition;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
@@ -51,6 +52,7 @@ import java.util.concurrent.CompletionException;
  * @since 5.1.0
  */
 public class AxonServerSnapshotStore implements SnapshotStore {
+
     private static final String POSITION_TYPE_KEY = "__AxonFramework__:Position-Type";  // reserved key in metadata
     private static final ByteString NUL = ByteString.copyFrom(new byte[] {0});
 
@@ -159,5 +161,11 @@ public class AxonServerSnapshotStore implements SnapshotStore {
 
                 throw new CompletionException("Snapshot loading failed for %s with identifier %s".formatted(qualifiedName.toString(), identifier.toString()), e);
             });
+    }
+
+    @Override
+    public void describeTo(ComponentDescriptor descriptor) {
+        descriptor.describeProperty("connection", connection);
+        descriptor.describeProperty("converter", converter);
     }
 }

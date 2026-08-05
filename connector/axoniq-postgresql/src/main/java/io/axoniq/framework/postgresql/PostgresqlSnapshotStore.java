@@ -20,6 +20,7 @@
 package io.axoniq.framework.postgresql;
 
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.eventstore.Position;
@@ -240,5 +241,11 @@ class PostgresqlSnapshotStore implements SnapshotStore {
             case "GIP" -> new GlobalIndexPosition(positionValue);
             default -> throw new IllegalArgumentException("Unknown position type in snapshot: " + positionType);
         };
+    }
+
+    @Override
+    public void describeTo(ComponentDescriptor descriptor) {
+        descriptor.describeProperty("dataSource", dataSource);
+        descriptor.describeProperty("converter", converter);
     }
 }

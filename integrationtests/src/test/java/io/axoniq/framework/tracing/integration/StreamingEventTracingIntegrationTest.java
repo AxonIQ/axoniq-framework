@@ -20,6 +20,7 @@
 package io.axoniq.framework.tracing.integration;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.micrometer.tracing.Tracer;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
@@ -104,6 +105,8 @@ class StreamingEventTracingIntegrationTest {
     private AxonConfiguration startApplication(AsyncInMemoryStreamableEventSource eventSource,
                                                BookingProjection projection) {
         return MessagingConfigurer.create()
+                                  // Not a multi-tenancy test. See MultiTenancyUtils#disable.
+                                  .componentRegistry(MultiTenancyUtils::disable)
                                   .componentRegistry(registry -> registry
                                           .disableEnhancer(AxonServerConfigurationEnhancer.class)
                                           .registerComponent(SpanFactory.class, c -> spanFactory)
