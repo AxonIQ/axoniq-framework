@@ -28,6 +28,8 @@ import io.micrometer.tracing.contextpropagation.ObservationAwareSpanThreadLocalA
 import io.micrometer.tracing.handler.TracingObservationHandler;
 import org.axonframework.common.annotation.Internal;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -49,12 +51,19 @@ import java.util.Objects;
  * Observation accessor remains its sole carrier. A missing raw-span value is therefore only cleared when this
  * accessor already owns a nested scope; otherwise the span restored by the Observation accessor is left untouched.
  * No Observation is created by this accessor.
+ * <p>
+ * Context propagation is best-effort: failures from a tracing backend are logged and contained inside this accessor.
+ * They must never escape into Reactor and terminate the business pipeline whose context is being restored.
  *
  * @author Mateusz Nowak
  * @since 5.3.0
  */
 @Internal
 final class MicrometerSpanThreadLocalAccessor implements ThreadLocalAccessor<Span> {
+
+    private static final Logger logger = LoggerFactory.getLogger(MicrometerSpanThreadLocalAccessor.class);
+    private static final Tracer.SpanInScope NO_OP_SCOPE = () -> {
+    };
 
     private final ObservationRegistry observationRegistry;
     private final Tracer tracer;
@@ -73,21 +82,26 @@ final class MicrometerSpanThreadLocalAccessor implements ThreadLocalAccessor<Spa
 
     @Override
     public @Nullable Span getValue() {
-        Span currentSpan = tracer.currentSpan();
-        Observation currentObservation = observationRegistry.getCurrentObservation();
-        if (currentObservation == null) {
-            return currentSpan;
+        try {
+            Span currentSpan = tracer.currentSpan();
+            Observation currentObservation = observationRegistry.getCurrentObservation();
+            if (currentObservation == null) {
+                return currentSpan;
+            }
+            TracingObservationHandler.TracingContext tracingContext =
+                    currentObservation.getContext().get(TracingObservationHandler.TracingContext.class);
+            return currentSpan != null && (tracingContext == null || !currentSpan.equals(tracingContext.getSpan()))
+                    ? currentSpan
+                    : null;
+        } catch (RuntimeException | AssertionError e) {
+            logContainedFailure("capturing", e);
+            return null;
         }
-        TracingObservationHandler.TracingContext tracingContext =
-                currentObservation.getContext().get(TracingObservationHandler.TracingContext.class);
-        return currentSpan != null && (tracingContext == null || !currentSpan.equals(tracingContext.getSpan()))
-                ? currentSpan
-                : null;
     }
 
     @Override
     public void setValue(Span value) {
-        scopes.get().push(tracer.withSpan(Objects.requireNonNull(value, "The Span may not be null.")));
+        openScope(value);
     }
 
     @Override
@@ -97,17 +111,19 @@ final class MicrometerSpanThreadLocalAccessor implements ThreadLocalAccessor<Spa
             scopes.remove();
             return;
         }
-        currentScopes.push(tracer.withSpan(null));
+        openScope(null);
     }
 
     @Override
     public void restore(Span previousValue) {
         closeCurrentScope();
-        Span restoredSpan = tracer.currentSpan();
-        if (!Objects.equals(previousValue, restoredSpan)) {
-            throw new IllegalStateException("Closing a propagated span scope restored [" + restoredSpan
-                                                    + "] instead of the previous Micrometer span [" + previousValue
-                                                    + "].");
+        try {
+            if (!Objects.equals(previousValue, tracer.currentSpan())) {
+                logger.warn("Closing a propagated span scope did not restore the previous Micrometer span. "
+                                    + "The tracing mismatch was contained so application processing can continue.");
+            }
+        } catch (RuntimeException | AssertionError e) {
+            logContainedFailure("verifying", e);
         }
     }
 
@@ -116,15 +132,36 @@ final class MicrometerSpanThreadLocalAccessor implements ThreadLocalAccessor<Spa
         closeCurrentScope();
     }
 
+    private void openScope(@Nullable Span span) {
+        Tracer.SpanInScope scope;
+        try {
+            scope = tracer.withSpan(span);
+        } catch (RuntimeException | AssertionError e) {
+            logContainedFailure("restoring", e);
+            scope = NO_OP_SCOPE;
+        }
+        scopes.get().push(scope);
+    }
+
     private void closeCurrentScope() {
         Deque<Tracer.SpanInScope> currentScopes = scopes.get();
         if (currentScopes.isEmpty()) {
             scopes.remove();
             return;
         }
-        currentScopes.pop().close();
-        if (currentScopes.isEmpty()) {
-            scopes.remove();
+        try {
+            currentScopes.pop().close();
+        } catch (RuntimeException | AssertionError e) {
+            logContainedFailure("closing", e);
+        } finally {
+            if (currentScopes.isEmpty()) {
+                scopes.remove();
+            }
         }
+    }
+
+    private static void logContainedFailure(String operation, Throwable failure) {
+        logger.warn("Micrometer span context propagation failed while {} a scope. The failure was contained so "
+                            + "application processing can continue.", operation, failure);
     }
 }
