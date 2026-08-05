@@ -248,6 +248,63 @@ class CommandConverterTest {
     }
 
     @Nested
+    class ConvertErrorResponse {
+
+        @Test
+        void convertsCauseWithoutDetailsToResponseWithoutPayload() {
+            // given
+            var cause = new RuntimeException("boom");
+
+            // when
+            var response = CommandConverter.convertErrorResponse(clientId, messageIdentifier, cause, converter);
+
+            // then
+            assertThat(response.getRequestIdentifier()).isEqualTo(messageIdentifier);
+            assertThat(response.getErrorMessage().getMessage()).isEqualTo("boom");
+            assertThat(response.hasPayload()).isFalse();
+        }
+
+        @Test
+        void convertsCauseCarryingHandlerExecutionDetailsToResponseWithPayload() {
+            // given
+            var cause = new CommandExecutionException("boom", null, "some details");
+
+            // when
+            var response = CommandConverter.convertErrorResponse(clientId, messageIdentifier, cause, converter);
+
+            // then
+            assertThat(response.hasPayload()).isTrue();
+            assertThat(response.getPayload().getData().toStringUtf8()).isEqualTo("some details");
+
+            // the default Converter#convert(Object, Class) delegates to convert(Object, Type); both are recorded
+            verify(converter).convert("some details", byte[].class);
+            verify(converter).convert("some details", (Type) byte[].class);
+        }
+
+        @Test
+        void roundTripsHandlerExecutionDetailsThroughConvertCommandResponse() {
+            // given a handler-side exception carrying application-specific details
+            var cause = new CommandExecutionException("boom", null, "some details");
+
+            // when the error response produced on the send side is parsed again on the receive side
+            var errorResponse = CommandConverter.convertErrorResponse(clientId, messageIdentifier, cause, converter);
+            var future = CommandConverter.convertCommandResponse(errorResponse, converter);
+
+            // then the original details are recovered through the round trip
+            assertThat(future).failsWithin(Duration.ofSeconds(1));
+            Throwable resultThrowable = future.exceptionNow();
+            assertThat(resultThrowable).isInstanceOf(CommandExecutionException.class);
+            Optional<String> details = ((CommandExecutionException) resultThrowable).getDetails(String.class);
+            assertThat(details).hasValue("some details");
+
+            // the default Converter#convert(Object, Class) delegates to convert(Object, Type); both are recorded
+            verify(converter).convert("some details", byte[].class);
+            verify(converter).convert("some details", (Type) byte[].class);
+            verify(converter).convert(errorResponse.getPayload().getData().toByteArray(), (Type) String.class);
+        }
+    }
+
+    @Nested
     class ConvertCommand {
 
         @Test

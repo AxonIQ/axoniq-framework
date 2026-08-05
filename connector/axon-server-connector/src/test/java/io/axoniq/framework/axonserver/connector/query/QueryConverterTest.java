@@ -26,6 +26,8 @@ import io.axoniq.axonserver.grpc.SerializedObject;
 import io.axoniq.axonserver.grpc.query.QueryRequest;
 import io.axoniq.axonserver.grpc.query.QueryUpdate;
 import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
+import io.axoniq.framework.axonserver.connector.shared.ExceptionConverter;
+import org.axonframework.common.AxonException;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
@@ -40,6 +42,7 @@ import org.mockito.junit.jupiter.*;
 
 import java.lang.reflect.Type;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static io.axoniq.axonserver.grpc.ProcessingKey.*;
@@ -270,6 +273,31 @@ class QueryConverterTest {
         assertThat(qu.getPayload().getType()).isEqualTo(String.class.getName());
 
         verify(converter).convert("details", byte[].class);
+    }
+
+    @Test
+    void roundTripsHandlerExecutionDetailsThroughConvertToAxonException() {
+        // given a handler-side exception carrying application-specific details
+        var throwable = new QueryExecutionException("boom", null, "details");
+        when(converter.convert("details", byte[].class)).thenReturn("details".getBytes());
+
+        // when the error update produced on the send side is parsed again on the receive side
+        var queryUpdate = QueryConverter.convertQueryUpdate(clientId, ErrorCode.QUERY_EXECUTION_ERROR, throwable,
+                                                            converter);
+        byte[] rawDetails = queryUpdate.getPayload().getData().toByteArray();
+        when(converter.convert(rawDetails, (Type) String.class)).thenReturn("details");
+
+        AxonException result = ExceptionConverter.convertToAxonException(
+                queryUpdate.getErrorCode(), queryUpdate.getErrorMessage(), queryUpdate.getPayload(), converter
+        );
+
+        // then the original details are recovered through the round trip
+        assertThat(result).isInstanceOf(QueryExecutionException.class);
+        Optional<String> details = ((QueryExecutionException) result).getDetails(String.class);
+        assertThat(details).hasValue("details");
+
+        verify(converter).convert("details", byte[].class);
+        verify(converter).convert(rawDetails, (Type) String.class);
     }
 
     @Test
