@@ -70,8 +70,8 @@ class MultiTenantSnapshotStoreTest {
         void loadRoutesToTheTenantOnTheProcessingContext() {
             MultiTenantSnapshotStore testSubject =
                     new MultiTenantSnapshotStore(stores::apply, new TenantRouter(alwaysTenant(TENANT_B), stores));
-            StubProcessingContext context = new StubProcessingContext();
-            context.withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
+            ProcessingContext context = new StubProcessingContext()
+                    .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
             testSubject.load(SNAPSHOT_NAME, IDENTIFIER, context);
 
@@ -101,8 +101,8 @@ class MultiTenantSnapshotStoreTest {
         void storeRoutesToTheTenantOnTheProcessingContext() {
             MultiTenantSnapshotStore testSubject =
                     new MultiTenantSnapshotStore(stores::apply, new TenantRouter(alwaysTenant(TENANT_B), stores));
-            StubProcessingContext context = new StubProcessingContext();
-            context.withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
+            ProcessingContext context = new StubProcessingContext()
+                    .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
             testSubject.store(SNAPSHOT_NAME, IDENTIFIER, snapshot(), context);
 
