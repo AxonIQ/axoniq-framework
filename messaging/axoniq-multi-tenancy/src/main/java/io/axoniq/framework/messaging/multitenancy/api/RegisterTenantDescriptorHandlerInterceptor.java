@@ -43,25 +43,25 @@ import static java.util.Objects.requireNonNull;
  * it. When the router cannot attribute the message to a known tenant, the interceptor logs a warning and proceeds
  * without registering a {@link TenantDescriptor}.
  *
- * @param tenantRouter the router deciding which tenant the handled {@link Message} belongs to
  * @author Jan Galinski
  * @author Laura Devriendt
  * @since 5.3.0
  */
 @Internal
-public record RegisterTenantDescriptorHandlerInterceptor(
-        TenantRouter tenantRouter
-) implements MessageHandlerInterceptor<Message> {
+public class RegisterTenantDescriptorHandlerInterceptor implements MessageHandlerInterceptor<Message> {
 
     private static final Logger logger = LoggerFactory.getLogger(RegisterTenantDescriptorHandlerInterceptor.class);
 
+    private final TenantRouter tenantRouter;
+
     /**
-     * Verifies the non-null contract of the {@code tenantRouter} parameter.
+     * Constructs a {@code RegisterTenantDescriptorHandlerInterceptor} registering the tenant decided by the given
+     * {@code tenantRouter} onto the {@link ProcessingContext} of the handled {@link Message}.
      *
      * @param tenantRouter the router deciding which tenant the handled {@link Message} belongs to
      */
-    public RegisterTenantDescriptorHandlerInterceptor {
-        requireNonNull(tenantRouter, "tenantRouter must not be null");
+    public RegisterTenantDescriptorHandlerInterceptor(TenantRouter tenantRouter) {
+        this.tenantRouter = requireNonNull(tenantRouter, "tenantRouter must not be null");
     }
 
     @Override

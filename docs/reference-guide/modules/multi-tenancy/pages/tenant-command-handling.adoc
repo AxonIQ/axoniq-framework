@@ -2,6 +2,7 @@
 = Tenant-Aware Command Processing
 :navtitle: Tenant-aware command processing
 :reftext: Tenant-aware command processing
+:demo-core: https://github.com/AxonIQ/AxonFramework/blob/main/examples/university-multi-tenancy-examples/university-multi-tenancy-core/src/main/java/org/axonframework/examples/demo/multitenancy
 
 Tenant-aware command handling covers how commands can be dispatched and handled in a tenant aware Axon application.
 
@@ -13,6 +14,8 @@ Each known tenant has its own Axon Server connection. When a command handler is 
 
 When a command is dispatched, the tenant is resolved as described in the xref:tenant-management.adoc#tenant-resolution[tenant resolution] section, and the command is routed to the Axon Server context of that tenant.
 
+A command dispatched from within another message's handler, without naming a tenant of its own, keeps the tenant of that message across this hop: see xref:tenant-management.adoc#tenant-propagation[propagating the tenant across a dispatch hop].
+
 [NOTE]
 ====
 The tenant resolved for a command must be one of the currently known tenants.
@@ -20,6 +23,7 @@ If the resolved tenant is not currently known, for example because its context w
 ====
 
 
+[#command-handling]
 == Command handling
 
 Command handling methods are registered the same way as in a single-tenant application. No change to how you declare or register a command handler is required.
@@ -29,16 +33,13 @@ This is what allows a tenant-scoped component, such as a per-tenant external ser
 
 [source,java]
 ----
-@CommandHandler
-public void on(NotifyCourseSubscription command, @TenantScoped NotificationService notificationService, EventAppender appender) { // <1>
-    notificationService.notifyStudentCourseCreation(command.studentId(), command.courseId());
-    appender.append(new CourseSubscriptionNotified(command.courseId(),
-                command.studentId()));
-}
+include::example$multitenancy/tenantcommandhandling/CourseSubscriptionCommandHandler.java[tag=tenant-scoped-command-handler,indent=0]
 ----
 <1> `notificationService` is the `NotificationService` instance specific for the current tenant. The `@TenantScoped` annotation marks it as tenant scoped, transparently resolved by a tenant aware parameter resolver.
 
 See xref:tenant-scoped-components.adoc[Tenant-scoped components] for more details on how to register such components and inject them into a handler.
+
+TIP: To see this running, the xref:multi-tenancy:demo.adoc[university demo] enrolls a student through link:{demo-core}/university/write/enrollstudent/EnrollStudentCommandHandler.java[`EnrollStudentCommandHandler`], which sources the course from, and appends to, the command's own tenant.
 
 [NOTE]
 ====

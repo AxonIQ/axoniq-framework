@@ -21,6 +21,7 @@ package io.axoniq.framework.messaging.multitenancy.configuration;
 
 import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.messaging.multitenancy.annotation.TenantScoped;
+import io.axoniq.framework.messaging.multitenancy.api.AttachTenantDescriptorDispatchInterceptor;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
 import io.axoniq.framework.messaging.multitenancy.queryhandling.TenantAwareQueryBus;
@@ -37,6 +38,7 @@ import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.axonframework.messaging.core.interception.DispatchInterceptorRegistry;
 import org.axonframework.messaging.core.interception.HandlerInterceptorRegistry;
 import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
@@ -83,6 +85,16 @@ class MultiTenancyConfigurationDefaultsTest {
                 .noneMatch(RegisterTenantDescriptorHandlerInterceptor.class::isInstance);
         assertThat(interceptorRegistry.queryInterceptors(configuration, TenantAwareQueryHandler.class, "handle"))
                 .noneMatch(RegisterTenantDescriptorHandlerInterceptor.class::isInstance);
+        DispatchInterceptorRegistry dispatchInterceptorRegistry =
+                configuration.getComponent(DispatchInterceptorRegistry.class);
+        assertThat(dispatchInterceptorRegistry.commandInterceptors(configuration,
+                                                                    TenantAwareCommandHandler.class,
+                                                                    "handle"))
+                .noneMatch(AttachTenantDescriptorDispatchInterceptor.class::isInstance);
+        assertThat(dispatchInterceptorRegistry.queryInterceptors(configuration,
+                                                                  TenantAwareQueryHandler.class,
+                                                                  "handle"))
+                .noneMatch(AttachTenantDescriptorDispatchInterceptor.class::isInstance);
     }
 
     @Nested
@@ -234,6 +246,59 @@ class MultiTenancyConfigurationDefaultsTest {
                     .anyMatch(RegisterTenantDescriptorHandlerInterceptor.class::isInstance);
             assertThat(eventInterceptors)
                     .noneMatch(RegisterTenantDescriptorHandlerInterceptor.class::isInstance);
+        }
+    }
+
+    @Nested
+    class DispatchInterceptorWiring {
+
+        private final StubTenantProvider tenantProvider = new StubTenantProvider();
+        private final TenantComponentProvider<CourseRepository> componentProvider =
+                TenantComponentProvider.withFactory(CourseRepository.class, CourseRepository::new);
+
+        private AxonConfiguration configuration;
+
+        @BeforeEach
+        void buildAndStartConfiguration() {
+            tenantProvider.addTenant(TENANT_A);
+            configuration = MessagingConfigurer.create()
+                                               .componentRegistry(registry -> registry
+                                                       .registerComponent(TenantProvider.class,
+                                                                          config -> tenantProvider)
+                                                       .registerComponent(TenantComponentProvider.class,
+                                                                          config -> componentProvider))
+                                               .build();
+            configuration.start();
+        }
+
+        @AfterEach
+        void shutdownConfiguration() {
+            configuration.shutdown();
+        }
+
+        @Test
+        void registersTheTenantAttachmentInterceptorForCommandAndQueryDispatchOnly() {
+            // given
+            DispatchInterceptorRegistry registry = configuration.getComponent(DispatchInterceptorRegistry.class);
+
+            // when
+            var commandInterceptors = registry.commandInterceptors(configuration,
+                                                                    TenantAwareCommandHandler.class,
+                                                                    "handle");
+            var queryInterceptors = registry.queryInterceptors(configuration,
+                                                                TenantAwareQueryHandler.class,
+                                                                "handle");
+            var eventInterceptors = registry.eventInterceptors(configuration,
+                                                               SampleHandlers.class,
+                                                               "handle");
+
+            // then
+            assertThat(commandInterceptors)
+                    .anyMatch(AttachTenantDescriptorDispatchInterceptor.class::isInstance);
+            assertThat(queryInterceptors)
+                    .anyMatch(AttachTenantDescriptorDispatchInterceptor.class::isInstance);
+            assertThat(eventInterceptors)
+                    .noneMatch(AttachTenantDescriptorDispatchInterceptor.class::isInstance);
         }
     }
 

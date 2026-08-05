@@ -20,24 +20,26 @@
 package io.axoniq.framework.messaging.multitenancy.api;
 
 import org.axonframework.messaging.core.Message;
-import org.axonframework.messaging.core.correlation.CorrelationDataProvider;
-import org.axonframework.messaging.core.correlation.SimpleCorrelationDataProvider;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.axonframework.common.BuilderUtils.assertNonEmpty;
 
 /**
- * A {@link TenantResolver} implementation that resolves the target tenant from message metadata.
+ * A {@link TenantResolver} implementation that resolves the target tenant from, and attaches it back to,
+ * message metadata.
  * <p>
  * This resolver extracts the tenant identifier from the message's {@link Message#metadata() metadata} using a
  * configurable key (default: {@code "tenantId"}). If the metadata does not contain the expected key, a
  * {@link TenantNotResolvedException} is thrown.
  * <p>
- * This is the standard resolver for metadata-based multi-tenant routing. Combined with a
- * {@link CorrelationDataProvider} that propagates the same metadata key, this enables automatic tenant context
- * propagation throughout the message handling chain.
+ * The same key is used in both directions: {@link #attachTenant(Message, TenantDescriptor)} writes the
+ * tenant identifier under this instance's own {@code metadataKey}, so a message this resolver attached a
+ * tenant to always resolves back to that same tenant through this same instance. This is what keeps the
+ * tenant of a message being handled attached to a command or query dispatched from within that handler,
+ * without any further configuration.
  * <p>
  * Example usage:
  * <pre><code>
@@ -53,7 +55,6 @@ import static org.axonframework.common.BuilderUtils.assertNonEmpty;
  * @author Theo Emanuelsson
  * @author Jan Galinski
  * @see TenantResolver
- * @see SimpleCorrelationDataProvider
  * @since 5.3.0
  */
 public record MetadataBasedTenantResolver(String metadataKey) implements TenantResolver {
@@ -102,5 +103,19 @@ public record MetadataBasedTenantResolver(String metadataKey) implements TenantR
                                                            .filter(tenant -> tenantId.equals(tenant.tenantId()))
                                                            .findFirst();
         return resolvedTenant.orElseGet(() -> TenantDescriptor.tenantWithId(tenantId));
+    }
+
+    /**
+     * Attaches the given {@code tenant} to the given {@code message} by writing its identifier into the
+     * message's metadata under this instance's {@code metadataKey}, merged with any metadata the message
+     * already carries.
+     *
+     * @param message the message to attach the given {@code tenant} to
+     * @param tenant  the tenant to attach to the given {@code message}
+     * @return a copy of the given {@code message} carrying the given {@code tenant} under {@code metadataKey}
+     */
+    @Override
+    public Message attachTenant(Message message, TenantDescriptor tenant) {
+        return message.andMetadata(Map.of(metadataKey, tenant.tenantId()));
     }
 }

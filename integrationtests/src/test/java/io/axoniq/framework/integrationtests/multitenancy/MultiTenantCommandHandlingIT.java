@@ -35,6 +35,7 @@ import org.axonframework.messaging.commandhandling.CommandResultMessage;
 import org.axonframework.messaging.commandhandling.GenericCommandResultMessage;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.axonframework.messaging.commandhandling.configuration.CommandHandlingModule;
+import org.axonframework.messaging.commandhandling.gateway.CommandDispatcher;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.commandhandling.gateway.CommandResult;
 import org.axonframework.messaging.core.MessageStream;
@@ -213,11 +214,29 @@ class MultiTenantCommandHandlingIT {
                 .containsExactly(TENANT_B);
     }
 
+    @Test
+    void followUpCommandDispatchedFromWithinAHandlerStaysWithTheTenantOfTheHandledMessage() {
+        CommandGateway commandGateway = application.getComponent(CommandGateway.class);
+
+        commandGateway.send(new DispatchFollowUpCommand("chained"),
+                            Metadata.with(MetadataBasedTenantResolver.DEFAULT_TENANT_METADATA_KEY, TENANT_A),
+                            null);
+
+        // then the follow-up RecordTenantCommand, dispatched without naming a tenant, is recorded under TENANT_A
+        await().untilAsserted(() -> assertThat(recordedCommands).hasSize(1));
+        assertThat(recordedCommands).extracting(RecordedCommand::tenantId).containsExactly(TENANT_A);
+    }
+
     @CommandHandler
     String resolveTenantScopedComponent(ResolveTenantScopedComponentCommand command,
                                        @TenantScoped TenantDescriptor tenantScopedComponent) {
         resolvedTenantScopedComponents.add(new RecordedCommand(command.id(), tenantScopedComponent.tenantId()));
         return "ok";
+    }
+
+    @CommandHandler
+    void dispatchFollowUp(DispatchFollowUpCommand command, CommandDispatcher dispatcher) {
+        dispatcher.send(new RecordTenantCommand(command.id()));
     }
 
     private MessageStream.Single<CommandResultMessage> recordAndAcknowledge(
@@ -238,6 +257,10 @@ class MultiTenantCommandHandlingIT {
     }
 
     public record ResolveTenantScopedComponentCommand(String id) {
+
+    }
+
+    public record DispatchFollowUpCommand(String id) {
 
     }
 
