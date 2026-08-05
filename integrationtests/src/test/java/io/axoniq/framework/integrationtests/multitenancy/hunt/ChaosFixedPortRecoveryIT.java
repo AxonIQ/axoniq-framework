@@ -20,19 +20,17 @@
 package io.axoniq.framework.integrationtests.multitenancy.hunt;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.integrationtests.multitenancy.hunt.SingleTenantControlIT.ControlHandlers;
+import io.axoniq.framework.integrationtests.multitenancy.hunt.TenantBankFixture.Account;
+import io.axoniq.framework.integrationtests.multitenancy.hunt.TenantBankFixture.DepositMoney;
+import io.axoniq.framework.integrationtests.multitenancy.hunt.TenantBankFixture.OpenAccount;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import org.axonframework.common.configuration.AxonConfiguration;
-import org.axonframework.common.configuration.DefaultAxonApplication;
-import org.axonframework.messaging.commandhandling.CommandMessage;
-import org.axonframework.messaging.commandhandling.CommandResultMessage;
-import org.axonframework.messaging.commandhandling.GenericCommandResultMessage;
+import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
+import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.messaging.commandhandling.configuration.CommandHandlingModule;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
-import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
-import org.axonframework.messaging.core.QualifiedName;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -53,15 +51,15 @@ import static org.awaitility.Awaitility.await;
 /**
  * {@link ChaosSingleTenantControlIT} is the test that shows the apparent bug from AxoniQ/axoniq-framework#320:
  * command dispatch looks like it never recovers from an Axon Server restart. This test is the proof that it is not
- * a real bug. It runs the exact same restart-under-workload chaos, but against an Axon Server container published
- * on a FIXED host port instead of Testcontainers' default dynamic one. {@link DockerRestartPortStabilityIT} shows
- * why the dynamic port matters: {@code docker restart} can reassign it on some Docker setups, observed on macOS
- * with Docker Desktop. With a fixed port, recovery here is fast, well inside 30 seconds, not "eventually within 3
- * minutes" like the dynamic-port version.
+ * a real bug. It is the same application, the same {@link ControlHandlers}, the same {@code OpenAccount} and
+ * {@code DepositMoney} workload, the same two worker threads, and the same restart-under-workload sequence and
+ * timeouts as {@link ChaosSingleTenantControlIT}. The only difference is the Axon Server container's port, fixed
+ * here instead of Testcontainers' default dynamic one. {@link DockerRestartPortStabilityIT} shows why that matters:
+ * {@code docker restart} can reassign a dynamic port, observed on macOS with Docker Desktop, and a client that
+ * cached the old port at startup is then stuck retrying a dead one. With a fixed port, recovery here happens within
+ * seconds, well inside the same 3-minute deadline {@link ChaosSingleTenantControlIT} never meets.
  * <p>
- * Deliberately self-contained. It has no dependency on {@link TenantBankFixture} or event-sourced entities, only a
- * stateless echo command handler, so this proof stays independent of anything else in this package or module. It
- * uses its own dedicated container on hardcoded fixed ports rather than the shared
+ * Uses its own dedicated container on hardcoded fixed ports rather than the shared
  * {@link io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure} instance, since
  * a fixed port cannot be shared safely with whatever else that infrastructure's dynamically-ported container is
  * doing. Do not run this test concurrently with another instance of itself.
@@ -70,15 +68,11 @@ class ChaosFixedPortRecoveryIT {
 
     private static final int FIXED_HTTP_PORT = 19024;
     private static final int FIXED_GRPC_PORT = 19124;
-    private static final QualifiedName PING_COMMAND = new QualifiedName(PingCommand.class);
+    private static final String ACCOUNT_ID = "chaos-control-account";
 
     private final AtomicReference<String> lastError = new AtomicReference<>("none");
     private FixedPortAxonServerContainer container;
     private AxonConfiguration application;
-
-    private record PingCommand() {
-
-    }
 
     /** Exposes {@code addFixedExposedPort}, which {@link AxonServerContainer} does not itself publish. */
     private static final class FixedPortAxonServerContainer extends AxonServerContainer {
@@ -101,7 +95,7 @@ class ChaosFixedPortRecoveryIT {
     }
 
     @Test
-    void singleTenantApplicationRecoversQuicklyAfterRestartWhenAxonServerUsesAFixedPort() throws Exception {
+    void singleTenantApplicationRecoversCommandDispatchingAfterAxonServerRestart() throws Exception {
         container = new FixedPortAxonServerContainer();
         container.withAxonServerHostname("localhost");
         container.withDevMode(true);
@@ -110,19 +104,21 @@ class ChaosFixedPortRecoveryIT {
         String containerId = container.getContainerId();
 
         AxonServerConfiguration.Builder configBuilder = builder().servers("localhost:" + FIXED_GRPC_PORT);
-        CommandHandlingModule.CommandHandlerPhase commandHandlingModule =
-                CommandHandlingModule.named("fixed-port-ping-module")
-                                     .commandHandlers()
-                                     .commandHandler(PING_COMMAND, this::handlePing);
-
-        application = new DefaultAxonApplication()
-                .componentRegistry(cr -> cr.registerComponent(AxonServerConfiguration.class,
-                                                              c -> configBuilder.build()))
-                .componentRegistry(cr -> cr.registerModule(commandHandlingModule.build()))
-                .start();
+        EventSourcingConfigurer configurer = EventSourcingConfigurer.create();
+        configurer.registerEntity(EventSourcedEntityModule.autodetected(String.class, Account.class))
+                  .registerCommandHandlingModule(
+                          CommandHandlingModule.named("control-commands")
+                                               .commandHandlers()
+                                               .autodetectedCommandHandlingComponent(c -> new ControlHandlers()))
+                  .componentRegistry(registry -> registry.registerComponent(AxonServerConfiguration.class,
+                                                                            c -> configBuilder.build()))
+                  .componentRegistry(registry -> registry
+                          .disableEnhancer(io.axoniq.license.entitlement.EntitlementConfigurationEnhancer.class)
+                          .disableEnhancer(io.axoniq.license.entitlement.source.axonserver.AxonServerLicenseSourceConfigurationEnhancer.class));
+        application = configurer.start();
 
         CommandGateway gateway = application.getComponent(CommandGateway.class);
-        sendAndAwait(gateway);
+        sendAndAwait(gateway, new OpenAccount(ACCOUNT_ID));
 
         AtomicLong accepted = new AtomicLong();
         AtomicLong unknown = new AtomicLong();
@@ -134,7 +130,7 @@ class ChaosFixedPortRecoveryIT {
                 pool.submit(() -> {
                     while (!stop.get()) {
                         try {
-                            sendAndAwait(gateway);
+                            sendAndAwait(gateway, new DepositMoney(ACCOUNT_ID, 1L));
                             accepted.incrementAndGet();
                         } catch (Exception e) {
                             unknown.incrementAndGet();
@@ -151,14 +147,12 @@ class ChaosFixedPortRecoveryIT {
             await().atMost(Duration.ofSeconds(60)).until(() -> unknown.get() > 0);
 
             long acceptedBeforeRecovery = accepted.get();
-            // A tight 30s bound, not the 3 minutes ChaosSingleTenantControlIT allows: with a stable port, recovery
-            // is expected to be fast, not merely eventual.
             try {
-                await().atMost(Duration.ofSeconds(30))
+                await().atMost(Duration.ofMinutes(3))
                        .pollInterval(Duration.ofSeconds(1))
                        .until(() -> accepted.get() > acceptedBeforeRecovery + 10);
             } catch (Exception recoveryTimeout) {
-                throw new AssertionError("Fixed-port single-tenant app did not recover within 30 seconds of the "
+                throw new AssertionError("Fixed-port single-tenant app did not recover within 3 minutes of the "
                                                  + "restart: accepted=" + accepted.get() + " unknown=" + unknown.get()
                                                  + " lastWorkloadFailure=" + lastError.get(), recoveryTimeout);
             }
@@ -169,12 +163,8 @@ class ChaosFixedPortRecoveryIT {
         }
     }
 
-    private MessageStream.Single<CommandResultMessage> handlePing(CommandMessage command, ProcessingContext context) {
-        return MessageStream.just(new GenericCommandResultMessage(new MessageType(String.class), "pong"));
-    }
-
-    private static void sendAndAwait(CommandGateway gateway) {
-        gateway.send(new PingCommand(), Metadata.emptyInstance(), null)
+    private static void sendAndAwait(CommandGateway gateway, Object command) {
+        gateway.send(command, Metadata.emptyInstance(), null)
                .getResultMessage()
                .orTimeout(10, TimeUnit.SECONDS)
                .join();
