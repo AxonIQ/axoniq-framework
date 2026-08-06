@@ -273,7 +273,7 @@ public class AutoDetectionUtils {
     static <T> String workflowName(Class<T> type, Map<String, Object> attributes,
                                    Method method) {
         return getIfNotDefault(attributes, ATTR_WORKFLOW_NAME, "").orElse(
-                type.getSimpleName() + "#" + StringUtils.capitalize(method.getName())
+                type.getSimpleName() + "." + StringUtils.capitalize(method.getName())
         );
     }
 

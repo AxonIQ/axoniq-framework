@@ -156,6 +156,30 @@ class WorkflowReplayPreparedStateTest {
         }
     }
 
+    @Test
+    void replayToleratesStepEventsOfCompletedWorkflowBehindSafePoint() {
+        var prepared = new PreparedState();
+        prepared.appendWarmupEvents();
+        prepared.appendStartReplayWorkflowEvent("first", "wait");
+        prepared.appendWorkflowStarted("first", payload("first", "wait"));   // idx 3: before safe point
+        prepared.appendStartReplayWorkflowEvent("second", "wait");           // idx 4: safe point
+        prepared.appendWorkflowStarted("second", payload("second", "wait"));
+        prepared.appendStepStarted("second", "waitForResume");
+        prepared.appendStepStarted("first", "waitForResume");                // idx 7: step event, no definitionId
+        prepared.appendWorkflowCompleted("first");                           // idx 8: first is terminal
+        prepared.seedSafePoint(prepared.tokenAt(4)); // first's Started is NOT replayed, its step event IS
+
+        var executedWorkflowIds = new CopyOnWriteArrayList<String>();
+        try (var app = prepared.startApp(executedWorkflowIds)) {
+            // Getting past token 7 proves the projector tolerated the metadata-less step event.
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                assertThat(app.workflowIds()).containsExactly("second");
+                assertThat(executedWorkflowIds).containsExactly("second");
+            });
+        }
+    }
+
+
     private static Map<String, Object> payload(String id, String mode) {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("id", id);

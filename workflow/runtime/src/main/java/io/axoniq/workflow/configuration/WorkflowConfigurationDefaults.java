@@ -72,8 +72,9 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-@Internal @RegistrationScope(scope = RegistrationScope.Scope.CURRENT) public class WorkflowConfigurationDefaults
-        implements ConfigurationEnhancer {
+@Internal
+@RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
+public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
 
     /**
      * Name of the event handling component used for workflow history projector.

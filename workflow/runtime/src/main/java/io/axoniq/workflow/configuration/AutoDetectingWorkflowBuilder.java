@@ -25,6 +25,8 @@ import io.axoniq.workflow.runtime.util.WorkflowReflectionUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.QualifiedName;
 
 import java.util.List;
 import java.util.Objects;
@@ -96,6 +98,9 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
         var eventConditionBuilder = eventConditionComponentBuilder(attributes);
         var workflowName = workflowName(instanceType, attributes, method);
         var workflowVersion = workflowVersion(attributes);
+
+        validateWorkflowDefinition(workflowName, workflowVersion);
+
         WorkflowDefinition<C> workflowDefinition = workflowContext -> {
             Class<?>[] parameterTypes = method.getParameterTypes();
             Object[] args = new Object[parameterTypes.length];
@@ -131,5 +136,10 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
                         statusChangeListeners
                 )
         );
+    }
+
+    private static void validateWorkflowDefinition(String workflowName, String workflowVersion) {
+        // validating by construction
+        new MessageType(new QualifiedName(workflowName), workflowVersion);
     }
 }
