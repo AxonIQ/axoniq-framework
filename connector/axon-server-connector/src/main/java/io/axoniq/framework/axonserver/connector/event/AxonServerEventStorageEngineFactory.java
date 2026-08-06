@@ -66,12 +66,28 @@ public class AxonServerEventStorageEngineFactory implements ComponentFactory<Axo
      * @param config  the configuration from which to retrieve an {@link AxonServerConnectionManager},
      *                {@link EventConverter}, and optional {@link EventTypeResolver} for the {@link AxonServerEventStorageEngine} under construction
      * @return an {@link AxonServerEventStorageEngine}, connecting to the given {@code context}
+     * @see #constructForContext(String, Configuration, EventConverter) for a variant that allows specifying the {@link EventConverter} to use
      */
     public static AxonServerEventStorageEngine constructForContext(String context,
                                                                             Configuration config) {
+        return constructForContext(context, config, config.getComponent(EventConverter.class));
+    }
+
+    /**
+     * Constructs an {@link AxonServerEventStorageEngine} for the given {@code context} using the given
+     * {@code eventConverter}.
+     *
+     * @param context        the name of the context for which to open an {@link AxonServerConnection}
+     * @param config         the configuration from which to retrieve an {@link AxonServerConnectionManager} and an
+     *                       optional {@link EventTypeResolver}
+     * @param eventConverter the converter used to serialize and deserialize events
+     * @return an {@link AxonServerEventStorageEngine}, connecting to the given {@code context}
+     */
+    public static AxonServerEventStorageEngine constructForContext(String context,
+                                                                    Configuration config,
+                                                                    EventConverter eventConverter) {
         AxonServerConnection connection = config.getComponent(AxonServerConnectionManager.class)
                                                 .getConnection(context);
-        EventConverter eventConverter = config.getComponent(EventConverter.class);
         EventTypeResolver eventTypeResolver = config.getOptionalComponent(EventTypeResolver.class)
                                                     .orElse(EventTypeResolver.DEFAULT);
         return new AxonServerEventStorageEngine(connection, eventConverter, eventTypeResolver);
