@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.multitenancy.annotation;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
+import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviders;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.Priority;
 import org.axonframework.common.annotation.AnnotationUtils;
@@ -135,23 +136,7 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
     // Providers are heterogeneous in their component type, so they are looked up through their raw type.
     @SuppressWarnings("rawtypes")
     private Iterable<TenantComponentProvider> providers() {
-        return rootConfiguration().getComponents(TenantComponentProvider.class).values();
-    }
-
-    /**
-     * We want to look up {@link TenantComponentProvider}s from ancestors as well in case this factory is registered in
-     * a module's configuration. So we resolve through the root to find providers registered anywhere in the hierarchy,
-     * regardless of which scope this instance runs in.
-     *
-     * @return the root configuration
-     */
-    private Configuration rootConfiguration() {
-        Configuration root = configuration;
-        Configuration parent;
-        while ((parent = root.getParent()) != null) {
-            root = parent;
-        }
-        return root;
+        return TenantComponentProviders.all(configuration);
     }
 
 

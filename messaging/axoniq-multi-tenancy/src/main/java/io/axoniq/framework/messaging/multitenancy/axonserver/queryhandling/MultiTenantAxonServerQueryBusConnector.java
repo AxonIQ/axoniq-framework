@@ -54,6 +54,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 
 /**
  * Multi-tenant Axon Server {@link QueryBusConnector}.
@@ -78,7 +79,7 @@ public class MultiTenantAxonServerQueryBusConnector
     private final TenantRouter tenantRouter;
     private final AxonServerConnectionManager connectionManager;
     private final AxonServerConfiguration configuration;
-    private final MessageConverter converter;
+    private final Function<TenantDescriptor, MessageConverter> converterFactory;
 
     private final Set<TenantDescriptor> tenantDescriptors = ConcurrentHashMap.newKeySet();
     private final Map<String, AxonServerQueryBusConnector> tenantConnectors = new ConcurrentHashMap<>();
@@ -100,10 +101,28 @@ public class MultiTenantAxonServerQueryBusConnector
                                                   AxonServerConnectionManager connectionManager,
                                                   AxonServerConfiguration configuration,
                                                   MessageConverter converter) {
+        this(tenantRouter, connectionManager, configuration, converter, converterFactory(converter));
+    }
+
+    /**
+     * Constructs a connector that obtains the message converter for every tenant while constructing that tenant's
+     * connector.
+     *
+     * @param tenantRouter      the router deciding which tenant a dispatched query is routed to
+     * @param connectionManager the manager used to obtain the connection for a given tenant
+     * @param configuration     the configuration applied to each per-tenant connector
+     * @param converterFactory  the factory providing the message converter for each tenant
+     */
+    public MultiTenantAxonServerQueryBusConnector(TenantRouter tenantRouter,
+                                                  AxonServerConnectionManager connectionManager,
+                                                  AxonServerConfiguration configuration,
+                                                  MessageConverter defaultConverter,
+                                                  Function<TenantDescriptor, MessageConverter> converterFactory) {
         this.tenantRouter = Objects.requireNonNull(tenantRouter, "The tenantRouter must not be null.");
         this.connectionManager = Objects.requireNonNull(connectionManager, "The connectionManager must not be null.");
         this.configuration = Objects.requireNonNull(configuration, "The configuration must not be null.");
-        this.converter = Objects.requireNonNull(converter, "The converter must not be null.");
+        Objects.requireNonNull(defaultConverter, "The defaultConverter must not be null.");
+        this.converterFactory = Objects.requireNonNull(converterFactory, "The converterFactory must not be null.");
         EntitlementManager.INSTANCE.registerAddon(MultiTenancyAxoniqAddon.class);
     }
 
@@ -264,7 +283,7 @@ public class MultiTenantAxonServerQueryBusConnector
     private Registration addTenant(TenantDescriptor tenantDescriptor) {
         tenantDescriptors.add(tenantDescriptor);
         tenantConnectors.computeIfAbsent(tenantDescriptor.tenantId(), tenantId -> {
-            AxonServerQueryBusConnector connector = createConnector(tenantId);
+            AxonServerQueryBusConnector connector = createConnector(tenantDescriptor);
             // Known subscriptions are replayed only while creating a new connector. An already-registered tenant's
             // connector is already in sync, and re-subscribing it would be a needless no-op at best; at worst it
             // risks the same orphaned-registration pitfall the command bus connector guards against.
@@ -299,9 +318,11 @@ public class MultiTenantAxonServerQueryBusConnector
         return true;
     }
 
-    private AxonServerQueryBusConnector createConnector(String tenantId) {
-        AxonServerConnection connection = connectionManager.getConnection(tenantId);
-        AxonServerQueryBusConnector connector = new AxonServerQueryBusConnector(connection, configuration, converter);
+    private AxonServerQueryBusConnector createConnector(TenantDescriptor tenant) {
+        AxonServerConnection connection = connectionManager.getConnection(tenant.tenantId());
+        AxonServerQueryBusConnector connector = new AxonServerQueryBusConnector(connection,
+                                                                                  configuration,
+                                                                                  converterFactory.apply(tenant));
         if (started.get()) {
             connector.start();
         }
@@ -309,5 +330,10 @@ public class MultiTenantAxonServerQueryBusConnector
             connector.onIncomingQuery(incomingHandler);
         }
         return connector;
+    }
+
+    private static Function<TenantDescriptor, MessageConverter> converterFactory(MessageConverter converter) {
+        MessageConverter nonNullConverter = Objects.requireNonNull(converter, "The converter must not be null.");
+        return tenant -> nonNullConverter;
     }
 }

@@ -25,6 +25,7 @@ import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConne
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyAxoniqAddon;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantConnectPredicate;
@@ -34,6 +35,7 @@ import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AxonS
 import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AxonServerTenantSnapshotStoreFactory;
 import io.axoniq.framework.messaging.multitenancy.axonserver.queryhandling.MultiTenantAxonServerQueryBusConnector;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
+import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviders;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenantStreamingProcessorRestarter;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
@@ -56,6 +58,8 @@ import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.SnapshotSourcingConfigurationEnhancer;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
+import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.core.conversion.DelegatingMessageConverter;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.jspecify.annotations.Nullable;
 
@@ -171,7 +175,8 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                                           config.getComponent(TenantRouter.class),
                                           axonServerConnectionManager(config),
                                           config.getComponent(AxonServerConfiguration.class),
-                                          config.getComponent(MessageConverter.class)))
+                                          config.getComponent(MessageConverter.class),
+                                          messageConverterFactory(config)))
                                   .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
                                            (config, connector) -> {
                                                tenantSubscription.set(config.getComponent(TenantProvider.class)
@@ -336,6 +341,15 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                                             config.getComponent(TenantRouter.class));
     }
 
+    private static Function<TenantDescriptor, MessageConverter> messageConverterFactory(Configuration configuration) {
+        MessageConverter defaultConverter = configuration.getComponent(MessageConverter.class);
+        return TenantComponentProviders.find(configuration, Converter.class)
+                                      .<Function<TenantDescriptor, MessageConverter>>map(
+                                              provider -> tenant -> new DelegatingMessageConverter(
+                                                      provider.componentFor(tenant)))
+                                      .orElse(tenant -> defaultConverter);
+    }
+
     /**
      * Builds a {@link ComponentDefinition} for a component that follows the tenant lifecycle. When the built component
      * is a {@link MultiTenantAwareComponent}, it is subscribed to the {@link TenantProvider} at startup and
@@ -411,7 +425,8 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                                           config.getComponent(TenantRouter.class),
                                           config.getComponent(AxonServerConnectionManager.class),
                                           config.getComponent(AxonServerConfiguration.class),
-                                          config.getComponent(MessageConverter.class)))
+                                          config.getComponent(MessageConverter.class),
+                                          messageConverterFactory(config)))
                                   .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
                                            (config, connector) -> {
                                                tenantSubscription.set(config.getComponent(TenantProvider.class)

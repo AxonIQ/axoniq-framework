@@ -20,11 +20,16 @@
 package io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing;
 
 import io.axoniq.framework.axonserver.connector.api.RecordingAxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
+import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
+import org.axonframework.common.configuration.Configuration;
+import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
+import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.junit.jupiter.api.*;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
@@ -87,5 +92,31 @@ class AxonServerTenantSnapshotStoreFactoryTest {
         testSubject.registerAndStartTenant(TENANT_A);
 
         assertThat(testSubject.storeFor(TENANT_A)).isNotSameAs(before);
+    }
+
+    @Test
+    void usesTheTenantConverterProviderWhenOneIsRegistered() {
+        // given
+        Converter tenantConverter = new ChainingContentTypeConverter();
+        TenantComponentProvider<Converter> converterProvider = TenantComponentProvider.withFactory(
+                Converter.class, tenant -> tenantConverter);
+        converterProvider.registerTenant(TENANT_A);
+        Configuration configuration = MessagingConfigurer.create()
+                                                       .componentRegistry(registry -> {
+                                                           registry.registerComponent(AxonServerConnectionManager.class,
+                                                                                      config -> connectionManager);
+                                                           registry.registerComponent(TenantComponentProvider.class,
+                                                                                      config -> converterProvider);
+                                                       })
+                                                       .build();
+        AxonServerTenantSnapshotStoreFactory factory = new AxonServerTenantSnapshotStoreFactory(configuration);
+        factory.registerTenant(TENANT_A);
+        MockComponentDescriptor descriptor = new MockComponentDescriptor();
+
+        // when
+        factory.storeFor(TENANT_A).describeTo(descriptor);
+
+        // then
+        assertThat(descriptor.<Converter>getProperty("converter")).isSameAs(tenantConverter);
     }
 }
