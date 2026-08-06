@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.context.Version;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -46,6 +47,7 @@ import java.util.stream.Collectors;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
+@Internal
 public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRegistry<W>>
         extends DescribableComponent {
 

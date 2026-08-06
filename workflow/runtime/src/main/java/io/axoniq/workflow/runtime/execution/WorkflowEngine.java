@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -39,6 +40,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -275,25 +277,25 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
      * of work and is used only while reading the event-sourced workflow state. The execution context becomes the parent
      * context of each restored workflow body and is retained after startup for the workflow's lifetime.
      *
-     * @param safePoint         replay safe point for restored workflow executions
-     * @param sourcingContext   context of the short-lived startup unit of work used to load durable workflow state; it
-     *                          may carry event-store transactions and lifecycle handlers and must not be retained by a
-     *                          restored workflow
-     * @param executionContext  independent context used as the parent of restored workflow executions; it provides the
-     *                          same application components while keeping workflow-body resources and lifecycle work
-     *                          separate from startup
-     *                          <p>
-     *                          Reusing {@code sourcingContext} here is invalid because restored workflow bodies run
-     *                          asynchronously and can outlive startup. If such a body appends an event after the startup
-     *                          unit of work has entered {@code COMMIT}, Axon can no longer register the required
-     *                          {@code PREPARE_COMMIT} handler. The append operation then fails, and the workflow cannot
-     *                          persist its resumed, timed-out, or terminal state
+     * @param safePoint        replay safe point for restored workflow executions
+     * @param sourcingContext  context of the short-lived startup unit of work used to load durable workflow state; it
+     *                         may carry event-store transactions and lifecycle handlers and must not be retained by a
+     *                         restored workflow
+     * @param executionContext independent context used as the parent of restored workflow executions; it provides the
+     *                         same application components while keeping workflow-body resources and lifecycle work
+     *                         separate from startup
+     *                         <p>
+     *                         Reusing {@code sourcingContext} here is invalid because restored workflow bodies run
+     *                         asynchronously and can outlive startup. If such a body appends an event after the startup
+     *                         unit of work has entered {@code COMMIT}, Axon can no longer register the required
+     *                         {@code PREPARE_COMMIT} handler. The append operation then fails, and the workflow cannot
+     *                         persist its resumed, timed-out, or terminal state
      */
     public void start(@Nullable TrackingToken safePoint,
                       @Nonnull ProcessingContext sourcingContext,
                       @Nonnull ProcessingContext executionContext) {
         initializeSafePoint(safePoint);
-        loadRunningWorkflows(sourcingContext, executionContext);
+        loadRunningWorkflows(sourcingContext, executionContext).join();
         startExecutions();
     }
 
@@ -318,34 +320,49 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         workflowExecutionRepository.clear();
     }
 
-    private void loadRunningWorkflows(@Nonnull ProcessingContext sourcingContext,
-                                      @Nonnull ProcessingContext executionContext) {
+    private CompletableFuture<Void> loadRunningWorkflows(@Nonnull ProcessingContext sourcingContext,
+                                                         @Nonnull ProcessingContext executionContext) {
         initializeRestoreProcessingContext(executionContext);
-        var runningWorkflows = workflowStore.loadRunningWorkflows(sourcingContext).join();
-        if (runningWorkflows.workflowIds().isEmpty()) {
-            logger.debug("No running workflows to rehydrate.");
-            return;
-        }
-        logger.debug("Rehydrating {} running workflow execution(s) from event-sourced state.",
-                     runningWorkflows.workflowIds().size());
-        for (var workflowId : runningWorkflows.workflowIds()) {
-            var state = workflowStore.loadWorkflow(workflowId, sourcingContext).join();
-            var workflowConfiguration = workflowConfigurationRegistry
-                    .getWorkflowConfiguration(state.workflowDefinitionId())
-                    .orElseThrow(() -> new IllegalStateException(
-                            "No workflow configuration found for workflow '%s' with definition %s."
-                                    .formatted(workflowId, state.workflowDefinitionId())
-                    ));
-            var workflowContext = workflowConfiguration.workflowContextFactory().createContext(
-                    state.payload(),
-                    workflowId,
-                    executionContext,
-                    workflowConfiguration
-            );
-            var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
-            execution.initializeState(state);
-            workflowExecutionRepository.save(workflowId, () -> execution);
-        }
+        return workflowStore.loadRunningWorkflows(sourcingContext)
+                            .thenCompose(runningWorkflows -> {
+                                if (runningWorkflows.workflowIds().isEmpty()) {
+                                    logger.debug("No running workflows to rehydrate.");
+                                    return CompletableFuture.completedFuture(null);
+                                }
+                                logger.debug("Rehydrating {} running workflow execution(s) from event-sourced state.",
+                                             runningWorkflows.workflowIds().size());
+                                var rehydrations = runningWorkflows.workflowIds()
+                                                                   .stream()
+                                                                   .map(workflowId -> workflowStore
+                                                                           .loadWorkflow(workflowId, sourcingContext)
+                                                                           .thenAccept(state -> restoreWorkflow(
+                                                                                   workflowId,
+                                                                                   state,
+                                                                                   executionContext
+                                                                           )))
+                                                                   .toArray(CompletableFuture[]::new);
+                                return CompletableFuture.allOf(rehydrations);
+                            });
+    }
+
+    private void restoreWorkflow(@Nonnull String workflowId,
+                                 @Nonnull WorkflowState state,
+                                 @Nonnull ProcessingContext executionContext) {
+        var workflowConfiguration = workflowConfigurationRegistry
+                .getWorkflowConfiguration(state.workflowDefinitionId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "No workflow configuration found for workflow '%s' with definition %s."
+                                .formatted(workflowId, state.workflowDefinitionId())
+                ));
+        var workflowContext = workflowConfiguration.workflowContextFactory().createContext(
+                state.payload(),
+                workflowId,
+                executionContext,
+                workflowConfiguration
+        );
+        var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
+        execution.initializeState(state);
+        workflowExecutionRepository.save(workflowId, () -> execution);
     }
 
     private void startExecutions() {
@@ -364,7 +381,6 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
             execute(execution);
         }
     }
-
 
     /**
      * Initializes the current and last processed tracking tokens.

@@ -30,7 +30,6 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.TypeReference;
@@ -46,6 +45,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -76,33 +76,42 @@ public class EventSourcedWorkflowState implements WorkflowState {
     private WorkflowStatus status = WorkflowStatus.NONE;
     private Map<String, Object> payload;
     private volatile Throwable terminationCause;
-    private volatile MessageType workflowDefinitionId;
+    private volatile MessageType workflowDefinition;
 
     private final WorkflowStateListenerSupport listenerSupport;
 
     /**
      * Creates a new workflow state without reference to a workflow context and with an empty initial payload.
+     *
+     * @param workflowId           workflow id of the workflow execution
+     * @param workflowDefinition workflow definition representing the reference to the definition (name and
+     *                             version)
      */
     @Internal
     public EventSourcedWorkflowState(@Nonnull String workflowId,
-                              @Nonnull MessageType workflowDefinitionId) {
-        this(workflowId, Map.of(), workflowDefinitionId);
+                                     @Nonnull MessageType workflowDefinition) {
+        this(workflowId, Map.of(), workflowDefinition);
     }
 
     /**
      * Creates a new workflow state without reference to a workflow context.
+     *
+     * @param workflowId           workflow id of the workflow execution
+     * @param payload              initial workflow payload
+     * @param workflowDefinition workflow definition representing the reference to the definition (name and
+     *                             version)
      */
     @Internal
     public EventSourcedWorkflowState(
             @Nonnull String workflowId,
             @Nonnull Map<String, Object> payload,
-            @Nonnull MessageType workflowDefinitionId
+            @Nonnull MessageType workflowDefinition
     ) {
         this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must be set.");
         this.listenerSupport = WorkflowStateListenerSupport.EMPTY;
         this.payload = Objects.requireNonNull(payload, "Payload must be set.");
-        this.workflowDefinitionId = Objects.requireNonNull(workflowDefinitionId,
-                                                           "Workflow definition id must be set.");
+        this.workflowDefinition = Objects.requireNonNull(workflowDefinition,
+                                                         "Workflow definition id must be set.");
     }
 
     /**
@@ -110,21 +119,21 @@ public class EventSourcedWorkflowState implements WorkflowState {
      *
      * @param workflowId           workflow id
      * @param payload              initial workflow payload
-     * @param workflowDefinitionId stable workflow definition identifier
+     * @param workflowDefinition stable workflow definition identifier
      * @param context              workflow context to use
      * @param listeners            workflow status change listeners
      */
     EventSourcedWorkflowState(
             @Nonnull String workflowId,
             @Nonnull Map<String, Object> payload,
-            @Nonnull MessageType workflowDefinitionId,
+            @Nonnull MessageType workflowDefinition,
             @Nonnull WorkflowContext context,
             @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
         this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must be set.");
         this.payload = Objects.requireNonNull(payload, "Payload must be set.");
-        this.workflowDefinitionId = Objects.requireNonNull(workflowDefinitionId,
-                                                           "Workflow definition id must be set.");
+        this.workflowDefinition = Objects.requireNonNull(workflowDefinition,
+                                                         "Workflow definition id must be set.");
         this.listenerSupport = new WorkflowStateListenerSupport(
                 Objects.requireNonNull(listeners, "Workflow status listeners must be set."),
                 Objects.requireNonNull(context, "Workflow context must be set.")
@@ -163,7 +172,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
         this(
                 Objects.requireNonNull(sourcedState, "Sourced workflow state must not be null").workflowId,
                 sourcedState.payload,
-                sourcedState.workflowDefinitionId,
+                sourcedState.workflowDefinition,
                 context,
                 listeners
         );
@@ -187,7 +196,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
      */
     @Nonnull
     public static EventCriteria criteriaBuilder(@Nonnull String workflowId) {
-        return EventCriteria.havingTags(Tag.of(WorkflowEventTagResolver.TAG_WORKFLOW_ID, workflowId));
+        return EventCriteria.havingTags(Tag.of(WorkflowEventTags.TAG_WORKFLOW_ID, workflowId));
     }
 
     @Override
@@ -204,7 +213,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     @Nonnull
     public String currentWorkflowVersion(@Nonnull String changeId) {
         Objects.requireNonNull(changeId, "changeId must not be null");
-        return versions.getOrDefault(changeId, workflowDefinitionId.version());
+        return versions.getOrDefault(changeId, workflowDefinition.version());
     }
 
     @Override
@@ -215,13 +224,13 @@ public class EventSourcedWorkflowState implements WorkflowState {
     @Override
     @Nonnull
     public String workflowDefinitionVersion() {
-        return workflowDefinitionId.version();
+        return workflowDefinition.version();
     }
 
     @Override
     @Nonnull
     public MessageType workflowDefinitionId() {
-        return workflowDefinitionId;
+        return workflowDefinition;
     }
 
     @Override
@@ -253,7 +262,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
         Object eventPayload = eventMessage.payloadAs(Object.class);
         var metadata = eventMessage.metadata();
         MetadataUtils.getWorkflowDefinitionId(metadata)
-                     .ifPresent(definitionId -> this.workflowDefinitionId = definitionId);
+                     .ifPresent(definitionId -> this.workflowDefinition = definitionId);
         // Migration events arrive as regular COMPLETED step events that additionally carry the
         // versionChangeId + version metadata keys. They flow through the step-registration switch like
         // any other step and ALSO update the version map as a side-effect.
@@ -345,10 +354,10 @@ public class EventSourcedWorkflowState implements WorkflowState {
                              var startedVersion = eventMessage.type().version();
                              if (startedVersion != null
                                      && !startedVersion.isBlank()
-                                     && !startedVersion.equals(workflowDefinitionId.version())) {
+                                     && !startedVersion.equals(workflowDefinition.version())) {
                                  synchronized (this) {
-                                     this.workflowDefinitionId = new MessageType(
-                                             workflowDefinitionId.qualifiedName(),
+                                     this.workflowDefinition = new MessageType(
+                                             workflowDefinition.qualifiedName(),
                                              startedVersion
                                      );
                                  }
@@ -371,8 +380,8 @@ public class EventSourcedWorkflowState implements WorkflowState {
         }
         versions.putIfAbsent(changeId, newVersion);
         synchronized (this) {
-            if (Version.of(newVersion).isGreaterThan(Version.of(workflowDefinitionId.version()))) {
-                workflowDefinitionId = new MessageType(workflowDefinitionId.qualifiedName(), newVersion);
+            if (Version.of(newVersion).isGreaterThan(Version.of(workflowDefinition.version()))) {
+                workflowDefinition = new MessageType(workflowDefinition.qualifiedName(), newVersion);
             }
         }
     }
@@ -392,8 +401,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                     .ifPresentOrElse(resultReducer -> {
                         Map<String, Object> stepPayload;
                         try {
-                            stepPayload = eventMessage.payloadAs(new TypeReference<>() {
-                            });
+                            stepPayload = payloadAsMap(eventMessage);
                         } catch (Exception e) {
                             logger.debug(
                                     "Could not convert payload to map for reducer {}. Skipping payload update.",
@@ -411,6 +419,16 @@ public class EventSourcedWorkflowState implements WorkflowState {
                         }
                     }, () -> logger.warn("Unknown reducer detected {}. Skipping payload update.", reducerName));
         });
+    }
+
+    private Map<String, Object> payloadAsMap(@Nonnull EventMessage eventMessage) {
+        var payload = eventMessage.payloadAs(Object.class);
+        if (payload instanceof Map<?, ?> map) {
+            var result = new HashMap<String, Object>();
+            map.forEach((key, value) -> result.put((String) key, value));
+            return result;
+        }
+        return eventMessage.payloadAs(PAYLOAD_TYPE);
     }
 
     /**
@@ -466,7 +484,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
         descriptor.describeProperty("payload", payload);
         descriptor.describeProperty("versions", Map.copyOf(versions));
         descriptor.describeProperty("workflowId", workflowId);
-        descriptor.describeProperty("workflowDefinitionId", workflowDefinitionId);
+        descriptor.describeProperty("workflowDefinitionId", workflowDefinition);
     }
 
     /**
@@ -504,7 +522,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     public String toString() {
         return "WorkflowState{" +
                 "workflowId='" + workflowId + '\'' +
-                ", workflowDefinitionId=" + workflowDefinitionId +
+                ", workflowDefinitionId=" + workflowDefinition +
                 ", status=" + status +
                 ", steps=" + steps +
                 ", payload=" + payload +

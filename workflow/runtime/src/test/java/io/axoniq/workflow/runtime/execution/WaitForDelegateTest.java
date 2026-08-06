@@ -33,6 +33,7 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -84,6 +85,8 @@ class WaitForDelegateTest {
         when(workflowContext.workflowId()).thenReturn("wf-123");
         when(workflowContext.workflowVersion()).thenReturn("0.0.1");
         when(workflowContext.workflowPayload()).thenReturn(Map.of("orderId", "123"));
+        when(workflowContext.processingContext()).thenReturn(processingContext);
+        when(processingContext.component(EventConverter.class)).thenReturn(TestEventConverter.INSTANCE);
 
         when(workflowExecution.workflowId()).thenReturn("wf-123");
         when(workflowExecution.state()).thenReturn(state);

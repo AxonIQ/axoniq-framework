@@ -79,7 +79,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     private static final Logger logger = LoggerFactory.getLogger(SimpleWorkflowExecution.class);
 
     // State variables
-    private WorkflowState workflowState;
+    private volatile WorkflowState workflowState;
     @Nullable
     private final TrackingToken restartToken;
     private final WorkflowConfiguration<?> workflowConfiguration;

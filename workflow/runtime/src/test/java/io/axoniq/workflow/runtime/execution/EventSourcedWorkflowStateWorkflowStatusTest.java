@@ -40,7 +40,7 @@ import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocal
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
-class WorkflowStateEventSourcedWorkflowStatusTest {
+class EventSourcedWorkflowStateWorkflowStatusTest {
 
     private static final MessageType DEFINITION_ID = new MessageType(new QualifiedName("TestWorkflow"), "0.0.1");
     private final EventConverter converter = new DelegatingEventConverter(new JacksonConverter());

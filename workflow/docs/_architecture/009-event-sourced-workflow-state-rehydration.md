@@ -1,6 +1,6 @@
 # ADR-009: Event-Sourced Workflow State Rehydration
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-07-08
 
 ## Context

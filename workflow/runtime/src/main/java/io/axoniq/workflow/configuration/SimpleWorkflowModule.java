@@ -24,10 +24,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
-import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
-import io.axoniq.workflow.runtime.execution.EventSourcedRunningWorkflows;
 import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
-import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowStore;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
@@ -40,12 +37,10 @@ import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
-import org.axonframework.modelling.repository.Repository;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.function.Function;
 
