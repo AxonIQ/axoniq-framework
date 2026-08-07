@@ -122,7 +122,7 @@ class MultiTenantAxonServerCommandBusConnectorTest {
         @Test
         void rejectsNullConverter() {
             assertThatThrownBy(() -> new MultiTenantAxonServerCommandBusConnector(
-                    tenantRouter, connectionManager, configuration, null))
+                    tenantRouter, connectionManager, configuration, (MessageConverter) null))
                     .isInstanceOf(NullPointerException.class);
         }
     }

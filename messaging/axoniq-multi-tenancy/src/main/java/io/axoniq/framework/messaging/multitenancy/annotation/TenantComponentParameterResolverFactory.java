@@ -101,7 +101,7 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
     private @Nullable TenantComponentProvider<?> findProviderFor(Class<?> parameterType) {
         List<TenantComponentProvider<?>> exactMatches = new ArrayList<>();
         List<TenantComponentProvider<?>> assignableMatches = new ArrayList<>();
-        for (TenantComponentProvider<?> provider : providers()) {
+        for (TenantComponentProvider<?> provider : TenantComponentProviders.all(configuration)) {
             Class<?> componentType = provider.componentType();
             if (parameterType.equals(componentType)) {
                 exactMatches.add(provider);
@@ -132,13 +132,6 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
                         + ". Register a single provider per component type, or narrow the parameter type."
         );
     }
-
-    // Providers are heterogeneous in their component type, so they are looked up through their raw type.
-    @SuppressWarnings("rawtypes")
-    private Iterable<TenantComponentProvider> providers() {
-        return TenantComponentProviders.all(configuration);
-    }
-
 
     /**
      * Resolves a handler parameter to the matched provider's component instance for the tenant of the message in the
