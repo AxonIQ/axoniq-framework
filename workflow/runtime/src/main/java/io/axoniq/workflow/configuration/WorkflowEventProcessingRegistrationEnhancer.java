@@ -19,6 +19,8 @@
 package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
+import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.CompletePhase;
+import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.RequiredComponentPhase;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -28,8 +30,9 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.CompletePhase;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.RequiredComponentPhase;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
@@ -189,23 +192,24 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
             TokenStore tokenStore,
             StreamableEventSource eventSource
     ) {
-        return tokenStore.fetchSegments(moduleName, null)
-                         .thenCompose(segments -> {
-                             if (!segments.isEmpty()) {
-                                 return tokenStore.fetchToken(moduleName, 0, null)
-                                                  .handle((token, ex) -> tokenStore
-                                                          .releaseClaim(moduleName, 0, null)
-                                                          .thenApply(ignored -> passOrThrow(token, ex)))
-                                                  .thenCompose(future -> future);
-                             }
-                             return eventSource.firstToken(null)
-                                               .thenCompose(firstToken -> tokenStore.initializeTokenSegments(
-                                                       moduleName,
-                                                       1, // FIXME #190 (https://github.com/AxonIQ/extension-workflow/issues/190) -> should be configurable?
-                                                       firstToken,
-                                                       null
-                                               ).thenApply(ignored -> firstToken));
-                         });
+        return tokenStore
+                .fetchSegments(moduleName, null)
+                .thenCompose(segments -> {
+                    if (!segments.isEmpty()) {
+                        return tokenStore.fetchToken(moduleName, 0, null)
+                                         .handle((token, ex) -> tokenStore
+                                                 .releaseClaim(moduleName, 0, null)
+                                                 .thenApply(ignored -> passOrThrow(token, ex)))
+                                         .thenCompose(future -> future);
+                    }
+                    return eventSource.firstToken(null)
+                                      .thenCompose(firstToken -> tokenStore.initializeTokenSegments(
+                                              moduleName,
+                                              1, // FIXME #190 (https://github.com/AxonIQ/extension-workflow/issues/190) -> should be configurable?
+                                              firstToken,
+                                              null
+                                      ).thenApply(ignored -> firstToken));
+                });
     }
 
     /**

@@ -25,11 +25,12 @@ import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventstreaming.Tag;
 import org.junit.jupiter.api.*;
 
@@ -54,6 +55,9 @@ class WorkflowEventTagResolverTest {
         when(context.workflowId()).thenReturn("wf-123");
         when(context.workflowPayload()).thenReturn(Map.of("orderId", "123"));
         when(context.workflowVersion()).thenReturn("0.0.1");
+        ProcessingContext processingContext = mock(ProcessingContext.class);
+        when(context.processingContext()).thenReturn(processingContext);
+        when(processingContext.component(EventConverter.class)).thenReturn(mock(EventConverter.class));
     }
 
     @Test

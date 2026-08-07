@@ -29,13 +29,19 @@ import org.axonframework.messaging.eventstreaming.Tag;
 import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * Event sourced collection of running workflow IDs, loaded by {@link WorkflowStore}.
+ *
+ * @author Simon Zambrovski
+ * @since 1.0.0
+ */
 @Internal
 public class EventSourcedRunningWorkflows implements RunningWorkflows {
 
     /**
      * Singleton identifier of the running-workflows entity.
      */
-    public static final String ENTITY_ID = "__running-workflow-ids";
+    public static final String ENTITY_ID = "__running-workflow";
 
     private final Set<String> workflowIds = new HashSet<>();
 

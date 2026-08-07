@@ -1,7 +1,7 @@
 # ADR-013: Workflow Engine Startup Ownership
 
 - Name: Workflow Engine Startup Ownership
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-07-28
 
 ## Context
@@ -28,9 +28,7 @@ The registration enhancer remains responsible for event-processor concerns. It d
 `WorkflowEngine.start(...)` inside its startup unit of work, then either resets the processor for replay or switches the
 engine to live mode when replay is unnecessary.
 
-Startup uses the same processing context for sourcing durable state and creating restored executions. A separate
-execution context will be introduced only if a concrete lifetime or component-isolation requirement arises.
-
+Startup uses two different processing contexts for sourcing durable state and creating restored executions. This is required to decouple the lifecycle and component of those two contexts.
 The individual state-load and restored-execution-start operations are implementation details of `WorkflowEngine`.
 
 ## Consequences

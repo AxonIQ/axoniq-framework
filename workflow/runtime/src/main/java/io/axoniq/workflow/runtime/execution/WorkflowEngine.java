@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import io.axoniq.license.entitlement.EntitlementManager;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
@@ -38,6 +39,7 @@ import org.slf4j.LoggerFactory;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 import static io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState.PAYLOAD_TYPE;
 
@@ -270,7 +272,7 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
                       @Nonnull ProcessingContext sourcingContext,
                       @Nonnull ProcessingContext executionContext) {
         replaySupport.initializeProcessorTokenIfAbsent(processorToken);
-        loadRunningWorkflows(sourcingContext, executionContext);
+        loadRunningWorkflows(sourcingContext, executionContext).join();
         removeTerminalAndStartRestoredWorkflowExecutions("before replay catch-up");
     }
 
@@ -294,35 +296,49 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
         workflowExecutionRepository.clear();
     }
 
-    private void loadRunningWorkflows(@Nonnull ProcessingContext sourcingContext,
-                                      @Nonnull ProcessingContext executionContext) {
+    private CompletableFuture<Void> loadRunningWorkflows(@Nonnull ProcessingContext sourcingContext,
+                                                         @Nonnull ProcessingContext executionContext) {
         replaySupport.initializeRestoreProcessingContext(executionContext);
-        var runningWorkflows = workflowStore.loadRunningWorkflows(sourcingContext).join();
-        if (runningWorkflows.workflowIds().isEmpty()) {
-            logger.info("No running workflows to rehydrate.");
-            return;
-        }
-        logger.info("Loading {} running workflow execution(s) from event-sourced state.",
-                    runningWorkflows.workflowIds().size());
-        for (var workflowId : runningWorkflows.workflowIds()) {
-            var state = workflowStore.loadWorkflow(workflowId, sourcingContext).join();
-            var workflowDefinitionId = state.workflowDefinitionId();
-            var workflowConfiguration = workflowConfigurationRegistry
-                    .getWorkflowConfiguration(workflowDefinitionId)
-                    .orElseThrow(() -> new IllegalStateException(
-                            "No workflow configuration found for workflow '%s' with definition %s."
-                                    .formatted(workflowId, workflowDefinitionId)
-                    ));
-            var workflowContext = workflowConfiguration.workflowContextFactory().createContext(
-                    state.payload(),
-                    workflowId,
-                    executionContext,
-                    workflowConfiguration
-            );
-            var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
-            execution.initializeState(state);
-            workflowExecutionRepository.save(workflowId, () -> execution);
-        }
+        return workflowStore.loadRunningWorkflows(sourcingContext)
+                            .thenCompose(runningWorkflows -> {
+                                if (runningWorkflows.workflowIds().isEmpty()) {
+                                    logger.debug("No running workflows to rehydrate.");
+                                    return CompletableFuture.completedFuture(null);
+                                }
+                                logger.debug("Rehydrating {} running workflow execution(s) from event-sourced state.",
+                                             runningWorkflows.workflowIds().size());
+                                var rehydrations = runningWorkflows.workflowIds()
+                                                                   .stream()
+                                                                   .map(workflowId -> workflowStore
+                                                                           .loadWorkflow(workflowId, sourcingContext)
+                                                                           .thenAccept(state -> restoreWorkflow(
+                                                                                   workflowId,
+                                                                                   state,
+                                                                                   executionContext
+                                                                           )))
+                                                                   .toArray(CompletableFuture[]::new);
+                                return CompletableFuture.allOf(rehydrations);
+                            });
+    }
+
+    private void restoreWorkflow(@Nonnull String workflowId,
+                                 @Nonnull WorkflowState state,
+                                 @Nonnull ProcessingContext executionContext) {
+        var workflowConfiguration = workflowConfigurationRegistry
+                .getWorkflowConfiguration(state.workflowDefinitionId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "No workflow configuration found for workflow '%s' with definition %s."
+                                .formatted(workflowId, state.workflowDefinitionId())
+                ));
+        var workflowContext = workflowConfiguration.workflowContextFactory().createContext(
+                state.payload(),
+                workflowId,
+                executionContext,
+                workflowConfiguration
+        );
+        var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
+        execution.initializeState(state);
+        workflowExecutionRepository.save(workflowId, () -> execution);
     }
 
     /**

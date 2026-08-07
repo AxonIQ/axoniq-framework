@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -62,8 +63,8 @@ public class EventSourcedWorkflowStore implements WorkflowStore {
 
     @Override
     @Nonnull
-    public CompletableFuture<EventSourcedWorkflowState> loadWorkflow(@Nonnull String workflowId,
-                                                                     @Nonnull ProcessingContext processingContext) {
+    public CompletableFuture<WorkflowState> loadWorkflow(@Nonnull String workflowId,
+                                                         @Nonnull ProcessingContext processingContext) {
         return workflowStateRepository.loadOrCreate(workflowId, processingContext)
                                       .thenApply(ManagedEntity::entity);
     }

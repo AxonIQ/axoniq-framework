@@ -34,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class RunningWorkflowsTest {
 
     @Test
-    void criteriaBuilder() {
+    void workflowLifecycleEventsSelectLifecycleTaggedEvents() {
         assertThat(EventSourcedRunningWorkflows.criteriaBuilder()).isEqualTo(
                 EventCriteria.havingTags(Tag.of(
                         TAG_WORKFLOW_EVENT_TYPE,

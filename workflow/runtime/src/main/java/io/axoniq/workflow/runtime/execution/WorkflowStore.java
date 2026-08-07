@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -25,7 +26,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Narrow adapter around event-sourced workflow-state repositories used during startup rehydration.
+ * Narrow adapter around workflow-state repositories used during startup.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
@@ -50,6 +51,6 @@ public interface WorkflowStore {
      * @return durable workflow state
      */
     @Nonnull
-    CompletableFuture<EventSourcedWorkflowState> loadWorkflow(@Nonnull String workflowId,
-                                                              @Nonnull ProcessingContext processingContext);
+    CompletableFuture<WorkflowState> loadWorkflow(@Nonnull String workflowId,
+                                                  @Nonnull ProcessingContext processingContext);
 }

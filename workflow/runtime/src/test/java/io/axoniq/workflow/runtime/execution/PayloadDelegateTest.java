@@ -32,6 +32,7 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -91,6 +92,8 @@ class PayloadDelegateTest {
         when(workflowExecution.processingContext()).thenReturn(processingContext);
         when(workflowExecution.workflowContext()).thenReturn(workflowContext);
         when(workflowExecution.state()).thenReturn(mock(WorkflowState.class));
+        when(workflowContext.processingContext()).thenReturn(processingContext);
+        when(processingContext.component(EventConverter.class)).thenReturn(TestEventConverter.INSTANCE);
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 

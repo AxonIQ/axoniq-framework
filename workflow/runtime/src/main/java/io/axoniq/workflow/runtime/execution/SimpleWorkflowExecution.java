@@ -78,7 +78,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     private static final Logger logger = LoggerFactory.getLogger(SimpleWorkflowExecution.class);
 
     // State variables
-    private EventSourcedWorkflowState workflowState;
+    private volatile EventSourcedWorkflowState workflowState;
     private final WorkflowConfiguration<?> workflowConfiguration;
 
     // Execution
