@@ -25,17 +25,19 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
+import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
-import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
+import io.axoniq.workflow.runtime.execution.WorkflowStore;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -68,12 +70,19 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     private final String name;
     private final Class<C> workflowContextType;
     private final boolean defaultConfiguration;
+    /**
+     * Workflow-definition builders appended during configuration; concatenated at build time.
+     */
+    private final List<ComponentBuilder<List<ConditionedWorkflowConfiguration<C>>>> workflowConfigurationBuilders = new ArrayList<>();
+
+    @Nullable
     private ComponentBuilder<WorkflowConfigurationRegistry<?>> workflowConfigurationRegistryBuilder;
+    @Nullable
     private ComponentBuilder<WorkflowExecutionRepository> workflowExecutionRepositoryBuilder;
     private boolean useHistory = true;
+    @Nullable
     private ComponentBuilder<WorkflowHistoryProjector> workflowHistoryProjectorBuilder;
-    /** Workflow-definition builders appended during configuration; concatenated at build time. */
-    private final List<ComponentBuilder<List<ConditionedWorkflowConfiguration<C>>>> workflowConfigurationBuilders = new ArrayList<>();
+    @Nullable
     private ComponentBuilder<WorkflowContextFactory<C>> workflowContextFactory;
 
     /**
@@ -83,8 +92,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
      * @param workflowContextType the type of {@link WorkflowContext} of the workflow module being constructed
      */
     @Internal
-    SimpleWorkflowModule(String name,
-                         Class<C> workflowContextType) {
+    SimpleWorkflowModule(String name, Class<C> workflowContextType) {
         this(name, workflowContextType, false);
     }
 
@@ -123,6 +131,7 @@ class SimpleWorkflowModule<C extends WorkflowContext>
     private void registerGivenComponents() {
         componentRegistry(cr -> {
             if (workflowConfigurationRegistryBuilder != null) {
+                //noinspection unchecked,rawtypes
                 cr.registerComponent(
                         WorkflowConfigurationRegistry.class,
                         (ComponentBuilder) workflowConfigurationRegistryBuilder
@@ -138,15 +147,15 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                     SafePointStore.class,
                     COMPONENT_SAFE_POINT_STORE,
                     cfg -> cfg.getOptionalComponent(
-                                     TokenStore.class,
-                                     COMPONENT_SAFE_POINT_TOKEN_STORE
-                             )
-                             .<SafePointStore>map(tokenStore ->
-                                     new TokenStoreSafePointStore(
-                                             tokenStore,
-                                             TokenStoreSafePointStore.tokenStoreIdentifier(name)
-                                     ))
-                             .orElseGet(InMemorySafePointStore::new)
+                                      TokenStore.class,
+                                      COMPONENT_SAFE_POINT_TOKEN_STORE
+                              )
+                              .<SafePointStore>map(tokenStore ->
+                                                           new TokenStoreSafePointStore(
+                                                                   tokenStore,
+                                                                   TokenStoreSafePointStore.tokenStoreIdentifier(name)
+                                                           ))
+                              .orElseGet(InMemorySafePointStore::new)
             );
 
             cr.registerComponent(
@@ -155,7 +164,8 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                     cfg -> new WorkflowEngine(
                             cfg.getComponent(WorkflowConfigurationRegistry.class),
                             cfg.getComponent(WorkflowExecutionRepository.class),
-                            cfg.getComponent(SafePointStore.class, COMPONENT_SAFE_POINT_STORE)
+                            cfg.getComponent(SafePointStore.class, COMPONENT_SAFE_POINT_STORE),
+                            cfg.getComponent(WorkflowStore.class)
                     )
             );
 
@@ -178,9 +188,10 @@ class SimpleWorkflowModule<C extends WorkflowContext>
 
     protected void registerWorkflowDefinitions(Configuration configuration) {
         WorkflowConfigurationRegistry<?> registry = configuration.getComponent(WorkflowConfigurationRegistry.class);
-        List<ConditionedWorkflowConfiguration<C>> workflowConfigs = workflowConfigurationBuilders.stream()
-                                                                                                 .flatMap(b -> b.build(configuration).stream())
-                                                                                                 .toList();
+        List<ConditionedWorkflowConfiguration<C>> workflowConfigs = workflowConfigurationBuilders
+                .stream()
+                .flatMap(b -> b.build(configuration).stream())
+                .toList();
         workflowConfigs.forEach(workflowConfig -> registry.register(
                 workflowConfig.eventCondition(),
                 workflowConfig.workflowConfiguration()

@@ -21,7 +21,9 @@ package io.axoniq.workflow.runtime.util;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.QualifiedName;
 
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -65,6 +67,16 @@ public class MetadataUtils {
      * Metadata key storing the workflow lifecycle status value.
      */
     public static final String METADATA_KEY_WORKFLOW_STATUS = "workflowStatus";
+
+    /**
+     * Metadata key storing the workflow definition name.
+     */
+    public static final String METADATA_KEY_WORKFLOW_DEFINITION_NAME = "workflowDefinitionName";
+
+    /**
+     * Metadata key storing the workflow definition version.
+     */
+    public static final String METADATA_KEY_WORKFLOW_DEFINITION_VERSION = "workflowDefinitionVersion";
 
     /**
      * Metadata key storing the identifier of a recorded workflow version change.
@@ -120,6 +132,20 @@ public class MetadataUtils {
     public static Metadata create(String workflowId, WorkflowStatus workflowStatus) {
         return create(workflowId)
                 .and(METADATA_KEY_WORKFLOW_STATUS, workflowStatus.name());
+    }
+
+    /**
+     * Creates a new metadata instance with the given workflow id, workflow status, and workflow definition id.
+     *
+     * @param workflowId           the workflow id
+     * @param workflowStatus       the workflow status
+     * @param workflowDefinitionId the workflow definition identifier
+     * @return metadata instance
+     */
+    public static Metadata create(String workflowId,
+                                  WorkflowStatus workflowStatus,
+                                  MessageType workflowDefinitionId) {
+        return withWorkflowDefinitionId(create(workflowId, workflowStatus), workflowDefinitionId);
     }
 
     /**
@@ -188,10 +214,39 @@ public class MetadataUtils {
      * Returns the version if present in the metadata.
      *
      * @param metadata metadata to inspect
-     * @return optional of version
+     * @return optional of version of the workflow
      */
     public static Optional<String> getVersion(Metadata metadata) {
         return Optional.ofNullable(metadata.getOrDefault(METADATA_KEY_VERSION, null));
+    }
+
+    /**
+     * Enriches metadata with the workflow definition id.
+     *
+     * @param metadata             metadata to enrich
+     * @param workflowDefinitionId workflow definition id to store
+     * @return enriched metadata
+     */
+    public static Metadata withWorkflowDefinitionId(Metadata metadata, MessageType workflowDefinitionId) {
+        return metadata.and(METADATA_KEY_WORKFLOW_DEFINITION_NAME, workflowDefinitionId.qualifiedName().toString())
+                       .and(METADATA_KEY_WORKFLOW_DEFINITION_VERSION, workflowDefinitionId.version());
+    }
+
+    /**
+     * Returns the workflow definition id if present in the metadata.
+     *
+     * @param metadata metadata to inspect
+     * @return optional workflow definition id
+     */
+    public static Optional<MessageType> getWorkflowDefinitionId(Metadata metadata) {
+        if (!metadata.containsKey(METADATA_KEY_WORKFLOW_DEFINITION_NAME)
+                || !metadata.containsKey(METADATA_KEY_WORKFLOW_DEFINITION_VERSION)) {
+            return Optional.empty();
+        }
+        return Optional.of(new MessageType(
+                new QualifiedName(metadata.get(METADATA_KEY_WORKFLOW_DEFINITION_NAME)),
+                metadata.get(METADATA_KEY_WORKFLOW_DEFINITION_VERSION)
+        ));
     }
 
     /**

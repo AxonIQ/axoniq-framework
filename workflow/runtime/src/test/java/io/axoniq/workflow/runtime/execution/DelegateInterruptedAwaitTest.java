@@ -70,7 +70,7 @@ class DelegateInterruptedAwaitTest {
         parentCustomizer = DefaultEventNameCustomizer.Builder.defaults();
 
         when(workflowExecution.state()).thenReturn(state);
-        when(workflowExecution.isExecutable()).thenReturn(true);
+        when(workflowExecution.isRunning()).thenReturn(true);
         when(workflowExecution.hasTasks()).thenReturn(true);
         when(state.workflowStepNames()).thenReturn(List.of());
         doThrow(new InterruptedException("workflow interrupted"))

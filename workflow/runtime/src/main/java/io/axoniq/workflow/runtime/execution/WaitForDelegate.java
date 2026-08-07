@@ -95,11 +95,10 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
 
         if (!workflowExecution.state().containsStep(stepName)) {
             workflowExecution.guardAgainstReplayDrift(stepName);
-            var startedAt = clock.instant();
             workflowExecution.appendTask(i ->
                                                  startedWaitForEvent(stepName,
                                                                      startedPayload(eventCondition,
-                                                                                    startedAt,
+                                                                                    clock.instant(),
                                                                                     timeout),
                                                                      eventNameCustomizer)
             );

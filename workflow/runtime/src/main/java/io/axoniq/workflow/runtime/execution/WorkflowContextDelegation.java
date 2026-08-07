@@ -124,7 +124,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
                 "Could not retrieve EventSink");
         this.timeoutScheduler = Objects.requireNonNull(
                 processingContext.component(WorkflowScheduler.class),
-                "Could not retrieve WorkflowTimeoutScheduler");
+                "Could not retrieve WorkflowScheduler");
         this.executeStepActionResolver = Objects.requireNonNull(
                 processingContext.component(ExecuteStepActionResolver.class),
                 "Could not retrieve ExecuteStepActionResolver");

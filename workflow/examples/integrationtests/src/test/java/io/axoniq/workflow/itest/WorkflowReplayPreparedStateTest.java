@@ -30,24 +30,26 @@ import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.SafePointStore;
+import io.axoniq.workflow.runtime.execution.WorkflowEngine;
+import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
@@ -57,14 +59,15 @@ import org.junit.jupiter.api.*;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import static io.axoniq.workflow.dsl.api.EventAssociationsUtils.equalsTo;
 import static io.axoniq.workflow.runtime.association.Associations.associate;
-import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -76,6 +79,8 @@ import static org.awaitility.Awaitility.await;
  * @since 1.0.0
  */
 class WorkflowReplayPreparedStateTest {
+
+    private static final JacksonConverter JACKSON_CONVERTER = new JacksonConverter();
 
     @Test
     void restoresOnlyEarliestStillRunningWorkflow() {
@@ -176,25 +181,32 @@ class WorkflowReplayPreparedStateTest {
         }
 
         private void appendTypedPayloadEvent(Class<?> payloadType, Map<String, Object> payload) {
-            appendEvent(new GenericEventMessage(new MessageType(payloadType), payload));
+            appendEvent(new GenericEventMessage(new MessageType(payloadType), payload)
+                                .withConverter(JACKSON_CONVERTER));
         }
 
         private void appendWorkflowStarted(String workflowId, Map<String, Object> payload) {
             appendEvent(new GenericEventMessage(
                     new MessageType("ReplayAwareWorkflowStarted"),
                     payload,
-                    MetadataUtils.create(workflowId, WorkflowStatus.STARTED)
+                    MetadataUtils.create(workflowId,
+                                         WorkflowStatus.STARTED,
+                                         new MessageType(new QualifiedName("ReplayAwareWorkflow"),
+                                                         MessageType.DEFAULT_VERSION))
                                  .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
                                       CombineGlobalAndLocalPayloadReducer.NAME)
-            ));
+            ).withConverter(JACKSON_CONVERTER));
         }
 
         private void appendWorkflowCompleted(String workflowId) {
             appendEvent(new GenericEventMessage(
                     new MessageType("ReplayAwareWorkflowCompleted"),
                     Map.of(),
-                    MetadataUtils.create(workflowId, WorkflowStatus.COMPLETED)
-            ));
+                    MetadataUtils.create(workflowId,
+                                         WorkflowStatus.COMPLETED,
+                                         new MessageType(new QualifiedName("ReplayAwareWorkflow"),
+                                                                  MessageType.DEFAULT_VERSION))
+            ).withConverter(JACKSON_CONVERTER));
         }
 
         private void appendStepStarted(String workflowId, String stepName) {
@@ -202,7 +214,7 @@ class WorkflowReplayPreparedStateTest {
                     new MessageType(stepName + "Started"),
                     Map.of("stepName", stepName),
                     MetadataUtils.create(workflowId, stepName, StepStatus.STARTED)
-            ));
+            ).withConverter(JACKSON_CONVERTER));
         }
 
         private void appendEvent(EventMessage eventMessage) {
@@ -218,7 +230,9 @@ class WorkflowReplayPreparedStateTest {
         }
 
         private static Set<Tag> tagsFor(EventMessage eventMessage) {
-            return Set.of(Tag.of("type", eventMessage.type().qualifiedName().toString()));
+            var tags = new LinkedHashSet<>(new WorkflowEventTagResolver().resolve(eventMessage));
+            tags.add(Tag.of("type", eventMessage.type().qualifiedName().toString()));
+            return Set.copyOf(tags);
         }
 
         private void seedSafePoint(TrackingToken token) {
@@ -267,21 +281,19 @@ class WorkflowReplayPreparedStateTest {
         private final WorkflowEngine workflowEngine;
         private final EventSink eventSink;
         private final MessageTypeResolver messageTypeResolver;
-        private final EventConverter eventConverter;
 
         private WorkflowTestApp(AxonConfiguration configuration) {
             this.configuration = configuration;
             this.workflowEngine = configuration.getComponent(WorkflowEngine.class);
             this.eventSink = configuration.getComponent(EventSink.class);
             this.messageTypeResolver = configuration.getComponent(MessageTypeResolver.class);
-            this.eventConverter = configuration.getComponent(EventConverter.class);
         }
 
         private void publish(Object event) {
             var eventMessage = new GenericEventMessage(
                     messageTypeResolver.resolveOrThrow(event),
                     event
-            ).withConverter(eventConverter);
+            ).withConverter(JACKSON_CONVERTER);
             eventSink.publish(null, eventMessage);
         }
 

@@ -94,11 +94,11 @@ public interface WorkflowExecution extends DescribableComponent {
     Consumer<WorkflowExecution> getNextTask();
 
     /**
-     * Returns true if the workflow execution is executable.
+     * Returns whether the workflow execution runtime is running.
      *
-     * @return true if the workflow execution is executable.
+     * @return true if the workflow execution runtime is running
      */
-    boolean isExecutable();
+    boolean isRunning();
 
     /**
      * Returns true if the workflow execution has tasks to execute.
@@ -160,10 +160,10 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Interrupt all running steps without producing any step/workflow cancellation events. Unlike
      * {@link #cancelAllRunningSteps(Throwable)}, this method is for abrupt process-level teardown (e.g. an engine
-     * shutdown lifecycle hook): it completes in-flight step futures with a non-cancellation failure so the running
-     * step is removed from bookkeeping and no {@code <Step>Cancelled} event is published. The workflow's state in the
-     * event store is left at its most recent {@code <Step>Started} entry so the step can resume on the next app
-     * start. Safe to call from any thread.
+     * shutdown lifecycle hook): it completes in-flight step futures with a non-cancellation failure so the running step
+     * is removed from bookkeeping and no {@code <Step>Cancelled} event is published. The workflow's state in the event
+     * store is left at its most recent {@code <Step>Started} entry so the step can resume on the next app start. Safe
+     * to call from any thread.
      */
     void interrupt();
 
@@ -182,6 +182,13 @@ public interface WorkflowExecution extends DescribableComponent {
      */
     @Nonnull
     WorkflowState state();
+
+    /**
+     * Initializes this newly created execution with a workflow state.
+     *
+     * @param state workflow state loaded from a repository
+     */
+    void initializeState(@Nonnull WorkflowState state);
 
     /**
      * Returns the processing context of the workflow execution.
@@ -227,9 +234,9 @@ public interface WorkflowExecution extends DescribableComponent {
     WorkflowConfiguration<?> workflowConfiguration();
 
     /**
-     * Records that the live execution has reached the step with the given name during the current
-     * invocation. Forms the runtime "book"; comparing it against the event-sourced book (state) detects
-     * when the code has drifted past what history accounts for.
+     * Records that the live execution has reached the step with the given name during the current invocation. Forms the
+     * runtime "book"; comparing it against the event-sourced book (state) detects when the code has drifted past what
+     * history accounts for.
      *
      * @param stepName step name encountered.
      */
@@ -244,9 +251,9 @@ public interface WorkflowExecution extends DescribableComponent {
     Set<String> referencedStepNames();
 
     /**
-     * Terminal steps in {@link #state()} (event-sourced book) that the current live run has not
-     * referenced (runtime book). A non-empty result means old code already ran past this position —
-     * the signal used by the version primitive's downstream-steps guard and by the drift safety net.
+     * Terminal steps in {@link #state()} (event-sourced book) that the current live run has not referenced (runtime
+     * book). A non-empty result means old code already ran past this position — the signal used by the version
+     * primitive's downstream-steps guard and by the drift safety net.
      *
      * @return ordered list of unreferenced terminal step names; empty when state is fully accounted for.
      */
@@ -273,13 +280,12 @@ public interface WorkflowExecution extends DescribableComponent {
     }
 
     /**
-     * Throws {@link WorkflowReplayDriftException} when the event-sourced book contains terminal steps the
-     * current run has not referenced yet — i.e. the new code is about to publish past where the old code
-     * already ran.
+     * Throws {@link WorkflowReplayDriftException} when the event-sourced book contains terminal steps the current run
+     * has not referenced yet — i.e. the new code is about to publish past where the old code already ran.
      * <p>
      * <b>Invariant:</b> anything that publishes events or changes workflow state must call this guard
-     * before doing so. Per-step primitives gate on first live publish; workflow-level termination
-     * gates on the {@code "<terminate>"} marker.
+     * before doing so. Per-step primitives gate on first live publish; workflow-level termination gates on the
+     * {@code "<terminate>"} marker.
      *
      * @param aboutToExecute step name about to publish.
      */

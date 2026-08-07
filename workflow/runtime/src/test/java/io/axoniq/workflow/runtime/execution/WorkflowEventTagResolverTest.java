@@ -26,8 +26,11 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventstreaming.Tag;
 import org.junit.jupiter.api.*;
 
@@ -43,6 +46,7 @@ class WorkflowEventTagResolverTest {
 
     private final WorkflowEventTagResolver resolver = new WorkflowEventTagResolver();
     private final EventNameCustomizer customizer = new TestEventNameCustomizer();
+    private final MessageType workflowDefinitionId = new MessageType(new QualifiedName("OrderWorkflow"), "0.0.1");
     private WorkflowContext context;
 
     @BeforeEach
@@ -51,14 +55,18 @@ class WorkflowEventTagResolverTest {
         when(context.workflowId()).thenReturn("wf-123");
         when(context.workflowPayload()).thenReturn(Map.of("orderId", "123"));
         when(context.workflowVersion()).thenReturn("0.0.1");
+        ProcessingContext processingContext = mock(ProcessingContext.class);
+        when(context.processingContext()).thenReturn(processingContext);
+        when(processingContext.component(EventConverter.class)).thenReturn(mock(EventConverter.class));
     }
 
     @Test
     void workflowLifecycleEventsGetWorkflowIdAndLifecycleTags() {
-        var started = EventMessageUtils.startedWorkflow(context, "OrderWorkflow", customizer);
+        var started = EventMessageUtils.startedWorkflow(context, "OrderWorkflow", workflowDefinitionId, customizer);
         var timedOut = EventMessageUtils.timeoutWorkflow(context,
                                                          "OrderWorkflow",
                                                          Instant.parse("2026-07-08T10:15:00Z"),
+                                                         workflowDefinitionId,
                                                          customizer);
 
         assertThat(resolver.resolve(started)).isEqualTo(Set.of(

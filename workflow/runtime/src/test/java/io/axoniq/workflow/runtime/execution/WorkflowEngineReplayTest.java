@@ -28,6 +28,8 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
+import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
+import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.Context;
@@ -50,6 +52,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 
@@ -68,16 +71,19 @@ class WorkflowEngineReplayTest {
     private WorkflowExecutionRepository workflowExecutionRepository;
     private WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private SafePointStore safePointStore;
+    private WorkflowStore workflowStore;
 
     @BeforeEach
     void setUp() {
         workflowExecutionRepository = spy(new InMemoryWorkflowExecutionRepository());
         workflowConfigurationRegistry = mock(WorkflowConfigurationRegistry.class);
         safePointStore = mock(SafePointStore.class);
+        workflowStore = mock(WorkflowStore.class);
         workflowEngine = new WorkflowEngine(
                 workflowConfigurationRegistry,
                 workflowExecutionRepository,
-                safePointStore
+                safePointStore,
+                workflowStore
         );
     }
 
@@ -182,19 +188,87 @@ class WorkflowEngineReplayTest {
         );
 
         assertSameToken(execution.restartToken(), token(18));
-        // Initially NOT executable (replay mode)
-        assertThat(execution.isExecutable()).isFalse();
+        // Initially not running (replay mode)
+        assertThat(execution.isRunning()).isFalse();
 
         EventMessage event = mock(EventMessage.class);
         when(event.metadata()).thenReturn(Metadata.with("none", "none"));
 
         execution.onEvent(event, pc);
-        assertThat(execution.isExecutable()).isFalse();
+        assertThat(execution.isRunning()).isFalse();
 
-        // Trigger switch to executable (end of replay)
+        // Trigger start after replay
         execution.execute(i -> {
         });
-        assertThat(execution.isExecutable()).isTrue();
+        assertThat(execution.isRunning()).isTrue();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void loadRunningWorkflowsRestoresExecutionStateAndRestartToken() {
+        String workflowId = "wf-1";
+        TrackingToken checkpointToken = token(30);
+        ProcessingContext sourcingContext = processingContext(checkpointToken);
+        ProcessingContext executionContext = processingContext(checkpointToken);
+        when(sourcingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
+        when(executionContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
+        when(executionContext.component(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
+        when(executionContext.component(Clock.class)).thenReturn(Clock.systemUTC());
+        when(executionContext.component(WorkflowScheduler.class)).thenReturn(mock(WorkflowScheduler.class));
+        when(executionContext.component(ExecuteStepActionResolver.class)).thenReturn(
+                mock(ExecuteStepActionResolver.class)
+        );
+        when(executionContext.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
+        when(executionContext.component(EventSink.class)).thenReturn(mock(EventSink.class));
+
+        var running = new EventSourcedRunningWorkflows();
+        running.evolve(MetadataUtils.create(workflowId, WorkflowStatus.STARTED));
+        when(workflowStore.loadRunningWorkflows(same(sourcingContext))).thenReturn(CompletableFuture.completedFuture(running));
+
+        var definitionId = new MessageType(new QualifiedName("RestoredWorkflow"), "1.0.0");
+        var restoredState = new EventSourcedWorkflowState(workflowId, definitionId);
+        restoredState.evolve(workflowStartedEvent(workflowId, definitionId, Map.of("mode", "wait")), sourcingContext);
+        restoredState.evolve(stepStartedEvent(workflowId, "waitForResume"), sourcingContext);
+        when(workflowStore.loadWorkflow(eq(workflowId), same(sourcingContext)))
+                .thenReturn(CompletableFuture.completedFuture(restoredState));
+
+        WorkflowConfiguration<WorkflowContext> configuration = mock(WorkflowConfiguration.class);
+        WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
+        WorkflowExecutionFactory executionFactory = mock(WorkflowExecutionFactory.class);
+        WorkflowContext workflowContext = mock(WorkflowContext.class);
+
+        when(configuration.workflowName()).thenReturn("RestoredWorkflow");
+        when(configuration.workflowVersion()).thenReturn(definitionId.version());
+        when(configuration.eventNameCustomizer()).thenReturn(defaults());
+        when(configuration.workflowStatusChangeListeners()).thenReturn(Map.of());
+        when(configuration.workflowContextFactory()).thenReturn(contextFactory);
+        when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
+        when(workflowConfigurationRegistry.getWorkflowConfiguration(definitionId)).thenReturn(Optional.of(configuration));
+        when(contextFactory.createContext(anyMap(), eq(workflowId), same(executionContext), eq(configuration)))
+                .thenReturn(workflowContext);
+        executionContext.putResource(RESTART_TOKEN_RESOURCE_KEY, Optional.of(checkpointToken));
+        when(workflowContext.processingContext()).thenReturn(executionContext);
+        when(executionContext.whenComplete(any())).thenReturn(executionContext);
+        var restoredExecution = new SimpleWorkflowExecution(
+                workflowId,
+                restoredState.payload(),
+                executionContext,
+                configuration,
+                workflowContext
+        );
+        when(executionFactory.create(workflowContext)).thenReturn(restoredExecution);
+
+        workflowEngine.start(checkpointToken, sourcingContext, executionContext);
+
+        var restored = workflowEngine.workflowExecutions().iterator().next();
+        assertThat(restored.workflowId()).isEqualTo(workflowId);
+        assertThat(restored.state().payload()).containsEntry("mode", "wait");
+        assertThat(restored.state().workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
+        assertThat(restored.state().workflowDefinitionVersion()).isEqualTo(definitionId.version());
+        assertThat(restored.state().getStep("waitForResume").status()).isEqualTo(
+                io.axoniq.workflow.runtime.api.execution.status.StepStatus.STARTED
+        );
+        assertSameToken(restored.restartToken(), checkpointToken);
     }
 
     @Test
@@ -584,6 +658,33 @@ class WorkflowEngineReplayTest {
         when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
         when(eventMessage.type()).thenReturn(new MessageType(eventName));
         when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of("orderId", workflowId));
+        return eventMessage;
+    }
+
+    private static EventMessage workflowStartedEvent(String workflowId,
+                                                     MessageType definitionId,
+                                                     Map<String, Object> payload) {
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(MetadataUtils.create(workflowId, WorkflowStatus.STARTED, definitionId)
+                                                              .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
+                                                                   io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME));
+        when(eventMessage.type()).thenReturn(new MessageType("RestoredWorkflowStarted", definitionId.version()));
+        when(eventMessage.payloadAs(Object.class)).thenReturn(payload);
+        when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(payload);
+        when(eventMessage.timestamp()).thenReturn(java.time.Instant.now());
+        return eventMessage;
+    }
+
+    private static EventMessage stepStartedEvent(String workflowId, String stepName) {
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(MetadataUtils.create(
+                workflowId,
+                stepName,
+                io.axoniq.workflow.runtime.api.execution.status.StepStatus.STARTED
+        ));
+        when(eventMessage.type()).thenReturn(new MessageType(stepName + "Started"));
+        when(eventMessage.payloadAs(Object.class)).thenReturn(Map.of("stepName", stepName));
+        when(eventMessage.timestamp()).thenReturn(java.time.Instant.now());
         return eventMessage;
     }
 

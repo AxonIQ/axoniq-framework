@@ -35,6 +35,8 @@ import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -77,10 +79,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     private static final Logger logger = LoggerFactory.getLogger(SimpleWorkflowExecution.class);
 
     // State variables
-    private final WorkflowState workflowState;
-    // Attributes
-    private final String workflowId;
-    private final String workflowName;
+    private volatile WorkflowState workflowState;
     @Nullable
     private final TrackingToken restartToken;
     private final WorkflowConfiguration<?> workflowConfiguration;
@@ -94,7 +93,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     private final RunningSteps runningSteps = new RunningSteps();
     private final Set<String> referencedStepNames = ConcurrentHashMap.newKeySet();
 
-    private boolean executable = false;
+    private boolean running = false;
 
     /**
      * Constructs a new instance.
@@ -111,12 +110,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                    @Nonnull WorkflowConfiguration<?> workflowConfiguration,
                                    @Nonnull WorkflowContext workflowContext
     ) {
-        this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must not be null");
         this.workflowConfiguration = Objects.requireNonNull(workflowConfiguration,
                                                             "Workflow configuration must not be null");
-        var configuredName = Objects.requireNonNull(workflowConfiguration.workflowName(),
-                                                    "Workflow name must not be null");
-        this.workflowName = configuredName.isEmpty() ? workflowId : configuredName; // FIXME
+        var workflowDefinitionId = new MessageType(
+                new QualifiedName(workflowConfiguration.workflowName()),
+                workflowConfiguration.workflowVersion()
+        );
         this.restartToken = resolveRestartToken(processingContext);
 
         this.contextDelegate = new WorkflowContextDelegation(
@@ -125,11 +124,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                 this,
                 processingContext
         );
-        this.workflowState = new EventSourcedWorkflowState(
-                initial,
-                workflowConfiguration.workflowVersion(),
-                this.contextDelegate.typedWorkflowContext(),
-                workflowConfiguration.workflowStatusChangeListeners()
+        initializeState(
+                new EventSourcedWorkflowState(
+                        Objects.requireNonNull(workflowId, "Workflow id must not be null"),
+                        initial,
+                        workflowDefinitionId
+                )
         );
     }
 
@@ -143,7 +143,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
      */
     @Override
     public void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler) {
-        this.executable = true;
+        this.running = true;
         // run in a separate thread to avoid blocking the replay status change handler thread ( = WorkPackage)
 
         ProcessingContextUtils
@@ -186,11 +186,14 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         if (this.state().workflowStatus() == WorkflowStatus.NONE) {
             // FIXME join without timeout?
-            sendWorkflowEvent(startedWorkflow(this.workflowContext(), workflowName, eventNameCustomizer), ctx).join();
+            sendWorkflowEvent(startedWorkflow(this.workflowContext(),
+                                              workflowName(),
+                                              workflowState.workflowDefinitionId(),
+                                              eventNameCustomizer), ctx).join();
             try {
                 awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
             } catch (Exception e) {
-                logger.error("Error waiting for start of workflow instance {}", workflowId, e);
+                logger.error("Error waiting for start of workflow instance {}", workflowId(), e);
             }
         }
     }
@@ -213,7 +216,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
         // Dispatch to the definition matching state.workflowDefinitionVersion().
         var definition = WorkflowConfigurationRegistry.resolveOrFallback(
-                ctx, workflowName, workflowId, this.state().workflowDefinitionVersion(), this.workflowConfiguration
+                ctx, workflowName(), workflowId(), this.state().workflowDefinitionVersion(), this.workflowConfiguration
         ).workflowDefinition();
         definition.accept(this.contextDelegate.typedWorkflowContext());
 
@@ -225,13 +228,14 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
             sendWorkflowEvent(
                     completedWorkflow(this.workflowContext(),
-                                      workflowName,
+                                      workflowName(),
+                                      workflowState.workflowDefinitionId(),
                                       eventNameCustomizer),
                     ctx).get(5, TimeUnit.SECONDS); // FIXME constant?
             try {
                 awaitStateChange(s -> s.workflowStatus().isTerminal());
             } catch (Exception e) {
-                logger.error("Error waiting for completion of workflow instance {}", workflowId, e);
+                logger.error("Error waiting for completion of workflow instance {}", workflowId(), e);
             }
         }
         logger.info("Workflow executed. Resulting workflow payload {}.", this.workflowContext().workflowPayload());
@@ -254,14 +258,15 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                     cancelAllRunningSteps(wfe);
                     sendWorkflowEvent(failedWorkflow(
                                               this.workflowContext(),
-                                              workflowName,
+                                              workflowName(),
                                               wfe,
+                                              workflowState.workflowDefinitionId(),
                                               eventNameCustomizer),
                                       ctx).join(); // FIXME join without timeout
                     try {
                         awaitStateChange(s -> s.workflowStatus().isTerminal());
                     } catch (Exception e) {
-                        logger.error("Error waiting for termination of workflow instance {}", workflowId, e);
+                        logger.error("Error waiting for termination of workflow instance {}", workflowId(), e);
                     }
                 }
             }
@@ -271,14 +276,15 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                     cancelAllRunningSteps(wce);
                     sendWorkflowEvent(
                             cancelledWorkflow(this.workflowContext(),
-                                              workflowName,
+                                              workflowName(),
                                               wce,
+                                              workflowState.workflowDefinitionId(),
                                               eventNameCustomizer),
                             ctx).join(); // FIXME join without timeout
                     try {
                         awaitStateChange(s -> s.workflowStatus().isTerminal());
                     } catch (Exception e) {
-                        logger.error("Error waiting for termination of workflow instance {}", workflowId, e);
+                        logger.error("Error waiting for termination of workflow instance {}", workflowId(), e);
                     }
                 }
             }
@@ -287,22 +293,23 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                     cancelAllRunningSteps(new StepCancellationException("Workflow timed out"));
                     sendWorkflowEvent(timeoutWorkflow(
                                               this.workflowContext(),
-                                              workflowName,
+                                              workflowName(),
                                               contextDelegate.clock().instant(),
+                                              workflowState.workflowDefinitionId(),
                                               eventNameCustomizer),
                                       ctx).join(); // FIXME join without timeout
 
                     try {
                         awaitStateChange(s -> s.workflowStatus().isTerminal());
                     } catch (Exception e) {
-                        logger.error("Error waiting for termination of workflow instance {}", workflowId, e);
+                        logger.error("Error waiting for termination of workflow instance {}", workflowId(), e);
                     }
                 }
             }
             case WorkflowReplayDriftException drift -> {
                 logger.warn("Workflow {} paused due to replay drift: {}. "
                                     + "Revert the code change or wrap it in ctx.migrateVersion() and replay.",
-                            workflowId, drift.getMessage());
+                            workflowId(), drift.getMessage());
                 // Intentionally do NOT publish failedWorkflow / cancelledWorkflow events.
                 // The workflow stays in its current (non-terminal) state; the next replay will try
                 // again. If the developer reverts the offending code or adds ctx.migrateVersion(...), the
@@ -315,6 +322,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                 sendWorkflowEvent(
                     cancelledWorkflow(this.workflowContext(),
                                       workflowName,
+                                      workflowDefinitionId,
                                       eventNameCustomizer),
                     ctx
                 ).join(); // FIXME join without timeout
@@ -322,13 +330,14 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
          */
             }
             default -> {
-                logger.error("Error occurred in workflow {}", workflowId, exception);
+                logger.error("Error occurred in workflow {}", workflowId(), exception);
                 // we agreed not to drive the workflow to terminal state on any other exception
                 /*
                 sendWorkflowEvent(failedWorkflow(
                                           this.workflowContext(),
                                           workflowName,
                                           exception instanceof Exception ? (Exception) exception : new RuntimeException(exception),
+                                          workflowDefinitionId,
                                           eventNameCustomizer),
                                   ctx).join(); // FIXME join without timeout
 
@@ -344,7 +353,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
      * @param terminationHandler termination handler to call.
      */
     private void finishWorkflow(Consumer<WorkflowExecution> terminationHandler) {
-        this.executable = false; // mark we are done and are not executable anymore
+        this.running = false;
         // TODO -> how do we recognize workflow executions which came to this point bit haven't reach the terminal states?
         this.taskQueue.clear();
         this.eventWaitConditions.clear();
@@ -366,7 +375,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     @Override
     public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
-        if (executable) {
+        if (running) {
             // live mode
 
             eventWaitConditions.evaluateAndApply(eventMessage, processingContext, contextDelegate::eventReceived);
@@ -507,8 +516,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
     @Override
-    public boolean isExecutable() {
-        return executable;
+    public boolean isRunning() {
+        return running;
     }
 
     private CompletableFuture<Void> sendWorkflowEvent(
@@ -552,13 +561,13 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Nonnull
     @Override
     public String workflowName() {
-        return this.workflowName;
+        return workflowState.workflowDefinitionId().qualifiedName().toString();
     }
 
     @Nonnull
     @Override
     public String workflowId() {
-        return this.workflowId;
+        return workflowState.workflowId();
     }
 
     @Override
@@ -571,6 +580,15 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Override
     public WorkflowConfiguration<?> workflowConfiguration() {
         return this.workflowConfiguration;
+    }
+
+    @Override
+    public void initializeState(@Nonnull WorkflowState state) {
+        this.workflowState = new EventSourcedWorkflowState(
+                state,
+                this.contextDelegate.typedWorkflowContext(),
+                this.workflowConfiguration.workflowStatusChangeListeners()
+        );
     }
 
     @Override
@@ -588,7 +606,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Override
     public void describeTo(@Nonnull ComponentDescriptor descriptor) {
         descriptor.describeProperty("delegate", contextDelegate);
-        descriptor.describeProperty("executable", executable);
+        descriptor.describeProperty("running", running);
         descriptor.describeProperty("state", state());
         eventWaitConditions.describeTo(descriptor);
         runningSteps.describeTo(descriptor);

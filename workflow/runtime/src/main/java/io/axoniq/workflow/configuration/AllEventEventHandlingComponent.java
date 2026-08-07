@@ -94,7 +94,6 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
         }
     }
 
-
     @Override
     public MessageStream.Empty<Message> handle(EventMessage event, ProcessingContext context) {
         logger.debug("Handling event {}", event);
@@ -110,7 +109,6 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent {
     public boolean supports(QualifiedName eventName) {
         return true;
     }
-
 
     @Override
     public Object sequenceIdentifierFor(EventMessage event,

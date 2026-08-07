@@ -136,7 +136,7 @@ public abstract class AbstractStepExecutor {
 
     protected void acceptAllPendingTasksForStep(@Nonnull String stepName) {
         while ((!workflowExecution.state().containsStep(stepName) && !workflowExecution.hasTasks())
-                || !workflowExecution.isExecutable()) {
+                || !workflowExecution.isRunning()) {
             var poll = workflowExecution.getNextTask();
             if (poll != null) {
                 poll.accept(this.workflowExecution);

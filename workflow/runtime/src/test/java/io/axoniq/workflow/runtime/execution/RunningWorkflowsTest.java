@@ -35,7 +35,7 @@ class RunningWorkflowsTest {
 
     @Test
     void workflowLifecycleEventsSelectLifecycleTaggedEvents() {
-        assertThat(RunningWorkflows.workflowLifecycleEvents()).isEqualTo(
+        assertThat(EventSourcedRunningWorkflows.criteriaBuilder()).isEqualTo(
                 EventCriteria.havingTags(Tag.of(
                         TAG_WORKFLOW_EVENT_TYPE,
                         TAG_VALUE_EVENT_TYPE_LIFECYCLE
@@ -45,7 +45,7 @@ class RunningWorkflowsTest {
 
     @Test
     void startedStatusAddsWorkflowIdAndUpdatesContains() {
-        var state = new RunningWorkflows();
+        var state = new EventSourcedRunningWorkflows();
 
         state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
 
@@ -57,7 +57,7 @@ class RunningWorkflowsTest {
     @ParameterizedTest
     @EnumSource(value = WorkflowStatus.class, names = {"COMPLETED", "FAILED", "CANCELLED", "TIMED_OUT"})
     void terminalStatusesRemoveWorkflowIds(WorkflowStatus status) {
-        var state = new RunningWorkflows();
+        var state = new EventSourcedRunningWorkflows();
 
         state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
         state.evolve(MetadataUtils.create("wf-123", status));
@@ -68,7 +68,7 @@ class RunningWorkflowsTest {
 
     @Test
     void noneStatusDoesNotChangeRunningWorkflowIds() {
-        var state = new RunningWorkflows();
+        var state = new EventSourcedRunningWorkflows();
 
         state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
         state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.NONE));
@@ -79,7 +79,7 @@ class RunningWorkflowsTest {
 
     @Test
     void metadataWithoutWorkflowStatusDoesNotChangeRunningWorkflowIds() {
-        var state = new RunningWorkflows();
+        var state = new EventSourcedRunningWorkflows();
 
         state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
         state.evolve(MetadataUtils.create("wf-123"));
@@ -89,7 +89,7 @@ class RunningWorkflowsTest {
 
     @Test
     void workflowIdsReturnsImmutableCopy() {
-        var state = new RunningWorkflows();
+        var state = new EventSourcedRunningWorkflows();
 
         state.evolve(MetadataUtils.create("wf-123", WorkflowStatus.STARTED));
 

@@ -32,6 +32,7 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -103,6 +104,8 @@ class VersionDelegateTest {
         when(workflowExecution.workflowId()).thenReturn("wf-1");
         when(workflowExecution.processingContext()).thenReturn(processingContext);
         when(workflowExecution.workflowContext()).thenReturn(workflowContext);
+        when(workflowContext.processingContext()).thenReturn(processingContext);
+        when(processingContext.component(EventConverter.class)).thenReturn(TestEventConverter.INSTANCE);
         when(workflowExecution.state()).thenReturn(state);
         when(workflowExecution.referencedStepNames()).thenReturn(referencedStepNames);
         // Wire the default-method helpers through Mockito so the real implementation runs against

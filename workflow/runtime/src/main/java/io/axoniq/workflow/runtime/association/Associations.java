@@ -52,7 +52,7 @@ import java.util.stream.Collectors;
  *         Matcher("=", workflowOrderId)
  * ).and(
  *         payloadProperty("tenantId"),
- *         VariableMatcher("=", tenantId)
+ *         Matcher("=", tenantId)
  * );
  * }</pre>
  * The DSL layer usually wraps this with friendlier helpers such as
@@ -106,7 +106,7 @@ public record Associations(
      *
      * @param retriever value retriever, see {@link PayloadPropertyValueRetriever#payloadProperty(String)} for example.
      * @param matcher   variable matcher, see {@link Matcher} for example.
-     * @return an association upon which can be build further, for fluent interface.
+     * @return an association upon which can be build further, for fluent interface
      */
     public static Associations associate(@Nonnull ValueRetriever retriever,
                                          @Nonnull Matcher matcher) {
@@ -122,7 +122,7 @@ public record Associations(
      *
      * @param registry     registry to use
      * @param associations associations to parse
-     * @return an association upon which can be build further, for fluent interface
+     * @return associations instance
      */
     public static Associations parse(
             @Nonnull ValueComparisonOperatorRegistry registry, String... associations) {
@@ -136,7 +136,7 @@ public record Associations(
      *                  {@link PayloadPropertyValueRetriever#payloadProperty(String)} for example.
      * @param operator  operator for value comparison
      * @param value     right side of comparison
-     * @return an association upon which can be build further, for fluent interface
+     * @return new associations containing old associations and new one
      */
     public Associations and(@Nonnull ValueRetriever retriever,
                             @Nonnull String operator,
@@ -152,7 +152,7 @@ public record Associations(
      * @param retriever       value retriever for the left side of the comparison, see
      *                        {@link PayloadPropertyValueRetriever#payloadProperty(String)} for example.
      * @param matcher value matcher including operator and value for comparison
-     * @return an association upon which can be build further, for fluent interface
+     * @return new associations containing old associations and new one
      */
     public Associations and(@Nonnull ValueRetriever retriever,
                             @Nonnull Matcher matcher) {
