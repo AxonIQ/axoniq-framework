@@ -510,7 +510,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Nullable
     public Consumer<WorkflowExecution> getNextTask() {
         var task = this.taskQueue.poll(); // FIXME: forever?
-        return task == null ? null : ignored -> checkpointSupport.runTask(task, this);
+        return task == null ? null : execution -> checkpointSupport.runTask(task, execution);
     }
 
     @Override
