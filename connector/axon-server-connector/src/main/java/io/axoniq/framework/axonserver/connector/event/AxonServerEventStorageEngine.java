@@ -28,13 +28,8 @@ import io.axoniq.axonserver.grpc.event.dcb.SourceEventsResponse;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsResponse;
 import io.grpc.Status;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.ExceptionUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejectedException;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
@@ -45,10 +40,15 @@ import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
-import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.axonframework.messaging.eventstreaming.StreamingCondition;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -199,12 +199,12 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
          * was not met. It is the same status a cancelled or broken call produces, so it narrows the set of candidate
          * failures without identifying a rejection on its own.
          */
-        private static final Status.Code CONSISTENCY_CONDITION_STATUS = Status.Code.CANCELLED;
+        private static final Status.Code CONSISTENCY_CONDITION_NOT_MET_STATUS = Status.Code.CANCELLED;
 
         /**
          * Marker within the reported failure description that, together with
-         * {@link #CONSISTENCY_CONDITION_STATUS}, identifies an unmet {@link AppendCondition}. It is the name of a
-         * server-side class, which is a weak contract: were Axon Server to rename that class, translate the
+         * {@link #CONSISTENCY_CONDITION_NOT_MET_STATUS}, identifies an unmet {@link AppendCondition}. It is the name of
+         * a server-side class, which is a weak contract: were Axon Server to rename that class, translate the
          * description, or close the call with a different status, a rejection would no longer be recognised and would
          * be reported as undetermined instead. That is the safe direction to be wrong in - the caller is told to
          * establish the outcome rather than being told a decision that was never made - but it makes this check worth
@@ -221,8 +221,8 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
          * instead. Both carry the original failure as their cause.
          *
          * @return a {@code CompletableFuture} of the {@link AppendEventsResponse}, failing with an
-         * {@link AppendEventsTransactionRejectedException} when Axon Server decided against the append, and with an
-         * {@link EventStoreException} when the outcome of the append is undetermined
+         * {@link AppendEventsTransactionRejectedException} when Axon Server decided against the append operation, and
+         * with an {@link EventStoreException} when the outcome of the append operation is undetermined
          */
         @Override
         public CompletableFuture<AppendEventsResponse> commit() {
@@ -239,12 +239,9 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
                 rejection.initCause(failure);
                 return CompletableFuture.failedFuture(rejection);
             }
-            logger.warn("Committing append transaction failed without a decision by Axon Server.", failure);
+            logger.warn("Committing append transaction failed.", failure);
             return CompletableFuture.failedFuture(new EventStoreException(
-                    "The outcome of the append transaction is undetermined, as Axon Server did not report a decision "
-                            + "on it. The events may or may not have been appended. Source the criteria of the append "
-                            + "condition to establish the outcome before retrying.",
-                    failure
+                    "Failed committing events to Axon Server with exception [" + failure.getClass() + "].", failure
             ));
         }
 
@@ -253,8 +250,8 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
          * <p>
          * Requires both signals Axon Server gives for that outcome: the status the append call was closed with, and the
          * marker in the reported description. Demanding the status as well as the marker keeps a failure that merely
-         * carries an earlier rejection somewhere in its cause chain - a transport failure closing a call that had
-         * already been refused - from reading as a rejection of this append, because
+         * carries an earlier rejection somewhere in its cause chain (a transport failure closing a call that had
+         * already been refused) from reading as a rejection of this append, because
          * {@link Status#fromThrowable(Throwable)} resolves the status of the outermost failure in the chain, which is
          * the one that actually terminated the call.
          *
@@ -262,12 +259,13 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
          * @return {@code true} when {@code failure} reports an unmet {@code AppendCondition}, {@code false} otherwise
          */
         private static boolean isConsistencyConditionFailure(Throwable failure) {
-            return Status.fromThrowable(failure).getCode() == CONSISTENCY_CONDITION_STATUS
+            return Status.fromThrowable(failure).getCode()
+                    == CONSISTENCY_CONDITION_NOT_MET_STATUS
                     && ExceptionUtils.findException(
-                            failure,
-                            cause -> cause.getMessage() != null
-                                    && cause.getMessage().contains(CONSISTENCY_CONDITION_FAILURE)
-                    ).isPresent();
+                                             failure,
+                                             cause -> cause.getMessage() != null
+                                                     && cause.getMessage().contains(CONSISTENCY_CONDITION_FAILURE))
+                                     .isPresent();
         }
 
         @Override
