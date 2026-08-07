@@ -39,6 +39,7 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -75,6 +76,7 @@ class WorkflowEngineReplayTest {
     private WorkflowExecutionRepository workflowExecutionRepository;
     private WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private WorkflowStore workflowStore;
+    private UnitOfWorkFactory startupUnitOfWorkFactory;
     private WorkflowEngineReplaySupport replaySupport;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
@@ -83,12 +85,14 @@ class WorkflowEngineReplayTest {
         workflowExecutionRepository = spy(new InMemoryWorkflowExecutionRepository());
         workflowConfigurationRegistry = mock(WorkflowConfigurationRegistry.class);
         workflowStore = mock(WorkflowStore.class);
+        startupUnitOfWorkFactory = mock(UnitOfWorkFactory.class);
         workflowEngine = new WorkflowEngine(
                 workflowConfigurationRegistry,
                 workflowExecutionRepository,
-                workflowStore
+                workflowStore,
+                startupUnitOfWorkFactory
         );
-        replaySupport = new WorkflowEngineReplaySupport(workflowEngine);
+        replaySupport = spy(new WorkflowEngineReplaySupport(workflowEngine));
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
     }
 
@@ -263,13 +267,20 @@ class WorkflowEngineReplayTest {
         when(restoredExecution.isRunning()).thenReturn(true);
         when(executionFactory.create(workflowContext)).thenReturn(restoredExecution);
 
-        ProcessingContext executionContext = processingContext(checkpointToken);
-        workflowEngine.start(checkpointToken, processingContext, executionContext);
+        var startupUnitOfWork = mock(UnitOfWork.class);
+        when(startupUnitOfWorkFactory.create("WorkflowRehydration")).thenReturn(startupUnitOfWork);
+        when(startupUnitOfWork.executeWithResult(any())).thenAnswer(invocation ->
+                invocation.<java.util.function.Function<ProcessingContext, CompletableFuture<Void>>>getArgument(0)
+                          .apply(processingContext));
+
+        workflowEngine.start(checkpointToken, false).join();
 
         verify(restoredExecution).initializeState(restoredState);
+        verify(replaySupport).initializeProcessorTokenIfAbsent(checkpointToken);
+        verify(replaySupport).switchToLiveMode(processingContext);
         var capturedExecutionContext = ArgumentCaptor.forClass(ProcessingContext.class);
         verify(contextFactory).createContext(anyMap(), eq(workflowId), capturedExecutionContext.capture(), eq(configuration));
-        assertThat(capturedExecutionContext.getValue()).isSameAs(executionContext).isNotSameAs(processingContext);
+        assertThat(capturedExecutionContext.getValue()).isNotSameAs(processingContext);
     }
 
     @Test

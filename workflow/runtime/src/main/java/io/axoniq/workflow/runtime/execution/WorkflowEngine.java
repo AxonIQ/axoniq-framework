@@ -28,13 +28,14 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -60,6 +61,7 @@ public class WorkflowEngine implements EventHandler,
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
     private final WorkflowStore workflowStore;
+    private final UnitOfWorkFactory unitOfWorkFactory;
 
     /**
      * Creates a new workflow engine.
@@ -67,16 +69,19 @@ public class WorkflowEngine implements EventHandler,
      * @param workflowConfigurationRegistry configuration registry.
      * @param workflowExecutionRepository   execution registry.
      * @param workflowStore                 store for persistence matters.
+     * @param unitOfWorkFactory             factory for workflow startup units of work.
      */
     public WorkflowEngine(
             @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
             @Nonnull WorkflowExecutionRepository workflowExecutionRepository,
-            @Nonnull WorkflowStore workflowStore
+            @Nonnull WorkflowStore workflowStore,
+            @Nonnull UnitOfWorkFactory unitOfWorkFactory
     ) {
         EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
         this.workflowExecutionRepository = workflowExecutionRepository;
         this.workflowStore = workflowStore;
+        this.unitOfWorkFactory = unitOfWorkFactory;
     }
 
     @Nonnull
@@ -212,35 +217,40 @@ public class WorkflowEngine implements EventHandler,
 
     /**
      * Restores and starts active workflow executions before processor replay resumes.
-     * <p>
-     * Restoration has two deliberately separate processing contexts. The sourcing context belongs to the startup unit
-     * of work and is used only while reading the event-sourced workflow state. The execution context becomes the parent
-     * context of each restored workflow body and is retained after startup for the workflow's lifetime.
      *
-     * @param processorToken   processor token at startup; initializes replay tracking when no processor token has been
-     *                         observed yet
-     * @param sourcingContext  context of the short-lived startup unit of work used to load durable workflow state; it
-     *                         may carry event-store transactions and lifecycle handlers and must not be retained by a
-     *                         restored workflow
-     * @param executionContext independent context used as the parent of restored workflow executions; it provides the
-     *                         same application components while keeping workflow-body resources and lifecycle work
-     *                         separate from startup
-     *                         <p>
-     *                         Reusing {@code sourcingContext} here is invalid because restored workflow bodies run
-     *                         asynchronously and can outlive startup. If such a body appends an event after the startup
-     *                         unit of work has entered {@code COMMIT}, Axon can no longer register the required
-     *                         {@code PREPARE_COMMIT} handler. The append operation then fails, and the workflow cannot
-     *                         persist its resumed, timed-out, or terminal state
+     * @param processorToken processor token at startup; initializes replay tracking when no processor token has been
+     *                       observed yet
+     * @param replayRequired whether the processor must catch up after restored workflows are started
+     * @return a future that completes when all running workflows have been restored and the engine is in the required
+     * replay or live mode
      */
-    public void start(@Nullable TrackingToken processorToken,
-                      @Nonnull ProcessingContext sourcingContext,
-                      @Nonnull ProcessingContext executionContext) {
-        var replaySupport = sourcingContext.component(WorkflowEngineReplaySupport.class);
+    public CompletableFuture<Void> start(@Nullable TrackingToken processorToken, boolean replayRequired) {
+        // Restoration has two deliberately separate processing contexts. The sourcing context belongs to the startup unit
+        // of work and is used only while reading the event-sourced workflow state. This method creates an execution context
+        // as a child of the sourcing context; it becomes the parent context of each restored workflow body and is retained
+        // after startup for the workflow's lifetime.
+        return unitOfWorkFactory.create("WorkflowRehydration")
+                                .executeWithResult(sourcingContext -> {
+                                    var replaySupport = sourcingContext.component(WorkflowEngineReplaySupport.class);
+                                    replaySupport.initializeProcessorTokenIfAbsent(processorToken);
 
-        replaySupport.initializeProcessorTokenIfAbsent(processorToken);
-        loadRunningWorkflows(sourcingContext, executionContext).join();
-        removeTerminalAndStartRestoredWorkflowExecutions("before replay catch-up", executionContext);
+                                    var executionUnitOfWork = new SimpleUnitOfWorkFactory(sourcingContext).create();
+                                    return executionUnitOfWork
+                                            .executeWithResult(
+                                                    executionContext ->
+                                                            loadRunningWorkflows(sourcingContext, executionContext)
+                                                                    .thenApply(ignored -> {
+                                                                        removeTerminalAndStartRestoredWorkflowExecutions(
+                                                                                "before replay catch-up",
+                                                                                executionContext);
+                                                                        if (!replayRequired) {
+                                                                            replaySupport.switchToLiveMode(sourcingContext);
+                                                                        }
+                                                                        return null;
+                                                                    }));
+                                });
     }
+
 
     /**
      * Shuts downs the engine and removes all running workflow executions.
@@ -273,12 +283,14 @@ public class WorkflowEngine implements EventHandler,
                                     logger.debug("No running workflows to rehydrate.");
                                     return CompletableFuture.completedFuture(null);
                                 }
-                                logger.debug("Rehydrating {} running workflow execution(s) from event-sourced state.",
-                                             runningWorkflows.workflowIds().size());
+                                logger.debug(
+                                        "Rehydrating {} running workflow execution(s) from event-sourced state.",
+                                        runningWorkflows.workflowIds().size());
                                 var rehydrations = runningWorkflows.workflowIds()
                                                                    .stream()
                                                                    .map(workflowId -> workflowStore
-                                                                           .loadWorkflow(workflowId, sourcingContext)
+                                                                           .loadWorkflow(workflowId,
+                                                                                         sourcingContext)
                                                                            .thenAccept(state -> restoreWorkflow(
                                                                                    workflowId,
                                                                                    state,
@@ -338,12 +350,8 @@ public class WorkflowEngine implements EventHandler,
 
     @Override
     public boolean scheduleCheckpointIntent(@Nonnull Runnable onDrained) {
-        var scheduledWorkflowIds = new HashSet<String>();
         var scheduled = false;
         for (var execution : workflowExecutionRepository.findAll(WorkflowExecution::hasPendingCheckpointWork)) {
-            if (!scheduledWorkflowIds.add(execution.workflowId())) {
-                continue;
-            }
             execution.appendCheckpointIntent(onDrained);
             scheduled = true;
         }

@@ -50,6 +50,7 @@ import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
@@ -123,20 +124,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowStateParameterResolverFactory(componentRegistry);
         registerReplaySupport(componentRegistry);
         registerCheckpointingSupport(componentRegistry);
-    }
-
-    private void registerCheckpointingSupport(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(WorkflowEngineCheckpointingSupport.class,
-                                               cfg -> new WorkflowEngineCheckpointingSupport(cfg.getComponent(
-                                                       WorkflowEngine.class)
-                                               ));
-    }
-
-    private void registerReplaySupport(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(WorkflowEngineReplaySupport.class,
-                                               cfg -> new WorkflowEngineReplaySupport(cfg.getComponent(
-                                                       WorkflowEngine.class)
-                                               ));
     }
 
     private void registerPayloadReducerRegistry(ComponentRegistry componentRegistry) {
@@ -218,7 +205,8 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                    .withBuilder(cfg -> new WorkflowEngine(
                                            cfg.getComponent(WorkflowConfigurationRegistry.class),
                                            cfg.getComponent(WorkflowExecutionRepository.class),
-                                           cfg.getComponent(WorkflowStore.class)
+                                           cfg.getComponent(WorkflowStore.class),
+                                           cfg.getComponent(UnitOfWorkFactory.class)
                                    ))
                                    .onShutdown(Phase.INBOUND_EVENT_CONNECTORS,
                                                WorkflowEngine::shutdown));
@@ -280,6 +268,21 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                 componentRegistry,
                 WorkflowStateParameterResolverFactory::new);
     }
+
+    void registerCheckpointingSupport(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(WorkflowEngineCheckpointingSupport.class,
+                                               cfg -> new WorkflowEngineCheckpointingSupport(cfg.getComponent(
+                                                       WorkflowEngine.class)
+                                               ));
+    }
+
+    void registerReplaySupport(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(WorkflowEngineReplaySupport.class,
+                                               cfg -> new WorkflowEngineReplaySupport(cfg.getComponent(
+                                                       WorkflowEngine.class)
+                                               ));
+    }
+
 
     @Override
     public int order() {

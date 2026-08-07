@@ -78,9 +78,9 @@ routed to rebuilt waits instead of being lost behind an uninitialized transient 
 
 ### Processing context
 
-The initial implementation used separate sourcing and execution contexts. [ADR-013](./013-workflow-engine-startup-ownership.md)
-proposes consolidating startup ownership in `WorkflowEngine` and using the startup unit of work's processing context for
-both state sourcing and restored execution creation.
+[ADR-013](./013-workflow-engine-startup-ownership.md) assigns the complete startup lifecycle to `WorkflowEngine`.
+It creates a short-lived sourcing context for state loading and a separate child execution context for restored workflow
+creation. The execution context remains valid after the sourcing unit of work completes.
 
 ### No checkpoint state images
 

@@ -33,6 +33,7 @@ import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -147,7 +148,8 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                     cfg -> new WorkflowEngine(
                             cfg.getComponent(WorkflowConfigurationRegistry.class),
                             cfg.getComponent(WorkflowExecutionRepository.class),
-                            cfg.getComponent(WorkflowStore.class)
+                            cfg.getComponent(WorkflowStore.class),
+                            cfg.getComponent(UnitOfWorkFactory.class)
                     )
             );
 

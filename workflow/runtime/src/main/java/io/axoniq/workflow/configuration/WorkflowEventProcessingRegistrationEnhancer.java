@@ -35,8 +35,6 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
-import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -48,7 +46,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static io.axoniq.workflow.runtime.execution.AllEventEventHandlingComponent.ANY_EVENT_IN_ONE_SEGMENT;
-import static java.util.concurrent.CompletableFuture.completedFuture;
 
 /**
  * Enhancer for registration of the workflow engine event processing.
@@ -172,7 +169,6 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                      var eventSource = cfg.getComponent(StreamableEventSource.class);
                                      var processor = cfg.getComponent(StreamingEventProcessor.class, moduleName);
                                      var replaySupport = cfg.getComponent(WorkflowEngineReplaySupport.class);
-                                     var unitOfWorkFactory = cfg.getComponent(UnitOfWorkFactory.class);
                                      var workflowEngine = engineComponentName != null
                                              ? cfg.getComponent(WorkflowEngine.class, engineComponentName)
                                              : cfg.getComponent(WorkflowEngine.class);
@@ -183,7 +179,6 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                                      .thenCompose(
                                                              latestToken -> initializeWorkflowEngine(
                                                                      workflowEngine,
-                                                                     unitOfWorkFactory,
                                                                      replaySupport,
                                                                      processorToken,
                                                                      latestToken
@@ -236,27 +231,12 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
 
     CompletableFuture<Void> initializeWorkflowEngine(
             WorkflowEngine workflowEngine,
-            UnitOfWorkFactory unitOfWorkFactory,
             WorkflowEngineReplaySupport replaySupport,
             @Nullable TrackingToken processorToken,
             @Nullable TrackingToken latestToken
     ) {
         replaySupport.initializeReplayTracking(processorToken, latestToken);
-        return unitOfWorkFactory.create(moduleName + "WorkflowRehydration")
-                                .executeWithResult(sourcingContext -> {
-                                    var executionUnitOfWork = new SimpleUnitOfWorkFactory(sourcingContext)
-                                            .create(moduleName + "WorkflowExecutionContext");
-                                    return executionUnitOfWork.executeWithResult(executionContext -> {
-                                        workflowEngine.start(processorToken, sourcingContext, executionContext);
-                                        return completedFuture(sourcingContext);
-                                    });
-                                })
-                                .thenApply(sourcingContext -> {
-                                    if (!requiresReplay(processorToken, latestToken)) {
-                                        replaySupport.switchToLiveMode(sourcingContext);
-                                    }
-                                    return null;
-                                });
+        return workflowEngine.start(processorToken, requiresReplay(processorToken, latestToken));
     }
 
     boolean requiresReplay(@Nullable TrackingToken resetToken, @Nullable TrackingToken latestToken) {
