@@ -449,8 +449,9 @@ public class EventSourcedWorkflowState implements WorkflowState {
     /**
      * Sets state and optional termination cause.
      *
-     * @param workflowStatus   workflow status to set.
-     * @param terminationCause cause of termination.
+     * @param workflowStatus   workflow status to set
+     * @param terminationCause cause of termination
+     * @param notifyStatusListeners whether a workflow status transition notifies its live listeners
      */
     void setStatus(
             @Nonnull WorkflowStatus workflowStatus,

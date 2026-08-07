@@ -94,6 +94,23 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
     void removeAll(@Nonnull Predicate<WorkflowExecution> predicate);
 
     /**
+     * Count the number of workflow executions with pending checkpoint work.
+     *
+     * @return the number of workflow executions with pending checkpoint work
+     */
+    default Integer countPendingCheckpointWork() {
+        return count(WorkflowExecution::hasPendingCheckpointWork);
+    }
+
+    /**
+     * Count the number of workflow executions matching the given predicate.
+     *
+     * @param predicate the predicate to match workflow executions against
+     * @return the number of matching workflow executions
+     */
+    Integer count(@Nonnull Predicate<WorkflowExecution> predicate);
+
+    /**
      * Removes all stored workflow executions.
      */
     void clear();

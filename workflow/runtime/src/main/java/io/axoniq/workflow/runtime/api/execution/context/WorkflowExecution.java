@@ -50,44 +50,44 @@ public interface WorkflowExecution extends DescribableComponent {
      * Execute workflow.
      *
      * @param terminationHandler termination handler, which is executed after the execution has reached a terminal
-     *                           {@link WorkflowStatus}.
+     *                           {@link WorkflowStatus}
      */
     void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler);
 
     /**
      * Returns workflow context of the current execution.
      *
-     * @return context.
+     * @return workflow context facing the user
      */
     WorkflowContext workflowContext();
 
     /**
      * Apply tasks as long the condition is not satisfied.
      *
-     * @param condition condition on workflow execution.
-     * @throws InterruptedException if interrupted while waiting.
+     * @param condition condition on workflow execution
+     * @throws InterruptedException if interrupted while waiting
      */
     void awaitStateChange(@Nonnull Predicate<WorkflowState> condition) throws InterruptedException;
 
     /**
      * Delivers an event to the workflow execution.
      *
-     * @param eventMessage      event message.
-     * @param processingContext processing context.
+     * @param eventMessage      event message
+     * @param processingContext processing context
      */
     void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
 
     /**
      * Append a task to the workflow execution.
      *
-     * @param task a task to execute by the workflow control thread.
+     * @param task a task to execute by the workflow control thread
      */
     void appendTask(@Nonnull Consumer<WorkflowExecution> task);
 
     /**
      * Returns the next task to execute.
      *
-     * @return new task to execute.
+     * @return new task to execute
      */
     @Nullable
     Consumer<WorkflowExecution> getNextTask();
@@ -102,17 +102,17 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Returns true if the workflow execution has tasks to execute.
      *
-     * @return true if the workflow execution has tasks to execute.
+     * @return true if the workflow execution has tasks to execute
      */
     boolean hasTasks();
 
     /**
      * Registers a new wait condition.
      *
-     * @param stepName             waiting step name.
-     * @param eventCondition       event condition.
-     * @param resultPayloadReducer step result payload reducer.
-     * @param eventNameCustomizer  event name customizer.
+     * @param stepName             waiting step name
+     * @param eventCondition       event condition
+     * @param resultPayloadReducer step result payload reducer
+     * @param eventNameCustomizer  event name customizer
      */
     void registerWaitCondition(@Nonnull String stepName,
                                @Nonnull EventCondition eventCondition,
@@ -122,30 +122,30 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Remove existing wait condition.
      *
-     * @param stepName name of the waiting step.
+     * @param stepName name of the waiting step
      */
     void removeWaitCondition(@Nonnull String stepName);
 
     /**
      * Register a running step.
      *
-     * @param stepName step name.
-     * @param future   future of the execution.
+     * @param stepName step name
+     * @param future   future of the execution
      */
     void registerRunningStep(@Nonnull String stepName, @Nonnull CompletableFuture<?> future);
 
     /**
      * Remove a running step.
      *
-     * @param stepName step name.
+     * @param stepName step name
      */
     void removeRunningStep(@Nonnull String stepName);
 
     /**
      * Cancel a running step.
      *
-     * @param stepName name of the step.
-     * @param cause    optional cause of the cancellation.
+     * @param stepName name of the step
+     * @param cause    optional cause of the cancellation
      */
     void cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause);
 
@@ -159,14 +159,14 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Checks if the pending checkpoint work is present.
      *
-     * @return {@code true} if the pending checkpoint work is present, {@code false} otherwise.
+     * @return {@code true} if the pending checkpoint work is present, {@code false} otherwise
      */
     boolean hasPendingCheckpointWork();
 
     /**
      * Cancel all running steps.
      *
-     * @param cause optional cause of the cancellation.
+     * @param cause optional cause of the cancellation
      */
     void cancelAllRunningSteps(@Nullable Throwable cause);
 
@@ -183,15 +183,15 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Cancel and remove a running step.
      *
-     * @param stepName              name of the step.
-     * @param mayInterruptIfRunning whether to interrupt the step if it is running.
+     * @param stepName              name of the step
+     * @param mayInterruptIfRunning whether to interrupt the step if it is running
      */
     void cancelAndRemoveRunningStep(@Nonnull String stepName, boolean mayInterruptIfRunning);
 
     /**
      * Retrieves the current state of the workflow execution.
      *
-     * @return workflow state.
+     * @return workflow state
      */
     @Nonnull
     WorkflowState state();
@@ -206,7 +206,7 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Returns the processing context of the workflow execution.
      *
-     * @return processing context.
+     * @return processing context
      */
     // FIXME check if we can replace this for the Context interface
     @Nonnull
@@ -215,7 +215,7 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Returns the name of the workflow.
      *
-     * @return returns the human-readable name of the workflow.
+     * @return returns the human-readable name of the workflow
      */
     @Nonnull
     String workflowName();
@@ -223,7 +223,7 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Returns the id of the workflow.
      *
-     * @return unique id of the workflow execution.
+     * @return unique id of the workflow execution
      */
     @Nonnull
     String workflowId();
@@ -231,7 +231,7 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Returns the configuration of the workflow.
      *
-     * @return workflow configuration.
+     * @return workflow configuration
      */
     @Nonnull
     WorkflowConfiguration<?> workflowConfiguration();
@@ -241,14 +241,14 @@ public interface WorkflowExecution extends DescribableComponent {
      * runtime "book"; comparing it against the event-sourced book (state) detects when the code has drifted past what
      * history accounts for.
      *
-     * @param stepName step name encountered.
+     * @param stepName step name encountered
      */
     void recordStepReference(@Nonnull String stepName);
 
     /**
      * Returns the set of step names the current invocation of the workflow body has already referenced.
      *
-     * @return live view of referenced step names for this invocation.
+     * @return live view of referenced step names for this invocation
      */
     @Nonnull
     Set<String> referencedStepNames();
@@ -258,7 +258,7 @@ public interface WorkflowExecution extends DescribableComponent {
      * book). A non-empty result means old code already ran past this position — the signal used by the version
      * primitive's downstream-steps guard and by the drift safety net.
      *
-     * @return ordered list of unreferenced terminal step names; empty when state is fully accounted for.
+     * @return ordered list of unreferenced terminal step names; empty when state is fully accounted for
      */
     @Nonnull
     default List<String> unreferencedTerminalSteps() {
@@ -276,7 +276,7 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Convenience boolean for {@link #unreferencedTerminalSteps()}.
      *
-     * @return {@code true} iff at least one terminal step in history is not yet referenced.
+     * @return {@code true} iff at least one terminal step in history is not yet referenced
      */
     default boolean hasUnreferencedTerminalStep() {
         return !unreferencedTerminalSteps().isEmpty();
@@ -290,7 +290,7 @@ public interface WorkflowExecution extends DescribableComponent {
      * before doing so. Per-step primitives gate on first live publish; workflow-level termination gates on the
      * {@code "<terminate>"} marker.
      *
-     * @param aboutToExecute step name about to publish.
+     * @param aboutToExecute step name about to publish
      */
     default void guardAgainstReplayDrift(@Nonnull String aboutToExecute) {
         List<String> unreferenced = unreferencedTerminalSteps();

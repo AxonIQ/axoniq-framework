@@ -453,7 +453,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                                                            DefaultEventNameCustomizer.Builder.defaults()));
     }
 
-
     @Override
     public void appendCheckpointIntent(@Nonnull Runnable onDrained) {
         checkpointSupport.appendCheckpointIntent(onDrained);

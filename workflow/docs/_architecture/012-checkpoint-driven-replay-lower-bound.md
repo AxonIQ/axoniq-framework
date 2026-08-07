@@ -25,7 +25,7 @@ event-sourced workflow data. This can turn a short downtime backlog into a very 
 
 ## Decision
 
-The separate engine `SafePointStore` model from ADR-004 is deprecated.
+The separate engine `SafePointStore` model from ADR-004 is removed and the entire ADR-004 is deprecated.
 
 The workflow processor's checkpointed tracking token becomes the sole replay lower bound.
 

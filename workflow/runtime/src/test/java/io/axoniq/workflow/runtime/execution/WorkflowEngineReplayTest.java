@@ -75,6 +75,8 @@ class WorkflowEngineReplayTest {
     private WorkflowExecutionRepository workflowExecutionRepository;
     private WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private WorkflowStore workflowStore;
+    private WorkflowEngineReplaySupport replaySupport;
+    private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
     @BeforeEach
     void setUp() {
@@ -86,6 +88,8 @@ class WorkflowEngineReplayTest {
                 workflowExecutionRepository,
                 workflowStore
         );
+        replaySupport = new WorkflowEngineReplaySupport(workflowEngine);
+        checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
     }
 
     @Test
@@ -98,8 +102,10 @@ class WorkflowEngineReplayTest {
         Metadata metaData = Metadata.with("workflowId", workflowId);
         when(eventMessage.metadata()).thenReturn(metaData);
 
-        ProcessingContext processingContext = mock(ProcessingContext.class);
+        ProcessingContext processingContext = processingContext(null);
         when(processingContext.resources()).thenReturn(Map.of());
+        when(processingContext.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
+        when(processingContext.component(WorkflowEngineCheckpointingSupport.class)).thenReturn(checkpointingSupport);
 
         workflowEngine.handle(eventMessage, processingContext);
 
@@ -145,7 +151,7 @@ class WorkflowEngineReplayTest {
 
         ProcessingContext context = processingContext(token(191));
 
-        workflowEngine.replayStatusChangedHandler().handle(replayStatusChanged, context);
+        context.component(WorkflowEngineReplaySupport.class).handle(replayStatusChanged, context);
 
         verify(workflowExecutionRepository).removeAll(any());
         assertThat(workflowExecutionRepository.findById("terminalId")).isEmpty();
@@ -301,7 +307,7 @@ class WorkflowEngineReplayTest {
         when(eventMessage.type()).thenReturn(new MessageType(eventName));
         when(eventMessage.payloadAs(any(org.axonframework.common.TypeReference.class))).thenReturn(Map.of());
 
-        ProcessingContext processingContext = mock(ProcessingContext.class);
+        ProcessingContext processingContext = processingContext(null);
 
         workflowEngine.handle(eventMessage, processingContext);
 
@@ -336,7 +342,7 @@ class WorkflowEngineReplayTest {
         when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
         when(eventMessage.type()).thenReturn(new MessageType(eventName));
 
-        workflowEngine.handle(eventMessage, mock(ProcessingContext.class));
+        workflowEngine.handle(eventMessage, processingContext(null));
 
         // Same-version duplicate: nothing is spawned. The v1 (and this case v2) instance stays untouched.
         verify(workflowExecutionRepository, never()).save(anyString(), any());
@@ -370,8 +376,7 @@ class WorkflowEngineReplayTest {
         when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
         when(eventMessage.type()).thenReturn(new MessageType(eventName));
 
-        ProcessingContext processingContext = mock(ProcessingContext.class);
-        when(processingContext.resources()).thenReturn(Map.of());
+        ProcessingContext processingContext = processingContext(null);
 
         workflowEngine.handle(eventMessage, processingContext);
 
@@ -426,8 +431,8 @@ class WorkflowEngineReplayTest {
             return execution;
         });
 
-        workflowEngine.replayStatusChangedHandler().initializeReplayTracking(safePoint, tokenAtReset);
-        workflowEngine.checkpointing().onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        replaySupport.initializeReplayTracking(safePoint, tokenAtReset);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
 
         workflowEngine.handle(startEvent(eventName, "wf-1"), processingContext(firstReplayToken));
         workflowEngine.handle(startEvent(eventName, "wf-2"), processingContext(secondReplayToken));
@@ -440,9 +445,9 @@ class WorkflowEngineReplayTest {
     void checkpointAdvancesToRequestedTokenWhenNoWorkflowWorkIsPending() {
         var requested = token(25);
 
-        workflowEngine.replayStatusChangedHandler().initializeReplayTracking(token(18), token(30));
+        replaySupport.initializeReplayTracking(token(18), token(30));
 
-        var advanced = workflowEngine.checkpointing().onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested).join();
+        var advanced = checkpointingSupport.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested).join();
 
         assertSameToken(advanced, requested);
     }
@@ -456,11 +461,11 @@ class WorkflowEngineReplayTest {
         workflowExecutionRepository.save("wf-1", () -> execution);
 
         var trigger = mock(CheckpointTrigger.class);
-        workflowEngine.replayStatusChangedHandler().initializeReplayTracking(token(18), token(30));
-        workflowEngine.checkpointing().onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        replaySupport.initializeReplayTracking(token(18), token(30));
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
 
         var requested = token(25);
-        var advanced = workflowEngine.checkpointing().onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
+        var advanced = checkpointingSupport.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
 
         assertThat(advanced).isNotDone();
 
@@ -479,10 +484,10 @@ class WorkflowEngineReplayTest {
 
         var trigger = mock(CheckpointTrigger.class);
         var requested = token(25);
-        workflowEngine.replayStatusChangedHandler().initializeReplayTracking(token(18), token(30));
-        workflowEngine.checkpointing().onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        replaySupport.initializeReplayTracking(token(18), token(30));
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
 
-        requestCheckpoint(workflowEngine, requested);
+        checkpointingSupport.requestCheckpoint(requested);
 
         verify(trigger).requestCheckpoint(requested);
     }
@@ -492,14 +497,14 @@ class WorkflowEngineReplayTest {
         var trigger = mock(CheckpointTrigger.class);
         var firstRequested = token(25);
         var secondRequested = token(27);
-        workflowEngine.replayStatusChangedHandler().initializeReplayTracking(token(18), token(30));
+        replaySupport.initializeReplayTracking(token(18), token(30));
 
-        requestCheckpoint(workflowEngine, firstRequested);
-        requestCheckpoint(workflowEngine, secondRequested);
+        checkpointingSupport.requestCheckpoint(firstRequested);
+        checkpointingSupport.requestCheckpoint(secondRequested);
 
         verifyNoInteractions(trigger);
 
-        workflowEngine.checkpointing().onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
 
         verify(trigger).requestCheckpoint(secondRequested);
         verifyNoMoreInteractions(trigger);
@@ -510,11 +515,11 @@ class WorkflowEngineReplayTest {
         var trigger = mock(CheckpointTrigger.class);
         var firstRequested = token(25);
         var secondRequested = token(27);
-        workflowEngine.replayStatusChangedHandler().initializeReplayTracking(token(18), token(30));
-        workflowEngine.checkpointing().onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        replaySupport.initializeReplayTracking(token(18), token(30));
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
 
-        requestCheckpoint(workflowEngine, firstRequested);
-        requestCheckpoint(workflowEngine, secondRequested);
+        checkpointingSupport.requestCheckpoint(firstRequested);
+        checkpointingSupport.requestCheckpoint(secondRequested);
 
         verify(trigger).requestCheckpoint(firstRequested);
         verify(trigger).requestCheckpoint(secondRequested);
@@ -529,7 +534,7 @@ class WorkflowEngineReplayTest {
         workflowExecutionRepository.save("wf-1", () -> execution);
 
         var requested = token(25);
-        var advanced = workflowEngine.checkpointing().onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
+        var advanced = checkpointingSupport.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
 
         execution.getNextTask().accept(execution);
         assertThat(advanced).isNotDone();
@@ -568,10 +573,12 @@ class WorkflowEngineReplayTest {
         return new GlobalSequenceTrackingToken(globalIndex);
     }
 
-    private static ProcessingContext processingContext(TrackingToken token) {
+    private ProcessingContext processingContext(TrackingToken token) {
         ProcessingContext processingContext = mock(ProcessingContext.class);
         Map<Context.ResourceKey<?>, Object> resources = new HashMap<>();
-        resources.put(TrackingToken.RESOURCE_KEY, token);
+        if (token != null) {
+            resources.put(TrackingToken.RESOURCE_KEY, token);
+        }
         when(processingContext.resources()).thenReturn(resources);
         doAnswer(invocation -> {
             Context.ResourceKey<?> key = invocation.getArgument(0);
@@ -579,6 +586,8 @@ class WorkflowEngineReplayTest {
             resources.put(key, value);
             return processingContext;
         }).when(processingContext).putResource(any(), any());
+        when(processingContext.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
+        when(processingContext.component(WorkflowEngineCheckpointingSupport.class)).thenReturn(checkpointingSupport);
         return processingContext;
     }
 
@@ -590,12 +599,12 @@ class WorkflowEngineReplayTest {
         return eventMessage;
     }
 
-    private static SimpleWorkflowExecution simpleExecution(String workflowId,
-                                                           TrackingToken restartToken) {
+    private SimpleWorkflowExecution simpleExecution(String workflowId,
+                                                    TrackingToken restartToken) {
         return simpleExecution(workflowId, restartToken, Map.of());
     }
 
-    private static SimpleWorkflowExecution simpleExecution(
+    private SimpleWorkflowExecution simpleExecution(
             String workflowId,
             TrackingToken restartToken,
             Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners
@@ -633,11 +642,6 @@ class WorkflowEngineReplayTest {
         Field field = SimpleWorkflowExecution.class.getDeclaredField("running");
         field.setAccessible(true);
         field.set(execution, running);
-    }
-
-    private static void requestCheckpoint(WorkflowEngine workflowEngine,
-                                          TrackingToken token) throws Exception {
-        workflowEngine.requestCheckpoint(token);
     }
 
     private static void drainAllTasks(SimpleWorkflowExecution execution) {
@@ -714,7 +718,7 @@ class WorkflowEngineReplayTest {
         when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
         when(eventMessage.type()).thenReturn(new MessageType(eventName));
 
-        workflowEngine.handle(eventMessage, mock(ProcessingContext.class));
+        workflowEngine.handle(eventMessage, processingContext(null));
 
         // Even the disambiguated id is taken — nothing new is spawned.
         verify(workflowExecutionRepository, never()).save(anyString(), any());

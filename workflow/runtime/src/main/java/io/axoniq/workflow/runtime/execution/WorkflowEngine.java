@@ -18,10 +18,9 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import io.axoniq.license.entitlement.EntitlementManager;
-import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -32,7 +31,6 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,15 +51,15 @@ import static io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState.PAY
  * @since 1.0.0
  */
 @Internal
-public class WorkflowEngine implements EventHandler, CheckpointingSupplier, ReplayStatusChangedHandlerSupplier {
+public class WorkflowEngine implements EventHandler,
+        WorkflowEngineCheckpointingSupport.CheckpointBarrierCoordinator,
+        WorkflowEngineReplaySupport.LiveModeActivatedCallback {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
     private final WorkflowStore workflowStore;
-    private final WorkflowEngineReplaySupport replaySupport;
-    private final WorkflowEngineCheckpointingAdvancingSupport checkpointingSupport;
 
     /**
      * Creates a new workflow engine.
@@ -79,31 +77,16 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
         this.workflowExecutionRepository = workflowExecutionRepository;
         this.workflowStore = workflowStore;
-        this.replaySupport = new WorkflowEngineReplaySupport(
-                () -> {
-                    WorkflowEngine.this.workflowConfigurationRegistry.warnAboutSameVersionDuplicates();
-                    logger.info("Workflow instance replay finished. Switching to live mode.");
-                    removeTerminalAndStartRestoredWorkflowExecutions("after replay catch-up");
-                }
-        );
-        this.checkpointingSupport = new WorkflowEngineCheckpointingAdvancingSupport(
-                new WorkflowEngineCheckpointingAdvancingSupport.Host() {
-                    @Override
-                    public boolean hasPendingCheckpointWork() {
-                        return WorkflowEngine.this.hasPendingCheckpointWork();
-                    }
-
-                    @Override
-                    public boolean scheduleCheckpointIntent(@Nonnull Runnable onDrained) {
-                        return WorkflowEngine.this.scheduleCheckpointIntent(onDrained);
-                    }
-                });
     }
 
     @Nonnull
     @Override
     public MessageStream.Empty<Message> handle(@Nonnull EventMessage eventMessage,
                                                @Nonnull ProcessingContext processingContext) {
+
+        var replaySupport = processingContext.component(WorkflowEngineReplaySupport.class);
+        var checkpointingSupport = processingContext.component(WorkflowEngineCheckpointingSupport.class);
+
         var currentTrackingToken = replaySupport.observeProcessingContext(processingContext);
         checkpointingSupport.observeProcessingContext(processingContext);
         logger.trace("Received eventMessage {} {} {}",
@@ -119,7 +102,7 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
                 logger.debug("Ignoring event {} for workflowId '{}' — no matching execution in this engine.",
                              eventMessage.type(), workflowId);
                 checkpointingSupport.requestCheckpoint(currentTrackingToken);
-                replaySupport.advanceReplayPosition(currentTrackingToken);
+                replaySupport.advanceReplayPosition(currentTrackingToken, processingContext);
                 return MessageStream.empty();
             }
             executionOpt.get().onEvent(eventMessage, processingContext);
@@ -133,16 +116,15 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
         }
 
         checkpointingSupport.requestCheckpoint(currentTrackingToken);
-        replaySupport.advanceReplayPosition(currentTrackingToken);
+        replaySupport.advanceReplayPosition(currentTrackingToken, processingContext);
         logger.trace("EventMessage {} successfully handled", eventMessage.identifier());
         return MessageStream.empty();
     }
 
-    void requestCheckpoint(@Nullable TrackingToken token) {
-        checkpointingSupport.requestCheckpoint(token);
-    }
+    private void execute(@Nonnull WorkflowExecution execution, @Nonnull ProcessingContext processingContext) {
+        var replaySupport = processingContext.component(WorkflowEngineReplaySupport.class);
+        var checkpointingSupport = processingContext.component(WorkflowEngineCheckpointingSupport.class);
 
-    private void execute(@Nonnull WorkflowExecution execution) {
         execution
                 .workflowContext()
                 .processingContext()
@@ -166,6 +148,9 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
 
     private void checkAndCreateNewWorkflow(@Nonnull EventMessage eventMessage,
                                            @Nonnull ProcessingContext processingContext) {
+
+        var replaySupport = processingContext.component(WorkflowEngineReplaySupport.class);
+
         // For brand-new starts, only the highest-registered version spawns instances.
         // Older registered versions stay available for replay routing (selected later in the execution path
         // based on state.workflowDefinitionVersion(), itself sourced from the workflow's started event metadata).
@@ -207,7 +192,7 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
                                      return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
                                  });
                                  if (replaySupport.isLiveMode()) {
-                                     execute(execution);
+                                     execute(execution, processingContext);
                                  }
                              }
                          }
@@ -224,27 +209,6 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
         return workflowExecutionRepository.findAll();
     }
 
-    /**
-     * Returns the checkpointing aspect used by Axon's event processor.
-     *
-     * @return checkpointing support
-     */
-    @Nonnull
-    @Override
-    public Checkpointing checkpointing() {
-        return checkpointingSupport;
-    }
-
-    /**
-     * Returns the replay-status handling aspect used by Axon's event processor and workflow bootstrap.
-     *
-     * @return replay-status handling support
-     */
-    @Nonnull
-    @Override
-    public WorkflowEngineReplaySupport replayStatusChangedHandler() {
-        return replaySupport;
-    }
 
     /**
      * Restores and starts active workflow executions before processor replay resumes.
@@ -271,9 +235,11 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
     public void start(@Nullable TrackingToken processorToken,
                       @Nonnull ProcessingContext sourcingContext,
                       @Nonnull ProcessingContext executionContext) {
+        var replaySupport = sourcingContext.component(WorkflowEngineReplaySupport.class);
+
         replaySupport.initializeProcessorTokenIfAbsent(processorToken);
         loadRunningWorkflows(sourcingContext, executionContext).join();
-        removeTerminalAndStartRestoredWorkflowExecutions("before replay catch-up");
+        removeTerminalAndStartRestoredWorkflowExecutions("before replay catch-up", executionContext);
     }
 
     /**
@@ -298,6 +264,8 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
 
     private CompletableFuture<Void> loadRunningWorkflows(@Nonnull ProcessingContext sourcingContext,
                                                          @Nonnull ProcessingContext executionContext) {
+        var replaySupport = sourcingContext.component(WorkflowEngineReplaySupport.class);
+
         replaySupport.initializeRestoreProcessingContext(executionContext);
         return workflowStore.loadRunningWorkflows(sourcingContext)
                             .thenCompose(runningWorkflows -> {
@@ -346,7 +314,10 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
      *
      * @param phase startup phase in which the executions are started
      */
-    private void removeTerminalAndStartRestoredWorkflowExecutions(@Nonnull String phase) {
+    private void removeTerminalAndStartRestoredWorkflowExecutions(
+            @Nonnull String phase,
+            @Nonnull ProcessingContext processingContext
+    ) {
         workflowExecutionRepository.removeAll(execution -> execution.state().workflowStatus().isTerminal());
         var executionsToStart = workflowExecutionRepository.findAll(execution -> !execution.isRunning());
         if (executionsToStart.isEmpty()) {
@@ -355,16 +326,18 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
         }
         logger.info("Starting {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
         for (var execution : executionsToStart) {
-            execute(execution);
+            execute(execution, processingContext);
         }
         logger.info("Started {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
     }
 
-    private boolean hasPendingCheckpointWork() {
-        return !workflowExecutionRepository.findAll(WorkflowExecution::hasPendingCheckpointWork).isEmpty();
+    @Override
+    public boolean hasPendingCheckpointWork() {
+        return workflowExecutionRepository.countPendingCheckpointWork() > 0;
     }
 
-    private boolean scheduleCheckpointIntent(@NonNull Runnable onDrained) {
+    @Override
+    public boolean scheduleCheckpointIntent(@Nonnull Runnable onDrained) {
         var scheduledWorkflowIds = new HashSet<String>();
         var scheduled = false;
         for (var execution : workflowExecutionRepository.findAll(WorkflowExecution::hasPendingCheckpointWork)) {
@@ -375,5 +348,12 @@ public class WorkflowEngine implements EventHandler, CheckpointingSupplier, Repl
             scheduled = true;
         }
         return scheduled;
+    }
+
+    @Override
+    public void onLiveModeActivated(@Nonnull ProcessingContext processingContext) {
+        this.workflowConfigurationRegistry.warnAboutSameVersionDuplicates();
+        logger.info("Workflow instance replay finished. Switching to live mode.");
+        removeTerminalAndStartRestoredWorkflowExecutions("after replay catch-up", processingContext);
     }
 }

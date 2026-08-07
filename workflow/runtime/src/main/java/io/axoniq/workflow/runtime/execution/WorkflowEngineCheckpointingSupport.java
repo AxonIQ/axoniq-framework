@@ -41,12 +41,13 @@ import java.util.concurrent.CompletableFuture;
  * @since 1.0.0
  */
 @Internal
-final class WorkflowEngineCheckpointingAdvancingSupport implements Checkpointing {
+public class WorkflowEngineCheckpointingSupport implements Checkpointing {
 
     /**
-     * Host contract implemented by the owning workflow engine.
+     * Coordinates workflow work that must complete before checkpoint advancement.
      */
-    interface Host {
+    @Internal
+    public interface CheckpointBarrierCoordinator {
 
         /**
          * Returns whether any owned workflow execution still makes checkpoint advancement unsafe.
@@ -64,19 +65,22 @@ final class WorkflowEngineCheckpointingAdvancingSupport implements Checkpointing
         boolean scheduleCheckpointIntent(@Nonnull Runnable onDrained);
     }
 
-    private final Host host;
+    private final CheckpointBarrierCoordinator checkpointBarrierCoordinator;
     @Nullable
     private CheckpointTrigger checkpointTrigger;
     @Nullable
     private TrackingToken pendingCheckpointToken;
 
     /**
-     * Creates checkpointing support for the given host.
+     * Creates checkpointing support for the given checkpoint-barrier coordinator.
      *
-     * @param host the engine facade used to inspect workflow safety and schedule barriers
+     * @param checkpointBarrierCoordinator coordinates workflow work before checkpoint advancement
      */
-    WorkflowEngineCheckpointingAdvancingSupport(@Nonnull Host host) {
-        this.host = Objects.requireNonNull(host, "Checkpointing host must not be null");
+    public WorkflowEngineCheckpointingSupport(@Nonnull CheckpointBarrierCoordinator checkpointBarrierCoordinator) {
+        this.checkpointBarrierCoordinator = Objects.requireNonNull(
+                checkpointBarrierCoordinator,
+                "Checkpoint barrier coordinator must not be null"
+        );
     }
 
     /**
@@ -111,9 +115,9 @@ final class WorkflowEngineCheckpointingAdvancingSupport implements Checkpointing
     @Override
     public CompletableFuture<TrackingToken> onCheckpointAdvanced(@Nonnull Segment segment,
                                                                  @Nonnull TrackingToken requested) {
-        if (host.hasPendingCheckpointWork()) {
+        if (checkpointBarrierCoordinator.hasPendingCheckpointWork()) {
             var result = new CompletableFuture<TrackingToken>();
-            var scheduled = host.scheduleCheckpointIntent(() -> {
+            var scheduled = checkpointBarrierCoordinator.scheduleCheckpointIntent(() -> {
                 if (result.isDone()) {
                     return;
                 }
@@ -127,7 +131,7 @@ final class WorkflowEngineCheckpointingAdvancingSupport implements Checkpointing
                         });
             });
             if (!scheduled) {
-                if (!host.hasPendingCheckpointWork()) {
+                if (!checkpointBarrierCoordinator.hasPendingCheckpointWork()) {
                     return CompletableFuture.completedFuture(requested);
                 }
                 result.completeExceptionally(new IllegalStateException(
@@ -157,7 +161,7 @@ final class WorkflowEngineCheckpointingAdvancingSupport implements Checkpointing
         flushPendingCheckpointRequest();
     }
 
-    private synchronized void flushPendingCheckpointRequest() {
+    private void flushPendingCheckpointRequest() {
         var trigger = checkpointTrigger;
         if (trigger == null) {
             return;

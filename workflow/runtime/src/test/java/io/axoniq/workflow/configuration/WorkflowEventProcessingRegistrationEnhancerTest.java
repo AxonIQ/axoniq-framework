@@ -46,20 +46,19 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         var unitOfWorkFactory = unitOfWorkFactory();
         var processorToken = token(18);
         var latestToken = token(192);
-        when(workflowEngine.replayStatusChangedHandler()).thenReturn(replaySupport);
 
         enhancer.initializeWorkflowEngine(
                 workflowEngine,
                 unitOfWorkFactory,
+                replaySupport,
                 processorToken,
                 latestToken
         ).join();
 
         var inOrder = inOrder(workflowEngine, replaySupport);
-        inOrder.verify(workflowEngine).replayStatusChangedHandler();
         inOrder.verify(replaySupport).initializeReplayTracking(processorToken, latestToken);
         inOrder.verify(workflowEngine).start(eq(processorToken), any(ProcessingContext.class), any(ProcessingContext.class));
-        verify(replaySupport, never()).switchToLiveMode();
+        verify(replaySupport, never()).switchToLiveMode(any(ProcessingContext.class));
     }
 
     @Test
@@ -69,18 +68,18 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         var replaySupport = mock(WorkflowEngineReplaySupport.class);
         var unitOfWorkFactory = unitOfWorkFactory();
         var token = token(192);
-        when(workflowEngine.replayStatusChangedHandler()).thenReturn(replaySupport);
 
         enhancer.initializeWorkflowEngine(
                 workflowEngine,
                 unitOfWorkFactory,
+                replaySupport,
                 token,
                 token
         ).join();
 
         verify(replaySupport).initializeReplayTracking(token, token);
         verify(workflowEngine).start(eq(token), any(ProcessingContext.class), any(ProcessingContext.class));
-        verify(replaySupport).switchToLiveMode();
+        verify(replaySupport).switchToLiveMode(any(ProcessingContext.class));
     }
 
     @Test

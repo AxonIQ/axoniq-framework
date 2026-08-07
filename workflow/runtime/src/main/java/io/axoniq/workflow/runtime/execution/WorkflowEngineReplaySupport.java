@@ -57,17 +57,20 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
     /**
      * Callback invoked once replay has transitioned to live mode.
      */
+    @Internal
     @FunctionalInterface
-    public interface Host {
+    public interface LiveModeActivatedCallback {
 
         /**
          * Reacts to the first transition from replay mode to live mode.
+         *
+         * @param processingContext the current processor context
          */
-        void onLiveModeActivated();
+        void onLiveModeActivated(@Nonnull ProcessingContext processingContext);
     }
 
     private final static Logger logger = LoggerFactory.getLogger(WorkflowEngineReplaySupport.class);
-    private final Host host;
+    private final LiveModeActivatedCallback liveModeActivatedCallback;
     private volatile boolean liveMode;
     @Nullable
     private volatile TrackingToken currentTrackingToken;
@@ -75,12 +78,15 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
     private volatile TrackingToken startupLatestToken;
 
     /**
-     * Creates replay support for the given host.
+     * Creates replay support for the given live-mode activation callback.
      *
-     * @param host the workflow-engine callback invoked when live mode starts
+     * @param liveModeActivatedCallback the workflow-engine callback invoked when live mode starts
      */
-    public WorkflowEngineReplaySupport(@Nonnull Host host) {
-        this.host = Objects.requireNonNull(host, "Replay host must not be null");
+    public WorkflowEngineReplaySupport(@Nonnull LiveModeActivatedCallback liveModeActivatedCallback) {
+        this.liveModeActivatedCallback = Objects.requireNonNull(
+                liveModeActivatedCallback,
+                "Live mode activated callback must not be null"
+        );
     }
 
     /**
@@ -111,14 +117,14 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      *
      * @return {@code true} if this call performed the transition, otherwise {@code false}
      */
-    public boolean switchToLiveMode() {
+    public boolean switchToLiveMode(@Nonnull ProcessingContext processingContext) {
         synchronized (this) {
             if (liveMode) {
                 return false;
             }
             liveMode = true;
         }
-        host.onLiveModeActivated();
+        liveModeActivatedCallback.onLiveModeActivated(processingContext);
         return true;
     }
 
@@ -176,10 +182,10 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      *
      * @param currentToken the normalized token associated with the observed callback
      */
-    void advanceReplayPosition(@Nullable TrackingToken currentToken) {
+    void advanceReplayPosition(@Nullable TrackingToken currentToken, @Nonnull ProcessingContext context) {
         var latest = startupLatestToken;
         if (latest != null && !liveMode && covers(currentToken, latest)) {
-            switchToLiveMode();
+            switchToLiveMode(context);
         }
     }
 
@@ -198,7 +204,7 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
         logger.debug("Replay status changed to {} at {}",
                      statusChange.status(),
                      context.resources().get(TrackingToken.RESOURCE_KEY));
-        if (!statusChange.status().isReplay() && !switchToLiveMode()) {
+        if (!statusChange.status().isReplay() && !switchToLiveMode(context)) {
             logger.warn("Workflow execution is already started.");
         }
         return MessageStream.empty();
