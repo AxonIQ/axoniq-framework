@@ -26,10 +26,11 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * A cache of one infrastructure component per tenant that creates each component lazily on first use and evicts it when
@@ -62,7 +63,7 @@ import java.util.function.Function;
  * @since 5.3.0
  */
 @Internal
-public class TenantScopedCache<C> implements MultiTenantAwareComponent {
+public class TenantScopedCache<C> implements TenantComponentLookup<C>, MultiTenantAwareComponent {
 
     private final Function<TenantDescriptor, C> componentFactory;
     private final BiConsumer<TenantDescriptor, C> onEviction;
@@ -106,9 +107,9 @@ public class TenantScopedCache<C> implements MultiTenantAwareComponent {
     public TenantScopedCache(Function<TenantDescriptor, C> componentFactory,
                              BiConsumer<TenantDescriptor, C> onEviction,
                              String owner) {
-        this.componentFactory = Objects.requireNonNull(componentFactory, "The component factory must not be null");
-        this.onEviction = Objects.requireNonNull(onEviction, "The eviction callback must not be null");
-        this.owner = Objects.requireNonNull(owner, "The owner must not be null");
+        this.componentFactory = requireNonNull(componentFactory, "The component factory must not be null");
+        this.onEviction = requireNonNull(onEviction, "The eviction callback must not be null");
+        this.owner = requireNonNull(owner, "The owner must not be null");
     }
 
     /**
@@ -118,8 +119,9 @@ public class TenantScopedCache<C> implements MultiTenantAwareComponent {
      * @return the tenant's cached component
      * @throws TenantNotResolvedException if the given {@code tenant} is not registered
      */
+    @Override
     public C componentFor(TenantDescriptor tenant) {
-        Objects.requireNonNull(tenant, "The tenant must not be null");
+        requireNonNull(tenant, "The tenant must not be null");
         // Retried only when a concurrent (un)registration intervened between reading the token and checking it again,
         // so a caller progresses unless the tenant is registered anew without bound. Bounding the retries instead would
         // fail an operation that a single unlucky interleaving could have completed.
@@ -132,7 +134,7 @@ public class TenantScopedCache<C> implements MultiTenantAwareComponent {
             }
             C component = components.computeIfAbsent(
                     token,
-                    ignored -> Objects.requireNonNull(componentFactory.apply(tenant),
+                    ignored -> requireNonNull(componentFactory.apply(tenant),
                                                       "The component factory returned null for tenant ["
                                                               + tenant.tenantId() + "]")
             );
@@ -151,7 +153,7 @@ public class TenantScopedCache<C> implements MultiTenantAwareComponent {
 
     @Override
     public Registration registerTenant(TenantDescriptor tenantDescriptor) {
-        Objects.requireNonNull(tenantDescriptor, "The tenant descriptor must not be null");
+        requireNonNull(tenantDescriptor, "The tenant descriptor must not be null");
         RegistrationToken token = new RegistrationToken();
         // Re-registering supersedes the previous registration, whose component would otherwise be reachable through
         // neither this cache nor its own cancellation once that Registration is dropped.
