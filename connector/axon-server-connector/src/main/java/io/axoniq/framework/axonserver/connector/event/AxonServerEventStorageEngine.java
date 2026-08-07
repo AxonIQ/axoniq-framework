@@ -233,13 +233,11 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
 
         private static CompletableFuture<AppendEventsResponse> mapCommitFailure(Throwable failure) {
             if (isConsistencyConditionFailure(failure)) {
-                logger.warn("Axon Server rejected the append transaction, as its condition was not met.", failure);
                 AppendEventsTransactionRejectedException rejection =
                         new AppendEventsTransactionRejectedException(failure.getMessage());
                 rejection.initCause(failure);
                 return CompletableFuture.failedFuture(rejection);
             }
-            logger.warn("Committing append transaction failed.", failure);
             return CompletableFuture.failedFuture(new EventStoreException(
                     "Failed committing events to Axon Server with exception [" + failure.getClass() + "].", failure
             ));
