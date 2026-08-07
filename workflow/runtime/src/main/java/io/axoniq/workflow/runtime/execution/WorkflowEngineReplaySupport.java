@@ -32,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Support object that owns replay tracking and the transition from replay mode to live mode for one workflow engine.
@@ -47,6 +48,10 @@ import java.util.Objects;
  * {@link #startupLatestToken} remembers the stream position that marked the end of replay at startup, and
  * {@link #liveMode} gates whether restored executions should start immediately. None of those concerns are required to
  * ask for a checkpoint, so they live here instead of inside checkpoint support.
+ * <p>
+ * Replay state is read frequently from processor callbacks, so the tracking-token references are {@code volatile}.
+ * The live-mode state uses an {@link AtomicBoolean} to perform the one-time transition atomically without a monitor.
+ * The live-mode callback runs after the successful transition, outside any coordination mechanism.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
@@ -71,7 +76,7 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
 
     private final static Logger logger = LoggerFactory.getLogger(WorkflowEngineReplaySupport.class);
     private final LiveModeActivatedCallback liveModeActivatedCallback;
-    private volatile boolean liveMode;
+    private final AtomicBoolean liveMode = new AtomicBoolean();
     @Nullable
     private volatile TrackingToken currentTrackingToken;
     @Nullable
@@ -118,11 +123,8 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      * @return {@code true} if this call performed the transition, otherwise {@code false}
      */
     public boolean switchToLiveMode(@Nonnull ProcessingContext processingContext) {
-        synchronized (this) {
-            if (liveMode) {
-                return false;
-            }
-            liveMode = true;
+        if (!liveMode.compareAndSet(false, true)) {
+            return false;
         }
         liveModeActivatedCallback.onLiveModeActivated(processingContext);
         return true;
@@ -134,7 +136,7 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      * @return {@code true} once live mode has been entered
      */
     public boolean isLiveMode() {
-        return liveMode;
+        return liveMode.get();
     }
 
     /**
@@ -184,7 +186,7 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      */
     void advanceReplayPosition(@Nullable TrackingToken currentToken, @Nonnull ProcessingContext context) {
         var latest = startupLatestToken;
-        if (latest != null && !liveMode && covers(currentToken, latest)) {
+        if (latest != null && !liveMode.get() && covers(currentToken, latest)) {
             switchToLiveMode(context);
         }
     }

@@ -36,6 +36,11 @@ import java.util.concurrent.CompletableFuture;
  * This class has one job: coordinate checkpoint requests and complete
  * {@link #onCheckpointAdvanced(Segment, TrackingToken)} only after the host confirms that workflow-owned asynchronous
  * work is safe. It does not track replay progress or decide when the engine should switch to live mode.
+ * <p>
+ * The checkpoint trigger and pending checkpoint token are coordinated through this instance's monitor. Their updates
+ * are deliberately small and never invoke processor or workflow callbacks while the monitor is held. The coordinator
+ * callback supplied to {@link #onCheckpointAdvanced(Segment, TrackingToken)} runs outside that monitor and re-enters
+ * the support only after the workflow barriers have been crossed.
  *
  * @author Simon Zambrovski
  * @since 1.0.0

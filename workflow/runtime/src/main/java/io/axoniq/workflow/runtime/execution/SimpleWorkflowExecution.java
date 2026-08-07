@@ -89,22 +89,24 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
     private final RunningSteps runningSteps = new RunningSteps();
     private final Set<String> referencedStepNames = ConcurrentHashMap.newKeySet();
-    private final WorkflowExecutionCheckpointSupport checkpointSupport = new WorkflowExecutionCheckpointSupport(new WorkflowExecutionCheckpointSupport.Host() {
-        @Override
-        public boolean isExecutable() {
-            return running;
-        }
+    private final WorkflowExecutionCheckpointSupport checkpointSupport = new WorkflowExecutionCheckpointSupport(
+            new WorkflowExecutionCheckpointSupport.CheckpointBarrierTaskQueue() {
+                @Override
+                public boolean isRunning() {
+                    return running;
+                }
 
-        @Override
-        public boolean hasQueuedTasks() {
-            return !taskQueue.isEmpty();
-        }
+                @Override
+                public boolean hasQueuedTasks() {
+                    return !taskQueue.isEmpty();
+                }
 
-        @Override
-        public void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
-            SimpleWorkflowExecution.this.appendTask(task);
-        }
-    });
+                @Override
+                public void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
+                    SimpleWorkflowExecution.this.appendTask(task);
+                }
+            }
+    );
     private boolean running = false;
 
     /**
