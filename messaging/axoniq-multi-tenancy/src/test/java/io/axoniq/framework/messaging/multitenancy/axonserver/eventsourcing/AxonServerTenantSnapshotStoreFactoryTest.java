@@ -28,6 +28,7 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.junit.jupiter.api.*;
@@ -118,5 +119,23 @@ class AxonServerTenantSnapshotStoreFactoryTest {
 
         // then
         assertThat(descriptor.<Converter>getProperty("converter")).isSameAs(tenantConverter);
+    }
+
+    @Test
+    void usesTheConfiguredConverterWhenNoTenantConverterProviderIsRegistered() {
+        Configuration configuration = MessagingConfigurer.create()
+                                                       .componentRegistry(registry -> {
+                                                           registry.registerComponent(AxonServerConnectionManager.class,
+                                                                                      config -> connectionManager);
+                                                       })
+                                                       .build();
+        AxonServerTenantSnapshotStoreFactory factory = new AxonServerTenantSnapshotStoreFactory(configuration);
+        factory.registerTenant(TENANT_A);
+        MockComponentDescriptor descriptor = new MockComponentDescriptor();
+
+        factory.storeFor(TENANT_A).describeTo(descriptor);
+
+        assertThat(descriptor.<Converter>getProperty("converter"))
+                .isSameAs(configuration.getComponent(GeneralConverter.class));
     }
 }
