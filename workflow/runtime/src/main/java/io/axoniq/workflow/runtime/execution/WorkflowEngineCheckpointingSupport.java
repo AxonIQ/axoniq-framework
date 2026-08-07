@@ -59,15 +59,17 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
          *
          * @return {@code true} when checkpoint advancement must wait
          */
-        boolean hasPendingCheckpointWork();
+        boolean hasUnsafeCheckpointWork();
 
         /**
          * Schedules checkpoint barrier tasks across the owned workflow executions.
+         * <p>
+         * Implementations must invoke {@code onDrained} even when no execution currently needs a barrier. The callback
+         * re-checks checkpoint safety, covering work appended after the coordinator takes its execution snapshot.
          *
          * @param onDrained callback to invoke once the scheduled barriers have been crossed
-         * @return {@code true} if at least one barrier was scheduled
          */
-        boolean scheduleCheckpointIntent(@Nonnull Runnable onDrained);
+        void scheduleCheckpointIntent(@Nonnull Runnable onDrained);
     }
 
     private final CheckpointBarrierCoordinator checkpointBarrierCoordinator;
@@ -120,9 +122,9 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     @Override
     public CompletableFuture<TrackingToken> onCheckpointAdvanced(@Nonnull Segment segment,
                                                                  @Nonnull TrackingToken requested) {
-        if (checkpointBarrierCoordinator.hasPendingCheckpointWork()) {
+        if (checkpointBarrierCoordinator.hasUnsafeCheckpointWork()) {
             var result = new CompletableFuture<TrackingToken>();
-            var scheduled = checkpointBarrierCoordinator.scheduleCheckpointIntent(() -> {
+            checkpointBarrierCoordinator.scheduleCheckpointIntent(() -> {
                 if (result.isDone()) {
                     return;
                 }
@@ -135,14 +137,6 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
                             }
                         });
             });
-            if (!scheduled) {
-                if (!checkpointBarrierCoordinator.hasPendingCheckpointWork()) {
-                    return CompletableFuture.completedFuture(requested);
-                }
-                result.completeExceptionally(new IllegalStateException(
-                        "Checkpoint requested while workflow work is unsafe, but no checkpoint intent could be scheduled."
-                ));
-            }
             return result;
         }
         return CompletableFuture.completedFuture(requested);

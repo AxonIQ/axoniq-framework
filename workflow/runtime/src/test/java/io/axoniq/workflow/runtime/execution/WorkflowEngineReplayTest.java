@@ -466,10 +466,10 @@ class WorkflowEngineReplayTest {
     @Test
     void checkpointWaitsForWorkflowQueueToDrain() throws Exception {
         var execution = simpleExecution("wf-1", token(18));
+        registerExecutionWithEngine(execution);
         markRunning(execution, true);
         execution.appendTask(ignored -> {
         });
-        workflowExecutionRepository.save("wf-1", () -> execution);
 
         var trigger = mock(CheckpointTrigger.class);
         replaySupport.initializeReplayTracking(token(18), token(30));
@@ -488,10 +488,10 @@ class WorkflowEngineReplayTest {
     @Test
     void checkpointIsRequestedImmediatelyEvenWhenWorkflowQueueHasPendingWork() throws Exception {
         var execution = simpleExecution("wf-1", token(18));
+        registerExecutionWithEngine(execution);
         markRunning(execution, true);
         execution.appendTask(ignored -> {
         });
-        workflowExecutionRepository.save("wf-1", () -> execution);
 
         var trigger = mock(CheckpointTrigger.class);
         var requested = token(25);
@@ -539,10 +539,10 @@ class WorkflowEngineReplayTest {
     @Test
     void checkpointAdvanceRechecksWhenEarlierTaskAppendsMoreWorkBehindBarrier() throws Exception {
         var execution = simpleExecution("wf-1", token(18));
+        registerExecutionWithEngine(execution);
         markRunning(execution, true);
         execution.appendTask(ignored -> execution.appendTask(next -> {
         }));
-        workflowExecutionRepository.save("wf-1", () -> execution);
 
         var requested = token(25);
         var advanced = checkpointingSupport.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
@@ -613,6 +613,26 @@ class WorkflowEngineReplayTest {
     private SimpleWorkflowExecution simpleExecution(String workflowId,
                                                     TrackingToken restartToken) {
         return simpleExecution(workflowId, restartToken, Map.of());
+    }
+
+    private void registerExecutionWithEngine(SimpleWorkflowExecution execution) {
+        QualifiedName eventName = new QualifiedName("RegisterCheckpointWork");
+        WorkflowConfiguration<WorkflowContext> configuration = mock(WorkflowConfiguration.class);
+        WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
+        WorkflowExecutionFactory executionFactory = mock(WorkflowExecutionFactory.class);
+        when(configuration.workflowIdProvider()).thenReturn(event -> execution.workflowId());
+        when(configuration.workflowVersion()).thenReturn(MessageType.DEFAULT_VERSION);
+        when(configuration.workflowContextFactory()).thenReturn(contextFactory);
+        when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
+        when(contextFactory.createContext(anyMap(), anyString(), any(), eq(configuration))).thenReturn(
+                mock(WorkflowContext.class)
+        );
+        when(executionFactory.create(any())).thenReturn(execution);
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName)).thenReturn(
+                List.of(new PredicatedWorkflowConfiguration((event, context) -> true, configuration))
+        );
+
+        workflowEngine.handle(startEvent(eventName, execution.workflowId()), processingContext(null));
     }
 
     private SimpleWorkflowExecution simpleExecution(

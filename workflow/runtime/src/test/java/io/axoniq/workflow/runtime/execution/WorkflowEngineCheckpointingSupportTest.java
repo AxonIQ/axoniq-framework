@@ -58,25 +58,58 @@ class WorkflowEngineCheckpointingSupportTest {
         assertThat(result).isCompletedWithValue(requested);
     }
 
+    @Test
+    void retriesCheckpointBarrierWhenWorkAppearsAfterAnEmptyBarrierSchedule() {
+        var coordinator = new ConcurrentWorkCoordinator();
+        var support = new WorkflowEngineCheckpointingSupport(coordinator);
+        var requested = new GlobalSequenceTrackingToken(42);
+
+        var result = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
+
+        assertThat(result).isCompletedWithValue(requested);
+        assertThat(coordinator.scheduledBarriers).isEqualTo(2);
+    }
+
     private static final class InlineCheckpointBarrierCoordinator
             implements WorkflowEngineCheckpointingSupport.CheckpointBarrierCoordinator {
 
         private boolean pendingWork;
         private Runnable barrier;
+        private int scheduledBarriers;
 
         @Override
-        public boolean hasPendingCheckpointWork() {
+        public boolean hasUnsafeCheckpointWork() {
             return pendingWork;
         }
 
         @Override
-        public boolean scheduleCheckpointIntent(@Nonnull Runnable onDrained) {
+        public void scheduleCheckpointIntent(@Nonnull Runnable onDrained) {
             barrier = onDrained;
-            return true;
+            scheduledBarriers++;
         }
 
         private void crossBarrier() {
             barrier.run();
+        }
+    }
+
+    private static final class ConcurrentWorkCoordinator
+            implements WorkflowEngineCheckpointingSupport.CheckpointBarrierCoordinator {
+
+        private boolean workAppended;
+        private int scheduledBarriers;
+
+        @Override
+        public boolean hasUnsafeCheckpointWork() {
+            return scheduledBarriers == 0 || workAppended;
+        }
+
+        @Override
+        public void scheduleCheckpointIntent(@Nonnull Runnable onDrained) {
+            scheduledBarriers++;
+            // The first schedule sees an empty snapshot. A workflow thread appends work before the callback re-checks.
+            workAppended = scheduledBarriers == 1;
+            onDrained.run();
         }
     }
 }

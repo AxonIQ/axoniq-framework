@@ -103,7 +103,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
                 @Override
                 public void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
-                    SimpleWorkflowExecution.this.appendTask(task);
+                    SimpleWorkflowExecution.this.enqueueTask(task);
                 }
             }
     );
@@ -156,6 +156,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     @Override
     public void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler) {
         this.running = true;
+        checkpointSupport.refreshCheckpointWorkState();
         // run in a separate thread to avoid blocking the replay status change handler thread ( = WorkPackage)
 
         ProcessingContextUtils
@@ -371,6 +372,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         this.eventWaitConditions.clear();
         this.runningSteps.cancelAll(null, s -> {
         });
+        checkpointSupport.refreshCheckpointWorkState();
         terminationHandler.accept(this);
     }
 
@@ -461,8 +463,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
     @Override
-    public boolean hasPendingCheckpointWork() {
-        return checkpointSupport.hasPendingCheckpointWork();
+    public boolean hasUnsafeCheckpointWork() {
+        return checkpointSupport.hasUnsafeCheckpointWork();
     }
 
     @Override
@@ -513,10 +515,21 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     @Override
     public void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
+        checkpointSupport.appendTask(task);
+    }
+
+    private void enqueueTask(@Nonnull Consumer<WorkflowExecution> task) {
         if (!this.taskQueue.offer(task)) {
             // whoops, we're overloading this workflow with events. STOP!!!
             throw new RuntimeException("Too many tasks to perform workflow instance"); // FIXME <- task queue is full, backpressure?
         }
+    }
+
+    @Override
+    public void registerCheckpointWorkStateListener(
+            @Nonnull CheckpointWorkStateListener listener
+    ) {
+        checkpointSupport.registerCheckpointWorkStateListener(listener);
     }
 
     @Override

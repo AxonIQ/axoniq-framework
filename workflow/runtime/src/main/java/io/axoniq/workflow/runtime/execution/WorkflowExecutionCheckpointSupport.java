@@ -139,6 +139,8 @@ final class WorkflowExecutionCheckpointSupport {
     private final AtomicBoolean taskActive = new AtomicBoolean(false);
     private boolean checkpointIntentQueued;
     private Runnable checkpointIntentCallback = NO_OP;
+    private WorkflowExecution.CheckpointWorkStateListener checkpointWorkStateListener;
+    private boolean checkpointWorkUnsafe;
 
     /**
      * Creates checkpoint support bound to a workflow task queue.
@@ -147,10 +149,58 @@ final class WorkflowExecutionCheckpointSupport {
      */
     @Internal
     WorkflowExecutionCheckpointSupport(@Nonnull CheckpointBarrierTaskQueue checkpointBarrierTaskQueue) {
+        this(checkpointBarrierTaskQueue, new WorkflowExecution.CheckpointWorkStateListener() {
+            @Override
+            public void onCheckpointWorkBecameUnsafe() {
+            }
+
+            @Override
+            public void onCheckpointWorkBecameSafe() {
+            }
+        });
+    }
+
+    WorkflowExecutionCheckpointSupport(
+            @Nonnull CheckpointBarrierTaskQueue checkpointBarrierTaskQueue,
+            @Nonnull WorkflowExecution.CheckpointWorkStateListener checkpointWorkStateListener
+    ) {
         this.checkpointBarrierTaskQueue = Objects.requireNonNull(
                 checkpointBarrierTaskQueue,
                 "Checkpoint barrier task queue must not be null"
         );
+        this.checkpointWorkStateListener = Objects.requireNonNull(
+                checkpointWorkStateListener,
+                "Checkpoint work state listener must not be null"
+        );
+    }
+
+    synchronized void registerCheckpointWorkStateListener(
+            @Nonnull WorkflowExecution.CheckpointWorkStateListener listener
+    ) {
+        checkpointWorkStateListener = Objects.requireNonNull(listener, "Checkpoint work state listener must not be null");
+        checkpointWorkUnsafe = checkpointBarrierTaskQueue.isRunning()
+                && (taskActive.get() || checkpointBarrierTaskQueue.hasQueuedTasks() || checkpointIntentQueued);
+        if (checkpointWorkUnsafe) {
+            checkpointWorkStateListener.onCheckpointWorkBecameUnsafe();
+        } else {
+            checkpointWorkStateListener.onCheckpointWorkBecameSafe();
+        }
+    }
+
+    synchronized void refreshCheckpointWorkState() {
+        reportCheckpointWorkState();
+    }
+
+    void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
+        synchronized (this) {
+            reportCheckpointWorkUnsafe();
+            try {
+                checkpointBarrierTaskQueue.appendTask(task);
+            } catch (RuntimeException e) {
+                reportCheckpointWorkState();
+                throw e;
+            }
+        }
     }
 
     /**
@@ -183,8 +233,17 @@ final class WorkflowExecutionCheckpointSupport {
                 return;
             }
             checkpointIntentQueued = true;
+            reportCheckpointWorkUnsafe();
         }
-        checkpointBarrierTaskQueue.appendTask(new CheckpointIntent());
+        try {
+            checkpointBarrierTaskQueue.appendTask(new CheckpointIntent());
+        } catch (RuntimeException e) {
+            synchronized (this) {
+                checkpointIntentQueued = false;
+                reportCheckpointWorkState();
+            }
+            throw e;
+        }
     }
 
     /**
@@ -202,7 +261,7 @@ final class WorkflowExecutionCheckpointSupport {
      *
      * @return {@code true} if checkpoint advancement must still wait, otherwise {@code false}
      */
-    boolean hasPendingCheckpointWork() {
+    boolean hasUnsafeCheckpointWork() {
         if (!checkpointBarrierTaskQueue.isRunning()) {
             return false;
         }
@@ -211,11 +270,33 @@ final class WorkflowExecutionCheckpointSupport {
         }
     }
 
+    private void reportCheckpointWorkUnsafe() {
+        if (!checkpointBarrierTaskQueue.isRunning() || checkpointWorkUnsafe) {
+            return;
+        }
+        checkpointWorkUnsafe = true;
+        checkpointWorkStateListener.onCheckpointWorkBecameUnsafe();
+    }
+
+    private void reportCheckpointWorkState() {
+        var unsafe = checkpointBarrierTaskQueue.isRunning()
+                && (taskActive.get() || checkpointBarrierTaskQueue.hasQueuedTasks() || checkpointIntentQueued);
+        if (unsafe == checkpointWorkUnsafe) {
+            return;
+        }
+        checkpointWorkUnsafe = unsafe;
+        if (unsafe) {
+            checkpointWorkStateListener.onCheckpointWorkBecameUnsafe();
+        } else {
+            checkpointWorkStateListener.onCheckpointWorkBecameSafe();
+        }
+    }
+
     /**
      * Executes one queue task while maintaining checkpoint bookkeeping.
      * <p>
      * This method marks a task as active for the duration of execution so
-     * {@link #hasPendingCheckpointWork()} can observe that the queue is not yet safe even when it appears empty.
+     * {@link #hasUnsafeCheckpointWork()} can observe that the queue is not yet safe even when it appears empty.
      * <p>
      * When the task is a {@link CheckpointIntent}, consuming it snapshots the currently composed callback. That callback
      * is then invoked after the task finishes and after {@code taskActive} has been cleared, so the subsequent safety
@@ -228,11 +309,17 @@ final class WorkflowExecutionCheckpointSupport {
                  @Nonnull WorkflowExecution execution) {
         Runnable afterTask;
         taskActive.set(true);
+        synchronized (this) {
+            reportCheckpointWorkUnsafe();
+        }
         try {
             task.accept(execution);
             afterTask = task instanceof CheckpointIntent checkpointIntent ? checkpointIntent.onDrained() : null;
         } finally {
             taskActive.set(false);
+            synchronized (this) {
+                reportCheckpointWorkState();
+            }
         }
         if (afterTask != null) {
             afterTask.run();

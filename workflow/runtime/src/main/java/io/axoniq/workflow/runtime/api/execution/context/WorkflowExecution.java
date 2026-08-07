@@ -157,11 +157,34 @@ public interface WorkflowExecution extends DescribableComponent {
     void appendCheckpointIntent(@Nonnull Runnable onDrained);
 
     /**
-     * Checks if the pending checkpoint work is present.
+     * Checks whether checkpoint advancement is unsafe because workflow work is active, queued, or barriered.
      *
-     * @return {@code true} if the pending checkpoint work is present, {@code false} otherwise
+     * @return {@code true} if checkpoint advancement is unsafe, {@code false} otherwise
      */
-    boolean hasPendingCheckpointWork();
+    boolean hasUnsafeCheckpointWork();
+
+    /**
+     * Registers a listener for transitions of checkpoint-relevant work.
+     *
+     * @param listener listener to notify when checkpoint work becomes safe or unsafe
+     */
+    void registerCheckpointWorkStateListener(@Nonnull CheckpointWorkStateListener listener);
+
+    /**
+     * Receives transitions of checkpoint-relevant workflow work.
+     */
+    interface CheckpointWorkStateListener {
+
+        /**
+         * Invoked when the workflow execution has checkpoint-relevant work.
+         */
+        void onCheckpointWorkBecameUnsafe();
+
+        /**
+         * Invoked when the workflow execution no longer has checkpoint-relevant work.
+         */
+        void onCheckpointWorkBecameSafe();
+    }
 
     /**
      * Cancel all running steps.

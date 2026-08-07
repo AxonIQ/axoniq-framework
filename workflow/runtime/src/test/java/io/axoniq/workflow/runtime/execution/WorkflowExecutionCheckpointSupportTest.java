@@ -44,12 +44,12 @@ class WorkflowExecutionCheckpointSupportTest {
         support.appendCheckpointIntent(callbacks::incrementAndGet);
 
         assertThat(taskQueue.tasks).hasSize(1);
-        assertThat(support.hasPendingCheckpointWork()).isTrue();
+        assertThat(support.hasUnsafeCheckpointWork()).isTrue();
 
         support.runTask(taskQueue.tasks.remove(), mock(WorkflowExecution.class));
 
         assertThat(callbacks).hasValue(2);
-        assertThat(support.hasPendingCheckpointWork()).isFalse();
+        assertThat(support.hasUnsafeCheckpointWork()).isFalse();
     }
 
     @Test
@@ -63,7 +63,38 @@ class WorkflowExecutionCheckpointSupportTest {
 
         assertThat(callbacks).hasValue(1);
         assertThat(taskQueue.tasks).isEmpty();
-        assertThat(support.hasPendingCheckpointWork()).isFalse();
+        assertThat(support.hasUnsafeCheckpointWork()).isFalse();
+    }
+
+    @Test
+    void reportsCheckpointWorkStateTransitions() {
+        var taskQueue = new InlineCheckpointBarrierTaskQueue();
+        var unsafeTransitions = new AtomicInteger();
+        var safeTransitions = new AtomicInteger();
+        var support = new WorkflowExecutionCheckpointSupport(
+                taskQueue,
+                new WorkflowExecution.CheckpointWorkStateListener() {
+                    @Override
+                    public void onCheckpointWorkBecameUnsafe() {
+                        unsafeTransitions.incrementAndGet();
+                    }
+
+                    @Override
+                    public void onCheckpointWorkBecameSafe() {
+                        safeTransitions.incrementAndGet();
+                    }
+                }
+        );
+
+        support.appendTask(ignored -> {
+        });
+
+        assertThat(unsafeTransitions).hasValue(1);
+        assertThat(safeTransitions).hasValue(0);
+
+        support.runTask(taskQueue.tasks.remove(), mock(WorkflowExecution.class));
+
+        assertThat(safeTransitions).hasValue(1);
     }
 
     private static final class InlineCheckpointBarrierTaskQueue

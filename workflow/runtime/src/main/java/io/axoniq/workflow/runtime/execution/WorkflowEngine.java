@@ -36,6 +36,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -62,6 +63,7 @@ public class WorkflowEngine implements EventHandler,
     private final WorkflowExecutionRepository workflowExecutionRepository;
     private final WorkflowStore workflowStore;
     private final UnitOfWorkFactory unitOfWorkFactory;
+    private final WorkflowEngineCheckpointWorkIndex checkpointWorkIndex = new WorkflowEngineCheckpointWorkIndex();
 
     /**
      * Creates a new workflow engine.
@@ -142,6 +144,7 @@ public class WorkflowEngine implements EventHandler,
                                                  execution.workflowId(),
                                                  finished.state().workflowStatus());
                                     this.workflowExecutionRepository.remove(execution.workflowId());
+                                    checkpointWorkIndex.markSafe(execution.workflowId());
                                     checkpointingSupport.requestCheckpoint(replaySupport.currentTrackingToken());
                                 }
                         );
@@ -196,6 +199,9 @@ public class WorkflowEngine implements EventHandler,
                                                   workflowId, eventMessage.payload());
                                      return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
                                  });
+                                 checkpointWorkIndex.register(
+                                         execution.workflowId(), execution::registerCheckpointWorkStateListener
+                                 );
                                  if (replaySupport.isLiveMode()) {
                                      execute(execution, processingContext);
                                  }
@@ -270,6 +276,7 @@ public class WorkflowEngine implements EventHandler,
             execution.interrupt();
         }
         workflowExecutionRepository.clear();
+        checkpointWorkIndex.clear();
     }
 
     private CompletableFuture<Void> loadRunningWorkflows(@Nonnull ProcessingContext sourcingContext,
@@ -318,7 +325,10 @@ public class WorkflowEngine implements EventHandler,
         );
         var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
         execution.initializeState(state);
-        workflowExecutionRepository.save(workflowId, () -> execution);
+        var storedExecution = workflowExecutionRepository.save(workflowId, () -> execution);
+        checkpointWorkIndex.register(
+                storedExecution.workflowId(), storedExecution::registerCheckpointWorkStateListener
+        );
     }
 
     /**
@@ -330,7 +340,11 @@ public class WorkflowEngine implements EventHandler,
             @Nonnull String phase,
             @Nonnull ProcessingContext processingContext
     ) {
+        var terminalExecutions = workflowExecutionRepository.findAll(
+                execution -> execution.state().workflowStatus().isTerminal()
+        );
         workflowExecutionRepository.removeAll(execution -> execution.state().workflowStatus().isTerminal());
+        terminalExecutions.forEach(execution -> checkpointWorkIndex.markSafe(execution.workflowId()));
         var executionsToStart = workflowExecutionRepository.findAll(execution -> !execution.isRunning());
         if (executionsToStart.isEmpty()) {
             logger.info("No restored workflow executions require startup {}.", phase);
@@ -344,18 +358,37 @@ public class WorkflowEngine implements EventHandler,
     }
 
     @Override
-    public boolean hasPendingCheckpointWork() {
-        return workflowExecutionRepository.countPendingCheckpointWork() > 0;
+    public boolean hasUnsafeCheckpointWork() {
+        return checkpointWorkIndex.hasUnsafeCheckpointWork();
     }
 
+    /**
+     * Schedules checkpoint barriers across the unsafe-execution index snapshot.
+     * <p>
+     * Barriers are added to executions still unsafe when resolved from the index. When the snapshot is empty, the
+     * callback re-checks safety in case a workflow appended work concurrently with the snapshot.
+     *
+     * @param onDrained callback invoked after the snapshot's barriers have been crossed
+     */
     @Override
-    public boolean scheduleCheckpointIntent(@Nonnull Runnable onDrained) {
-        var scheduled = false;
-        for (var execution : workflowExecutionRepository.findAll(WorkflowExecution::hasPendingCheckpointWork)) {
-            execution.appendCheckpointIntent(onDrained);
-            scheduled = true;
+    public void scheduleCheckpointIntent(@Nonnull Runnable onDrained) {
+        var executions = new HashSet<WorkflowExecution>();
+        for (var workflowId : checkpointWorkIndex.unsafeWorkflowIds()) {
+            workflowExecutionRepository.findById(workflowId).ifPresentOrElse(execution -> {
+                if (execution.hasUnsafeCheckpointWork()) {
+                    executions.add(execution);
+                } else {
+                    checkpointWorkIndex.markSafe(workflowId);
+                }
+            }, () -> checkpointWorkIndex.markSafe(workflowId));
         }
-        return scheduled;
+        if (executions.isEmpty()) {
+            onDrained.run();
+            return;
+        }
+        for (var execution : executions) {
+            execution.appendCheckpointIntent(onDrained);
+        }
     }
 
     @Override

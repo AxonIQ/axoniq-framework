@@ -22,7 +22,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,11 +80,6 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
     @Override
     public void removeAll(@Nonnull Predicate<WorkflowExecution> predicate) {
         workflowExecutions.values().removeIf(predicate);
-    }
-
-    @Override
-    public Integer count(@NonNull Predicate<WorkflowExecution> predicate) {
-        return findAll(predicate).size();
     }
 
     @Override
