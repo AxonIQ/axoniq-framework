@@ -41,7 +41,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-import static io.axoniq.framework.messaging.multitenancy.api.TenantUtils.tenantDescriptorFrom;
+import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException.tenantNotResolved;
 
 /**
  * {@link ParameterResolverFactory} injecting tenant-scoped components into message-handling methods.
@@ -172,7 +172,9 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
                 ));
             }
             try {
-                TenantDescriptor tenant = tenantDescriptorFrom(context);
+                TenantDescriptor tenant = TenantDescriptor.fromContext(context)
+                                                          .orElseThrow(tenantNotResolved(
+                                                                  "No tenant descriptor found in processing context"));
                 Object component = provider.componentFor(tenant);
                 return CompletableFuture.completedFuture(component);
             } catch (RuntimeException e) {

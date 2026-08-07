@@ -24,6 +24,7 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import org.axonframework.common.Registration;
 import org.axonframework.common.StringUtils;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.messaging.core.SubscribableEventSource;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -43,11 +44,15 @@ import java.util.function.BiFunction;
  * The persistent stream is identified by a unique {@code name}, which acts as the stream identifier in Axon Server.
  * Using the same name for different instances will join the same server-side stream. Each instance owns an exclusive
  * {@link PersistentStreamConnection} and may have at most one active subscriber at a time.
+ * <p>
+ * Marked {@link Internal} as a concrete, internal implementation behind the {@link PersistentStreamEventSourceFactory}.
  *
  * @author Marc Gathier
  * @author Jakob Hatzl
+ * @see PersistentStreamEventSourceFactory
  * @since 5.2.0
  */
+@Internal
 public class PersistentStreamEventSource implements SubscribableEventSource {
 
     private static final BiFunction<List<? extends EventMessage>, ProcessingContext, CompletableFuture<?>>
@@ -91,12 +96,14 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
              persistentStreamProperties,
              scheduler,
              unitOfWorkFactory,
+             PersistentStreamContextCustomizer.NO_OP,
              batchSize,
              null);
     }
 
     /**
-     * Instantiates a {@code PersistentStreamEventSource}.
+     * Instantiates a {@code PersistentStreamEventSource} placing additional resources on the
+     * {@link ProcessingContext} of every batch it delivers through the given {@code contextCustomizer}.
      *
      * @param name                       the name of the persistent stream; acts as the unique stream identifier in Axon
      *                                   Server
@@ -108,6 +115,9 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
      * @param scheduler                  the scheduler thread pool to schedule tasks
      * @param unitOfWorkFactory          the {@link UnitOfWorkFactory} used to create a unit of work to span message
      *                                   processing
+     * @param contextCustomizer          the customizer placing resources on the {@link ProcessingContext} of every
+     *                                   batch, invoked once per batch before any of its events is consumed, returning
+     *                                   the context that batch is consumed with
      * @param batchSize                  the maximum number of events to collect per batch
      * @param context                    the Axon Server context in which this stream exists, or {@code null} to use the
      *                                   context from {@link AxonServerConfiguration#getContext()}
@@ -120,6 +130,7 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
                                        PersistentStreamProperties persistentStreamProperties,
                                        ScheduledExecutorService scheduler,
                                        UnitOfWorkFactory unitOfWorkFactory,
+                                       PersistentStreamContextCustomizer contextCustomizer,
                                        int batchSize,
                                        @Nullable String context) {
         if(StringUtils.emptyOrNull(name)){
@@ -134,6 +145,7 @@ public class PersistentStreamEventSource implements SubscribableEventSource {
                                                                          persistentStreamProperties,
                                                                          scheduler,
                                                                          unitOfWorkFactory,
+                                                                         contextCustomizer,
                                                                          batchSize,
                                                                          context);
     }

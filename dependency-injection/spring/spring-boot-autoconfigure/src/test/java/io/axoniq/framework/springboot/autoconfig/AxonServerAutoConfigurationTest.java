@@ -62,7 +62,9 @@ class AxonServerAutoConfigurationTest {
     void setUp() {
         testContext = new ApplicationContextRunner()
                 .withUserConfiguration(TestContext.class)
-                .withPropertyValues("axon.axonserver.enabled=true");
+                // Tracing off: these tests assert the concrete AxonServer component types (e.g. the
+                // PayloadConvertingCommandBusConnector), which the tracing decorators would otherwise wrap.
+                .withPropertyValues("axon.axonserver.enabled=true", "axon.tracing.enabled=false");
     }
 
     @BeforeAll
@@ -162,7 +164,9 @@ class AxonServerAutoConfigurationTest {
 
     @Test
     void defaultAxonServerComponentsArePresent() {
-        testContext.run(context -> {
+        // Multi-tenancy is default-on with Axon Server and would wrap the engine in a tenant-routing wrapper;
+        // disable it so this test verifies the plain Axon Server storage engine wiring.
+        testContext.withPropertyValues("axon.multitenancy.enabled=false").run(context -> {
             assertThat(context).hasSingleBean(AxonServerConfiguration.class);
             // Default name for beans from an @EnableConfigurationProperties contain their prefix.
             assertThat(context).hasBean("axon.axonserver-" + AxonServerConfiguration.class.getName());
@@ -181,17 +185,21 @@ class AxonServerAutoConfigurationTest {
 
     @Test
     void overrideDefaultAxonServerComponents() {
-        testContext.withUserConfiguration(CustomContext.class).run(context -> {
-            assertThat(context).hasSingleBean(AxonServerConnectionManager.class);
-            assertThat(context).hasBean("customAxonServerConnectionManager");
-            assertThat(context).hasSingleBean(ManagedChannelCustomizer.class);
-            assertThat(context).hasBean("customManagedChannelCustomizer");
-            assertThat(context).hasSingleBean(EventStorageEngine.class);
-            assertThat(context).hasBean("customAxonServerEventStorageEngine");
-            assertThat(context).hasSingleBean(CommandBusConnector.class);
-            assertThat(context).hasSingleBean(PayloadConvertingCommandBusConnector.class);
-            assertThat(context).hasBean("customAxonServerCommandBusConnector");
-        });
+        // Multi-tenancy is default-on with Axon Server and owns the EventStorageEngine registration; disable it so this
+        // test verifies that an application's own Axon Server components take the place of the defaults.
+        testContext.withPropertyValues("axon.multitenancy.enabled=false")
+                   .withUserConfiguration(CustomContext.class)
+                   .run(context -> {
+                       assertThat(context).hasSingleBean(AxonServerConnectionManager.class);
+                       assertThat(context).hasBean("customAxonServerConnectionManager");
+                       assertThat(context).hasSingleBean(ManagedChannelCustomizer.class);
+                       assertThat(context).hasBean("customManagedChannelCustomizer");
+                       assertThat(context).hasSingleBean(EventStorageEngine.class);
+                       assertThat(context).hasBean("customAxonServerEventStorageEngine");
+                       assertThat(context).hasSingleBean(CommandBusConnector.class);
+                       assertThat(context).hasSingleBean(PayloadConvertingCommandBusConnector.class);
+                       assertThat(context).hasBean("customAxonServerCommandBusConnector");
+                   });
     }
 
     @Configuration

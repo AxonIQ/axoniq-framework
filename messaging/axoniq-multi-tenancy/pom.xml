@@ -50,19 +50,28 @@
             <artifactId>axon-server-connector</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-event-streaming</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-distributed-messaging</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!-- Core Axon Framework -->
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-messaging</artifactId>
         </dependency>
-
-        <!-- Testing -->
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-eventsourcing</artifactId>
-            <scope>test</scope>
         </dependency>
+
+        <!-- Testing -->
         <dependency>
             <groupId>org.axonframework</groupId>
             <artifactId>axon-common</artifactId>
@@ -73,6 +82,24 @@
             <groupId>org.axonframework</groupId>
             <artifactId>axon-messaging</artifactId>
             <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axon-server-connector</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.axonframework</groupId>
+            <artifactId>axon-conversion</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>tools.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-cbor</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

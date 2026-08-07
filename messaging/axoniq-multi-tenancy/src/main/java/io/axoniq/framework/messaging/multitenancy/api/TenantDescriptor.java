@@ -18,11 +18,14 @@
  */
 package io.axoniq.framework.messaging.multitenancy.api;
 
+import org.axonframework.messaging.core.Context.ResourceKey;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.StringJoiner;
 
 import static java.util.Objects.requireNonNull;
@@ -38,6 +41,17 @@ import static java.util.Objects.requireNonNull;
  * @since 4.6.0
  */
 public class TenantDescriptor {
+
+    /**
+     * The key under which a tenant identifier is stored in a message's {@link org.axonframework.messaging.core.Metadata
+     * metadata}.
+     */
+    public static final String TENANT_ID_KEY = "tenantId";
+
+    /**
+     * The {@link ResourceKey} used whenever a {@link ProcessingContext} would contain a {@code TenantDescriptor}.
+     */
+    public static final ResourceKey<TenantDescriptor> RESOURCE_KEY = ResourceKey.withLabel(TENANT_ID_KEY);
 
     private final String tenantId;
     private final Map<String, String> properties;
@@ -71,6 +85,18 @@ public class TenantDescriptor {
      */
     public static TenantDescriptor tenantWithId(String tenantId) {
         return new TenantDescriptor(tenantId);
+    }
+
+    /**
+     * Returns an {@link Optional} of the {@code TenantDescriptor} kept under the {@link #RESOURCE_KEY} in the given
+     * {@code context}, or {@link Optional#empty()} when none is present.
+     *
+     * @param context the {@link ProcessingContext} to retrieve the {@code TenantDescriptor} from, if present
+     * @return an {@link Optional} of the {@code TenantDescriptor} kept under the {@link #RESOURCE_KEY} in the given
+     * {@code context}
+     */
+    public static Optional<TenantDescriptor> fromContext(ProcessingContext context) {
+        return Optional.ofNullable(context.getResource(RESOURCE_KEY));
     }
 
     /**

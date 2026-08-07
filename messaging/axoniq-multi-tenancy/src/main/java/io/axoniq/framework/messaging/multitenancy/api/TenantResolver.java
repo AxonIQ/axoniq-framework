@@ -19,20 +19,27 @@
 package io.axoniq.framework.messaging.multitenancy.api;
 
 import org.axonframework.messaging.core.Message;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Optional;
 
 /**
- * Resolves the target tenant of a given {@link Message}.
+ * Resolves the target tenant of a given {@link Message}, and attaches a tenant to a {@link Message} in the
+ * inverse direction.
+ * <p>
+ * A message dispatched from within a handler generally does not name its own tenant: the tenant is only
+ * known through the {@link org.axonframework.messaging.core.unitofwork.ProcessingContext} of the message
+ * being handled. {@link #attachTenant(Message, TenantDescriptor)} is what makes that tenant survive the
+ * message being dispatched elsewhere, for example across a distributed command or query bus that carries
+ * the message to another process and back. A resolver that only resolves, and never attaches, silently
+ * drops the tenant on every such dispatch, with no signal that anything is missing until a receiving
+ * component fails to resolve a tenant it should have had.
  *
  * @author Stefan Dragisic
  * @author Jan Galinski
+ * @author Jakob Hatzl
  * @since 4.6.0
  */
-@FunctionalInterface
 public interface TenantResolver {
 
     /**
@@ -48,7 +55,6 @@ public interface TenantResolver {
             Collection<TenantDescriptor> tenants
     ) throws TenantNotResolvedException;
 
-
     /**
      * Returns {@link TenantDescriptor} for the given {@code message}. This method is a convenience method that calls
      * {@link #resolveTenant(Message, Collection)} with an empty collection of tenants.
@@ -63,23 +69,13 @@ public interface TenantResolver {
     }
 
     /**
-     * Resolves the tenant from the current {@link ProcessingContext} by extracting the message stored on it and passing
-     * it to the given {@code resolver}.
-     * <p>
-     * This is a convenience method for components that operate within an existing processing context (such as the event
-     * store or snapshot store) and need to resolve the tenant from the context's message rather than from a directly
-     * available message parameter.
+     * Returns a copy of the given {@code message} carrying the given {@code tenant}, the inverse of
+     * {@link #resolveTenant(Message, Collection)}: where that method determines the tenant a message
+     * belongs to, this one makes that determination survive the message being dispatched elsewhere.
      *
-     * @param context the processing context containing the message
-     * @param tenants the collection of known tenants
-     * @return the resolved {@link TenantDescriptor}
-     * @throws IllegalStateException if no message is found in the processing context
+     * @param message the message to attach the given {@code tenant} to
+     * @param tenant  the tenant to attach to the given {@code message}
+     * @return a copy of the given {@code message} carrying the given {@code tenant}
      */
-    default TenantDescriptor resolveTenant(ProcessingContext context, Collection<TenantDescriptor> tenants) {
-        Message message = Optional.ofNullable(Message.fromContext(context))
-                                  .orElseThrow(() -> new IllegalStateException(
-                                          "Cannot resolve tenant: no message found in ProcessingContext"));
-
-        return resolveTenant(message, tenants);
-    }
+    Message attachTenant(Message message, TenantDescriptor tenant);
 }

@@ -1,0 +1,43 @@
+[.axoniq-feature]
+= Tenant-Aware Event Storage
+:navtitle: Tenant-aware event storage
+:reftext: Tenant-aware event storage
+
+Tenant-aware event storage covers how events and snapshots are stored per tenant.
+Each tenant keeps its events in its own Axon Server context, so no tenant can read or write another tenant's events.
+
+[#sourcing-and-appending]
+== Sourcing and appending events
+
+With multi-tenancy enabled, the event store is automatically tenant-aware.
+No changes to how an event-sourced entity is loaded or how you append events are required.
+
+With multi-tenancy enabled, the module registers the tenant-routing `EventStorageEngine` itself, so an application cannot register an `EventStorageEngine` of its own.
+A single engine would serve every tenant from one place, giving up the per-tenant isolation this module exists for, so such a registration fails the configuration at startup.
+Register a `TenantEventStorageEngineFactory` instead to control how each tenant's engine is built.
+
+When an entity is used in the context of a message handler, the tenant information is already available in the `ProcessingContext`. Source and append operations are automatically routed to the event store of the related tenant.
+Publishing events without a context in contrast requires resolution of the tenant as described in the xref:tenant-management.adoc#tenant-resolution[tenant resolution] section.
+
+[NOTE]
+====
+Appending and sourcing require a resolvable tenant.
+If no tenant can be resolved, the operation fails with a `TenantNotResolvedException`.
+All events in a single append must belong to the same tenant.
+====
+
+[#snapshots]
+== Snapshots
+
+Snapshots follow the events they summarize.
+A snapshot is stored in, and loaded from, the snapshot store of the same tenant as the entity it belongs to.
+This happens automatically whenever snapshotting is configured, with no tenant-specific setup.
+
+As with the event storage engine, an application cannot register a `SnapshotStore` of its own.
+Register a `TenantSnapshotStoreFactory` instead to control how each tenant's snapshot store is built.
+
+== Reading across tenants
+
+Sourcing and appending act on a single tenant, resolved from the message being handled.
+Reading events across tenants, for example to build read models, is provided by the multi-tenant pooled-streaming support rather than by a single-tenant sourcing call.
+See xref:multi-tenancy:tenant-event-processing.adoc[tenant-aware event processing] for details.

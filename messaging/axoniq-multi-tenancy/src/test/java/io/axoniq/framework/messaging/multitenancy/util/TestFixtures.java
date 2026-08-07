@@ -20,11 +20,16 @@
 package io.axoniq.framework.messaging.multitenancy.util;
 
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptors;
+import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import org.axonframework.messaging.core.Message;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_REPLICATION_GROUP;
+import static io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor.tenantWithId;
 
 /**
  * Utility class providing test fixtures for multi-tenancy related tests.
@@ -43,4 +48,39 @@ public enum TestFixtures {
     );
 
     public static final List<TenantDescriptor> TENANT_LIST = List.of(TENANT_A, TENANT_B);
+    public static final TenantDescriptors TENANT_DESCRIPTORS = () -> TENANT_LIST;
+
+    /**
+     * Creates a {@link TenantResolver} that always resolves to the given tenant ID.
+     *
+     * @param tenantId the tenant ID to resolve to
+     * @return a {@link TenantResolver} that always resolves to the given tenant ID
+     * @see #alwaysTenant(TenantDescriptor)
+     */
+    public static TenantResolver alwaysTenant(String tenantId) {
+        return alwaysTenant(tenantWithId(tenantId));
+    }
+
+    /**
+     * Creates a {@link TenantResolver} that always resolves to the given {@link TenantDescriptor}.
+     *
+     * @param tenantDescriptor the {@link TenantDescriptor} to resolve to
+     * @return a {@link TenantResolver} that always resolves to the given {@link TenantDescriptor}
+     */
+    public static TenantResolver alwaysTenant(TenantDescriptor tenantDescriptor) {
+        return new AlwaysTenant(tenantDescriptor);
+    }
+
+    private record AlwaysTenant(TenantDescriptor tenantDescriptor) implements TenantResolver {
+
+        @Override
+        public TenantDescriptor resolveTenant(Message message, Collection<TenantDescriptor> tenants) {
+            return tenantDescriptor;
+        }
+
+        @Override
+        public Message attachTenant(Message message, TenantDescriptor tenant) {
+            return message.andMetadata(Map.of(TenantDescriptor.TENANT_ID_KEY, tenant.tenantId()));
+        }
+    }
 }

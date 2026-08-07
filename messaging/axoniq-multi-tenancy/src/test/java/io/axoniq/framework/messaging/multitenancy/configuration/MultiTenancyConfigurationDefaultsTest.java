@@ -19,34 +19,44 @@
 
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.messaging.multitenancy.annotation.TenantScoped;
+import io.axoniq.framework.messaging.multitenancy.api.AttachTenantDescriptorDispatchInterceptor;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.RegisterTenantDescriptorHandlerInterceptor;
+import io.axoniq.framework.messaging.multitenancy.queryhandling.TenantAwareQueryBus;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
+import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
+import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.common.infra.MockComponentDescriptor;
+import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
-import org.axonframework.messaging.core.annotation.ParameterResolver;
-import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.axonframework.messaging.core.interception.DispatchInterceptorRegistry;
 import org.axonframework.messaging.core.interception.HandlerInterceptorRegistry;
+import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
+import org.axonframework.messaging.queryhandling.interception.InterceptingQueryBus;
 import org.junit.jupiter.api.*;
 
-import java.lang.reflect.Method;
+import java.lang.reflect.Field;
+import java.time.Duration;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
+import static org.awaitility.Awaitility.await;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Verifies the {@link MultiTenancyConfigurationDefaults} against a real {@link MessagingConfigurer}: the generic,
- * backend-agnostic multi-tenancy components are wired for a given configuration, and the enhancer only acts when
- * multi-tenancy is enabled.
+ * backend-agnostic multi-tenancy components are wired for a given configuration out of the box, and stay away once
+ * multi-tenancy is disabled.
  *
  * @author Jan Galinski
  * @author Jakob Hatzl
@@ -60,9 +70,12 @@ class MultiTenancyConfigurationDefaultsTest {
     }
 
     @Test
-    void enhanceIsANoOpWhenMultiTenancyIsNotEnabled() {
+    void enhanceIsANoOpWhenMultiTenancyIsDisabled() {
         // when
-        AxonConfiguration configuration = MessagingConfigurer.create().build();
+        AxonConfiguration configuration =
+                MessagingConfigurer.create()
+                                   .componentRegistry(MultiTenancyUtils::disable)
+                                   .build();
 
         // then none of the multi-tenancy defaults were registered
         assertThat(configuration.hasComponent(TenantResolver.class)).isFalse();
@@ -72,6 +85,16 @@ class MultiTenancyConfigurationDefaultsTest {
                 .noneMatch(RegisterTenantDescriptorHandlerInterceptor.class::isInstance);
         assertThat(interceptorRegistry.queryInterceptors(configuration, TenantAwareQueryHandler.class, "handle"))
                 .noneMatch(RegisterTenantDescriptorHandlerInterceptor.class::isInstance);
+        DispatchInterceptorRegistry dispatchInterceptorRegistry =
+                configuration.getComponent(DispatchInterceptorRegistry.class);
+        assertThat(dispatchInterceptorRegistry.commandInterceptors(configuration,
+                                                                    TenantAwareCommandHandler.class,
+                                                                    "handle"))
+                .noneMatch(AttachTenantDescriptorDispatchInterceptor.class::isInstance);
+        assertThat(dispatchInterceptorRegistry.queryInterceptors(configuration,
+                                                                  TenantAwareQueryHandler.class,
+                                                                  "handle"))
+                .noneMatch(AttachTenantDescriptorDispatchInterceptor.class::isInstance);
     }
 
     @Nested
@@ -85,7 +108,6 @@ class MultiTenancyConfigurationDefaultsTest {
         @BeforeEach
         void buildConfiguration() {
             configuration = MessagingConfigurer.create()
-                                               .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                                .componentRegistry(registry -> registry.registerComponent(
                                                        TenantComponentProvider.class,
                                                        config -> componentProvider))
@@ -99,23 +121,78 @@ class MultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
+        void registersTheTenantRouterForTenantRoutingComponentsToShare() {
+            assertThat(configuration.getComponent(TenantRouter.class)).isNotNull();
+        }
+
+        @Test
         void registersTheTenantComponentProviderSubscriber() {
             assertThat(configuration.getComponent(TenantComponentProviderSubscriber.class)).isNotNull();
         }
 
         @Test
-        void registersAParameterResolverFactoryThatResolvesTenantScopedComponentParameters() throws Exception {
-            // given
-            ParameterResolverFactory factory = configuration.getComponent(ParameterResolverFactory.class);
-            Method handler = SampleHandlers.class.getDeclaredMethod("handle", CourseRepository.class);
+        void registersTheStreamingProcessorRestarter() {
+            assertThat(configuration.getComponent(MultiTenantStreamingProcessorRestarter.class)).isNotNull();
+        }
 
+        @Test
+        void decoratesTheQueryBusWithATenantAwareQueryBus() {
             // when
-            ParameterResolver<?> resolver = factory.createInstance(handler, handler.getParameters(), 0);
+            QueryBus queryBus = configuration.getComponent(QueryBus.class);
 
             // then
-            assertThat(resolver)
-                    .extracting("provider")
-                    .isInstanceOf(TenantComponentProvider.class);
+            assertThat(queryBus).isInstanceOf(InterceptingQueryBus.class);
+            assertThat(interceptingQueryBusDelegate(queryBus)).isInstanceOf(TenantAwareQueryBus.class);
+        }
+    }
+
+    @Nested
+    class TenantAwareQueryBusDecoratorIdempotency {
+
+        @Test
+        void registeringTheDecoratorTwiceDoesNotDoubleWrap() {
+            // given / when
+            AxonConfiguration configuration = MessagingConfigurer.create()
+                                                                 .componentRegistry(cr -> cr.registerComponent(
+                                                                         TenantResolver.class,
+                                                                         config -> new MetadataBasedTenantResolver()))
+                                                                 .componentRegistry(cr -> cr.registerComponent(
+                                                                         TenantProvider.class,
+                                                                         config -> new StubTenantProvider()))
+                                                                 .componentRegistry(cr -> {
+                                                                     MultiTenancyConfigurationDefaults
+                                                                             .registerTenantAwareQueryBusDecorator(cr);
+                                                                     MultiTenancyConfigurationDefaults
+                                                                             .registerTenantAwareQueryBusDecorator(cr);
+                                                                 })
+                                                                 .build();
+
+            // then
+            QueryBus queryBus = configuration.getComponent(QueryBus.class);
+            QueryBus unwrapped = interceptingQueryBusDelegate(queryBus);
+            assertThat(unwrapped).isInstanceOf(TenantAwareQueryBus.class);
+            assertThat(tenantAwareQueryBusDelegate((TenantAwareQueryBus) unwrapped))
+                    .isNotInstanceOf(TenantAwareQueryBus.class);
+        }
+    }
+
+    private static QueryBus interceptingQueryBusDelegate(QueryBus queryBus) {
+        try {
+            Field delegateField = InterceptingQueryBus.class.getDeclaredField("delegate");
+            delegateField.setAccessible(true);
+            return (QueryBus) delegateField.get(queryBus);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException("Failed to extract delegate from InterceptingQueryBus", e);
+        }
+    }
+
+    private static QueryBus tenantAwareQueryBusDelegate(TenantAwareQueryBus queryBus) {
+        try {
+            Field delegateField = TenantAwareQueryBus.class.getDeclaredField("delegate");
+            delegateField.setAccessible(true);
+            return (QueryBus) delegateField.get(queryBus);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException("Failed to extract delegate from TenantAwareQueryBus", e);
         }
     }
 
@@ -132,7 +209,6 @@ class MultiTenancyConfigurationDefaultsTest {
         void buildAndStartConfiguration() {
             tenantProvider.addTenant(TENANT_A);
             configuration = MessagingConfigurer.create()
-                                               .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                                .componentRegistry(registry -> registry
                                                        .registerComponent(TenantProvider.class,
                                                                           config -> tenantProvider)
@@ -174,7 +250,7 @@ class MultiTenancyConfigurationDefaultsTest {
     }
 
     @Nested
-    class TenantLifecycleWiring {
+    class DispatchInterceptorWiring {
 
         private final StubTenantProvider tenantProvider = new StubTenantProvider();
         private final TenantComponentProvider<CourseRepository> componentProvider =
@@ -186,7 +262,6 @@ class MultiTenancyConfigurationDefaultsTest {
         void buildAndStartConfiguration() {
             tenantProvider.addTenant(TENANT_A);
             configuration = MessagingConfigurer.create()
-                                               .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
                                                .componentRegistry(registry -> registry
                                                        .registerComponent(TenantProvider.class,
                                                                           config -> tenantProvider)
@@ -199,6 +274,107 @@ class MultiTenancyConfigurationDefaultsTest {
         @AfterEach
         void shutdownConfiguration() {
             configuration.shutdown();
+        }
+
+        @Test
+        void registersTheTenantAttachmentInterceptorForCommandAndQueryDispatchOnly() {
+            // given
+            DispatchInterceptorRegistry registry = configuration.getComponent(DispatchInterceptorRegistry.class);
+
+            // when
+            var commandInterceptors = registry.commandInterceptors(configuration,
+                                                                    TenantAwareCommandHandler.class,
+                                                                    "handle");
+            var queryInterceptors = registry.queryInterceptors(configuration,
+                                                                TenantAwareQueryHandler.class,
+                                                                "handle");
+            var eventInterceptors = registry.eventInterceptors(configuration,
+                                                               SampleHandlers.class,
+                                                               "handle");
+
+            // then
+            assertThat(commandInterceptors)
+                    .anyMatch(AttachTenantDescriptorDispatchInterceptor.class::isInstance);
+            assertThat(queryInterceptors)
+                    .anyMatch(AttachTenantDescriptorDispatchInterceptor.class::isInstance);
+            assertThat(eventInterceptors)
+                    .noneMatch(AttachTenantDescriptorDispatchInterceptor.class::isInstance);
+        }
+    }
+
+    @Nested
+    class TenantLifecycleWiring {
+
+        private final StubTenantProvider tenantProvider = new StubTenantProvider();
+        private final TenantComponentProvider<CourseRepository> componentProvider =
+                TenantComponentProvider.withFactory(CourseRepository.class, CourseRepository::new);
+
+        private AxonConfiguration configuration;
+
+        @BeforeEach
+        void buildAndStartConfiguration() {
+            tenantProvider.addTenant(TENANT_A);
+            configuration = MessagingConfigurer.create()
+                                               .componentRegistry(registry -> registry
+                                                       .registerComponent(TenantProvider.class,
+                                                                          config -> tenantProvider)
+                                                       .registerComponent(TenantComponentProvider.class,
+                                                                          config -> componentProvider))
+                                               .build();
+            configuration.start();
+        }
+
+        @AfterEach
+        void shutdownConfiguration() {
+            configuration.shutdown();
+        }
+
+        @Test
+        void wiresTheStreamingProcessorRestarterToTheRoutingEnginesTenantsUntilShutdown() {
+            // Asserted through what the wiring does, rather than through the restarter reporting itself as running: a
+            // tenant registered with the routing engine reaches the restarter while the configuration runs, and stops
+            // reaching it afterwards.
+            MultiTenantStreamingProcessorRestarter restarter =
+                    configuration.getComponent(MultiTenantStreamingProcessorRestarter.class);
+            MultiTenantEventStorageEngine routingEngine =
+                    (MultiTenantEventStorageEngine) configuration.getComponent(EventStorageEngine.class);
+
+            routingEngine.registerTenant(TENANT_B);
+
+            await().atMost(Duration.ofSeconds(2))
+                   .untilAsserted(() -> assertThat(restartCount(restarter)).isPositive());
+
+            configuration.shutdown();
+
+            // Asserted on the engine, since a stopped restarter ignores a restart request either way, so counting
+            // restarts cannot tell a cancelled listener from a still-registered one.
+            MockComponentDescriptor engineDescriptor = new MockComponentDescriptor();
+            routingEngine.describeTo(engineDescriptor);
+            assertThat(engineDescriptor.getDescribedProperties()).containsEntry("tenantChangeListenerCount", 0);
+        }
+
+        @Test
+        void followsNothingWhenNoEnhancerHandsOverARoutingEngine() {
+            // What the startup warning reports: multi-tenancy is on, but no backend enhancer built a tenant-routing
+            // engine, so a tenant change re-opens no stream.
+            AxonConfiguration withoutRoutingEngine =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry
+                                               .disableEnhancer(AxonServerMultiTenancyConfigurationDefaults.class)
+                                               .registerComponent(TenantProvider.class, config -> tenantProvider))
+                                       .build();
+            withoutRoutingEngine.start();
+            try {
+                MockComponentDescriptor descriptor = new MockComponentDescriptor();
+                withoutRoutingEngine.getComponent(MultiTenantStreamingProcessorRestarter.class)
+                                    .describeTo(descriptor);
+
+                assertThat(descriptor.getDescribedProperties())
+                        .containsEntry("followingTenantChanges", false)
+                        .doesNotContainKey("followedEngine");
+            } finally {
+                withoutRoutingEngine.shutdown();
+            }
         }
 
         @Test
@@ -216,12 +392,19 @@ class MultiTenancyConfigurationDefaultsTest {
             assertThat(repositoryB.closed).isTrue();
             assertThat(componentProvider.tenants()).isEmpty();
         }
+
+        private static long restartCount(MultiTenantStreamingProcessorRestarter restarter) {
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+            restarter.describeTo(descriptor);
+            return (long) descriptor.getDescribedProperties().get("restartCount");
+        }
     }
 
     @SuppressWarnings("unused")
     private static final class SampleHandlers {
+
         void handle(@TenantScoped CourseRepository repository) {
-            // Reflection target only. The parameter type drives the matching under test.
+            // Reflection target only, for a handler that is neither a command nor a query handler.
         }
     }
 

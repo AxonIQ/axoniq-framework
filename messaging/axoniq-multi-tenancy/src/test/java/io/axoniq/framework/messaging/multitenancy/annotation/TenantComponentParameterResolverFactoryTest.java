@@ -39,7 +39,6 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 
-import static io.axoniq.framework.messaging.multitenancy.api.TenantUtils.TENANT_RESOURCE_KEY;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -173,7 +172,7 @@ class TenantComponentParameterResolverFactoryTest {
             givenProviders(provider);
             ParameterResolver<?> resolver = resolverFor("handlesCourseRepository", CourseRepository.class);
             ProcessingContext context = StubProcessingContext.forMessage(messageForTenant(TENANT_A.tenantId()))
-                                                             .withResource(TENANT_RESOURCE_KEY, TENANT_A);
+                                                             .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
             // when
             Object resolved = resolver.resolveParameterValue(context).join();
@@ -190,7 +189,7 @@ class TenantComponentParameterResolverFactoryTest {
             givenProviders(provider);
             ParameterResolver<?> resolver = resolverFor("handlesCourseRepository", CourseRepository.class);
             ProcessingContext context = StubProcessingContext.forMessage(messageForTenant(TENANT_A.tenantId()))
-                                                             .withResource(TENANT_RESOURCE_KEY, TENANT_A);
+                                                             .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
             // when
             Object resolved = resolver.resolveParameterValue(context).join();
@@ -208,7 +207,7 @@ class TenantComponentParameterResolverFactoryTest {
             givenProviders(courseProvider, auditProvider);
             ParameterResolver<?> resolver = resolverFor("handlesCourseRepository", CourseRepository.class);
             ProcessingContext context = StubProcessingContext.forMessage(messageForTenant(TENANT_A.tenantId()))
-                                                             .withResource(TENANT_RESOURCE_KEY, TENANT_A);
+                                                             .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A);
 
             // when
             Object resolved = resolver.resolveParameterValue(context).join();
@@ -234,7 +233,7 @@ class TenantComponentParameterResolverFactoryTest {
             // when
             Object resolved = resolver.resolveParameterValue(
                     StubProcessingContext.forMessage(message)
-                                         .withResource(TENANT_RESOURCE_KEY, TENANT_A)
+                                         .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A)
             ).join();
 
             // then the tenant is resolved through the custom key, not the default tenantId key
@@ -259,7 +258,7 @@ class TenantComponentParameterResolverFactoryTest {
             // when the command resolves through the command-specific key
             Object resolved = resolver.resolveParameterValue(
                     StubProcessingContext.forMessage(commandMessage)
-                                         .withResource(TENANT_RESOURCE_KEY, TENANT_A)
+                                         .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A)
             ).join();
 
             // then
@@ -269,7 +268,7 @@ class TenantComponentParameterResolverFactoryTest {
             Object resolvedDefault = resolver
                     .resolveParameterValue(
                             StubProcessingContext.forMessage(messageForTenant(TENANT_A.tenantId()))
-                                                 .withResource(TENANT_RESOURCE_KEY, TENANT_A)
+                                                 .withResource(TenantDescriptor.RESOURCE_KEY, TENANT_A)
                     )
                     .join();
             assertThat(resolvedDefault).isSameAs(provider.componentFor(TENANT_A));
@@ -294,7 +293,7 @@ class TenantComponentParameterResolverFactoryTest {
 
             TenantDescriptor tenantDescriptor = new MetadataBasedTenantResolver("lateTenantKey").resolveTenant(message);
             ProcessingContext context = StubProcessingContext.forMessage(message)
-                                                             .withResource(TENANT_RESOURCE_KEY, tenantDescriptor);
+                                                             .withResource(TenantDescriptor.RESOURCE_KEY, tenantDescriptor);
 
             // when
             Object resolved = resolver.resolveParameterValue(context).join();

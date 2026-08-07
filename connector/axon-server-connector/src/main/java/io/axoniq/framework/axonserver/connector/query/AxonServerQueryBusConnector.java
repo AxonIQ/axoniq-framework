@@ -30,6 +30,7 @@ import io.axoniq.axonserver.grpc.query.QueryRequest;
 import io.axoniq.axonserver.grpc.query.QueryResponse;
 import io.axoniq.axonserver.grpc.query.SubscriptionQuery;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.api.ConnectorLifecycle;
 import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import org.axonframework.common.FutureUtils;
@@ -68,7 +69,7 @@ import static java.util.Objects.requireNonNull;
  * @author Steven van Beelen, Allard Buijze, Jan Galinski
  * @since 5.0.0
  */
-public class AxonServerQueryBusConnector implements QueryBusConnector {
+public class AxonServerQueryBusConnector implements QueryBusConnector, ConnectorLifecycle {
 
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
@@ -87,8 +88,8 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
     /**
      * Creates a QueryBusConnector implementation that connects to AxonServer for dispatching and receiving queries.
      *
-     * @param connection    The connection to AxonServer
-     * @param configuration The configuration containing local settings for this connector
+     * @param connection    the connection to AxonServer
+     * @param configuration the configuration containing local settings for this connector
      */
     public AxonServerQueryBusConnector(AxonServerConnection connection,
                                        AxonServerConfiguration configuration) {
@@ -98,9 +99,9 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
     /**
      * Creates a QueryBusConnector implementation that connects to AxonServer for dispatching and receiving queries.
      *
-     * @param connection    The connection to AxonServer
-     * @param configuration The configuration containing local settings for this connector
-     * @param converter     The converter to be used for payload conversion
+     * @param connection    the connection to AxonServer
+     * @param configuration the configuration containing local settings for this connector
+     * @param converter     the converter to be used for payload conversion
      */
     public AxonServerQueryBusConnector(AxonServerConnection connection,
                                        AxonServerConfiguration configuration, @Nullable MessageConverter converter) {
@@ -116,6 +117,7 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
     /**
      * Starts the Axon Server {@link QueryBusConnector} implementation.
      */
+    @Override
     public void start() {
         shutdownLatch.initialize();
         logger.trace("The AxonServerQueryBusConnector started.");
@@ -163,10 +165,8 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
         try (ShutdownLatch.ActivityHandle queryInTransit = shutdownLatch.registerActivity()) {
             ResultStream<QueryResponse> resultStream = connection.queryChannel()
                                                                  .query(QueryConverter.convertQueryMessage(
-                                                                         query,
-                                                                         clientId,
-                                                                         componentName)
-                                                                 );
+                                                                         query, clientId, componentName
+                                                                 ));
             return new QueryResponseMessageStream(resultStream, converter).onClose(queryInTransit::end);
         }
     }
@@ -198,14 +198,16 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
      * This shutdown operation is performed in the {@link Phase#INBOUND_QUERY_CONNECTOR}
      * phase.
      *
-     * @return A completable future that resolves once the {@link AxonServerConnection#queryChannel()} has prepared
-     * disconnecting.
+     * @return a completable future that resolves once the {@link AxonServerConnection#queryChannel()} has prepared
+     * disconnecting
      */
+    @Override
     public CompletableFuture<Void> disconnect() {
-        if (connection.isConnected()) {
-            logger.trace("Disconnecting the AxonServerQueryBusConnector.");
-            connection.queryChannel().prepareDisconnect();
+        if (!connection.isConnected()) {
+            return FutureUtils.emptyCompletedFuture();
         }
+        logger.trace("Disconnecting the AxonServerQueryBusConnector.");
+        connection.queryChannel().prepareDisconnect();
         if (!localSegmentAdapter.awaitTermination(queryInProgressAwait)) {
             logger.info("Awaited termination of queries in progress without success. "
                                 + "Going to cancel remaining queries in progress.");
@@ -220,8 +222,9 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
      * This process will wait for dispatched queries which have not received a response yet. This shutdown operation is
      * performed in the {@link Phase#OUTBOUND_QUERY_CONNECTORS} phase.
      *
-     * @return A completable future which is resolved once all query dispatching activities are completed.
+     * @return a completable future which is resolved once all query dispatching activities are completed
      */
+    @Override
     public CompletableFuture<Void> shutdownDispatching() {
         logger.trace("Shutting down dispatching of AxonServerQueryBusConnector.");
         return shutdownLatch.initiateShutdown();
@@ -254,9 +257,13 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
             if (previous != null) {
                 previous.run();
             }
-            return new FlowControlledResponseSender(clientId, query.getMessageIdentifier(),
-                                                    result.onClose(queriesInProgress.remove(query.getMessageIdentifier())),
-                                                    responseHandler);
+            return new FlowControlledResponseSender(
+                    clientId,
+                    query.getMessageIdentifier(),
+                    result.onClose(queriesInProgress.remove(query.getMessageIdentifier())),
+                    responseHandler,
+                    converter
+            );
         }
 
         @Override
@@ -314,7 +321,8 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
 
         @Override
         public CompletableFuture<Void> completeExceptionally(Throwable error) {
-            updateHandler.sendUpdate(QueryConverter.convertQueryUpdate(clientId, ErrorCode.QUERY_EXECUTION_ERROR, error));
+            ErrorCode errorCode = ErrorCode.getQueryExecutionErrorCode(error);
+            updateHandler.sendUpdate(QueryConverter.convertQueryUpdate(clientId, errorCode, error, converter));
             updateHandler.complete();
             return FutureUtils.emptyCompletedFuture();
         }

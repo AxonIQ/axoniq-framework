@@ -20,6 +20,7 @@
 package io.axoniq.framework.integrationtests.testsuite.infrastructure;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
 import org.axonframework.common.configuration.ComponentRegistry;
@@ -28,10 +29,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.*;
 
@@ -46,13 +47,18 @@ import static io.axoniq.framework.axonserver.connector.api.AxonServerConfigurati
  * <p>
  * Leaf test classes should hold a {@code private static final} instance of this class:
  * <pre>{@code
- * private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
+ * private static final TestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.singleTenant();
  *
  * @Override
  * protected TestInfrastructure testInfrastructure() {
  *     return INFRASTRUCTURE;
  * }
  * }</pre>
+ * <p>
+ * This module carries {@code axoniq-multi-tenancy} on its classpath, so its enhancers reach every configuration built
+ * here through the {@link java.util.ServiceLoader}. Instances are therefore created through
+ * {@link #singleTenant(Consumer...)} or {@link #multiTenant(Consumer...)}, so each suite states whether it exercises
+ * multi-tenancy instead of leaving that to be inferred.
  *
  * @since 5.1.0
  */
@@ -77,30 +83,56 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
 
     private final List<Consumer<ComponentRegistry>> infrastructureConfigurators;
 
-    public AxonServerTestInfrastructure() {
-        this(Collections.emptyList());
-    }
-
     /**
-     * Creates a new {@code AxonServerTestInfrastructure} instance with the given infrastructure configurators.
+     * Creates a new {@code AxonServerTestInfrastructure} instance with multi-tenancy switched off.
+     * <p>
+     * The counterpart of {@link #multiTenant(Consumer...)}. Both are named, so every leaf suite states at its
+     * declaration whether it exercises multi-tenancy, rather than inheriting that from a constructor.
      *
      * @param infrastructureConfigurators to be executed when {@link #configureInfrastructure(ComponentRegistry)} is
-     *                                    called.
-     * @see AxonServerTestInfrastructure#AxonServerTestInfrastructure(List)
+     *                                    called
+     * @return an {@code AxonServerTestInfrastructure} with multi-tenancy switched off
+     * @since 5.3.0
      */
     @SafeVarargs
-    public AxonServerTestInfrastructure(Consumer<ComponentRegistry>... infrastructureConfigurators) {
-        this(List.of(infrastructureConfigurators));
+    public static AxonServerTestInfrastructure singleTenant(
+            Consumer<ComponentRegistry>... infrastructureConfigurators
+    ) {
+        return new AxonServerTestInfrastructure(List.of(infrastructureConfigurators), false);
     }
 
     /**
-     * Creates a new {@code AxonServerTestInfrastructure} instance with the given infrastructure configurators.
+     * Creates a new {@code AxonServerTestInfrastructure} instance that leaves multi-tenancy active.
      *
      * @param infrastructureConfigurators to be executed when {@link #configureInfrastructure(ComponentRegistry)} is
-     *                                    called.
+     *                                    called
+     * @return an {@code AxonServerTestInfrastructure} that keeps multi-tenancy active
+     * @since 5.3.0
      */
-    public AxonServerTestInfrastructure(List<Consumer<ComponentRegistry>> infrastructureConfigurators) {
-        this.infrastructureConfigurators = infrastructureConfigurators;
+    @SafeVarargs
+    public static AxonServerTestInfrastructure multiTenant(
+            Consumer<ComponentRegistry>... infrastructureConfigurators
+    ) {
+        return new AxonServerTestInfrastructure(List.of(infrastructureConfigurators), true);
+    }
+
+    /**
+     * Creates a new {@code AxonServerTestInfrastructure} instance, prepending the multi-tenancy opt-out to the given
+     * configurators unless {@code multiTenancyActive}.
+     * <p>
+     * The opt-out is folded into the configurator list here rather than applied in
+     * {@link #configureInfrastructure(ComponentRegistry)}, so an instance's whole configuration policy is the one field
+     * and nothing has to be re-decided per configuration.
+     *
+     * @param infrastructureConfigurators to be executed when {@link #configureInfrastructure(ComponentRegistry)} is
+     *                                    called
+     * @param multiTenancyActive          whether to leave multi-tenancy active for the built configurations
+     */
+    private AxonServerTestInfrastructure(List<Consumer<ComponentRegistry>> infrastructureConfigurators,
+                                         boolean multiTenancyActive) {
+        this.infrastructureConfigurators = multiTenancyActive
+                ? List.copyOf(infrastructureConfigurators)
+                : Stream.concat(Stream.of(MultiTenancyUtils::disable), infrastructureConfigurators.stream()).toList();
     }
 
     @Override

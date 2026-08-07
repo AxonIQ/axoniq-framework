@@ -22,12 +22,12 @@ package io.axoniq.framework.integrationtests.multitenancy;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import io.axoniq.framework.messaging.multitenancy.annotation.TenantScoped;
 import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
-import io.axoniq.framework.messaging.multitenancy.api.TenantUtils;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
+import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
+import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.DefaultAxonApplication;
 import org.axonframework.messaging.commandhandling.CommandMessage;
@@ -35,6 +35,7 @@ import org.axonframework.messaging.commandhandling.CommandResultMessage;
 import org.axonframework.messaging.commandhandling.GenericCommandResultMessage;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.axonframework.messaging.commandhandling.configuration.CommandHandlingModule;
+import org.axonframework.messaging.commandhandling.gateway.CommandDispatcher;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.axonframework.messaging.commandhandling.gateway.CommandResult;
 import org.axonframework.messaging.core.MessageStream;
@@ -49,10 +50,9 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException.tenantNotResolved;
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
-import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.registerTenantConnectPredicate;
-import static io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.registerTenantResolver;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
@@ -67,7 +67,7 @@ import static org.awaitility.Awaitility.await;
 @ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
 class MultiTenantCommandHandlingIT {
 
-    private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
+    private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
     private static final String TENANT_A = "tenant-A";
     private static final String TENANT_B = "tenant-B";
 
@@ -96,10 +96,11 @@ class MultiTenantCommandHandlingIT {
 
         application = new DefaultAxonApplication()
                 .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                .componentRegistry(MultiTenancyEnabled::enableMultiTenancyEnhancer)
-                .componentRegistry(registerTenantResolver(new MetadataBasedTenantResolver()))
-                .componentRegistry(registerTenantConnectPredicate(d -> !Set.of(ADMIN_CONTEXT, DEFAULT_CONTEXT)
-                                                                           .contains(d.tenantId())))
+                .componentRegistry(cr -> cr.registerComponent(TenantResolver.class,
+                                                              c -> new MetadataBasedTenantResolver()))
+                .componentRegistry(cr -> cr.registerComponent(
+                        TenantConnectPredicate.class,
+                        c -> d -> !Set.of(ADMIN_CONTEXT, DEFAULT_CONTEXT).contains(d.tenantId())))
                 // Identity factory: the tenant-scoped component IS the resolved TenantDescriptor, so injecting it
                 // into the annotated handler below proves parameter resolution picks the dispatched tenant's instance.
                 .componentRegistry(registry -> registry.registerComponent(TenantComponentProvider.class,
@@ -213,6 +214,19 @@ class MultiTenantCommandHandlingIT {
                 .containsExactly(TENANT_B);
     }
 
+    @Test
+    void followUpCommandDispatchedFromWithinAHandlerStaysWithTheTenantOfTheHandledMessage() {
+        CommandGateway commandGateway = application.getComponent(CommandGateway.class);
+
+        commandGateway.send(new DispatchFollowUpCommand("chained"),
+                            Metadata.with(MetadataBasedTenantResolver.DEFAULT_TENANT_METADATA_KEY, TENANT_A),
+                            null);
+
+        // then the follow-up RecordTenantCommand, dispatched without naming a tenant, is recorded under TENANT_A
+        await().untilAsserted(() -> assertThat(recordedCommands).hasSize(1));
+        assertThat(recordedCommands).extracting(RecordedCommand::tenantId).containsExactly(TENANT_A);
+    }
+
     @CommandHandler
     String resolveTenantScopedComponent(ResolveTenantScopedComponentCommand command,
                                        @TenantScoped TenantDescriptor tenantScopedComponent) {
@@ -220,12 +234,20 @@ class MultiTenantCommandHandlingIT {
         return "ok";
     }
 
+    @CommandHandler
+    void dispatchFollowUp(DispatchFollowUpCommand command, CommandDispatcher dispatcher) {
+        dispatcher.send(new RecordTenantCommand(command.id()));
+    }
+
     private MessageStream.Single<CommandResultMessage> recordAndAcknowledge(
             CommandMessage command,
             ProcessingContext context
     ) {
         RecordTenantCommand payload = command.payloadAs(RecordTenantCommand.class);
-        String tenantId = TenantUtils.tenantDescriptorFrom(context).tenantId();
+        String tenantId = TenantDescriptor
+                .fromContext(context)
+                .orElseThrow(tenantNotResolved("No tenant descriptor found in processing context"))
+                .tenantId();
         recordedCommands.add(new RecordedCommand(payload.id(), tenantId));
         return MessageStream.just(new GenericCommandResultMessage(new MessageType(String.class), "ok"));
     }
@@ -235,6 +257,10 @@ class MultiTenantCommandHandlingIT {
     }
 
     public record ResolveTenantScopedComponentCommand(String id) {
+
+    }
+
+    public record DispatchFollowUpCommand(String id) {
 
     }
 

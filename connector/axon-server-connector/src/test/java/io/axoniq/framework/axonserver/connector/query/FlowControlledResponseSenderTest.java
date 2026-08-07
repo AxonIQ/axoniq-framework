@@ -22,10 +22,13 @@ package io.axoniq.framework.axonserver.connector.query;
 import io.axoniq.axonserver.connector.ErrorCategory;
 import io.axoniq.axonserver.connector.ReplyChannel;
 import io.axoniq.axonserver.grpc.query.QueryResponse;
+import org.axonframework.conversion.ChainingContentTypeConverter;
+import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QueueMessageStream;
 import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
+import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.*;
@@ -50,7 +53,7 @@ class FlowControlledResponseSenderTest {
     void setUp() {
         stubDownstream = mock();
         upstream = new QueueMessageStream<>();
-        testSubject = new FlowControlledResponseSender("testCase", "test", upstream, stubDownstream);
+        testSubject = new FlowControlledResponseSender("testCase", "test", upstream, stubDownstream, null);
     }
 
     @Test
@@ -153,6 +156,24 @@ class FlowControlledResponseSenderTest {
             assertThat(e.getErrorMessage().getMessage()).isEqualTo("Custom message");
             assertThat(e.getErrorMessage().getErrorCode()).isEqualTo(ErrorCategory.QUERY_EXECUTION_ERROR.errorCode());
             assertThat(e.getErrorCode()).isEqualTo(ErrorCategory.QUERY_EXECUTION_ERROR.errorCode());
+        }));
+    }
+
+    @Test
+    void shouldSendLastMessageWithDetailsPayloadWhenUpstreamCompletesWithHandlerExecutionException() {
+        Converter converter = new ChainingContentTypeConverter();
+        QueueMessageStream<QueryResponseMessage> detailsUpstream = new QueueMessageStream<>();
+        FlowControlledResponseSender detailsTestSubject =
+                new FlowControlledResponseSender("testCase", "test", detailsUpstream, stubDownstream, converter);
+        detailsUpstream.sealExceptionally(
+                new QueryExecutionException("Custom message", null, "Some details")
+        );
+
+        detailsTestSubject.request(1);
+
+        verify(stubDownstream).sendLast(assertArg(e -> {
+            assertThat(e.getErrorMessage().getMessage()).isEqualTo("Custom message");
+            assertThat(e.getPayload().getData().toStringUtf8()).isEqualTo("Some details");
         }));
     }
 

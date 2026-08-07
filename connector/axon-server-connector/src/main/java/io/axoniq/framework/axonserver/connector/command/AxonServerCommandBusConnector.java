@@ -196,8 +196,7 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
                                                             .toArray(CompletableFuture[]::new);
         return connection.commandChannel()
                          .prepareDisconnect()
-                         .thenCompose(ignored -> CompletableFuture.allOf(inFlight))
-                         .thenRun(connection::disconnect);
+                         .thenCompose(ignored -> CompletableFuture.allOf(inFlight));
     }
 
     /**
@@ -239,7 +238,9 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
                 logger.info("Command [{}] raised an exception [{}]",
                             command.getName(),
                             cause.getMessage());
-                result.completeExceptionally(cause);
+                result.complete(CommandConverter.convertErrorResponse(
+                        clientId, command.getMessageIdentifier(), cause, converter
+                ));
             }
         };
     }

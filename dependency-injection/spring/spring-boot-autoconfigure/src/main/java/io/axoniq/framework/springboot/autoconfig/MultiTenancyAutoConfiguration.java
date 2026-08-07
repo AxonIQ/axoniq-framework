@@ -19,29 +19,28 @@
 
 package io.axoniq.framework.springboot.autoconfig;
 
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
-import io.axoniq.framework.messaging.multitenancy.axonserver.AxonServerMultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
-import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationUtils.MultiTenancyEnabled;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.AnyNestedCondition;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
-
-import java.util.function.Consumer;
+import org.springframework.context.annotation.Conditional;
 
 /**
  * Spring Boot auto-configuration wiring multi-tenancy support into Spring Boot applications.
  * <p>
  * Multi-tenancy is active by default: with the {@code axoniq-multi-tenancy} module on the classpath, tenants are
- * discovered from the connected Axon Server contexts and the tenant of each message is resolved automatically. As
- * tenants are Axon Server contexts, multi-tenancy is only activated while Axon Server is enabled: it steps aside when
- * {@code axon.axonserver.enabled=false}, and is switched off entirely with {@code axon.multitenancy.enabled=false}.
+ * discovered from the connected Axon Server contexts and the tenant of each message is resolved automatically. Either
+ * {@code axon.multitenancy.enabled=false} or {@code axon.axonserver.enabled=false} switches it off again, the latter
+ * because tenants are Axon Server contexts and there is nothing to serve as one without it.
  * <p>
  * Application-specific tenant-scoped components need no manual registration: every Spring bean of type
  * {@link TenantComponentProvider} is picked up as an Axon component, subscribed to the tenant lifecycle, and made
@@ -50,10 +49,11 @@ import java.util.function.Consumer;
  * {@link io.axoniq.framework.messaging.multitenancy.api.TenantResolver} or
  * {@link io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate} bean.
  * <p>
- * The {@link MultiTenancyConfigurationDefaults} and {@link AxonServerMultiTenancyConfigurationDefaults} enhancers
- * are contributed by the {@code axoniq-multi-tenancy} module through the {@link java.util.ServiceLoader}, so this
- * autoconfiguration does not register them. It only contributes the {@link ConfigurationEnhancer} that switches the
- * enhancer on by default, keeping the multi-tenancy core module free of Spring dependencies.
+ * The multi-tenancy enhancers are contributed by the {@code axoniq-multi-tenancy} module through the
+ * {@link java.util.ServiceLoader}, so this autoconfiguration does not register them. They are active out of the
+ * box. It only contributes the {@link ConfigurationEnhancer} that switches them off again for either of the two
+ * independent reasons multi-tenancy should not apply, keeping the multi-tenancy core module free of Spring
+ * dependencies.
  *
  * @author Jan Galinski
  * @author Laura Devriendt
@@ -66,31 +66,34 @@ public class MultiTenancyAutoConfiguration {
     private static final Logger logger = LoggerFactory.getLogger(MultiTenancyAutoConfiguration.class);
 
     /**
-     * The order of the enable and disable enhancers, chosen to run just before
-     * {@link MultiTenancyConfigurationDefaults}. Enabling must be in place before that enhancer checks for it, and
-     * disabling must be in place before it would otherwise run.
+     * The order of the disabling enhancer, chosen to run before every multi-tenancy enhancer contributed through the
+     * {@link java.util.ServiceLoader}. Disabling an enhancer that has already run has no effect, so the disable must be
+     * in place before the earliest of them. That is {@link MultiTenancyConfigurationDefaults}, which anchors the
+     * multi-tenancy enhancer block: its siblings all order themselves at that value plus a positive offset.
      */
-    private static final int MULTI_TENANCY_ENHANCER_ORDER = MultiTenancyConfigurationDefaults.ENHANCER_ORDER - 1;
+    private static final int DISABLE_ENHANCER_ORDER = MultiTenancyConfigurationDefaults.ENHANCER_ORDER - 1;
 
     /**
-     * Enables multi-tenancy when the feature is active, so the {@link MultiTenancyConfigurationDefaults} and
-     * {@link AxonServerMultiTenancyConfigurationDefaults} enhancer contributed through the
-     * {@link java.util.ServiceLoader} take effect.
-     * <p>
-     * Only contributed while both {@code axon.multitenancy.enabled} and {@code axon.axonserver.enabled} are enabled or
-     * absent. Gating on Axon Server keeps multi-tenancy inactive where it cannot function, since tenants are Axon
-     * Server contexts.
+     * Switches multi-tenancy off, for either of the two independent reasons it should not apply: it is explicitly
+     * disabled through {@code axon.multitenancy.enabled=false}, or Axon Server is disabled through
+     * {@code axon.axonserver.enabled=false} and there are no contexts to serve as tenants.
      *
-     * @return a configuration enhancer that enables multi-tenancy
+     * @return a configuration enhancer that disables multi-tenancy
      */
     @Bean
-    @ConditionalOnProperty(
-            name = {"axon.multitenancy.enabled", "axon.axonserver.enabled"},
-            matchIfMissing = true
-    )
-    public ConfigurationEnhancer enableMultiTenancyConfigurationEnhancer() {
-        // TODO flip that to remove the relevant enhancers when implementing https://github.com/AxonIQ/axoniq-framework/issues/258
-        return orderedEnhancer(MultiTenancyEnabled::enableMultiTenancyEnhancer);
+    @Conditional(MultiTenancyDoesNotApply.class)
+    public ConfigurationEnhancer disableMultiTenancyConfigurationEnhancer() {
+        return new ConfigurationEnhancer() {
+            @Override
+            public void enhance(ComponentRegistry registry) {
+                MultiTenancyUtils.disable(registry);
+            }
+
+            @Override
+            public int order() {
+                return DISABLE_ENHANCER_ORDER;
+            }
+        };
     }
 
     /**
@@ -109,17 +112,23 @@ public class MultiTenancyAutoConfiguration {
                         + "stays inactive. Enable Axon Server, or remove 'axon.multitenancy.enabled=true'.");
     }
 
-    private static ConfigurationEnhancer orderedEnhancer(Consumer<ComponentRegistry> registryAction) {
-        return new ConfigurationEnhancer() {
-            @Override
-            public void enhance(ComponentRegistry registry) {
-                registryAction.accept(registry);
-            }
+    /**
+     * Matches when multi-tenancy should not apply, which is when {@code axon.multitenancy.enabled=false} or
+     * {@code axon.axonserver.enabled=false}.
+     * <p>
+     * An {@link AnyNestedCondition} rather than repeated {@link ConditionalOnProperty} annotations on the bean, because
+     * those combine as a conjunction while either property on its own is reason enough.
+     */
+    static class MultiTenancyDoesNotApply extends AnyNestedCondition {
 
-            @Override
-            public int order() {
-                return MULTI_TENANCY_ENHANCER_ORDER;
-            }
-        };
+        MultiTenancyDoesNotApply() {
+            super(ConfigurationPhase.REGISTER_BEAN);
+        }
+
+        @ConditionalOnProperty(name = "axon.multitenancy.enabled", havingValue = "false")
+        private static final class MultiTenancyDisabled {}
+
+        @ConditionalOnProperty(name = "axon.axonserver.enabled", havingValue = "false")
+        private static final class AxonServerDisabled {}
     }
 }

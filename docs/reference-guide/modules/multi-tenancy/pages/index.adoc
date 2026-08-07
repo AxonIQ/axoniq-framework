@@ -22,17 +22,30 @@ Covers routing each command to the Axon Server context of its resolved tenant, a
 
 See xref:multi-tenancy:tenant-command-handling.adoc[Tenant-aware command processing] for details.
 
+== Event storage
+
+Covers per-tenant event stores: appending to and sourcing from the event store of the tenant resolved from the message, including per-tenant snapshots.
+
+See xref:multi-tenancy:tenant-event-storage.adoc[Tenant-aware event storage] for details.
+
+[#event-processing]
+== Event processing
+
+Covers consuming every tenant's events in one event processor, keeping each tenant's projection separated, and picking up tenants added or removed at runtime, either from one merged stream over the per-tenant event stores or from a persistent stream per tenant.
+
+See xref:multi-tenancy:tenant-event-processing.adoc[Tenant-aware event processing] for details.
+
 == Queries
 
 Covers routing each query to the Axon Server context of its resolved tenant, mirroring the approach used for commands.
 
-== Event storage
+See xref:multi-tenancy:tenant-query-handling.adoc[Tenant-aware query processing] for details.
 
-Covers per-tenant event stores: appending to and sourcing from the event store of the tenant resolved from the message.
+== Example application
 
-== Event processing
+A runnable demo runs the university domain for several tenants at once, showing these features wired into a working application.
 
-Covers per-tenant streaming, pooled, and persistent-stream-based event processors, including per-tenant token stores and transaction management.
+See xref:multi-tenancy:demo.adoc[University multi-tenancy example] for details.
 
 == Adding the module
 

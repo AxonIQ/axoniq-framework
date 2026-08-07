@@ -1,0 +1,199 @@
+[.axoniq-feature]
+= Tenant-Aware Event Processing
+:navtitle: Tenant-aware event processing
+:reftext: Tenant-aware event processing
+:demo-core: https://github.com/AxonIQ/AxonFramework/blob/main/examples/university-multi-tenancy-examples/university-multi-tenancy-core/src/main/java/org/axonframework/examples/demo/multitenancy
+:demo-declarative: https://github.com/AxonIQ/AxonFramework/blob/main/examples/university-multi-tenancy-examples/university-multi-tenancy-declarative/src/main/java/org/axonframework/examples/demo/multitenancy
+:demo-springboot: https://github.com/AxonIQ/AxonFramework/blob/main/examples/university-multi-tenancy-examples/university-multi-tenancy-springboot/src/main/java/org/axonframework/examples/demo/multitenancy
+
+Axon Framework has two kinds of event processors. A streaming event processor pulls events from a stream and tracks its position in a token. A subscribing event processor reacts to events on the event bus as they are published.
+Multi-tenancy makes the streaming event processor tenant-aware: one event processor consumes the events of every tenant, keeping each tenant's projection separated, with no extra configuration.
+
+There are two ways to stream a tenant's events, and the event handler you write is the same for both.
+<<Pooled streaming>> merges every tenant's event store into a single stream and tracks a position per tenant in one token.
+<<Persistent streams>> gives each tenant its own stream on Axon Server, which tracks that tenant's position server-side.
+<<Choosing between them>> sets the two side by side.
+
+A subscribing event processor is not wired to the per-tenant stores at all. <<Subscribing event processors>> explains how it behaves in a multi-tenant application.
+
+[#handling-events-per-tenant]
+== Handling events per tenant
+
+Events in a multi-tenancy application are handled through regular xref:events:event-handlers.adoc[event handlers].
+During handling, the tenant of the event is available on the processing context, so the handler writes to the projection of the tenant the event belongs to.
+
+The tenant is determined by the event store connection or the stream the event was delivered from, so no tenant information has to be present in the stored event's payload or metadata.
+See xref:multi-tenancy:tenant-management.adoc#tenant-resolution[tenant resolution] for how the tenant of a message is determined.
+
+Write an ordinary event handler and take the tenant's own instance of whatever it writes to as a xref:multi-tenancy:tenant-scoped-components.adoc[tenant-scoped component]:
+
+[source,java]
+----
+include::example$multitenancy/tenanteventprocessing/EnrollmentProjection.java[tag=tenant-scoped-event-handler,indent=0]
+----
+<1> Resolved from the tenant carried on the processing context, so the enrollment lands in that tenant's own projection.
+
+TIP: To see this running, the xref:multi-tenancy:demo.adoc[university demo] projects every tenant's events through link:{demo-core}/university/read/statistics/CourseStatisticsProjection.java[`CourseStatisticsProjection`], on one processor that names no tenant.
+
+== Pooled streaming
+
+A pooled streaming event processor consumes every tenant from one merged stream, tracking their positions in a single token store.
+This is what a multi-tenant application gets by default.
+
+=== One merged stream, one token
+
+Each tenant keeps its events in its own event store, as described in xref:multi-tenancy:tenant-event-storage.adoc[tenant-aware event storage].
+When a processor streams events, the per-tenant streams are merged into a single stream, ordered by event timestamp.
+Every event on that stream carries the tenant it originates from, and that tenant is available on the processing context while the event is handled.
+
+The processor tracks one position per tenant in a single token.
+A tenant that has no position yet, because it was added after the token was written, streams from the beginning of its store.
+
+Because the stream is shared across tenants, a tenant whose store cannot be read pauses processing for every tenant: the processor retries the whole stream until that tenant can be read again.
+
+=== Tenant changes restart the processors
+
+Adding or removing a tenant re-opens the merged stream so the current set of tenants takes effect.
+Because a running stream cannot change its set of tenants, the running streaming event processors are restarted, which briefly pauses processing for all tenants.
+A tenant that is added starts from the beginning of its store. A tenant that is removed is no longer read.
+Renaming a tenant's context is seen as removing one tenant and adding another, so its events replay from the beginning under the new name.
+This happens automatically and requires no configuration.
+
+[#idempotent-handlers]
+[WARNING]
+.Event handlers must be idempotent
+====
+Events are delivered at least once, as they are for any streaming event processor, so an event handler must be written so that handling the same event twice has the same effect as handling it once.
+
+On a multi-tenant stream a duplicate is more likely than on a single-tenant one.
+Adding or removing a tenant re-opens the stream, and the processor cannot always tell that an event of another tenant was already handled, so a duplicate may follow an ordinary tenant change, not only a failure.
+
+In practice this means deriving a projection from the identifiers in the event rather than counting.
+Recording an enrollment as `enrolledStudents.add(studentId)` is safe to repeat, while `enrollments = enrollments + 1` is not.
+====
+
+Each restart is bounded by a safety-net timeout, so a processor that never finishes stopping or starting cannot block later restarts.
+When a processor does not finish within that timeout, its restart is abandoned with a logged warning while the other processors still restart, and that processor picks up the current set of tenants on the next tenant change.
+The timeout defaults to 30 seconds.
+
+[#configuring-restart-timeout]
+=== Configuring the restart timeout
+
+A deployment whose processors are slow to stop and start can raise the safety-net timeout by registering a `MultiTenantStreamingProcessorRestartConfiguration` with a longer value:
+
+[tabs]
+====
+Declarative - Configuration API::
++
+--
+[source,java]
+----
+include::example$multitenancy/tenanteventprocessing/DeclarativeRestartConfiguration.java[tag=restart-timeout,indent=0]
+----
+<1> The bound applied to each processor's shutdown-and-start during a restart, raised here from the 30-second default.
+--
+Autodetected - Spring Boot::
++
+--
+Expose the configuration as a bean. The default is only registered when the application registers none, so this bean replaces it:
+
+[source,java]
+----
+include::example$multitenancy/tenanteventprocessing/SpringRestartConfiguration.java[tag=restart-timeout,indent=0]
+----
+<1> The bound applied to each processor's shutdown-and-start during a restart, raised here from the 30-second default.
+--
+====
+
+TIP: Both variants of the xref:multi-tenancy:demo.adoc[university demo] register this at its default, from the `UniversityConfiguration` of its link:{demo-declarative}/UniversityConfiguration.java[declarative] and link:{demo-springboot}/UniversityConfiguration.java[Spring Boot] variants, so the knob is visible without changing what the demo does.
+
+== Persistent streams
+
+A xref:connector:persistent-streams.adoc[persistent stream] lets Axon Server track an event processor's position, instead of the application keeping a token store.
+With multi-tenancy enabled, a configured persistent stream is consumed from every tenant's Axon Server context, and every event reaches its handlers labelled with the tenant it belongs to.
+
+This is the simplest way to give each tenant its own projection database: Axon Server tracks each tenant's position in that tenant's own context, so no per-tenant token store is needed on the client at all.
+
+=== One stream per tenant
+
+Each tenant is an Axon Server context, and a persistent stream lives in one context.
+A configured stream therefore becomes one stream per tenant, all carrying the name you configured, each consumed independently and all feeding the same event processor.
+
+Every event arrives with the tenant of the stream it came from available on the processing context, so a handler writes to the projection of the tenant the event belongs to.
+That tenant is determined by which tenant's stream delivered the event, not by the event's metadata, so no tenant information has to be present in the stored event.
+
+=== Configuring a stream
+
+Nothing changes about how a persistent stream is configured.
+Configure it as described in xref:connector:persistent-streams.adoc[persistent streams], and multi-tenancy applies it to every tenant:
+
+[source,text]
+----
+axon.axonserver.persistent-streams.my-stream.initial-segment-count=4
+axon.axonserver.persistent-streams.my-stream.thread-count=2
+axon.axonserver.persistent-streams.my-stream.batch-size=10
+
+axon.eventhandling.processors.MyProjection.mode=subscribing
+axon.eventhandling.processors.MyProjection.source=my-stream
+----
+
+=== Thread usage
+
+Each tenant's stream runs on its own thread pool, so `thread-count` means "threads for this tenant's stream".
+One tenant's stream retrying against an unreachable context therefore cannot occupy the threads the other tenants need.
+
+Total thread usage grows with the number of tenants: a `thread-count` of 2 across ten tenants uses twenty threads for that stream.
+Size `thread-count` per tenant, not for all tenants together.
+
+=== Tenant changes affect only that tenant
+
+Tenants are independent, so a tenant change affects only that tenant.
+A tenant added at runtime gets one more stream, joined to the running processor without pausing the other tenants.
+A tenant that is removed has its stream closed and its threads released, leaving the rest untouched.
+This happens automatically and requires no configuration.
+
+Because each tenant has its own stream and its own server-side position, resetting one tenant's stream replays that tenant only.
+
+== Choosing between them
+
+Both give every tenant its own projection. They differ in what is shared.
+
+[cols="1,1,1"]
+|===
+| | <<Persistent streams>> | <<Pooled streaming>>
+
+| Position tracking
+| Axon Server, per tenant. No token store.
+| One token store, holding a position per tenant.
+
+| Streams
+| One per tenant, consumed independently.
+| One merged stream over all tenants.
+
+| Adding or removing a tenant
+| Affects that tenant only.
+| Restarts the processors, briefly pausing all tenants.
+
+| Replays
+| Per tenant.
+| One replay is every tenant's replay.
+
+| Ordering
+| Per tenant.
+| Across tenants, by event timestamp.
+|===
+
+Prefer persistent streams when tenants should not affect each other, which is the usual expectation for a database-per-tenant deployment.
+Prefer pooled streaming when the projection is shared across tenants, or when the deployment cannot use Axon Server's persistent streams.
+
+== Subscribing event processors
+
+A streaming event processor reads the per-tenant stores.
+It consumes every tenant, tracks a position per tenant, and resumes each tenant from its own last position after a restart.
+
+A subscribing event processor does not read those stores.
+It reacts to the shared, in-process event bus, which keeps no token, so it holds no per-tenant position, cannot replay or catch up, and only sees events published in this application instance while it runs.
+
+It can still build a per-tenant projection.
+An event committed within a tenant's context carries that tenant on the processing context the handler runs in, so a handler that writes through a xref:multi-tenancy:tenant-scoped-components.adoc[tenant-scoped] repository still reaches the right tenant's read model.
+What it gives up is the durability and replay above, so use a streaming event processor when a projection has to survive restarts or catch up on events published while it was down.
