@@ -50,7 +50,7 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
     Optional<WorkflowExecution> findById(@Nonnull String workflowId);
 
     /**
-     * Returns all stored workflow executions.
+     * Returns all stored workflow executions, with at most one execution per workflow identifier.
      *
      * @return an unmodifiable collection of all workflow executions
      */
@@ -60,7 +60,8 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
     }
 
     /**
-     * Returns all stored workflow executions matching the given predicate.
+     * Returns all stored workflow executions matching the given predicate, with at most one execution per workflow
+     * identifier.
      *
      * @param predicate the predicate to match workflow executions against
      * @return an unmodifiable collection of all workflow executions

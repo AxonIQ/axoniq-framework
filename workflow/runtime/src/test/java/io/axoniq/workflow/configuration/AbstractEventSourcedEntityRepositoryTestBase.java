@@ -29,6 +29,7 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.modelling.repository.Repository;
 import org.junit.jupiter.api.*;
 
@@ -97,6 +98,9 @@ abstract class AbstractEventSourcedEntityRepositoryTestBase {
         when(context.workflowId()).thenReturn(workflowId);
         when(context.workflowPayload()).thenReturn(Map.of("orderId", workflowId));
         when(context.workflowVersion()).thenReturn(version);
+        ProcessingContext processingContext = mock(ProcessingContext.class);
+        when(context.processingContext()).thenReturn(processingContext);
+        when(processingContext.component(EventConverter.class)).thenReturn(mock(EventConverter.class));
         return context;
     }
 

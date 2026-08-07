@@ -11,7 +11,7 @@ projections can rebuild from a narrow tagged event slice instead of replaying al
 The first concrete projection needed from that tag contract is `RunningWorkflows`: the set of workflow identifiers that
 started and have not yet reached a terminal workflow state.
 
-The initial persistence model should use standard AF5 event-sourcing building blocks instead of a custom projector and
+The initial persistence model should use standard Axon Framework event-sourcing building blocks instead of a custom projector and
 custom replay loop. The workflow engine must not depend on that persistence choice, however, because a future
 implementation may use a different storage or reconstruction strategy.
 

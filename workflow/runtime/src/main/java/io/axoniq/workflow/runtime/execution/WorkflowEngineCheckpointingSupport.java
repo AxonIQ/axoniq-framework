@@ -36,40 +36,58 @@ import java.util.concurrent.CompletableFuture;
  * This class has one job: coordinate checkpoint requests and complete
  * {@link #onCheckpointAdvanced(Segment, TrackingToken)} only after the host confirms that workflow-owned asynchronous
  * work is safe. It does not track replay progress or decide when the engine should switch to live mode.
+ * <p>
+ * The checkpoint trigger and pending checkpoint token are coordinated through this instance's monitor. Their updates
+ * are deliberately small and never invoke processor or workflow callbacks while the monitor is held. The coordinator
+ * callback supplied to {@link #onCheckpointAdvanced(Segment, TrackingToken)} runs outside that monitor and re-enters
+ * the support only after the workflow barriers have been crossed.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
  */
 @Internal
-final class WorkflowEngineCheckpointingAdvancingSupport implements Checkpointing {
+public class WorkflowEngineCheckpointingSupport implements Checkpointing {
 
     /**
-     * Host contract implemented by the owning workflow engine.
+     * Coordinates workflow work that must complete before checkpoint advancement.
      */
-    interface Host {
+    @Internal
+    public interface CheckpointBarrierCoordinator {
+
+        /**
+         * Returns whether any owned workflow execution still makes checkpoint advancement unsafe.
+         *
+         * @return {@code true} when checkpoint advancement must wait
+         */
+        boolean hasUnsafeCheckpointWork();
 
         /**
          * Schedules checkpoint barrier tasks across the owned workflow executions.
+         * <p>
+         * Implementations must invoke {@code onDrained} even when no execution currently needs a barrier. The callback
+         * re-checks checkpoint safety, covering work appended after the coordinator takes its execution snapshot.
          *
          * @param onDrained callback to invoke once the scheduled barriers have been crossed
-         * @return {@code true} if at least one barrier was scheduled
          */
-        boolean scheduleCheckpointIntent(@Nonnull Runnable onDrained);
+        void scheduleCheckpointIntent(@Nonnull Runnable onDrained);
     }
 
-    private final Host host;
+    private final CheckpointBarrierCoordinator checkpointBarrierCoordinator;
     @Nullable
     private CheckpointTrigger checkpointTrigger;
     @Nullable
     private TrackingToken pendingCheckpointToken;
 
     /**
-     * Creates checkpointing support for the given host.
+     * Creates checkpointing support for the given checkpoint-barrier coordinator.
      *
-     * @param host the engine facade used to inspect workflow safety and schedule barriers
+     * @param checkpointBarrierCoordinator coordinates workflow work before checkpoint advancement
      */
-    WorkflowEngineCheckpointingAdvancingSupport(@Nonnull Host host) {
-        this.host = Objects.requireNonNull(host, "Checkpointing host must not be null");
+    public WorkflowEngineCheckpointingSupport(@Nonnull CheckpointBarrierCoordinator checkpointBarrierCoordinator) {
+        this.checkpointBarrierCoordinator = Objects.requireNonNull(
+                checkpointBarrierCoordinator,
+                "Checkpoint barrier coordinator must not be null"
+        );
     }
 
     /**
@@ -104,21 +122,24 @@ final class WorkflowEngineCheckpointingAdvancingSupport implements Checkpointing
     @Override
     public CompletableFuture<TrackingToken> onCheckpointAdvanced(@Nonnull Segment segment,
                                                                  @Nonnull TrackingToken requested) {
-        var result = new CompletableFuture<TrackingToken>();
-        var scheduled = host.scheduleCheckpointIntent(() -> {
-            if (result.isDone()) {
-                return;
-            }
-            onCheckpointAdvanced(segment, requested)
-                    .whenComplete((token, cause) -> {
-                        if (cause != null) {
-                            result.completeExceptionally(cause);
-                        } else {
-                            result.complete(token);
-                        }
-                    });
-        });
-        return scheduled ? result : CompletableFuture.completedFuture(requested);
+        if (checkpointBarrierCoordinator.hasUnsafeCheckpointWork()) {
+            var result = new CompletableFuture<TrackingToken>();
+            checkpointBarrierCoordinator.scheduleCheckpointIntent(() -> {
+                if (result.isDone()) {
+                    return;
+                }
+                onCheckpointAdvanced(segment, requested)
+                        .whenComplete((token, cause) -> {
+                            if (cause != null) {
+                                result.completeExceptionally(cause);
+                            } else {
+                                result.complete(token);
+                            }
+                        });
+            });
+            return result;
+        }
+        return CompletableFuture.completedFuture(requested);
     }
 
     @Override
@@ -139,7 +160,7 @@ final class WorkflowEngineCheckpointingAdvancingSupport implements Checkpointing
         flushPendingCheckpointRequest();
     }
 
-    private synchronized void flushPendingCheckpointRequest() {
+    private void flushPendingCheckpointRequest() {
         var trigger = checkpointTrigger;
         if (trigger == null) {
             return;

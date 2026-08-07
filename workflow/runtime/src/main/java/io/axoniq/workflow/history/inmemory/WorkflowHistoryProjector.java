@@ -28,6 +28,8 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 
@@ -39,6 +41,8 @@ import java.util.HashMap;
  */
 @Internal
 public class WorkflowHistoryProjector implements EventHandler {
+
+    private static final Logger logger = LoggerFactory.getLogger(WorkflowHistoryProjector.class);
 
     private final MutableWorkflowHistoryRepository historyRepository;
 
@@ -58,26 +62,32 @@ public class WorkflowHistoryProjector implements EventHandler {
     public MessageStream.Empty<Message> handle(@Nonnull EventMessage event, @Nonnull ProcessingContext context) {
         if (MetadataUtils.hasWorkflowId().test(event.metadata())) {
             var workflowId = MetadataUtils.getWorkflowId(event.metadata());
-            historyRepository.findById(workflowId).ifPresentOrElse(history -> {
-                historyRepository.save(
-                        new WorkflowHistory(workflowId, history.state().evolve(event, context))
-                );
-            }, () -> {
-                var workflowDefinitionId = MetadataUtils.getWorkflowDefinitionId(event.metadata())
-                                                        .orElseThrow(() -> new IllegalStateException(
-                                                                "Workflow history for '%s' cannot be created without workflowDefinitionId metadata."
-                                                                        .formatted(workflowId)
+            historyRepository.findById(workflowId)
+                             .ifPresentOrElse(
+                                     history ->
+                                             historyRepository.save(
+                                                     new WorkflowHistory(workflowId,
+                                                                         history.state().evolve(event, context))
+                                             ),
+                                     () -> MetadataUtils.getWorkflowDefinitionId(event.metadata())
+                                                        .ifPresentOrElse(
+                                                                workflowDefinitionId -> historyRepository.save(
+                                                                        new WorkflowHistory(
+                                                                                workflowId,
+                                                                                new EventSourcedWorkflowState(
+                                                                                        workflowId,
+                                                                                        new HashMap<>(),
+                                                                                        workflowDefinitionId
+                                                                                ).evolve(event, context)
+                                                                        )
+                                                                ),
+                                                                () -> logger.debug(
+                                                                        "Skipping history creation for workflow '{}': event '{}' carries no workflowDefinitionId "
+                                                                                + "metadata and no history entry exists yet (its definition-carrying lifecycle "
+                                                                                + "event lies before the replay window).",
+                                                                        workflowId,
+                                                                        event.type())
                                                         ));
-                historyRepository.save(
-                        new WorkflowHistory(workflowId,
-                                            new EventSourcedWorkflowState(
-                                                    workflowId,
-                                                    new HashMap<>(),
-                                                    workflowDefinitionId
-                                            ).evolve(event, context)
-                        )
-                );
-            });
         }
         return MessageStream.empty();
     }

@@ -30,11 +30,12 @@ import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowStore;
 import io.axoniq.workflow.runtime.execution.ExecuteStepActionResolver;
 import io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
-import io.axoniq.workflow.runtime.execution.RunningWorkflows;
 import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
-import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowCancellationService;
+import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
+import io.axoniq.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
+import io.axoniq.workflow.runtime.execution.WorkflowEngineReplaySupport;
 import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowScheduler;
@@ -50,10 +51,10 @@ import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jdbc.TokenSchema;
 import org.axonframework.modelling.repository.Repository;
 
 import java.time.Clock;
@@ -123,6 +124,8 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowEngine(componentRegistry);
         registerWorkflowHistoryProjector(componentRegistry);
         registerWorkflowStateParameterResolverFactory(componentRegistry);
+        registerReplaySupport(componentRegistry);
+        registerCheckpointingSupport(componentRegistry);
     }
 
     private void registerPayloadReducerRegistry(ComponentRegistry componentRegistry) {
@@ -186,7 +189,9 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                                 "Workflow state for '%s' cannot be created without workflowDefinitionId metadata.".formatted(
                                                         identifier)))))
                         .criteriaResolver(c -> (identifier, context) -> EventSourcedWorkflowState.criteriaBuilder(
-                                identifier)).build());
+                                identifier))
+                        // FIXME Register snapshot configuration eventually, see #245
+                        .build());
     }
 
     void registerWorkflowEngineExecutor(ComponentRegistry componentRegistry) {
@@ -203,7 +208,8 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                            cfg.getComponent(WorkflowConfigurationRegistry.class),
                                            cfg.getComponent(WorkflowExecutionRepository.class),
                                            cfg.getComponent(WorkflowCancellationService.class),
-                                           cfg.getComponent(WorkflowStore.class)
+                                           cfg.getComponent(WorkflowStore.class),
+                                           cfg.getComponent(UnitOfWorkFactory.class)
                                    ))
                                    .onShutdown(Phase.INBOUND_EVENT_CONNECTORS,
                                                WorkflowEngine::shutdown));
@@ -270,6 +276,21 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                 componentRegistry,
                 WorkflowStateParameterResolverFactory::new);
     }
+
+    void registerCheckpointingSupport(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(WorkflowEngineCheckpointingSupport.class,
+                                               cfg -> new WorkflowEngineCheckpointingSupport(cfg.getComponent(
+                                                       WorkflowEngine.class)
+                                               ));
+    }
+
+    void registerReplaySupport(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(WorkflowEngineReplaySupport.class,
+                                               cfg -> new WorkflowEngineReplaySupport(cfg.getComponent(
+                                                       WorkflowEngine.class)
+                                               ));
+    }
+
 
     @Override
     public int order() {

@@ -16,12 +16,10 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.workflow.configuration;
+package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointTrigger;
-import io.axoniq.workflow.runtime.execution.CheckpointingSupplier;
-import io.axoniq.workflow.runtime.execution.ReplayStatusChangedHandlerSupplier;
+import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -56,6 +54,10 @@ import java.util.function.BiFunction;
 
 /**
  * Event handling component handling all events.
+ * <p>
+ * This component always participates in checkpoint coordination, including when it wraps a plain
+ * {@link EventHandler}. A plain handler acknowledges requested checkpoint tokens immediately. This keeps every
+ * handler in the workflow processor checkpoint-aware, preserving the engine's deferred checkpointing behavior.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
@@ -87,9 +89,9 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
     private final ReplayStatusChangedHandler replayStatusChangedHandler;
 
     /**
-     * Constructs the component.
+     * Constructs the component for a generic event handler.
      *
-     * @param eventHandler event handler to wrap.
+     * @param eventHandler event handler to wrap
      */
     public AllEventEventHandlingComponent(EventHandler eventHandler) {
         this.eventHandler = Objects.requireNonNull(eventHandler, "Event handler must not be null");
@@ -97,16 +99,29 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
                 SequentialPerAggregatePolicy.INSTANCE,
                 SequentialPolicy.INSTANCE
         );
-        if (eventHandler instanceof CheckpointingSupplier checkpointingSupplier) {
-            checkpointingHandler = checkpointingSupplier.checkpointing();
-        } else {
-            checkpointingHandler = null;
-        }
-        if (eventHandler instanceof ReplayStatusChangedHandlerSupplier replayStatusChangedHandlerSupplier) {
-            replayStatusChangedHandler = replayStatusChangedHandlerSupplier.replayStatusChangedHandler();
-        } else {
-            replayStatusChangedHandler = null;
-        }
+        this.checkpointingHandler = null;
+        this.replayStatusChangedHandler = null;
+    }
+
+    /**
+     * Constructs the component for a workflow engine.
+     *
+     * @param workflowEngine             workflow engine to deliver events to
+     * @param replayStatusChangedHandler handler to notify when replay status changes
+     * @param checkpointingHandler       handler to notify when checkpointing is required
+     */
+    public AllEventEventHandlingComponent(@Nonnull WorkflowEngine workflowEngine,
+                                          @Nonnull ReplayStatusChangedHandler replayStatusChangedHandler,
+                                          @Nonnull Checkpointing checkpointingHandler) {
+        this.eventHandler = Objects.requireNonNull(workflowEngine, "Workflow engine handler must not be null");
+        this.sequencingPolicy = new HierarchicalSequencingPolicy<>(
+                SequentialPerAggregatePolicy.INSTANCE,
+                SequentialPolicy.INSTANCE
+        );
+        this.checkpointingHandler = Objects.requireNonNull(checkpointingHandler,
+                                                           "Checkpointing handler must not be null");
+        this.replayStatusChangedHandler = Objects.requireNonNull(replayStatusChangedHandler,
+                                                                 "Replay status changed handler must not be null");
     }
 
     @Override
@@ -146,6 +161,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
         if (checkpointingHandler != null) {
             return checkpointingHandler.onCheckpointAdvanced(segment, requested);
         }
+        // Plain handlers add no checkpoint work but must acknowledge to preserve deferred checkpoint coordination.
         return CompletableFuture.completedFuture(requested);
     }
 
@@ -163,6 +179,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
         if (checkpointingHandler != null) {
             return checkpointingHandler.onSegmentReleased(segment, requested);
         }
+        // Plain handlers add no checkpoint work but must acknowledge to preserve deferred checkpoint coordination.
         return CompletableFuture.completedFuture(requested);
     }
 

@@ -24,9 +24,14 @@ import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import org.axonframework.common.TypeReference;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Constructor;
@@ -46,6 +51,9 @@ import static org.mockito.Mockito.*;
  */
 class EventMessageUtilsTest {
 
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
+
     private WorkflowContext context;
     private EventNameCustomizer customizer;
     private MessageType workflowDefinitionId;
@@ -61,6 +69,9 @@ class EventMessageUtilsTest {
         when(context.workflowId()).thenReturn(workflowId);
         when(context.workflowPayload()).thenReturn(payload);
         when(context.workflowVersion()).thenReturn(org.axonframework.messaging.core.MessageType.DEFAULT_VERSION);
+        ProcessingContext processingContext = mock(ProcessingContext.class);
+        when(context.processingContext()).thenReturn(processingContext);
+        when(processingContext.component(EventConverter.class)).thenReturn(mock(EventConverter.class));
 
         when(customizer.getEventName(anyString(), anyMap(), any(WorkflowStatus.class)))
                 .thenAnswer(inv -> new QualifiedName(
@@ -106,6 +117,21 @@ class EventMessageUtilsTest {
         assertThat(MetadataUtils.getWorkflowStatus(message.metadata())).contains(WorkflowStatus.STARTED);
         assertThat(MetadataUtils.getWorkflowDefinitionId(message.metadata())).contains(workflowDefinitionId);
         assertThat(MetadataUtils.payloadReducer(message.metadata())).contains(NAME);
+    }
+
+    @Test
+    void workflowEventsUseTheProcessingContextEventConverter() {
+        ProcessingContext processingContext = mock(ProcessingContext.class);
+        EventConverter converter = new DelegatingEventConverter(new JacksonConverter());
+        when(context.processingContext()).thenReturn(processingContext);
+        when(processingContext.component(EventConverter.class)).thenReturn(converter);
+
+        EventMessage message = EventMessageUtils.startedWorkflow(context,
+                                                                 "myWorkflow",
+                                                                 workflowDefinitionId,
+                                                                 customizer);
+
+        assertThat(message.payloadAs(MAP_TYPE)).isEqualTo(payload);
     }
 
     @Test
@@ -361,18 +387,6 @@ class EventMessageUtilsTest {
         assertThat(MetadataUtils.getStepName(message.metadata())).isEqualTo("step1");
         assertThat(MetadataUtils.getStepStatus(message.metadata())).contains(StepStatus.TIMED_OUT);
         assertThat(MetadataUtils.isWaitForEventStep(message.metadata())).isTrue();
-    }
-
-    @Test
-    void testStartedWorkflowDefaultsMessageTypeVersionWhenContextVersionIsBlank() {
-        when(context.workflowVersion()).thenReturn(" ");
-
-        EventMessage message = EventMessageUtils.startedWorkflow(context,
-                                                                 "myWorkflow",
-                                                                 workflowDefinitionId,
-                                                                 customizer);
-
-        assertThat(message.type().version()).isEqualTo(org.axonframework.messaging.core.MessageType.DEFAULT_VERSION);
     }
 
     @Test

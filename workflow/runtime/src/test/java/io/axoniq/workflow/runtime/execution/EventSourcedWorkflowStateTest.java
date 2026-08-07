@@ -205,6 +205,24 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
+    void evolvePayloadConvertsNonMapPayloadsToMaps() {
+        String stepName = "testStep";
+        Map<String, Object> stepResult = Map.of("key", "value");
+        Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.COMPLETED)
+                                         .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD, NAME);
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(metadata);
+        when(eventMessage.timestamp()).thenReturn(Instant.now());
+        when(eventMessage.payloadAs(Object.class)).thenReturn(new byte[]{1, 2, 3});
+        when(eventMessage.payloadAs(EventSourcedWorkflowState.PAYLOAD_TYPE)).thenReturn(stepResult);
+
+        state.evolve(eventMessage, processingContext);
+
+        assertThat(state.payload()).containsEntry("key", "value");
+        verify(eventMessage).payloadAs(EventSourcedWorkflowState.PAYLOAD_TYPE);
+    }
+
+    @Test
     void evolveStepFailed() {
         String stepName = "testStep";
         WorkflowError error = WorkflowError.from(new RuntimeException("Test error"));
@@ -237,7 +255,7 @@ class EventSourcedWorkflowStateTest {
         var seeded = new EventSourcedWorkflowState("wf-1",
                                                    Map.of(),
                                                    new MessageType(new QualifiedName("OrderWorkflow"), "1.2.3"),
-                                                   mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowContext.class),
+                                                   mock(WorkflowContext.class),
                                                    Map.of());
         assertThat(seeded.workflowDefinitionVersion()).isEqualTo("1.2.3");
     }
@@ -251,16 +269,15 @@ class EventSourcedWorkflowStateTest {
         var seeded = new EventSourcedWorkflowState("wf-1",
                                                    Map.of(),
                                                    new MessageType(new QualifiedName("OrderWorkflow"), "2.0.0"),
-                                                   mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowContext.class),
+                                                   mock(WorkflowContext.class),
                                                    Map.of());
 
         EventMessage started = mock(EventMessage.class);
         when(started.metadata()).thenReturn(MetadataUtils.create("wf-1",
-                                                                 io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus.STARTED));
+                                                                 WorkflowStatus.STARTED));
         when(started.timestamp()).thenReturn(Instant.now());
         when(started.payloadAs(Object.class)).thenReturn(Map.of());
-        when(started.type()).thenReturn(new org.axonframework.messaging.core.MessageType("OrderWorkflow.Started",
-                                                                                         "1.0.0"));
+        when(started.type()).thenReturn(new MessageType("OrderWorkflow.Started", "1.0.0"));
 
         seeded.evolve(started, processingContext);
 
@@ -271,7 +288,7 @@ class EventSourcedWorkflowStateTest {
     void version_returnsCurrentWorkflowVersion_whenNoMarkerRecorded() {
         // Default before any STARTED event applies is MessageType.DEFAULT_VERSION ("0.0.1").
         assertThat(state.currentWorkflowVersion("payment-redesign"))
-                .isEqualTo(org.axonframework.messaging.core.MessageType.DEFAULT_VERSION);
+                .isEqualTo(MessageType.DEFAULT_VERSION);
         assertThat(state.hasVersionMigrationStep("payment-redesign")).isFalse();
     }
 

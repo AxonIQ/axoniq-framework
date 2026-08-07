@@ -18,7 +18,14 @@
  */
 package io.axoniq.workflow.configuration;
 
+import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
+import io.axoniq.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.workflow.runtime.execution.AllEventEventHandlingComponent;
+import io.axoniq.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
+import io.axoniq.workflow.runtime.execution.WorkflowEngineReplaySupport;
+import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.CompletePhase;
+import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.RequiredComponentPhase;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -28,10 +35,6 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.CompletePhase;
-import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.RequiredComponentPhase;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -42,8 +45,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static io.axoniq.workflow.configuration.AllEventEventHandlingComponent.ANY_EVENT_IN_ONE_SEGMENT;
-import static java.util.concurrent.CompletableFuture.completedFuture;
+import static io.axoniq.workflow.runtime.execution.AllEventEventHandlingComponent.ANY_EVENT_IN_ONE_SEGMENT;
 
 /**
  * Enhancer for registration of the workflow engine event processing.
@@ -119,7 +121,10 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                  cfg -> {
                                      if (engineComponentName != null) {
                                          return new AllEventEventHandlingComponent(
-                                                 cfg.getComponent(WorkflowEngine.class, engineComponentName));
+                                                 cfg.getComponent(WorkflowEngine.class, engineComponentName),
+                                                 cfg.getComponent(WorkflowEngineReplaySupport.class),
+                                                 cfg.getComponent(WorkflowEngineCheckpointingSupport.class)
+                                         );
                                      } else {
                                          return new AllEventEventHandlingComponent(
                                                  cfg.getComponent(WorkflowEngine.class)
@@ -163,7 +168,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                      var tokenStore = cfg.getComponent(TokenStore.class, tokenStoreName(moduleName));
                                      var eventSource = cfg.getComponent(StreamableEventSource.class);
                                      var processor = cfg.getComponent(StreamingEventProcessor.class, moduleName);
-                                     var unitOfWorkFactory = cfg.getComponent(UnitOfWorkFactory.class);
+                                     var replaySupport = cfg.getComponent(WorkflowEngineReplaySupport.class);
                                      var workflowEngine = engineComponentName != null
                                              ? cfg.getComponent(WorkflowEngine.class, engineComponentName)
                                              : cfg.getComponent(WorkflowEngine.class);
@@ -174,7 +179,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                                      .thenCompose(
                                                              latestToken -> initializeWorkflowEngine(
                                                                      workflowEngine,
-                                                                     unitOfWorkFactory,
+                                                                     replaySupport,
                                                                      processorToken,
                                                                      latestToken
                                                              )
@@ -189,23 +194,24 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
             TokenStore tokenStore,
             StreamableEventSource eventSource
     ) {
-        return tokenStore.fetchSegments(moduleName, null)
-                         .thenCompose(segments -> {
-                             if (!segments.isEmpty()) {
-                                 return tokenStore.fetchToken(moduleName, 0, null)
-                                                  .handle((token, ex) -> tokenStore
-                                                          .releaseClaim(moduleName, 0, null)
-                                                          .thenApply(ignored -> passOrThrow(token, ex)))
-                                                  .thenCompose(future -> future);
-                             }
-                             return eventSource.firstToken(null)
-                                               .thenCompose(firstToken -> tokenStore.initializeTokenSegments(
-                                                       moduleName,
-                                                       1, // FIXME #190 (https://github.com/AxonIQ/extension-workflow/issues/190) -> should be configurable?
-                                                       firstToken,
-                                                       null
-                                               ).thenApply(ignored -> firstToken));
-                         });
+        return tokenStore
+                .fetchSegments(moduleName, null)
+                .thenCompose(segments -> {
+                    if (!segments.isEmpty()) {
+                        return tokenStore.fetchToken(moduleName, 0, null)
+                                         .handle((token, ex) -> tokenStore
+                                                 .releaseClaim(moduleName, 0, null)
+                                                 .thenApply(ignored -> passOrThrow(token, ex)))
+                                         .thenCompose(future -> future);
+                    }
+                    return eventSource.firstToken(null)
+                                      .thenCompose(firstToken -> tokenStore.initializeTokenSegments(
+                                              moduleName,
+                                              1, // FIXME #190 (https://github.com/AxonIQ/extension-workflow/issues/190) -> should be configurable?
+                                              firstToken,
+                                              null
+                                      ).thenApply(ignored -> firstToken));
+                });
     }
 
     /**
@@ -225,26 +231,12 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
 
     CompletableFuture<Void> initializeWorkflowEngine(
             WorkflowEngine workflowEngine,
-            UnitOfWorkFactory unitOfWorkFactory,
+            WorkflowEngineReplaySupport replaySupport,
             @Nullable TrackingToken processorToken,
             @Nullable TrackingToken latestToken
     ) {
-        var replaySupport = workflowEngine.replayStatusChangedHandler();
         replaySupport.initializeReplayTracking(processorToken, latestToken);
-        return unitOfWorkFactory.create(moduleName + "WorkflowRehydration")
-                                .executeWithResult(sourcingContext -> {
-                                    var executionUnitOfWork = new SimpleUnitOfWorkFactory(sourcingContext)
-                                            .create(moduleName + "WorkflowExecutionContext");
-                                    return executionUnitOfWork.executeWithResult(executionContext -> {
-                                        workflowEngine.start(processorToken, sourcingContext, executionContext);
-                                        return completedFuture(null);
-                                    });
-                                })
-                                .thenRun(() -> {
-                                    if (!requiresReplay(processorToken, latestToken)) {
-                                        replaySupport.switchToLiveMode();
-                                    }
-                                });
+        return workflowEngine.start(processorToken, requiresReplay(processorToken, latestToken));
     }
 
     boolean requiresReplay(@Nullable TrackingToken resetToken, @Nullable TrackingToken latestToken) {

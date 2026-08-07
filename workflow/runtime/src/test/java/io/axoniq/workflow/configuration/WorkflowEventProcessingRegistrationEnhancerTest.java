@@ -20,14 +20,10 @@ package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineReplaySupport;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.core.unitofwork.UnitOfWork;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.Test;
 
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,23 +39,20 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         var enhancer = new WorkflowEventProcessingRegistrationEnhancer("Workflow", null, null, true);
         var workflowEngine = mock(WorkflowEngine.class);
         var replaySupport = mock(WorkflowEngineReplaySupport.class);
-        var unitOfWorkFactory = unitOfWorkFactory();
         var processorToken = token(18);
         var latestToken = token(192);
-        when(workflowEngine.replayStatusChangedHandler()).thenReturn(replaySupport);
+        when(workflowEngine.start(processorToken, true)).thenReturn(CompletableFuture.completedFuture(null));
 
         enhancer.initializeWorkflowEngine(
                 workflowEngine,
-                unitOfWorkFactory,
+                replaySupport,
                 processorToken,
                 latestToken
         ).join();
 
-        var inOrder = inOrder(workflowEngine, replaySupport);
-        inOrder.verify(workflowEngine).replayStatusChangedHandler();
+        var inOrder = inOrder(replaySupport, workflowEngine);
         inOrder.verify(replaySupport).initializeReplayTracking(processorToken, latestToken);
-        inOrder.verify(workflowEngine).start(eq(processorToken), any(ProcessingContext.class), any(ProcessingContext.class));
-        verify(replaySupport, never()).switchToLiveMode();
+        inOrder.verify(workflowEngine).start(processorToken, true);
     }
 
     @Test
@@ -67,20 +60,18 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         var enhancer = new WorkflowEventProcessingRegistrationEnhancer("Workflow", null, null, true);
         var workflowEngine = mock(WorkflowEngine.class);
         var replaySupport = mock(WorkflowEngineReplaySupport.class);
-        var unitOfWorkFactory = unitOfWorkFactory();
         var token = token(192);
-        when(workflowEngine.replayStatusChangedHandler()).thenReturn(replaySupport);
+        when(workflowEngine.start(token, false)).thenReturn(CompletableFuture.completedFuture(null));
 
         enhancer.initializeWorkflowEngine(
                 workflowEngine,
-                unitOfWorkFactory,
+                replaySupport,
                 token,
                 token
         ).join();
 
         verify(replaySupport).initializeReplayTracking(token, token);
-        verify(workflowEngine).start(eq(token), any(ProcessingContext.class), any(ProcessingContext.class));
-        verify(replaySupport).switchToLiveMode();
+        verify(workflowEngine).start(token, false);
     }
 
     @Test
@@ -88,19 +79,6 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         var enhancer = new WorkflowEventProcessingRegistrationEnhancer("Workflow", null, null, true);
         assertThat(enhancer.requiresReplay(null, token(1))).isFalse();
         assertThat(enhancer.requiresReplay(token(1), null)).isFalse();
-    }
-
-    private static UnitOfWorkFactory unitOfWorkFactory() {
-        var unitOfWorkFactory = mock(UnitOfWorkFactory.class);
-        var unitOfWork = mock(UnitOfWork.class);
-        var processingContext = mock(ProcessingContext.class);
-        when(processingContext.resources()).thenReturn(Map.of());
-        when(unitOfWorkFactory.create(anyString())).thenReturn(unitOfWork);
-        when(unitOfWork.executeWithResult(any())).thenAnswer(invocation ->
-                invocation.<java.util.function.Function<ProcessingContext, CompletableFuture<Void>>>getArgument(0)
-                          .apply(processingContext)
-        );
-        return unitOfWorkFactory;
     }
 
     private static TrackingToken token(long globalIndex) {

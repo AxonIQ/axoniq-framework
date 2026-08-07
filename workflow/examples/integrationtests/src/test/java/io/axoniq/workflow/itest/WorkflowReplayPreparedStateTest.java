@@ -30,10 +30,11 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
+import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import io.axoniq.workflow.runtime.util.WorkflowEventTagResolver;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
@@ -73,7 +74,7 @@ import static org.awaitility.Awaitility.await;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public class WorkflowReplayPreparedStateTest {
+class WorkflowReplayPreparedStateTest {
 
     @Test
     void restoresOnlyEarliestStillRunningWorkflow() {
@@ -198,6 +199,30 @@ public class WorkflowReplayPreparedStateTest {
         }
     }
 
+    @Test
+    void replayToleratesStepEventsOfCompletedWorkflowBehindSafePoint() {
+        var prepared = new PreparedState();
+        prepared.appendWarmupEvents();
+        prepared.appendStartReplayWorkflowEvent("first", "wait");
+        prepared.appendWorkflowStarted("first", payload("first", "wait"));   // idx 3: before safe point
+        prepared.appendStartReplayWorkflowEvent("second", "wait");           // idx 4: safe point
+        prepared.appendWorkflowStarted("second", payload("second", "wait"));
+        prepared.appendStepStarted("second", "waitForResume");
+        prepared.appendStepStarted("first", "waitForResume");                // idx 7: step event, no definitionId
+        prepared.appendWorkflowCompleted("first");
+        prepared.seedProcessorToken(prepared.tokenAt(1));// idx 8: first is terminal
+
+        var executedWorkflowIds = new CopyOnWriteArrayList<String>();
+        try (var app = prepared.startApp(executedWorkflowIds)) {
+            // Getting past token 7 proves the projector tolerated the metadata-less step event.
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+                assertThat(app.workflowIds()).containsExactly("second");
+                assertThat(executedWorkflowIds).containsExactly("second");
+            });
+        }
+    }
+
+
     private static Map<String, Object> payload(String id, String mode) {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("id", id);
@@ -208,6 +233,7 @@ public class WorkflowReplayPreparedStateTest {
     private static final class PreparedState {
 
         private final EventStorageEngine eventStorageEngine = new InMemoryEventStorageEngine();
+        private final JacksonConverter eventConverter = new JacksonConverter();
         private final TokenStore processingTokenStore = new InMemoryTokenStore();
         private final InMemoryWorkflowHistoryRepository historyRepository = new InMemoryWorkflowHistoryRepository();
         private final List<TrackingToken> appendedTokens = new ArrayList<>();
@@ -226,7 +252,8 @@ public class WorkflowReplayPreparedStateTest {
         }
 
         private void appendTypedPayloadEvent(Class<?> payloadType, Map<String, Object> payload) {
-            appendEvent(new GenericEventMessage(new MessageType(payloadType), payload));
+            appendEvent(new GenericEventMessage(new MessageType(payloadType), payload)
+                                .withConverter(eventConverter));
         }
 
         private void appendWorkflowStarted(String workflowId, Map<String, Object> payload) {
@@ -239,7 +266,7 @@ public class WorkflowReplayPreparedStateTest {
                                                          MessageType.DEFAULT_VERSION))
                                  .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
                                       CombineGlobalAndLocalPayloadReducer.NAME)
-            ));
+            ).withConverter(eventConverter));
         }
 
         private void appendWorkflowCompleted(String workflowId) {
@@ -250,7 +277,7 @@ public class WorkflowReplayPreparedStateTest {
                                          WorkflowStatus.COMPLETED,
                                          new MessageType(new QualifiedName("ReplayAwareWorkflow"),
                                                                   MessageType.DEFAULT_VERSION))
-            ));
+            ).withConverter(eventConverter));
         }
 
         private void appendStepStarted(String workflowId, String stepName) {
@@ -258,7 +285,7 @@ public class WorkflowReplayPreparedStateTest {
                     new MessageType(stepName + "Started"),
                     Map.of("stepName", stepName),
                     MetadataUtils.create(workflowId, stepName, StepStatus.STARTED)
-            ));
+            ).withConverter(eventConverter));
         }
 
         private void appendEvent(EventMessage eventMessage) {
@@ -356,7 +383,9 @@ public class WorkflowReplayPreparedStateTest {
         }
 
         private List<String> workflowIds() {
-            return workflowEngine.workflowExecutions().stream().map(WorkflowExecution::workflowId).sorted().toList();
+            return workflowEngine.workflowExecutions().stream().map(
+                    WorkflowExecution::workflowId
+            ).sorted().toList();
         }
 
         private Optional<io.axoniq.workflow.history.api.WorkflowHistory> history(String workflowId) {
