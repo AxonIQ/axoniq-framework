@@ -54,6 +54,10 @@ import java.util.function.BiFunction;
 
 /**
  * Event handling component handling all events.
+ * <p>
+ * This component always participates in checkpoint coordination, including when it wraps a plain
+ * {@link EventHandler}. A plain handler acknowledges requested checkpoint tokens immediately. This keeps every
+ * handler in the workflow processor checkpoint-aware, preserving the engine's deferred checkpointing behavior.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
@@ -157,6 +161,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
         if (checkpointingHandler != null) {
             return checkpointingHandler.onCheckpointAdvanced(segment, requested);
         }
+        // Plain handlers add no checkpoint work but must acknowledge to preserve deferred checkpoint coordination.
         return CompletableFuture.completedFuture(requested);
     }
 
@@ -174,6 +179,7 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
         if (checkpointingHandler != null) {
             return checkpointingHandler.onSegmentReleased(segment, requested);
         }
+        // Plain handlers add no checkpoint work but must acknowledge to preserve deferred checkpoint coordination.
         return CompletableFuture.completedFuture(requested);
     }
 
