@@ -37,11 +37,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashSet;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import static io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState.PAYLOAD_TYPE;
+import static java.util.Objects.requireNonNull;
 
 /**
  * Main workflow component responsible for managing and executing workflows.
@@ -53,7 +53,8 @@ import static io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState.PAY
  * @since 1.0.0
  */
 @Internal
-public class WorkflowEngine implements EventHandler,
+public class WorkflowEngine implements
+        EventHandler,
         WorkflowEngineCheckpointingSupport.CheckpointBarrierCoordinator,
         WorkflowEngineReplaySupport.LiveModeActivatedCallback {
 
@@ -63,37 +64,54 @@ public class WorkflowEngine implements EventHandler,
     private final WorkflowExecutionRepository workflowExecutionRepository;
     private final WorkflowStore workflowStore;
     private final UnitOfWorkFactory unitOfWorkFactory;
+    private final WorkflowEngineReplaySupport replaySupport;
+    private final WorkflowEngineCheckpointingSupport checkpointingSupport;
+
     private final WorkflowEngineCheckpointWorkIndex checkpointWorkIndex = new WorkflowEngineCheckpointWorkIndex();
 
     /**
      * Creates a new workflow engine.
      *
-     * @param workflowConfigurationRegistry configuration registry.
-     * @param workflowExecutionRepository   execution registry.
-     * @param workflowStore                 store for persistence matters.
-     * @param unitOfWorkFactory             factory for workflow startup units of work.
+     * @param workflowConfigurationRegistry registry containing a
+     *                                      {@link
+     *                                      io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration
+     *                                      workflow configuration}
+     * @param workflowExecutionRepository   repository dedicated towards {@link WorkflowExecution} storage and
+     *                                      retrieval
+     * @param workflowStore                 dedicated store for workflow information, like {@link RunningWorkflows} and
+     *                                      {@link WorkflowState}
+     * @param unitOfWorkFactory             a unit of work factory dedicated to construct a unit of work during
+     *                                      {@link #start(TrackingToken, boolean)} of this engine
+     * @param replaySupport                 provides replayability support to this {@code WorkflowEngine}
+     * @param checkpointingSupport          provides checkpointing support to this {@code WorkflowEngine}
      */
     public WorkflowEngine(
             @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
             @Nonnull WorkflowExecutionRepository workflowExecutionRepository,
             @Nonnull WorkflowStore workflowStore,
-            @Nonnull UnitOfWorkFactory unitOfWorkFactory
+            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
+            @Nonnull WorkflowEngineReplaySupport replaySupport,
+            @Nonnull WorkflowEngineCheckpointingSupport checkpointingSupport
     ) {
+        this.workflowConfigurationRegistry = requireNonNull(
+                workflowConfigurationRegistry, "The WorkflowConfigurationRegistry must not be null."
+        );
+        this.workflowExecutionRepository = requireNonNull(
+                workflowExecutionRepository, "The WorkflowExecutionRepository must not be null."
+        );
+        this.workflowStore = requireNonNull(workflowStore, "The WorkflowStore must not be null.");
+        this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
+        this.replaySupport = requireNonNull(replaySupport, "The WorkflowEngineReplaySupport must not be null.");
+        this.checkpointingSupport = requireNonNull(
+                checkpointingSupport, "The WorkflowEngineCheckpointingSupport must not be null."
+        );
         EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
-        this.workflowConfigurationRegistry = workflowConfigurationRegistry;
-        this.workflowExecutionRepository = workflowExecutionRepository;
-        this.workflowStore = workflowStore;
-        this.unitOfWorkFactory = unitOfWorkFactory;
     }
 
     @Nonnull
     @Override
     public MessageStream.Empty<Message> handle(@Nonnull EventMessage eventMessage,
                                                @Nonnull ProcessingContext processingContext) {
-
-        var replaySupport = processingContext.component(WorkflowEngineReplaySupport.class);
-        var checkpointingSupport = processingContext.component(WorkflowEngineCheckpointingSupport.class);
-
         var currentTrackingToken = replaySupport.observeProcessingContext(processingContext);
         checkpointingSupport.observeProcessingContext(processingContext);
         logger.trace("Received eventMessage {} {} {}",
@@ -187,8 +205,9 @@ public class WorkflowEngine implements EventHandler,
                                      return;
                                  }
 
-                                 var payload = Objects.requireNonNull(eventMessage.payloadAs(PAYLOAD_TYPE),
-                                                                      "Error converting initial payload");
+                                 var payload = requireNonNull(
+                                         eventMessage.payloadAs(PAYLOAD_TYPE), "Error converting initial payload"
+                                 );
 
                                  var workflowContext = workflowConfiguration
                                          .workflowContextFactory()
@@ -220,9 +239,13 @@ public class WorkflowEngine implements EventHandler,
         return workflowExecutionRepository.findAll();
     }
 
-
     /**
      * Restores and starts active workflow executions before processor replay resumes.
+     * <p>
+     * Restoration has two deliberately separate processing contexts. The sourcing context belongs to the startup unit
+     * of work and is used only while reading the event-sourced workflow state. This method creates an execution context
+     * as a child of the sourcing context; it becomes the parent context of each restored workflow body and is retained
+     * after startup for the workflow's lifetime.
      *
      * @param processorToken processor token at startup; initializes replay tracking when no processor token has been
      *                       observed yet
@@ -231,32 +254,26 @@ public class WorkflowEngine implements EventHandler,
      * replay or live mode
      */
     public CompletableFuture<Void> start(@Nullable TrackingToken processorToken, boolean replayRequired) {
-        // Restoration has two deliberately separate processing contexts. The sourcing context belongs to the startup unit
-        // of work and is used only while reading the event-sourced workflow state. This method creates an execution context
-        // as a child of the sourcing context; it becomes the parent context of each restored workflow body and is retained
-        // after startup for the workflow's lifetime.
         return unitOfWorkFactory.create("WorkflowRehydration")
                                 .executeWithResult(sourcingContext -> {
                                     var replaySupport = sourcingContext.component(WorkflowEngineReplaySupport.class);
                                     replaySupport.initializeProcessorTokenIfAbsent(processorToken);
-
                                     var executionUnitOfWork = new SimpleUnitOfWorkFactory(sourcingContext).create();
-                                    return executionUnitOfWork
-                                            .executeWithResult(
-                                                    executionContext ->
-                                                            loadRunningWorkflows(sourcingContext, executionContext)
-                                                                    .thenApply(ignored -> {
-                                                                        removeTerminalAndStartRestoredWorkflowExecutions(
-                                                                                "before replay catch-up",
-                                                                                executionContext);
-                                                                        if (!replayRequired) {
-                                                                            replaySupport.switchToLiveMode(sourcingContext);
-                                                                        }
-                                                                        return null;
-                                                                    }));
+
+                                    return executionUnitOfWork.executeWithResult(
+                                            executionContext -> loadRunningWorkflows(sourcingContext, executionContext)
+                                                    .thenApply(ignored -> {
+                                                        removeTerminalAndStartRestoredWorkflowExecutions(
+                                                                "before replay catch-up", executionContext
+                                                        );
+                                                        if (!replayRequired) {
+                                                            replaySupport.switchToLiveMode(sourcingContext);
+                                                        }
+                                                        return null;
+                                                    })
+                                    );
                                 });
     }
-
 
     /**
      * Shuts downs the engine and removes all running workflow executions.

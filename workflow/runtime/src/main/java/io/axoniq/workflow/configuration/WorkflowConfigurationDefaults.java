@@ -206,7 +206,9 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                            cfg.getComponent(WorkflowConfigurationRegistry.class),
                                            cfg.getComponent(WorkflowExecutionRepository.class),
                                            cfg.getComponent(WorkflowStore.class),
-                                           cfg.getComponent(UnitOfWorkFactory.class)
+                                           cfg.getComponent(UnitOfWorkFactory.class),
+                                           cfg.getComponent(WorkflowEngineReplaySupport.class),
+                                           cfg.getComponent(WorkflowEngineCheckpointingSupport.class)
                                    ))
                                    .onShutdown(Phase.INBOUND_EVENT_CONNECTORS,
                                                WorkflowEngine::shutdown));

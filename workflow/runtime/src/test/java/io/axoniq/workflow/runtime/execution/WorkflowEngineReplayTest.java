@@ -43,14 +43,14 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatus;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
-import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
-import org.mockito.ArgumentCaptor;
+import org.mockito.*;
 
 import java.lang.reflect.Field;
 import java.time.Clock;
@@ -86,14 +86,16 @@ class WorkflowEngineReplayTest {
         workflowConfigurationRegistry = mock(WorkflowConfigurationRegistry.class);
         workflowStore = mock(WorkflowStore.class);
         startupUnitOfWorkFactory = mock(UnitOfWorkFactory.class);
+        replaySupport = spy(new WorkflowEngineReplaySupport(workflowEngine));
+        checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
         workflowEngine = new WorkflowEngine(
                 workflowConfigurationRegistry,
                 workflowExecutionRepository,
                 workflowStore,
-                startupUnitOfWorkFactory
+                startupUnitOfWorkFactory,
+                replaySupport,
+                checkpointingSupport
         );
-        replaySupport = spy(new WorkflowEngineReplaySupport(workflowEngine));
-        checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
     }
 
     @Test
@@ -210,9 +212,11 @@ class WorkflowEngineReplayTest {
     void replayDoesNotInvokeWorkflowStatusListenersButLiveEventsDo() throws Exception {
         var replayListener = mock(WorkflowStatusChangeListener.class);
         var liveListener = mock(WorkflowStatusChangeListener.class);
-        var execution = simpleExecution("listener-workflow", token(18),
-                                       Map.of(WorkflowStatus.STARTED, replayListener,
-                                              WorkflowStatus.COMPLETED, liveListener));
+        var execution = simpleExecution(
+                "listener-workflow",
+                token(18),
+                Map.of(WorkflowStatus.STARTED, replayListener, WorkflowStatus.COMPLETED, liveListener)
+        );
         var processingContext = execution.processingContext();
         var definitionId = new MessageType(new QualifiedName("CheckpointWorkflow"), MessageType.DEFAULT_VERSION);
 
@@ -239,7 +243,8 @@ class WorkflowEngineReplayTest {
 
         var running = new EventSourcedRunningWorkflows();
         running.evolve(MetadataUtils.create(workflowId, WorkflowStatus.STARTED));
-        when(workflowStore.loadRunningWorkflows(same(processingContext))).thenReturn(CompletableFuture.completedFuture(running));
+        when(workflowStore.loadRunningWorkflows(same(processingContext)))
+                .thenReturn(CompletableFuture.completedFuture(running));
 
         var definitionId = new MessageType(new QualifiedName("RestoredWorkflow"), "1.0.0");
         var restoredState = new EventSourcedWorkflowState(workflowId, definitionId);
@@ -269,9 +274,8 @@ class WorkflowEngineReplayTest {
 
         var startupUnitOfWork = mock(UnitOfWork.class);
         when(startupUnitOfWorkFactory.create("WorkflowRehydration")).thenReturn(startupUnitOfWork);
-        when(startupUnitOfWork.executeWithResult(any())).thenAnswer(invocation ->
-                invocation.<java.util.function.Function<ProcessingContext, CompletableFuture<Void>>>getArgument(0)
-                          .apply(processingContext));
+        when(startupUnitOfWork.executeWithResult(any()))
+                .thenAnswer(invocation -> invocation.<java.util.function.Function<ProcessingContext, CompletableFuture<Void>>>getArgument(0).apply(processingContext));
 
         workflowEngine.start(checkpointToken, false).join();
 
@@ -279,12 +283,13 @@ class WorkflowEngineReplayTest {
         verify(replaySupport).initializeProcessorTokenIfAbsent(checkpointToken);
         verify(replaySupport).switchToLiveMode(processingContext);
         var capturedExecutionContext = ArgumentCaptor.forClass(ProcessingContext.class);
-        verify(contextFactory).createContext(anyMap(), eq(workflowId), capturedExecutionContext.capture(), eq(configuration));
+        verify(contextFactory)
+                .createContext(anyMap(), eq(workflowId), capturedExecutionContext.capture(), eq(configuration));
         assertThat(capturedExecutionContext.getValue()).isNotSameAs(processingContext);
     }
 
     @Test
-    void crossVersionStart_disambiguatesWorkflowIdWithVersionSuffix() {
+    void crossVersionStartDisambiguatesWorkflowIdWithVersionSuffix() {
         String baseId = "order-1";
 
         // Pre-register a running v1.0.0 workflow under the base id.
@@ -687,8 +692,8 @@ class WorkflowEngineReplayTest {
                                                      Map<String, Object> payload) {
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(MetadataUtils.create(workflowId, WorkflowStatus.STARTED, definitionId)
-                                                             .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
-                                                                  io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME));
+                                                              .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
+                                                                   io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME));
         when(eventMessage.type()).thenReturn(new MessageType("RestoredWorkflowStarted", definitionId.version()));
         when(eventMessage.payloadAs(Object.class)).thenReturn(payload);
         when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(payload);
@@ -761,5 +766,4 @@ class WorkflowEngineReplayTest {
         assertThat(actual.lowerBound(expected)).isEqualTo(expected);
         assertThat(expected.lowerBound(actual)).isEqualTo(actual);
     }
-
 }

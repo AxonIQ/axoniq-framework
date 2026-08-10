@@ -26,6 +26,8 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
+import io.axoniq.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
+import io.axoniq.workflow.runtime.execution.WorkflowEngineReplaySupport;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowStore;
 import org.axonframework.common.annotation.Internal;
@@ -149,7 +151,9 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                             cfg.getComponent(WorkflowConfigurationRegistry.class),
                             cfg.getComponent(WorkflowExecutionRepository.class),
                             cfg.getComponent(WorkflowStore.class),
-                            cfg.getComponent(UnitOfWorkFactory.class)
+                            cfg.getComponent(UnitOfWorkFactory.class),
+                            cfg.getComponent(WorkflowEngineReplaySupport.class),
+                            cfg.getComponent(WorkflowEngineCheckpointingSupport.class)
                     )
             );
 
