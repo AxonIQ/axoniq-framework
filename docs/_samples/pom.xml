@@ -89,6 +89,12 @@
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-multi-tenancy</artifactId>
         </dependency>
+        <!-- Data Protection types used by the multi-tenancy data-protection samples -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-data-protection</artifactId>
+            <version>5.4.0-SNAPSHOT</version>
+        </dependency>
         <!-- Spring Boot auto-configuration types (EventProcessorDefinition, etc.) used by Spring samples -->
         <dependency>
             <groupId>io.axoniq.framework</groupId>

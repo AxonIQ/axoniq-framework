@@ -1100,3 +1100,22 @@ The following files in `axon-5/` describe the API changes:
 - Remove JDBC configuration references (moved to external extension)
 - Document aggregate-based vs DCB-based storage performance
 - Update connection pool recommendations
+
+---
+
+## Axoniq Multi-Tenancy Module
+
+### modules/multi-tenancy/pages/tenant-data-protection.adoc
+**Status:** ✅ COMPLETED (NEW FILE)
+
+**Changes applied:**
+- Documented a tenant-scoped `Converter` provider for Axoniq Data Protection.
+- Explained that each tenant needs an isolated crypto engine or key namespace.
+- Documented the converter paths for commands, queries, events, snapshots, and persistent streams.
+- Added Configuration API and Spring Boot samples, plus an annotated event payload sample.
+
+### modules/multi-tenancy/partials/nav.adoc
+**Status:** ✅ COMPLETED
+
+**Changes applied:**
+- Added the data-protection page to the multi-tenancy navigation.
