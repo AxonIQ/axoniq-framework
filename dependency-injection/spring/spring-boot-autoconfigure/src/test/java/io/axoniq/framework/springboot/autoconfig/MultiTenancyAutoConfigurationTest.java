@@ -25,7 +25,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
-import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviders;
+import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
@@ -266,7 +266,7 @@ class MultiTenancyAutoConfigurationTest {
                                                                                     TenantComponentProvider.class);
                              AxonConfiguration configuration = context.getBean(AxonConfiguration.class);
 
-                             assertThat(TenantComponentProviders.find(configuration, Converter.class))
+                             assertThat(TenantComponentProviderUtil.find(configuration, Converter.class))
                                      .containsSame(provider);
                          });
         }

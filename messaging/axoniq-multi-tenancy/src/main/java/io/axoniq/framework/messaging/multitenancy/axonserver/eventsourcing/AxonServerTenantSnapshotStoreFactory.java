@@ -22,11 +22,11 @@ package io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
-import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
+import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
-import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviders;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
@@ -34,9 +34,9 @@ import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
-import java.util.Optional;
 import java.util.function.Function;
 
 /**
@@ -67,7 +67,7 @@ public class AxonServerTenantSnapshotStoreFactory
     public AxonServerTenantSnapshotStoreFactory(Configuration configuration) {
         this(configuration.getComponent(AxonServerConnectionManager.class),
              configuration.getComponent(GeneralConverter.class),
-             TenantComponentProviders.find(configuration, Converter.class));
+             TenantComponentProviderUtil.find(configuration, Converter.class).orElse(null));
     }
 
     /**
@@ -77,13 +77,13 @@ public class AxonServerTenantSnapshotStoreFactory
      * @param converter         the converter used to (de)serialize snapshot payloads
      */
     public AxonServerTenantSnapshotStoreFactory(AxonServerConnectionManager connectionManager, Converter converter) {
-        this(connectionManager, converter, Optional.empty());
+        this(connectionManager, converter, null);
     }
 
     private AxonServerTenantSnapshotStoreFactory(AxonServerConnectionManager connectionManager,
                                                  Converter defaultConverter,
-                                                 Optional<TenantComponentProvider<Converter>> tenantConverters) {
-        this.storeCache = new TenantScopedCache<>(perTenantStore(connectionManager, defaultConverter, tenantConverters),
+                                                 @Nullable TenantComponentProvider<Converter> converterProvider) {
+        this.storeCache = new TenantScopedCache<>(perTenantStore(connectionManager, defaultConverter, converterProvider),
                                                  "the tenant snapshot store factory");
     }
 
@@ -110,12 +110,12 @@ public class AxonServerTenantSnapshotStoreFactory
     private static Function<TenantDescriptor, SnapshotStore> perTenantStore(
             AxonServerConnectionManager connectionManager,
             Converter defaultConverter,
-            Optional<TenantComponentProvider<Converter>> tenantConverters) {
+            @Nullable TenantComponentProvider<Converter> converterProvider) {
         Objects.requireNonNull(connectionManager, "The connection manager must not be null");
         Objects.requireNonNull(defaultConverter, "The converter must not be null");
         return tenant -> new AxonServerSnapshotStore(
                 connectionManager.getConnection(tenant.tenantId()),
-                tenantConverters.map(provider -> provider.componentFor(tenant)).orElse(defaultConverter)
+                converterProvider != null ? converterProvider.componentFor(tenant) : defaultConverter
         );
     }
 }

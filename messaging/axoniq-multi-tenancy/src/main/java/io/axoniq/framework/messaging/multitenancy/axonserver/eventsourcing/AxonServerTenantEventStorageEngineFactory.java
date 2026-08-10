@@ -24,7 +24,7 @@ import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
-import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviders;
+import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
@@ -99,7 +99,7 @@ public class AxonServerTenantEventStorageEngineFactory
     private static Function<TenantDescriptor, EventStorageEngine> perTenantEngine(Configuration configuration) {
         EventConverter defaultConverter = configuration.getComponent(EventConverter.class);
         Optional<TenantComponentProvider<Converter>> tenantConverters =
-                TenantComponentProviders.find(configuration, Converter.class);
+                TenantComponentProviderUtil.find(configuration, Converter.class);
         return tenant -> AxonServerEventStorageEngineFactory.constructForContext(
                 tenant.tenantId(),
                 configuration,

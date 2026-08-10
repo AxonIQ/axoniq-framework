@@ -19,19 +19,18 @@
 
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
-import io.axoniq.framework.messaging.multitenancy.api.TenantComponentLookup;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.common.configuration.AmbiguousComponentMatchException;
+import org.axonframework.common.configuration.Component;
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.conversion.Converter;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Function;
-
-import static java.util.Objects.requireNonNull;
 
 /**
  * Finds {@link TenantComponentProvider TenantComponentProviders} registered in a configuration hierarchy.
@@ -43,9 +42,9 @@ import static java.util.Objects.requireNonNull;
  * @since 5.3.1
  */
 @Internal
-public final class TenantComponentProviders {
+public final class TenantComponentProviderUtil {
 
-    private TenantComponentProviders() {
+    private TenantComponentProviderUtil() {
         // Utility class
     }
 
@@ -78,38 +77,10 @@ public final class TenantComponentProviders {
             }
         }
         if (matches.size() > 1) {
-            throw new AxonConfigurationException("Multiple TenantComponentProviders match component type ["
-                                                         + componentType.getName()
-                                                         + "]. Register a single provider for this type.");
+            throw new AmbiguousComponentMatchException(new Component.Identifier(new TypeReference<TenantComponentProvider<Converter>>() {
+            }, null));
         }
         return matches.isEmpty() ? Optional.empty() : Optional.of(matches.getFirst());
-    }
-
-    /**
-     * Returns a {@link TenantComponentLookup} that always returns the given {@code defaultComponent}, ignoring the
-     * requested tenant.
-     *
-     * @param defaultComponent the default component instance to return for any tenant
-     * @param <T>              the type of the component
-     * @return a {@link TenantComponentLookup} that always returns the given {@code defaultComponent}
-     */
-    public static <T> TenantComponentLookup<T> defaultTenantComponentLookup(T defaultComponent) {
-        T nonNullDefaultComponent = requireNonNull(defaultComponent, "The defaultComponent must not be null.");
-        return unused -> nonNullDefaultComponent;
-    }
-
-    /**
-     * Returns a {@link TenantComponentLookup} that uses the given {@code lookupFn} to resolve the component for a
-     * tenant.
-     *
-     * @param lookupFn the function to resolve the component for a tenant
-     * @param <T>      the type of the component
-     * @return a {@link TenantComponentLookup} that uses the given {@code lookupFn} to resolve the component for a
-     * tenant
-     */
-    public static <T> TenantComponentLookup<T> tenantComponentLookup(Function<TenantDescriptor, T> lookupFn) {
-        requireNonNull(lookupFn, "The lookupFn must not be null.");
-        return lookupFn::apply;
     }
 
     private static Configuration rootConfiguration(Configuration configuration) {

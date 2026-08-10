@@ -53,7 +53,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 
 import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException.tenantNotResolved;
-import static io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviders.defaultTenantComponentLookup;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -88,22 +87,6 @@ public class MultiTenantAxonServerCommandBusConnector
 
     private final AtomicBoolean started = new AtomicBoolean(false);
     private @Nullable Handler incomingHandler;
-
-    /**
-     * Constructs a {@code MultiTenantAxonServerCommandBusConnector}.
-     *
-     * @param tenantRouter      the router deciding which tenant a dispatched {@link CommandMessage} is routed to
-     * @param connectionManager the manager used to obtain the {@link AxonServerConnection} for a given tenant
-     * @param configuration     the configuration applied to each per-tenant {@link AxonServerCommandBusConnector}
-     * @param converter         the {@link MessageConverter} used by each per-tenant
-     *                          {@link AxonServerCommandBusConnector}
-     */
-    public MultiTenantAxonServerCommandBusConnector(TenantRouter tenantRouter,
-                                                    AxonServerConnectionManager connectionManager,
-                                                    AxonServerConfiguration configuration,
-                                                    MessageConverter converter) {
-        this(tenantRouter, connectionManager, configuration, defaultTenantComponentLookup(converter));
-    }
 
     /**
      * Constructs a connector that obtains the message converter for every tenant while constructing that tenant's

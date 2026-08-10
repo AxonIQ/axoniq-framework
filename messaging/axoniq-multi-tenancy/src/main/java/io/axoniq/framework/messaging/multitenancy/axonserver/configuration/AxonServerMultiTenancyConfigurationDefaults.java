@@ -38,7 +38,7 @@ import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AxonS
 import io.axoniq.framework.messaging.multitenancy.axonserver.queryhandling.MultiTenantAxonServerQueryBusConnector;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenantStreamingProcessorRestarter;
-import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviders;
+import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
@@ -69,7 +69,6 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
-import static io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviders.defaultTenantComponentLookup;
 
 /**
  * {@link ConfigurationEnhancer} registering the default Axon Server-backed multi-tenancy components:
@@ -96,7 +95,8 @@ import static io.axoniq.framework.messaging.multitenancy.configuration.TenantCom
  * @author Jakob Hatzl
  * @since 5.3.0
  */
-@Internal @RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
+@Internal
+@RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
 public class AxonServerMultiTenancyConfigurationDefaults implements ConfigurationEnhancer {
 
     /**
@@ -142,13 +142,19 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
      * @return a {@link ComponentDefinition} for the {@link TenantProvider} that is backed by Axon Server
      */
     public static ComponentDefinition<TenantProvider> axonServerTenantProvider() {
-        return ComponentDefinition.ofType(TenantProvider.class).withBuilder(config -> new AxonServerTenantProvider(
-                                          axonServerConnectionManager(config),
-                                          config.getComponent(TenantConnectPredicate.class, AxonServerTenantConnectPredicate::new))).onStart(
-                                          MultiTenancyConfigurationDefaults.TENANT_PROVIDER_PHASE,
-                                          (ComponentLifecycleHandler<TenantProvider>) (config, provider) -> ((AxonServerTenantProvider) provider).start())
-                                  .onShutdown(MultiTenancyConfigurationDefaults.TENANT_PROVIDER_PHASE,
-                                              (ComponentLifecycleHandler<TenantProvider>) (config, provider) -> ((AxonServerTenantProvider) provider).shutdown());
+        return ComponentDefinition
+                .ofType(TenantProvider.class)
+                .withBuilder(config -> new AxonServerTenantProvider(
+                                     axonServerConnectionManager(config),
+                                     config.getComponent(TenantConnectPredicate.class, AxonServerTenantConnectPredicate::new)
+                             )
+                )
+                .onStart(MultiTenancyConfigurationDefaults.TENANT_PROVIDER_PHASE,
+                         (ComponentLifecycleHandler<TenantProvider>) (config, provider) ->
+                                 ((AxonServerTenantProvider) provider).start())
+                .onShutdown(MultiTenancyConfigurationDefaults.TENANT_PROVIDER_PHASE,
+                            (ComponentLifecycleHandler<TenantProvider>) (config, provider) ->
+                                    ((AxonServerTenantProvider) provider).shutdown());
     }
 
     /**
@@ -169,25 +175,25 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
     private static ComponentDefinition<CommandBusConnector> multiTenantCommandBusConnector() {
         AtomicReference<@Nullable Registration> tenantSubscription = new AtomicReference<>();
         return ComponentDefinition.ofType(CommandBusConnector.class)
-                                  .withBuilder(config -> new MultiTenantAxonServerCommandBusConnector(config.getComponent(
-                                          TenantRouter.class),
-                                                                                                      axonServerConnectionManager(
-                                                                                                              config),
-                                                                                                      config.getComponent(
-                                                                                                              AxonServerConfiguration.class),
-                                                                                                      messageConverterFactory(
-                                                                                                              config)))
+                                  .withBuilder(config -> new MultiTenantAxonServerCommandBusConnector(
+                                          config.getComponent(TenantRouter.class),
+                                          axonServerConnectionManager(config),
+                                          config.getComponent(AxonServerConfiguration.class),
+                                          messageConverterLookup(config)))
                                   .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
                                            (config, connector) -> {
                                                tenantSubscription.set(config.getComponent(TenantProvider.class)
                                                                             .subscribe((MultiTenantAxonServerCommandBusConnector) connector));
                                                return FutureUtils.emptyCompletedFuture();
-                                           }).onStart(Phase.INBOUND_COMMAND_CONNECTOR,
-                                                      connector -> ((MultiTenantAxonServerCommandBusConnector) connector).start())
+                                           })
+                                  .onStart(Phase.INBOUND_COMMAND_CONNECTOR,
+                                           connector -> ((MultiTenantAxonServerCommandBusConnector) connector).start())
                                   .onShutdown(Phase.OUTBOUND_COMMAND_CONNECTORS,
-                                              (ComponentLifecycleHandler<CommandBusConnector>) (config, connector) -> ((MultiTenantAxonServerCommandBusConnector) connector).shutdownDispatching())
+                                              (ComponentLifecycleHandler<CommandBusConnector>) (config, connector) ->
+                                                      ((MultiTenantAxonServerCommandBusConnector) connector).shutdownDispatching())
                                   .onShutdown(Phase.INBOUND_COMMAND_CONNECTOR,
-                                              (ComponentLifecycleHandler<CommandBusConnector>) (config, connector) -> ((MultiTenantAxonServerCommandBusConnector) connector).disconnect())
+                                              (ComponentLifecycleHandler<CommandBusConnector>) (config, connector) ->
+                                                      ((MultiTenantAxonServerCommandBusConnector) connector).disconnect())
                                   .onShutdown(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
                                               (config, connector) -> {
                                                   Registration registration = tenantSubscription.getAndSet(null);
@@ -211,12 +217,15 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
      * @throws AxonConfigurationException if no {@link AxonServerConnectionManager} is configured
      */
     private static AxonServerConnectionManager axonServerConnectionManager(Configuration configuration) {
-        return configuration.getOptionalComponent(AxonServerConnectionManager.class)
-                            .orElseThrow(() -> new AxonConfigurationException("""
-                                                                                      Multi-tenancy is active, but no AxonServerConnectionManager is configured. Tenants are Axon \
-                                                                                      Server contexts, so multi-tenancy cannot function without a connection to Axon Server. Either \
-                                                                                      configure Axon Server, or opt out of multi-tenancy through \
-                                                                                      MultiTenancyUtils#disable(ComponentRegistry)."""));
+        return configuration
+                .getOptionalComponent(AxonServerConnectionManager.class)
+                .orElseThrow(() -> new AxonConfigurationException(
+                        """
+                                Multi-tenancy is active, but no AxonServerConnectionManager is configured. Tenants are Axon \
+                                Server contexts, so multi-tenancy cannot function without a connection to Axon Server. Either \
+                                configure Axon Server, or opt out of multi-tenancy through \
+                                MultiTenancyUtils#disable(ComponentRegistry)."""
+                ));
     }
 
     /**
@@ -246,21 +255,25 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
         // Applied above the tenant fan-out it would resolve snapshots before a tenant is known, leaving every tenant's
         // engine without the snapshot sourcing strategy.
         componentRegistry.disableEnhancer(SnapshotSourcingConfigurationEnhancer.class);
-        componentRegistry.registerIfNotPresent(subscribedComponent(TenantSnapshotStoreFactory.class,
-                                                                   AxonServerTenantSnapshotStoreFactory::new,
-                                                                   MultiTenancyConfigurationDefaults.TENANT_COMPONENT_FACTORY_PHASE),
-                                               SearchScope.ALL);
-        componentRegistry.registerIfNotPresent(subscribedComponent(TenantEventStorageEngineFactory.class,
-                                                                   AxonServerTenantEventStorageEngineFactory::new,
-                                                                   MultiTenancyConfigurationDefaults.TENANT_COMPONENT_FACTORY_PHASE),
-                                               SearchScope.ALL);
-        componentRegistry.registerComponent(subscribedComponent(EventStorageEngine.class,
-                                                                AxonServerMultiTenancyConfigurationDefaults::routingEngine).onStart(
-                MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
-                AxonServerMultiTenancyConfigurationDefaults::followRoutingEngine));
+        componentRegistry.registerIfNotPresent(
+                subscribedComponent(TenantSnapshotStoreFactory.class,
+                                    AxonServerTenantSnapshotStoreFactory::new,
+                                    MultiTenancyConfigurationDefaults.TENANT_COMPONENT_FACTORY_PHASE),
+                SearchScope.ALL);
+        componentRegistry.registerIfNotPresent(
+                subscribedComponent(TenantEventStorageEngineFactory.class,
+                                    AxonServerTenantEventStorageEngineFactory::new,
+                                    MultiTenancyConfigurationDefaults.TENANT_COMPONENT_FACTORY_PHASE),
+                SearchScope.ALL);
+        componentRegistry.registerComponent(
+                subscribedComponent(EventStorageEngine.class,
+                                    AxonServerMultiTenancyConfigurationDefaults::routingEngine)
+                        .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
+                                 AxonServerMultiTenancyConfigurationDefaults::followRoutingEngine));
 
-        componentRegistry.registerComponent(ComponentDefinition.ofType(SnapshotStore.class)
-                                                               .withBuilder(AxonServerMultiTenancyConfigurationDefaults::routingSnapshotStore));
+        componentRegistry.registerComponent(
+                ComponentDefinition.ofType(SnapshotStore.class)
+                                   .withBuilder(AxonServerMultiTenancyConfigurationDefaults::routingSnapshotStore));
     }
 
     /**
@@ -342,15 +355,15 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
      * if a custom {@link TenantComponentProvider} is registered, or always returns the default
      * {@link MessageConverter}
      */
-    private static TenantComponentLookup<MessageConverter> messageConverterFactory(Configuration configuration) {
-        Optional<TenantComponentProvider<Converter>> converterProvider = TenantComponentProviders.find(configuration,
-                                                                                                       Converter.class);
+    private static TenantComponentLookup<MessageConverter> messageConverterLookup(Configuration configuration) {
+        Optional<TenantComponentProvider<Converter>> converterProvider = TenantComponentProviderUtil.find(configuration,
+                                                                                                          Converter.class);
 
         Optional<Function<TenantDescriptor, MessageConverter>> fn = converterProvider.<Function<TenantDescriptor, MessageConverter>>map(
                 provider -> tenant -> new DelegatingMessageConverter(provider.componentFor(tenant)));
 
-        return fn.map(TenantComponentProviders::tenantComponentLookup)
-                 .orElse(defaultTenantComponentLookup(configuration.getComponent(MessageConverter.class)));
+        return fn.<TenantComponentLookup<MessageConverter>>map(tenantDescriptorMessageConverterFunction -> tenantDescriptorMessageConverterFunction::apply)
+                 .orElseGet(() -> tenant -> configuration.getComponent(MessageConverter.class));
     }
 
     /**
@@ -386,25 +399,24 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                                                                   Function<Configuration, C> builder,
                                                                   int subscriberPhase) {
         AtomicReference<@Nullable Registration> subscription = new AtomicReference<>();
-        return ComponentDefinition.ofType(componentType).withBuilder(builder::apply).onStart(subscriberPhase,
-                                                                                             (config, component) -> {
-                                                                                                 if (component instanceof MultiTenantAwareComponent aware) {
-                                                                                                     subscription.set(
-                                                                                                             config.getComponent(
-                                                                                                                           TenantProvider.class)
-                                                                                                                   .subscribe(
-                                                                                                                           aware));
-                                                                                                 }
-                                                                                                 return FutureUtils.emptyCompletedFuture();
-                                                                                             }).onShutdown(
-                subscriberPhase,
-                (config, ignored) -> {
-                    Registration registration = subscription.getAndSet(null);
-                    if (registration != null) {
-                        registration.cancel();
-                    }
-                    return FutureUtils.emptyCompletedFuture();
-                });
+        return ComponentDefinition.ofType(componentType)
+                                  .withBuilder(builder::apply)
+                                  .onStart(subscriberPhase,
+                                           (config, component) -> {
+                                               if (component instanceof MultiTenantAwareComponent aware) {
+                                                   subscription.set(config.getComponent(TenantProvider.class)
+                                                                          .subscribe(aware));
+                                               }
+                                               return FutureUtils.emptyCompletedFuture();
+                                           })
+                                  .onShutdown(subscriberPhase,
+                                              (config, ignored) -> {
+                                                  Registration registration = subscription.getAndSet(null);
+                                                  if (registration != null) {
+                                                      registration.cancel();
+                                                  }
+                                                  return FutureUtils.emptyCompletedFuture();
+                                              });
     }
 
     /**
@@ -425,23 +437,22 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
     private static ComponentDefinition<QueryBusConnector> multiTenantQueryBusConnector() {
         AtomicReference<@Nullable Registration> tenantSubscription = new AtomicReference<>();
         return ComponentDefinition.ofType(QueryBusConnector.class)
-                                  .withBuilder(config -> new MultiTenantAxonServerQueryBusConnector(config.getComponent(
-                                          TenantRouter.class),
-                                                                                                    config.getComponent(
-                                                                                                            AxonServerConnectionManager.class),
-                                                                                                    config.getComponent(
-                                                                                                            AxonServerConfiguration.class),
-                                                                                                    messageConverterFactory(
-                                                                                                            config)))
+                                  .withBuilder(config -> new MultiTenantAxonServerQueryBusConnector(
+                                          config.getComponent(TenantRouter.class),
+                                          config.getComponent(AxonServerConnectionManager.class),
+                                          config.getComponent(AxonServerConfiguration.class),
+                                          messageConverterLookup(config)))
                                   .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
                                            (config, connector) -> {
                                                tenantSubscription.set(config.getComponent(TenantProvider.class)
                                                                             .subscribe((MultiTenantAxonServerQueryBusConnector) connector));
                                                return FutureUtils.emptyCompletedFuture();
-                                           }).onStart(Phase.INBOUND_QUERY_CONNECTOR,
+                                           })
+                                  .onStart(Phase.INBOUND_QUERY_CONNECTOR,
                                                       connector -> ((MultiTenantAxonServerQueryBusConnector) connector).start())
                                   .onShutdown(Phase.OUTBOUND_QUERY_CONNECTORS,
-                                              (ComponentLifecycleHandler<QueryBusConnector>) (config, connector) -> ((MultiTenantAxonServerQueryBusConnector) connector).shutdownDispatching())
+                                              (ComponentLifecycleHandler<QueryBusConnector>) (config, connector) ->
+                                                      ((MultiTenantAxonServerQueryBusConnector) connector).shutdownDispatching())
                                   .onShutdown(Phase.INBOUND_QUERY_CONNECTOR,
                                               (ComponentLifecycleHandler<QueryBusConnector>) (config, connector) -> ((MultiTenantAxonServerQueryBusConnector) connector).disconnect())
                                   .onShutdown(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,

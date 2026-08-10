@@ -27,7 +27,7 @@ import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
-import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviders;
+import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
@@ -274,10 +274,10 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
 
     private EventConverter tenantEventConverter(TenantDescriptor tenant) {
         EventConverter defaultConverter = configuration.getComponent(EventConverter.class);
-        return TenantComponentProviders.find(configuration, Converter.class)
-                                      .<EventConverter>map(provider -> new DelegatingEventConverter(
+        return TenantComponentProviderUtil.find(configuration, Converter.class)
+                                          .<EventConverter>map(provider -> new DelegatingEventConverter(
                                               provider.componentFor(tenant)))
-                                      .orElse(defaultConverter);
+                                          .orElse(defaultConverter);
     }
 
     private void releaseTenantStream(TenantDescriptor tenant, TenantStream tenantStream) {

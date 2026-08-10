@@ -17,21 +17,19 @@
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
-import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.common.configuration.AmbiguousComponentMatchException;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.conversion.ChainingContentTypeConverter;
 import org.axonframework.conversion.Converter;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
-class TenantComponentProvidersTest {
+class TenantComponentProviderUtilTest {
 
     @Nested
     class Find {
@@ -49,7 +47,7 @@ class TenantComponentProvidersTest {
             when(root.getComponents(TenantComponentProvider.class)).thenReturn(Map.of("converter", converterProvider));
 
             // when
-            var result = TenantComponentProviders.find(child, Converter.class);
+            var result = TenantComponentProviderUtil.find(child, Converter.class);
 
             // then
             assertThat(result).containsSame(converterProvider);
@@ -67,9 +65,9 @@ class TenantComponentProvidersTest {
             ));
 
             // when / then
-            assertThatThrownBy(() -> TenantComponentProviders.find(configuration, Converter.class))
-                    .isInstanceOf(AxonConfigurationException.class)
-                    .hasMessageContaining(Converter.class.getName());
+            assertThatThrownBy(() -> TenantComponentProviderUtil.find(configuration, Converter.class))
+                    .isInstanceOf(AmbiguousComponentMatchException.class)
+                    .hasMessageContaining(TenantComponentProvider.class.getName());
         }
     }
 

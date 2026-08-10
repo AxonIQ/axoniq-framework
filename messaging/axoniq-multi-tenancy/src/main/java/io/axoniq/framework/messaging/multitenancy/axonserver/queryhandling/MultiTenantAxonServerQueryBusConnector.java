@@ -32,7 +32,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
-import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviders;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.FutureUtils;
@@ -89,27 +88,6 @@ public class MultiTenantAxonServerQueryBusConnector
 
     private final AtomicBoolean started = new AtomicBoolean(false);
     private @Nullable Handler incomingHandler;
-
-    /**
-     * Constructs a {@code MultiTenantAxonServerQueryBusConnector}.
-     *
-     * @param tenantRouter      the resolver used to determine the {@link TenantDescriptor} a given {@link QueryMessage}
-     *                          belongs to
-     * @param connectionManager the manager used to obtain the {@link AxonServerConnection} for a given tenant
-     * @param configuration     the configuration applied to each per-tenant {@link AxonServerQueryBusConnector}
-     * @param converter         the {@link MessageConverter} used by each per-tenant
-     *                          {@link AxonServerQueryBusConnector}
-     */
-    public MultiTenantAxonServerQueryBusConnector(TenantRouter tenantRouter,
-                                                  AxonServerConnectionManager connectionManager,
-                                                  AxonServerConfiguration configuration,
-                                                  MessageConverter converter) {
-        this(tenantRouter,
-             connectionManager,
-             configuration,
-             TenantComponentProviders.defaultTenantComponentLookup(converter)
-        );
-    }
 
     /**
      * Constructs a connector that obtains the message converter for every tenant while constructing that tenant's

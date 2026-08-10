@@ -22,7 +22,7 @@ package io.axoniq.framework.messaging.multitenancy.annotation;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
-import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviders;
+import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.Priority;
 import org.axonframework.common.annotation.AnnotationUtils;
@@ -101,7 +101,7 @@ public class TenantComponentParameterResolverFactory implements ParameterResolve
     private @Nullable TenantComponentProvider<?> findProviderFor(Class<?> parameterType) {
         List<TenantComponentProvider<?>> exactMatches = new ArrayList<>();
         List<TenantComponentProvider<?>> assignableMatches = new ArrayList<>();
-        for (TenantComponentProvider<?> provider : TenantComponentProviders.all(configuration)) {
+        for (TenantComponentProvider<?> provider : TenantComponentProviderUtil.all(configuration)) {
             Class<?> componentType = provider.componentType();
             if (parameterType.equals(componentType)) {
                 exactMatches.add(provider);

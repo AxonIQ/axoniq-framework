@@ -85,58 +85,6 @@ class MultiTenantAxonServerQueryBusConnectorTest {
     private static final QualifiedName QUERY_TWO = new QualifiedName("query-two");
 
     @Nested
-    class ConstructorValidation {
-
-        private final AxonServerConfiguration configuration = defaultConfiguration();
-        private final AxonServerConnectionManager connectionManager =
-                new RecordingConnectionManager(configuration, Map.of());
-        private final MessageConverter converter = Mockito.mock(MessageConverter.class);
-        private final TenantRouter tenantResolver = new TenantRouter(
-                new TenantResolver() {
-                    @Override
-                    public TenantDescriptor resolveTenant(Message message, Collection<TenantDescriptor> tenants) {
-                        return tenants.stream()
-                                      .findFirst()
-                                      .orElseThrow(() -> new TenantNotResolvedException("no tenant"));
-                    }
-
-                    @Override
-                    public Message attachTenant(Message message, TenantDescriptor tenant) {
-                        return message.andMetadata(Map.of(TenantDescriptor.TENANT_ID_KEY, tenant.tenantId()));
-                    }
-                },
-                List::of);
-
-        @Test
-        void rejectsNullTenantResolver() {
-            assertThatThrownBy(() -> new MultiTenantAxonServerQueryBusConnector(
-                    null, connectionManager, configuration, converter))
-                    .isInstanceOf(NullPointerException.class);
-        }
-
-        @Test
-        void rejectsNullConnectionManager() {
-            assertThatThrownBy(() -> new MultiTenantAxonServerQueryBusConnector(
-                    tenantResolver, null, configuration, converter))
-                    .isInstanceOf(NullPointerException.class);
-        }
-
-        @Test
-        void rejectsNullConfiguration() {
-            assertThatThrownBy(() -> new MultiTenantAxonServerQueryBusConnector(
-                    tenantResolver, connectionManager, null, converter))
-                    .isInstanceOf(NullPointerException.class);
-        }
-
-        @Test
-        void rejectsNullConverter() {
-            assertThatThrownBy(() -> new MultiTenantAxonServerQueryBusConnector(
-                    tenantResolver, connectionManager, configuration, (MessageConverter) null))
-                    .isInstanceOf(NullPointerException.class);
-        }
-    }
-
-    @Nested
     class Start {
 
         @Test
@@ -145,8 +93,8 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1));
             RecordingConnection connection1 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1));
             testSubject.shutdownDispatching().join();
 
             // when / then: querying while still shut down fails
@@ -171,10 +119,10 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             RecordingConnection connection1 = new RecordingConnection();
             RecordingConnection connection2 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1,
-                                                                                       TENANT_2.tenantId(),
-                                                                                       connection2));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1,
+                                                                                      TENANT_2.tenantId(),
+                                                                                      connection2));
 
             QueryMessage query = queryFor(TENANT_2.tenantId());
             MessageStream<QueryResponseMessage> result = testSubject.query(query, null);
@@ -191,8 +139,8 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1));
             RecordingConnection connection1 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1));
 
             assertThatThrownBy(() -> testSubject.query(queryFor(TENANT_2.tenantId()), null))
                     .isInstanceOf(TenantNotResolvedException.class);
@@ -208,10 +156,10 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             RecordingConnection connection1 = new RecordingConnection();
             RecordingConnection connection2 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1,
-                                                                                       TENANT_2.tenantId(),
-                                                                                       connection2));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1,
+                                                                                      TENANT_2.tenantId(),
+                                                                                      connection2));
 
             QueryMessage query = queryFor(TENANT_2.tenantId());
             MessageStream<QueryResponseMessage> result = testSubject.subscriptionQuery(query, null, 64);
@@ -228,8 +176,8 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1));
             RecordingConnection connection1 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1));
 
             assertThatThrownBy(() -> testSubject.subscriptionQuery(queryFor(TENANT_2.tenantId()), null, 64))
                     .isInstanceOf(TenantNotResolvedException.class);
@@ -245,10 +193,10 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             RecordingConnection connection1 = new RecordingConnection();
             RecordingConnection connection2 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1,
-                                                                                       TENANT_2.tenantId(),
-                                                                                       connection2));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1,
+                                                                                      TENANT_2.tenantId(),
+                                                                                      connection2));
 
             testSubject.subscribe(QUERY_ONE).join();
             testSubject.subscribe(QUERY_TWO).join();
@@ -265,8 +213,8 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1));
             RecordingConnection connection1 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1));
 
             // when
             testSubject.subscribe(QUERY_ONE).join();
@@ -301,10 +249,10 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             RecordingConnection connection1 = new RecordingConnection();
             RecordingConnection connection2 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1,
-                                                                                       TENANT_2.tenantId(),
-                                                                                       connection2));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1,
+                                                                                      TENANT_2.tenantId(),
+                                                                                      connection2));
 
             testSubject.subscribe(QUERY_ONE).join();
             boolean unsubscribed = testSubject.unsubscribe(QUERY_ONE);
@@ -322,8 +270,8 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1));
             RecordingConnection connection1 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1));
 
             // when
             boolean result = testSubject.unsubscribe(QUERY_ONE);
@@ -342,10 +290,10 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             RecordingConnection connection1 = new RecordingConnection();
             RecordingConnection connection2 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                 Map.of(TENANT_1.tenantId(),
-                                                                                        connection1,
-                                                                                        TENANT_2.tenantId(),
-                                                                                        connection2));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1,
+                                                                                      TENANT_2.tenantId(),
+                                                                                      connection2));
 
             testSubject.subscribe(QUERY_ONE).join();
 
@@ -368,8 +316,8 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1));
             RecordingConnection connection1 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1));
             testSubject.subscribe(QUERY_ONE).join();
 
             // when
@@ -390,8 +338,8 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1));
             RecordingConnection connection1 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1));
             testSubject.subscribe(QUERY_ONE).join();
 
             List<QueryMessage> firstHandlerQueries = new ArrayList<>();
@@ -423,10 +371,10 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             RecordingConnection connection1 = new RecordingConnection();
             RecordingConnection connection2 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1,
-                                                                                       TENANT_2.tenantId(),
-                                                                                       connection2));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1,
+                                                                                      TENANT_2.tenantId(),
+                                                                                      connection2));
 
             // when
             CompletableFuture<Void> result = testSubject.shutdownDispatching();
@@ -458,10 +406,10 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             RecordingConnection connection1 = new RecordingConnection();
             RecordingConnection connection2 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1,
-                                                                                       TENANT_2.tenantId(),
-                                                                                       connection2));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1,
+                                                                                      TENANT_2.tenantId(),
+                                                                                      connection2));
 
             testSubject.subscribe(QUERY_ONE).join();
 
@@ -472,7 +420,6 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             assertThat(connection1.disconnectCalls()).isZero();
             assertThat(connection2.disconnectCalls()).isZero();
         }
-
     }
 
     @Nested
@@ -484,10 +431,10 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             RecordingConnection connection1 = new RecordingConnection();
             RecordingConnection connection2 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1,
-                                                                                       TENANT_2.tenantId(),
-                                                                                       connection2));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1,
+                                                                                      TENANT_2.tenantId(),
+                                                                                      connection2));
 
             testSubject.subscribe(QUERY_ONE).join();
 
@@ -502,8 +449,8 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1));
             RecordingConnection connection1 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1));
 
             testSubject.subscribe(QUERY_ONE).join();
 
@@ -515,8 +462,8 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             List<RecordingRegistration> registrationsForQuery =
                     connection1.recordingQueryChannel().allRegistrationsFor(QUERY_ONE.name());
             long activeRegistrations = registrationsForQuery.stream()
-                                                             .filter(registration -> !registration.isCancelled())
-                                                             .count();
+                                                            .filter(registration -> !registration.isCancelled())
+                                                            .count();
 
             assertThat(activeRegistrations)
                     .as("Re-registering an already-known tenant must not leave an orphaned, uncancelled query "
@@ -535,10 +482,10 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             RecordingConnection connection1 = new RecordingConnection();
             RecordingConnection connection2 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1,
-                                                                                       TENANT_2.tenantId(),
-                                                                                       connection2));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1,
+                                                                                      TENANT_2.tenantId(),
+                                                                                      connection2));
             Registration registration = testSubject.registerTenant(TENANT_1);
 
             // when
@@ -561,7 +508,7 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             RecordingConnection connection1 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1));
+                                                                                      connection1));
             Registration registration = testSubject.registerTenant(TENANT_1);
             registration.cancel();
 
@@ -583,10 +530,10 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             RecordingConnection connection1 = new RecordingConnection();
             RecordingConnection connection2 = new RecordingConnection();
             MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
-                                                                                Map.of(TENANT_1.tenantId(),
-                                                                                       connection1,
-                                                                                       TENANT_2.tenantId(),
-                                                                                       connection2));
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1,
+                                                                                      TENANT_2.tenantId(),
+                                                                                      connection2));
             testSubject.subscribe(QUERY_ONE).join();
 
             // when
@@ -613,14 +560,14 @@ class MultiTenantAxonServerQueryBusConnectorTest {
     }
 
     private static MultiTenantAxonServerQueryBusConnector createSubject(TestTenantProvider tenantProvider,
-                                                                         Map<String, RecordingConnection> connections) {
+                                                                        Map<String, RecordingConnection> connections) {
         AxonServerConfiguration configuration = defaultConfiguration();
         MessageConverter converter = Mockito.mock(MessageConverter.class);
         MultiTenantAxonServerQueryBusConnector connector = new MultiTenantAxonServerQueryBusConnector(
                 routerFor(tenantProvider),
                 new RecordingConnectionManager(configuration, connections),
                 configuration,
-                converter
+                unused -> converter
         );
         tenantProvider.subscribe(connector);
         return connector;
@@ -668,7 +615,7 @@ class MultiTenantAxonServerQueryBusConnectorTest {
 
             @Override
             public Registration registerUpdateHandler(QueryMessage subscriptionQueryMessage,
-                                                       QueryBusConnector.UpdateCallback updateCallback) {
+                                                      QueryBusConnector.UpdateCallback updateCallback) {
                 return () -> true;
             }
         };
@@ -867,7 +814,7 @@ class MultiTenantAxonServerQueryBusConnectorTest {
 
         @Override
         public io.axoniq.axonserver.connector.Registration registerQueryHandler(QueryHandler handler,
-                                                                                  QueryDefinition... queryTypes) {
+                                                                                QueryDefinition... queryTypes) {
             String[] queryNames = Arrays.stream(queryTypes).map(QueryDefinition::getQueryName).toArray(String[]::new);
             RecordingRegistration registration = new RecordingRegistration(registrations, queryNames);
             for (String queryName : queryNames) {
