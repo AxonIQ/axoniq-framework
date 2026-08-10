@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointTrigger;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.Message;
@@ -43,46 +42,55 @@ import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 
+import static java.util.Objects.requireNonNull;
+
 /**
- * Event handling component handling all events.
+ * Event handling component handling any event.
  * <p>
- * This component always participates in checkpoint coordination, including when it wraps a plain
- * {@link EventHandler}. A plain handler acknowledges requested checkpoint tokens immediately. This keeps every
- * handler in the workflow processor checkpoint-aware, preserving the engine's deferred checkpointing behavior.
+ * This component always participates in checkpoint coordination, including when it wraps a plain {@link EventHandler}.
+ * A plain handler acknowledges requested checkpoint tokens immediately. This keeps every handler in the workflow
+ * processor checkpoint-aware, preserving the engine's deferred checkpointing behavior.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public class AllEventEventHandlingComponent implements EventHandlingComponent, Checkpointing {
+public class EventHandlingComponentHandlingAny implements EventHandlingComponent, Checkpointing {
 
-    private static final Logger logger = LoggerFactory.getLogger(AllEventEventHandlingComponent.class);
+    private static final Logger logger = LoggerFactory.getLogger(EventHandlingComponentHandlingAny.class);
+
+    /**
+     * Static {@link PooledStreamingEventProcessorConfiguration} for any {@link EventHandlingComponentHandlingAny}
+     * instance.
+     */
     public static final BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
-            PooledStreamingEventProcessorConfiguration> ANY_EVENT_IN_ONE_SEGMENT = (c, pcepc) ->
-            pcepc.eventCriteria(
-                         set -> {
-                             if (set.isEmpty()) {
-                                 return EventCriteria.havingAnyTag();
-                             } else {
-                                 return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
-                             }
-                         }
-                 )
-                 .eventSource(c.getComponent(StreamableEventSource.class))
-                 .tokenStore(new InMemoryTokenStore())
-                 .unitOfWorkFactory(c.getComponent(UnitOfWorkFactory.class))
-                 .initialSegmentCount(1) // FIXME #190 (https://github.com/AxonIQ/extension-workflow/issues/190) -> should be configurable?
-                 .batchSize(1); // FIXME -> should be configurable? currently only 1 is supported / working blocked by https://github.com/AxonIQ/AxonFramework/issues/4323
-    private final SequencingPolicy<EventMessage> sequencingPolicy;
+            PooledStreamingEventProcessorConfiguration> ANY_EVENT_IN_ONE_SEGMENT = (c, psepConfig) ->
+            psepConfig.eventCriteria(
+                              set -> {
+                                  if (set.isEmpty()) {
+                                      return EventCriteria.havingAnyTag();
+                                  } else {
+                                      return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
+                                  }
+                              }
+                      )
+                      .eventSource(c.getComponent(StreamableEventSource.class))
+                      .tokenStore(new InMemoryTokenStore())
+                      .unitOfWorkFactory(c.getComponent(UnitOfWorkFactory.class))
+                      .initialSegmentCount(1) // FIXME #190 (https://github.com/AxonIQ/extension-workflow/issues/190) -> should be configurable?
+                      .batchSize(1); // FIXME -> should be configurable? currently only 1 is supported / working blocked by https://github.com/AxonIQ/AxonFramework/issues/4323
+    private static final boolean ANY_EVENT = true;
+
     private final EventHandler eventHandler;
+    private final SequencingPolicy<EventMessage> sequencingPolicy;
     @Nullable
     private final Checkpointing checkpointingHandler;
     @Nullable
@@ -93,8 +101,8 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
      *
      * @param eventHandler event handler to wrap
      */
-    public AllEventEventHandlingComponent(EventHandler eventHandler) {
-        this.eventHandler = Objects.requireNonNull(eventHandler, "Event handler must not be null");
+    public EventHandlingComponentHandlingAny(EventHandler eventHandler) {
+        this.eventHandler = requireNonNull(eventHandler, "Event handler must not be null");
         this.sequencingPolicy = new HierarchicalSequencingPolicy<>(
                 SequentialPerAggregatePolicy.INSTANCE,
                 SequentialPolicy.INSTANCE
@@ -110,72 +118,72 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
      * @param replayStatusChangedHandler handler to notify when replay status changes
      * @param checkpointingHandler       handler to notify when checkpointing is required
      */
-    public AllEventEventHandlingComponent(@Nonnull WorkflowEngine workflowEngine,
-                                          @Nonnull ReplayStatusChangedHandler replayStatusChangedHandler,
-                                          @Nonnull Checkpointing checkpointingHandler) {
-        this.eventHandler = Objects.requireNonNull(workflowEngine, "Workflow engine handler must not be null");
+    public EventHandlingComponentHandlingAny(@NonNull WorkflowEngine workflowEngine,
+                                             @NonNull ReplayStatusChangedHandler replayStatusChangedHandler,
+                                             @NonNull Checkpointing checkpointingHandler) {
+        this.eventHandler = requireNonNull(workflowEngine, "Workflow engine handler must not be null");
         this.sequencingPolicy = new HierarchicalSequencingPolicy<>(
                 SequentialPerAggregatePolicy.INSTANCE,
                 SequentialPolicy.INSTANCE
         );
-        this.checkpointingHandler = Objects.requireNonNull(checkpointingHandler,
-                                                           "Checkpointing handler must not be null");
-        this.replayStatusChangedHandler = Objects.requireNonNull(replayStatusChangedHandler,
-                                                                 "Replay status changed handler must not be null");
+        this.checkpointingHandler = requireNonNull(checkpointingHandler, "Checkpointing handler must not be null");
+        this.replayStatusChangedHandler =
+                requireNonNull(replayStatusChangedHandler, "Replay status changed handler must not be null");
     }
 
     @Override
-    public MessageStream.Empty<Message> handle(EventMessage event, ProcessingContext context) {
+    public MessageStream.Empty<Message> handle(@NonNull EventMessage event, @NonNull ProcessingContext context) {
         logger.debug("Handling event {}", event);
         return eventHandler.handle(event, context);
     }
 
+    @NonNull
     @Override
     public Set<QualifiedName> supportedEvents() {
         return Set.of();
     }
 
     @Override
-    public boolean supports(QualifiedName eventName) {
-        return true;
+    public boolean supports(@NonNull QualifiedName eventName) {
+        return ANY_EVENT;
     }
 
+    @NonNull
     @Override
-    public Object sequenceIdentifierFor(EventMessage event,
-                                        ProcessingContext context) {
+    public Object sequenceIdentifierFor(@NonNull EventMessage event,
+                                        @NonNull ProcessingContext context) {
         return sequencingPolicy.sequenceIdentifierFor(event, context);
     }
 
     @Override
-    public MessageStream.Empty<Message> handle(ReplayStatusChanged statusChange,
-                                               ProcessingContext context) {
-        if (replayStatusChangedHandler != null) { // just forward
-            return replayStatusChangedHandler.handle(statusChange, context);
-        }
-        return MessageStream.empty();
+    public MessageStream.Empty<Message> handle(@NonNull ReplayStatusChanged statusChange,
+                                               @NonNull ProcessingContext context) {
+        return replayStatusChangedHandler != null
+                ? replayStatusChangedHandler.handle(statusChange, context)
+                : MessageStream.empty();
+    }
+
+    @NonNull
+    @Override
+    public CompletableFuture<TrackingToken> onCheckpointAdvanced(@NonNull Segment segment,
+                                                                 @NonNull TrackingToken requested) {
+        return checkpointingHandler != null
+                ? checkpointingHandler.onCheckpointAdvanced(segment, requested)
+                : CompletableFuture.completedFuture(requested);
     }
 
     @Override
-    public CompletableFuture<TrackingToken> onCheckpointAdvanced(@Nonnull Segment segment,
-                                                                 @Nonnull TrackingToken requested) {
-        if (checkpointingHandler != null) {
-            return checkpointingHandler.onCheckpointAdvanced(segment, requested);
-        }
-        // Plain handlers add no checkpoint work but must acknowledge to preserve deferred checkpoint coordination.
-        return CompletableFuture.completedFuture(requested);
-    }
-
-    @Override
-    public void onSegmentClaimed(@Nonnull Segment segment,
-                                 @Nonnull CheckpointTrigger trigger) {
+    public void onSegmentClaimed(@NonNull Segment segment,
+                                 @NonNull CheckpointTrigger trigger) {
         if (checkpointingHandler != null) {
             checkpointingHandler.onSegmentClaimed(segment, trigger);
         }
     }
 
+    @NonNull
     @Override
-    public CompletableFuture<TrackingToken> onSegmentReleased(@Nonnull Segment segment,
-                                                              @Nonnull TrackingToken requested) {
+    public CompletableFuture<TrackingToken> onSegmentReleased(@NonNull Segment segment,
+                                                              @NonNull TrackingToken requested) {
         if (checkpointingHandler != null) {
             return checkpointingHandler.onSegmentReleased(segment, requested);
         }
@@ -185,12 +193,12 @@ public class AllEventEventHandlingComponent implements EventHandlingComponent, C
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
-        descriptor.describeProperty("event-handler", eventHandler.getClass());
+        descriptor.describeProperty("eventHandler", eventHandler.getClass());
         if (checkpointingHandler != null) {
-            descriptor.describeProperty("checkpointing-handler", checkpointingHandler.getClass());
+            descriptor.describeProperty("checkpointingHandler", checkpointingHandler.getClass());
         }
         if (replayStatusChangedHandler != null) {
-            descriptor.describeProperty("replay-status-changed-handler", replayStatusChangedHandler.getClass());
+            descriptor.describeProperty("replayStatusChangedHandler", replayStatusChangedHandler.getClass());
         }
     }
 }

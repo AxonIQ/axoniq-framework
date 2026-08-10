@@ -19,7 +19,7 @@
 package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
-import io.axoniq.workflow.runtime.execution.AllEventEventHandlingComponent;
+import io.axoniq.workflow.runtime.execution.EventHandlingComponentHandlingAny;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineReplaySupport;
@@ -43,7 +43,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
-import static io.axoniq.workflow.runtime.execution.AllEventEventHandlingComponent.ANY_EVENT_IN_ONE_SEGMENT;
+import static io.axoniq.workflow.runtime.execution.EventHandlingComponentHandlingAny.ANY_EVENT_IN_ONE_SEGMENT;
 
 /**
  * Enhancer for registration of the workflow engine event processing.
@@ -118,13 +118,13 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                          : DEFAULT_MODULE_NAME + "ExecutionEventing",
                                  cfg -> {
                                      if (engineComponentName != null) {
-                                         return new AllEventEventHandlingComponent(
+                                         return new EventHandlingComponentHandlingAny(
                                                  cfg.getComponent(WorkflowEngine.class, engineComponentName),
                                                  cfg.getComponent(WorkflowEngineReplaySupport.class),
                                                  cfg.getComponent(WorkflowEngineCheckpointingSupport.class)
                                          );
                                      } else {
-                                         return new AllEventEventHandlingComponent(
+                                         return new EventHandlingComponentHandlingAny(
                                                  cfg.getComponent(WorkflowEngine.class)
                                          );
                                      }
@@ -138,13 +138,13 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                         : DEFAULT_MODULE_NAME + "HistoryEventing",
                                 cfg -> {
                                     if (projectorComponentName != null) {
-                                        return new AllEventEventHandlingComponent(
+                                        return new EventHandlingComponentHandlingAny(
                                                 cfg.getComponent(WorkflowHistoryProjector.class, projectorComponentName)
                                         );
                                     } else {
                                         // FIXME: eventually history projector doesn't need to be replayed.
                                         // configure this separately InMemoryHistoryRepo = InMemoryTokeStore and replay
-                                        return new AllEventEventHandlingComponent(
+                                        return new EventHandlingComponentHandlingAny(
                                                 cfg.getComponent(WorkflowHistoryProjector.class)
                                         );
                                     }
