@@ -18,20 +18,20 @@
  */
 package io.axoniq.workflow.configuration;
 
-import io.axoniq.workflow.runtime.association.Associations;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.annotation.WorkflowStatusChangedHandler;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.workflow.runtime.api.execution.context.Version;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.workflow.runtime.association.Associations;
 import io.axoniq.workflow.runtime.association.ValueComparisonOperatorRegistry;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.runtime.util.WorkflowReflectionUtils;
-import io.axoniq.workflow.runtime.api.execution.context.Version;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.StringUtils;
@@ -273,7 +273,7 @@ public class AutoDetectionUtils {
     static <T> String workflowName(Class<T> type, Map<String, Object> attributes,
                                    Method method) {
         return getIfNotDefault(attributes, ATTR_WORKFLOW_NAME, "").orElse(
-                type.getSimpleName() + "." + StringUtils.capitalize(method.getName())
+                type.getSimpleName() + "#" + StringUtils.capitalize(method.getName())
         );
     }
 
