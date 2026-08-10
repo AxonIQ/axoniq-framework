@@ -37,10 +37,10 @@ import java.util.function.Predicate;
 /**
  * Represents the part of the execution accessed by the Workflow Engine (internal).
  *
+ * @author Allard Buijze
  * @author Simon Zambrovski
  * @author Stefan Dragisic
  * @author Steven van Beelen
- * @author Allard Buijze
  * @since 1.0.0
  */
 @Internal
