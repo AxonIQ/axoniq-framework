@@ -34,7 +34,7 @@ public interface TenantComponentLookup<T> {
      *
      * @param tenant the tenant to provide the component instance for
      * @return the component instance belonging to the given {@code tenant}
-     * @throws TenantNotResolvedException if the given {@code tenant} is cannot be resolved
+     * @throws TenantNotResolvedException if the given {@code tenant} cannot be resolved
      */
     T componentFor(TenantDescriptor tenant);
 }
