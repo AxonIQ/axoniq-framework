@@ -283,7 +283,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                                ));
     }
 
-
     @Override
     public int order() {
         return WORKFLOW_DEFAULTS_ENHANCER_ORDER;
