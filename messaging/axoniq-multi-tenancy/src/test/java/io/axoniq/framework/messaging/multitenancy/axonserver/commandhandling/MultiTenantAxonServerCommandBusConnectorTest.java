@@ -36,6 +36,7 @@ import io.axoniq.axonserver.grpc.command.CommandResponse;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
+import io.axoniq.framework.messaging.multitenancy.api.TenantComponentLookup;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
@@ -101,28 +102,28 @@ class MultiTenantAxonServerCommandBusConnectorTest {
         @Test
         void rejectsNullTenantRouter() {
             assertThatThrownBy(() -> new MultiTenantAxonServerCommandBusConnector(
-                    null, connectionManager, configuration, converter))
+                    null, connectionManager, configuration, unused -> converter))
                     .isInstanceOf(NullPointerException.class);
         }
 
         @Test
         void rejectsNullConnectionManager() {
             assertThatThrownBy(() -> new MultiTenantAxonServerCommandBusConnector(
-                    tenantRouter, null, configuration, converter))
+                    tenantRouter, null, configuration, unused -> converter))
                     .isInstanceOf(NullPointerException.class);
         }
 
         @Test
         void rejectsNullConfiguration() {
             assertThatThrownBy(() -> new MultiTenantAxonServerCommandBusConnector(
-                    tenantRouter, connectionManager, null, converter))
+                    tenantRouter, connectionManager, null, unused -> converter))
                     .isInstanceOf(NullPointerException.class);
         }
 
         @Test
-        void rejectsNullConverter() {
+        void rejectsNullConverterLookup() {
             assertThatThrownBy(() -> new MultiTenantAxonServerCommandBusConnector(
-                    tenantRouter, connectionManager, configuration, null))
+                    tenantRouter, connectionManager, configuration, (TenantComponentLookup<MessageConverter>) null))
                     .isInstanceOf(NullPointerException.class);
         }
     }
@@ -688,7 +689,7 @@ class MultiTenantAxonServerCommandBusConnectorTest {
                 tenantRouter,
                 new RecordingConnectionManager(configuration, connections),
                 configuration,
-                converter
+                unused -> converter
         );
         tenantProvider.subscribe(connector);
         return connector;
