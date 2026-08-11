@@ -19,6 +19,7 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution.CheckpointWorkStateListener;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayDeque;
@@ -37,7 +38,7 @@ class WorkflowExecutionCheckpointingSupportTest {
     @Test
     void coalescesCallbacksUntilTheInlineBarrierIsConsumed() {
         var taskQueue = new InlineExecutionTaskQueue();
-        var support = new WorkflowExecutionCheckpointingSupport(taskQueue);
+        var support = new WorkflowExecutionCheckpointingSupport(taskQueue, CheckpointWorkStateListener.NO_OP);
         var callbacks = new AtomicInteger();
 
         support.addCheckpointLatch(callbacks::incrementAndGet);
@@ -56,7 +57,7 @@ class WorkflowExecutionCheckpointingSupportTest {
     void invokesTheCallbackImmediatelyWhenTheTaskQueueIsNotRunning() {
         var taskQueue = new InlineExecutionTaskQueue();
         taskQueue.running = false;
-        var support = new WorkflowExecutionCheckpointingSupport(taskQueue);
+        var support = new WorkflowExecutionCheckpointingSupport(taskQueue, CheckpointWorkStateListener.NO_OP);
         var callbacks = new AtomicInteger();
 
         support.addCheckpointLatch(callbacks::incrementAndGet);
@@ -73,7 +74,7 @@ class WorkflowExecutionCheckpointingSupportTest {
         var safeTransitions = new AtomicInteger();
         var support = new WorkflowExecutionCheckpointingSupport(
                 taskQueue,
-                new WorkflowExecution.CheckpointWorkStateListener() {
+                new CheckpointWorkStateListener() {
                     @Override
                     public void onMarkedUnsafe() {
                         unsafeTransitions.incrementAndGet();
