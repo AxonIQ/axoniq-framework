@@ -29,7 +29,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Axon Framework repository-backed workflow store.
+ * Event-sourcing repository-backed workflow store.
  * <p>
  * Loads the projection of workflow instances that have started without reaching a terminal state and the durable
  * event-sourced state for an individual workflow instance.

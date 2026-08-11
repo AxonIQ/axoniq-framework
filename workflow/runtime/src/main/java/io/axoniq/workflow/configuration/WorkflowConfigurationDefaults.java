@@ -29,13 +29,12 @@ import io.axoniq.workflow.runtime.execution.EventSourcedRunningWorkflows;
 import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowStore;
 import io.axoniq.workflow.runtime.execution.ExecuteStepActionResolver;
-import io.axoniq.workflow.runtime.execution.InMemorySafePointStore;
 import io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
-import io.axoniq.workflow.runtime.execution.SafePointStore;
 import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
-import io.axoniq.workflow.runtime.execution.TokenStoreSafePointStore;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
+import io.axoniq.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
+import io.axoniq.workflow.runtime.execution.WorkflowEngineReplaySupport;
 import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowScheduler;
@@ -54,8 +53,7 @@ import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationD
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.store.jdbc.TokenSchema;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.modelling.repository.Repository;
 
 import java.time.Clock;
@@ -72,8 +70,9 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-@Internal @RegistrationScope(scope = RegistrationScope.Scope.CURRENT) public class WorkflowConfigurationDefaults
-        implements ConfigurationEnhancer {
+@Internal
+@RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
+public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
 
     /**
      * Name of the event handling component used for workflow history projector.
@@ -85,30 +84,6 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
      */
     public static final String COMPONENT_WORKFLOW_ENGINE = "WorkflowEngine";
 
-    /**
-     * Name of the component used for the workflow engine safe point tracking token store.
-     */
-    public static final String COMPONENT_SAFE_POINT_STORE = "WorkflowEngineSafePointStore";
-
-    /**
-     * Name of the component used for the workflow engine token store used for safe point persistence.
-     */
-    public static final String COMPONENT_SAFE_POINT_TOKEN_STORE = "WorkflowEngineSafePointTokenStore";
-
-    /**
-     * Token JDBC schema used for the {@link TokenStore}.
-     */
-    public static final TokenSchema SAFE_POINT_TOKEN_STORE_JDBC_SCHEMA = TokenSchema.builder()
-                                                                                    .setTokenTable("WF_TOKEN_ENTRY")
-                                                                                    .setProcessorNameColumn(
-                                                                                            "PROCESSOR_NAME")
-                                                                                    .setTokenTypeColumn("TOKEN_TYPE")
-                                                                                    .setTokenColumn("TOKEN")
-                                                                                    .setMaskColumn("MASK")
-                                                                                    .setOwnerColumn("OWNER")
-                                                                                    .setTimestampColumn("TIMESTAMP")
-                                                                                    .setSegmentColumn("SEGMENT")
-                                                                                    .build();
     /**
      * Name of the executor service component.
      */
@@ -143,11 +118,12 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
         registerWorkflowExecutionRepository(componentRegistry);
         registerMutableWorkflowHistoryRepository(componentRegistry);
         registerWorkflowConfigurationRegistry(componentRegistry);
-        registerSafePointStore(componentRegistry);
         registerWorkflowStore(componentRegistry);
         registerWorkflowEngine(componentRegistry);
         registerWorkflowHistoryProjector(componentRegistry);
         registerWorkflowStateParameterResolverFactory(componentRegistry);
+        registerReplaySupport(componentRegistry);
+        registerCheckpointingSupport(componentRegistry);
     }
 
     private void registerPayloadReducerRegistry(ComponentRegistry componentRegistry) {
@@ -211,7 +187,9 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
                                                 "Workflow state for '%s' cannot be created without workflowDefinitionId metadata.".formatted(
                                                         identifier)))))
                         .criteriaResolver(c -> (identifier, context) -> EventSourcedWorkflowState.criteriaBuilder(
-                                identifier)).build());
+                                identifier))
+                        // FIXME Register snapshot configuration eventually, see #245
+                        .build());
     }
 
     void registerWorkflowEngineExecutor(ComponentRegistry componentRegistry) {
@@ -224,12 +202,18 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
     void registerWorkflowEngine(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(
                 ComponentDefinition.ofType(WorkflowEngine.class)
-                                   .withBuilder(cfg -> new WorkflowEngine(cfg.getComponent(
-                                           WorkflowConfigurationRegistry.class),
-                                                                          cfg.getComponent(WorkflowExecutionRepository.class),
-                                                                          cfg.getComponent(SafePointStore.class,
-                                                                                           COMPONENT_SAFE_POINT_STORE),
-                                                                          cfg.getComponent(WorkflowStore.class)))
+                                   .withBuilder(cfg -> new WorkflowEngine(
+                                           cfg.getComponent(WorkflowConfigurationRegistry.class),
+                                           cfg.getComponent(WorkflowExecutionRepository.class),
+                                           cfg.getComponent(WorkflowStore.class),
+                                           cfg.getComponent(UnitOfWorkFactory.class)
+                                   ))
+                                   .onStart(Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS, (config, engine) -> {
+                                       engine.setEngineSupportComponents(
+                                               config.getComponent(WorkflowEngineReplaySupport.class),
+                                               config.getComponent(WorkflowEngineCheckpointingSupport.class)
+                                       );
+                                   })
                                    .onShutdown(Phase.INBOUND_EVENT_CONNECTORS,
                                                WorkflowEngine::shutdown));
     }
@@ -258,19 +242,6 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
                                     )));
                     return new EventSourcedWorkflowStore(runningWorkflowsRepository, workflowStateRepository);
                 });
-    }
-
-    void registerSafePointStore(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(
-                SafePointStore.class,
-                COMPONENT_SAFE_POINT_STORE,
-                cfg -> cfg.getOptionalComponent(TokenStore.class,
-                                                COMPONENT_SAFE_POINT_TOKEN_STORE)
-                          .<SafePointStore>map(tokenStore -> new TokenStoreSafePointStore(
-                                  tokenStore,
-                                  TokenStoreSafePointStore.tokenStoreIdentifier(
-                                          WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME)))
-                          .orElseGet(InMemorySafePointStore::new));
     }
 
     void registerWorkflowHistoryProjector(ComponentRegistry componentRegistry) {
@@ -302,6 +273,20 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
         ParameterResolverFactoryUtils.registerToComponentRegistry(
                 componentRegistry,
                 WorkflowStateParameterResolverFactory::new);
+    }
+
+    void registerCheckpointingSupport(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(WorkflowEngineCheckpointingSupport.class,
+                                               cfg -> new WorkflowEngineCheckpointingSupport(cfg.getComponent(
+                                                       WorkflowEngine.class)
+                                               ));
+    }
+
+    void registerReplaySupport(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(WorkflowEngineReplaySupport.class,
+                                               cfg -> new WorkflowEngineReplaySupport(cfg.getComponent(
+                                                       WorkflowEngine.class)
+                                               ));
     }
 
     @Override

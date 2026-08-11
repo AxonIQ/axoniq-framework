@@ -28,24 +28,22 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.UnitOfWork;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.WrappedToken;
-import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
-import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
+import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Objects;
-import java.util.Optional;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState.PAYLOAD_TYPE;
-import static io.axoniq.workflow.runtime.util.ProcessingContextUtils.RESTART_TOKEN_RESOURCE_KEY;
+import static java.util.Objects.requireNonNull;
 
 /**
  * Main workflow component responsible for managing and executing workflows.
@@ -57,157 +55,111 @@ import static io.axoniq.workflow.runtime.util.ProcessingContextUtils.RESTART_TOK
  * @since 1.0.0
  */
 @Internal
-public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler {
+public class WorkflowEngine implements
+        EventHandler,
+        WorkflowEngineReplaySupport.LiveModeActivatedCallback,
+        WorkflowEngineCheckpointingSupport.CheckpointLatchCoordinator {
 
-    private final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
+    private static final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
+
+    private static final String AFTER_REPLAY_LOG = "after replay catch-up";
+    private static final String BEFORE_REPLAY_LOG = "before replay catch-up";
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
-    private final SafePointStore safePointStore;
     private final WorkflowStore workflowStore;
-    private final AtomicBoolean isRunning = new AtomicBoolean(false);
-    private final AtomicReference<TrackingToken> currentTrackingToken = new AtomicReference<>();
-    private final AtomicReference<TrackingToken> lastProcessedTrackingToken = new AtomicReference<>();
+    private final UnitOfWorkFactory unitOfWorkFactory;
+    private WorkflowEngineReplaySupport replaySupport;
+    private WorkflowEngineCheckpointingSupport checkpointingSupport;
+    private final UnsafeCheckpointWorkIndex checkpointWorkIndex = new UnsafeCheckpointWorkIndex();
 
     /**
-     * Creates a new workflow engine.
+     * Creates a new workflow engine. Be sure to follow-up construction of a {@code WorkflowEngine} with an invocation
+     * of {@link #setEngineSupportComponents(WorkflowEngineReplaySupport, WorkflowEngineCheckpointingSupport)}, as
+     * otherwise replay and checkpointing support is unavailable.
      *
-     * @param workflowConfigurationRegistry configuration registry.
-     * @param workflowExecutionRepository   execution registry.
-     * @param safePointStore                engine safe point tracking token store.
-     * @param workflowStore                 repository-backed rehydration support.
+     * @param workflowConfigurationRegistry registry containing a
+     *                                      {@link
+     *                                      io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration
+     *                                      workflow configuration}
+     * @param workflowExecutionRepository   repository dedicated towards {@link WorkflowExecution} storage and
+     *                                      retrieval
+     * @param workflowStore                 dedicated store for workflow information, like {@link RunningWorkflows} and
+     *                                      {@link WorkflowState}
+     * @param unitOfWorkFactory             a unit of work factory dedicated to construct a unit of work during
+     *                                      {@link #start(TrackingToken, boolean)} of this engine
      */
     public WorkflowEngine(
             @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
             @Nonnull WorkflowExecutionRepository workflowExecutionRepository,
-            @Nonnull SafePointStore safePointStore,
-            @Nonnull WorkflowStore workflowStore
+            @Nonnull WorkflowStore workflowStore,
+            @Nonnull UnitOfWorkFactory unitOfWorkFactory
     ) {
+        this.workflowConfigurationRegistry = requireNonNull(
+                workflowConfigurationRegistry, "The WorkflowConfigurationRegistry must not be null."
+        );
+        this.workflowExecutionRepository = requireNonNull(
+                workflowExecutionRepository, "The WorkflowExecutionRepository must not be null."
+        );
+        this.workflowStore = requireNonNull(workflowStore, "The WorkflowStore must not be null.");
+        this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
         EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
-        this.workflowConfigurationRegistry = workflowConfigurationRegistry;
-        this.workflowExecutionRepository = workflowExecutionRepository;
-        this.safePointStore = safePointStore;
-        this.workflowStore = workflowStore;
+    }
+
+    /**
+     * Sets {@code WorkflowEngine} support components which are <b>required</b> for the engine to work.
+     * <p>
+     * Both {@code replaySupport} and {@code checkpointingSupport} are set outside the
+     * {@link #WorkflowEngine(WorkflowConfigurationRegistry, WorkflowExecutionRepository, WorkflowStore,
+     * UnitOfWorkFactory)}, because they require <b>this</b> {@code WorkflowEngine} itself to function. Hence, a cyclic
+     * dependency would exist upon start-up if done otherwise.
+     *
+     * @param replaySupport        provides replayability support to this {@code WorkflowEngine}
+     * @param checkpointingSupport provides checkpointing support to this {@code WorkflowEngine}
+     */
+    @Internal
+    public void setEngineSupportComponents(@Nonnull WorkflowEngineReplaySupport replaySupport,
+                                           @Nonnull WorkflowEngineCheckpointingSupport checkpointingSupport) {
+        this.replaySupport = requireNonNull(replaySupport, "The WorkflowEngineReplaySupport must not be null.");
+        this.checkpointingSupport = requireNonNull(
+                checkpointingSupport, "The WorkflowEngineCheckpointingSupport must not be null."
+        );
     }
 
     @Nonnull
     @Override
-    public MessageStream.Empty<Message> handle(@Nonnull EventMessage eventMessage,
-                                               @Nonnull ProcessingContext processingContext) {
-        var currentTrackingToken = captureCurrentTrackingToken(processingContext);
-        // ensure there is always a restart token resource available, even an empty one
-        processingContext.putResource(RESTART_TOKEN_RESOURCE_KEY,
-                                      Optional.ofNullable(lastProcessedTrackingToken.get()));
-        logger.trace("Received eventMessage {} {} {}",
-                     processingContext.resources().get(TrackingToken.RESOURCE_KEY),
-                     eventMessage.identifier(),
-                     eventMessage.type()
-        );
-        if (MetadataUtils.hasWorkflowId().test(eventMessage.metadata())) {
-            var workflowId = MetadataUtils.getWorkflowId(eventMessage.metadata());
+    public MessageStream.Empty<Message> handle(@Nonnull EventMessage event,
+                                               @Nonnull ProcessingContext context) {
+        TrackingToken currentToken = replaySupport.getAndSetTokenFrom(context);
+        logger.trace("Handling event [{}] with id [{}] and token [{}].",
+                     event.type(), event.identifier(), currentToken);
+        checkpointingSupport.getAndSetTriggerFrom(context);
+
+        if (MetadataUtils.hasWorkflowId().test(event.metadata())) {
+            var workflowId = MetadataUtils.getWorkflowId(event.metadata());
             // Skip events whose workflowId isn't owned by this engine (expected in multi-module setups).
             var executionOpt = workflowExecutionRepository.findById(workflowId);
             if (executionOpt.isEmpty()) {
-                logger.debug("Ignoring event {} for workflowId '{}' — no matching execution in this engine.",
-                             eventMessage.type(), workflowId);
+                logger.debug("Ignoring event [{}] for workflowId [{}] — no matching execution in this engine.",
+                             event.type(), workflowId);
+                checkpointingSupport.requestCheckpoint(currentToken);
+                replaySupport.validateIfReplayFinished(currentToken, context);
                 return MessageStream.empty();
             }
-            executionOpt.get().onEvent(eventMessage, processingContext);
+            executionOpt.get().onEvent(event, context);
         } else {
             // handle starting of new processes
-            checkAndCreateNewWorkflow(eventMessage, processingContext);
+            checkAndCreateNewWorkflow(event, context);
             // route external events to workflows waiting for them
             for (var execution : workflowExecutionRepository.findAll()) {
-                // TODO: discussion regarding hibernating workflows ->
-                // TODO: is it safe to put an eventMessage in the queue?
-                execution.onEvent(eventMessage, processingContext);
+                execution.onEvent(event, context);
             }
         }
 
-        if (currentTrackingToken != null) {
-            lastProcessedTrackingToken.set(currentTrackingToken);
-        }
-        logger.trace("EventMessage {} successfully handled", eventMessage.identifier());
+        checkpointingSupport.requestCheckpoint(currentToken);
+        replaySupport.validateIfReplayFinished(currentToken, context);
+        logger.trace("Event [{}] handled successfully.", event.identifier());
         return MessageStream.empty();
-    }
-
-    /**
-     * If the replay is finished, start workflow executions of previously event-sourced executions.
-     */
-    @Override
-    @Nonnull
-    public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
-                                               @Nonnull ProcessingContext context) {
-        captureCurrentTrackingToken(context);
-        logger.debug("Replay status changed to {} at {}",
-                     statusChange.status(),
-                     context.resources().get(TrackingToken.RESOURCE_KEY));
-
-        if (!statusChange.status().isReplay()) {
-            switchToLiveMode();
-        }
-        return MessageStream.empty();
-    }
-
-
-    /**
-     * Switches the engine to live mode. By doing so, the engine stops replaying events and starts executing workflow
-     * executions. Prior to that, all finished workflow executions are removed from the execution repository.
-     */
-    public void switchToLiveMode() {
-        var running = isRunning.getAndSet(true);
-        if (!running) {
-            workflowConfigurationRegistry.warnAboutSameVersionDuplicates();
-            logger.info("Workflow instance replay finished. Switching to live mode.");
-            // get rid of finished executions
-            workflowExecutionRepository
-                    .findAll()
-                    .stream()
-                    .filter(e -> e.state().workflowStatus().isTerminal())
-                    .map(WorkflowExecution::workflowId)
-                    .forEach(workflowExecutionRepository::remove);
-            persistEngineSafePoint();
-
-            var allExecution = workflowExecutionRepository.findAll();
-            if (allExecution.isEmpty()) {
-                logger.info("No running workflow instances found.");
-            } else {
-                var executionsToStart = allExecution.stream()
-                                                    .filter(execution -> !execution.isRunning())
-                                                    .toList();
-                logger.info("Restored {} running workflow instances, starting {} workflow execution(s).",
-                            allExecution.size(),
-                            executionsToStart.size());
-                for (var execution : executionsToStart) {
-                    execute(execution);
-                }
-                logger.info("All workflow instances started.");
-            }
-        } else {
-            logger.warn("Workflow Execution is already started.");
-        }
-    }
-
-    private void execute(@Nonnull WorkflowExecution execution) {
-        execution
-                .workflowContext()
-                .processingContext()
-                .whenComplete(pc -> {
-                    try {
-                        logger.debug("Executing workflow execution with id: {}", execution.workflowId());
-                        execution.execute(
-                                finished -> {
-                                    logger.debug("Workflow {} finished with status {}, removing it from repository",
-                                                 execution.workflowId(),
-                                                 finished.state().workflowStatus());
-                                    this.workflowExecutionRepository.remove(execution.workflowId());
-                                    persistEngineSafePoint();
-                                }
-                        );
-                    } catch (Throwable t) {
-                        throw new RuntimeException("Error during workflow execution", t);
-                    }
-                });
     }
 
     private void checkAndCreateNewWorkflow(@Nonnull EventMessage eventMessage,
@@ -222,43 +174,82 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         var configurations = workflowConfigurationRegistry.getHighestVersionConfigurations(
                 eventMessage.type().qualifiedName()
         );
-        configurations
-                .forEach(configuration -> {
 
-                             if (configuration.predicate().test(eventMessage, processingContext)) {
+        configurations.forEach(configuration -> {
+            if (!configuration.predicate().test(eventMessage, processingContext)) {
+                return;
+            }
 
-                                 var workflowConfiguration = configuration.configuration();
+            var workflowConfiguration = configuration.configuration();
+            var baseWorkflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
+            var workflowId = WorkflowSpawnRouting.resolveWorkflowIdForNewSpawn(
+                    workflowExecutionRepository, baseWorkflowId, workflowConfiguration.workflowVersion(), eventMessage
+            );
 
-                                 var baseWorkflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
-                                 var workflowId = WorkflowSpawnRouting.resolveWorkflowIdForNewSpawn(
-                                         workflowExecutionRepository,
-                                         baseWorkflowId,
-                                         workflowConfiguration.workflowVersion(),
-                                         eventMessage);
+            if (workflowId == null) {
+                return;
+            }
 
-                                 if (workflowId == null) {
-                                     return;
-                                 }
+            var payload = requireNonNull(eventMessage.payloadAs(PAYLOAD_TYPE), "Error converting initial payload");
+            var workflowContext = workflowConfiguration.workflowContextFactory().createContext(
+                    payload, workflowId, processingContext, workflowConfiguration
+            );
 
-                                 var payload = Objects.requireNonNull(eventMessage.payloadAs(PAYLOAD_TYPE),
-                                                                      "Error converting initial payload");
+            var execution = workflowExecutionRepository.save(workflowId, () -> {
+                logger.debug("Creating a new workflow '{}' with payload '{}'", workflowId, eventMessage.payload());
+                return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
+            });
+            checkpointWorkIndex.register(execution.workflowId(), execution::registerCheckpointWorkStateListener);
+            if (replaySupport.inLiveMode()) {
+                execute(execution);
+            }
+        });
+    }
 
-                                 var workflowContext = workflowConfiguration
-                                         .workflowContextFactory()
-                                         .createContext(payload, workflowId, processingContext, workflowConfiguration);
+    @Override
+    public void invoke(@Nonnull ProcessingContext context) {
+        this.workflowConfigurationRegistry.warnAboutSameVersionDuplicates();
+        logger.info("Workflow instance replay finished. Switching to live mode.");
+        removeTerminalAndStartRestoredWorkflowExecutions(AFTER_REPLAY_LOG);
+    }
 
-                                 var execution = workflowExecutionRepository.save(workflowId, () -> {
-                                     logger.debug("Creating a new workflow '{}' with payload '{}'",
-                                                  workflowId, eventMessage.payload());
-                                     return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
-                                 });
-                                 persistEngineSafePoint();
-                                 if (isRunning.get()) { // if the engine is already running, start the workflow immediately
-                                     execute(execution);
-                                 }
-                             }
-                         }
-                );
+    @Override
+    public boolean hasUnsafeCheckpointWork() {
+        return checkpointWorkIndex.hasUnsafeCheckpointWork();
+    }
+
+    /**
+     * Adds a checkpoint latch across the current set of {@link WorkflowExecution WorkflowExecutions} that are still
+     * performing tasks.
+     * <p>
+     * The given {@code latch} is attached to all {@code WorkflowExecutions} that still have tasks to perform. Or in
+     * other terms, executions that are "unsafe" to checkpoint on
+     *
+     * @param latch the latch to invoke after all unsafe {@link WorkflowExecution WorkflowExecutions} have reached it
+     */
+    @Override
+    public void addCheckpointLatch(@Nonnull Runnable latch) {
+        Set<WorkflowExecution> executions = new HashSet<>();
+        for (String workflowId : checkpointWorkIndex.unsafeWorkflowIds()) {
+            workflowExecutionRepository.findById(workflowId).ifPresentOrElse(
+                    execution -> {
+                        if (execution.hasUnsafeCheckpointWork()) {
+                            executions.add(execution);
+                        } else {
+                            checkpointWorkIndex.markSafe(workflowId);
+                        }
+                    },
+                    () -> checkpointWorkIndex.markSafe(workflowId));
+        }
+
+        if (executions.isEmpty()) {
+            latch.run();
+            return;
+        }
+
+        for (WorkflowExecution execution : executions) {
+            execution.addCheckpointLatch(latch);
+        }
     }
 
     /**
@@ -266,83 +257,77 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
      *
      * @return set of currently running workflow executions.
      */
+    @Nonnull
     public Set<WorkflowExecution> workflowExecutions() {
         return workflowExecutionRepository.findAll();
     }
 
     /**
-     * Starts the engine from its replay safe point and restores active workflow executions.
+     * Restores and starts active workflow executions before processor replay resumes.
      * <p>
      * Restoration has two deliberately separate processing contexts. The sourcing context belongs to the startup unit
-     * of work and is used only while reading the event-sourced workflow state. The execution context becomes the parent
-     * context of each restored workflow body and is retained after startup for the workflow's lifetime.
+     * of work and is used only while reading the event-sourced workflow state. This method creates an execution context
+     * as a child of the sourcing context; it becomes the parent context of each restored workflow body and is retained
+     * after startup for the workflow's lifetime.
      *
-     * @param safePoint        replay safe point for restored workflow executions
-     * @param sourcingContext  context of the short-lived startup unit of work used to load durable workflow state; it
-     *                         may carry event-store transactions and lifecycle handlers and must not be retained by a
-     *                         restored workflow
-     * @param executionContext independent context used as the parent of restored workflow executions; it provides the
-     *                         same application components while keeping workflow-body resources and lifecycle work
-     *                         separate from startup
-     *                         <p>
-     *                         Reusing {@code sourcingContext} here is invalid because restored workflow bodies run
-     *                         asynchronously and can outlive startup. If such a body appends an event after the startup
-     *                         unit of work has entered {@code COMMIT}, Axon can no longer register the required
-     *                         {@code PREPARE_COMMIT} handler. The append operation then fails, and the workflow cannot
-     *                         persist its resumed, timed-out, or terminal state
+     * @param processorToken processor token at startup; initializes replay tracking when no processor token has been
+     *                       observed yet
+     * @param replayRequired whether the processor must catch up after restored workflows are started
+     * @return a future that completes when all running workflows have been restored and the engine is in the required
+     * replay or live mode
      */
-    public void start(@Nullable TrackingToken safePoint,
-                      @Nonnull ProcessingContext sourcingContext,
-                      @Nonnull ProcessingContext executionContext) {
-        initializeSafePoint(safePoint);
-        loadRunningWorkflows(sourcingContext, executionContext).join();
-        startExecutions();
-    }
+    public CompletableFuture<Void> start(@Nullable TrackingToken processorToken, boolean replayRequired) {
+        return unitOfWorkFactory.create("WorkflowRehydration").executeWithResult(
+                sourcingContext -> {
+                    replaySupport.setCurrentTokenIfNull(processorToken);
+                    UnitOfWork executionUnitOfWork = new SimpleUnitOfWorkFactory(sourcingContext).create();
 
-    /**
-     * Shuts downs the engine and removes all running workflow executions.
-     * <p>
-     * Before clearing the repository, all in-flight step futures are interrupted so that workflow driver threads parked
-     * in {@code sleepAsync} / {@code waitForEvent} / async {@code execute} can exit. This is an interrupt, not a
-     * cancellation: no {@code <Step>Cancelled} / {@code <Workflow>Cancelled} events are emitted, so the persisted event
-     * stream still reflects the most recent {@code <Step>Started} and the step resumes on the next app start. Without
-     * this, a graceful shutdown can hang because the workflow executor (e.g. a virtual-thread-per-task executor) blocks
-     * on {@code close()} waiting for those threads to terminate. See issue #125.
-     */
-    public void shutdown() {
-        var executions = workflowExecutionRepository.findAll();
-        logger.info("Shutting down WorkflowEngine: interrupting running steps of {} workflow instance(s).",
-                    executions.size());
-        for (var execution : executions) {
-            execution.interrupt();
-        }
-        persistEngineSafePoint();
-        workflowExecutionRepository.clear();
+                    return executionUnitOfWork.executeWithResult(
+                            executionContext -> loadRunningWorkflows(
+                                    sourcingContext, putCurrentTokenOn(executionContext)
+                            ).thenApply(ignored -> {
+                                removeTerminalAndStartRestoredWorkflowExecutions(BEFORE_REPLAY_LOG);
+                                if (!replayRequired) {
+                                    replaySupport.switchToLiveMode(sourcingContext);
+                                }
+                                return null;
+                            })
+                    );
+                }
+        );
     }
 
     private CompletableFuture<Void> loadRunningWorkflows(@Nonnull ProcessingContext sourcingContext,
                                                          @Nonnull ProcessingContext executionContext) {
-        initializeRestoreProcessingContext(executionContext);
         return workflowStore.loadRunningWorkflows(sourcingContext)
                             .thenCompose(runningWorkflows -> {
                                 if (runningWorkflows.workflowIds().isEmpty()) {
                                     logger.debug("No running workflows to rehydrate.");
                                     return CompletableFuture.completedFuture(null);
                                 }
-                                logger.debug("Rehydrating {} running workflow execution(s) from event-sourced state.",
-                                             runningWorkflows.workflowIds().size());
-                                var rehydrations = runningWorkflows.workflowIds()
-                                                                   .stream()
-                                                                   .map(workflowId -> workflowStore
-                                                                           .loadWorkflow(workflowId, sourcingContext)
-                                                                           .thenAccept(state -> restoreWorkflow(
-                                                                                   workflowId,
-                                                                                   state,
-                                                                                   executionContext
-                                                                           )))
-                                                                   .toArray(CompletableFuture[]::new);
+                                logger.debug(
+                                        "Rehydrating {} running workflow execution(s) from event-sourced state.",
+                                        runningWorkflows.workflowIds().size()
+                                );
+
+                                var rehydrations = runningWorkflows.workflowIds().stream().map(
+                                        workflowId -> workflowStore.loadWorkflow(workflowId, sourcingContext)
+                                                                   .thenAccept(state -> restoreWorkflow(
+                                                                           workflowId,
+                                                                           state,
+                                                                           executionContext
+                                                                   ))
+                                ).toArray(CompletableFuture[]::new);
                                 return CompletableFuture.allOf(rehydrations);
                             });
+    }
+
+    private ProcessingContext putCurrentTokenOn(@NonNull ProcessingContext context) {
+        TrackingToken processorToken = replaySupport.currentToken();
+        if (processorToken != null && !context.resources().containsKey(TrackingToken.RESOURCE_KEY)) {
+            context.putResource(TrackingToken.RESOURCE_KEY, processorToken);
+        }
+        return context;
     }
 
     private void restoreWorkflow(@Nonnull String workflowId,
@@ -362,78 +347,75 @@ public class WorkflowEngine implements EventHandler, ReplayStatusChangedHandler 
         );
         var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
         execution.initializeState(state);
-        workflowExecutionRepository.save(workflowId, () -> execution);
-    }
-
-    private void startExecutions() {
-        var executionsToStart = workflowExecutionRepository
-                .findAll()
-                .stream()
-                .filter(execution -> !execution.isRunning())
-                .filter(execution -> !execution.state().workflowStatus().isTerminal())
-                .toList();
-        if (executionsToStart.isEmpty()) {
-            return;
-        }
-        logger.info("Starting {} rehydrated workflow execution(s) before replay catch-up.",
-                    executionsToStart.size());
-        for (var execution : executionsToStart) {
-            execute(execution);
-        }
+        var storedExecution = workflowExecutionRepository.save(workflowId, () -> execution);
+        checkpointWorkIndex.register(
+                storedExecution.workflowId(), storedExecution::registerCheckpointWorkStateListener
+        );
     }
 
     /**
-     * Initializes the current and last processed tracking tokens.
+     * Removes terminal workflow executions and starts the remaining restored executions.
      *
-     * @param safePoint safe point tracking token passed on reset / empty store start.
+     * @param phase startup phase in which the executions are started
      */
-    void initializeSafePoint(@Nullable TrackingToken safePoint) {
-        lastProcessedTrackingToken.set(safePoint);
-        currentTrackingToken.set(safePoint);
+    private void removeTerminalAndStartRestoredWorkflowExecutions(@Nonnull String phase) {
+        var terminalExecutions = workflowExecutionRepository.findAll(
+                execution -> execution.state().workflowStatus().isTerminal()
+        );
+        workflowExecutionRepository.removeAll(execution -> execution.state().workflowStatus().isTerminal());
+        terminalExecutions.forEach(execution -> checkpointWorkIndex.markSafe(execution.workflowId()));
+        var executionsToStart = workflowExecutionRepository.findAll(execution -> !execution.isRunning());
+        if (executionsToStart.isEmpty()) {
+            logger.info("No restored workflow executions require startup {}.", phase);
+            return;
+        }
+        logger.info("Starting {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
+        for (var execution : executionsToStart) {
+            execute(execution);
+        }
+        logger.info("Started {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
     }
 
-    private void initializeRestoreProcessingContext(@Nonnull ProcessingContext processingContext) {
-        var restartToken = lastProcessedTrackingToken.get();
-        if (!processingContext.resources().containsKey(RESTART_TOKEN_RESOURCE_KEY)) {
-            processingContext.putResource(RESTART_TOKEN_RESOURCE_KEY, Optional.ofNullable(restartToken));
-        }
-        if (restartToken != null && !processingContext.resources().containsKey(TrackingToken.RESOURCE_KEY)) {
-            processingContext.putResource(TrackingToken.RESOURCE_KEY, restartToken);
-        }
+    private void execute(@Nonnull WorkflowExecution execution) {
+        execution.workflowContext()
+                 .processingContext()
+                 .whenComplete(context -> {
+                     try {
+                         logger.debug("Executing workflow execution with id: {}", execution.workflowId());
+                         execution.execute(
+                                 finished -> {
+                                     logger.debug("Workflow {} finished with status {}, removing it from repository",
+                                                  execution.workflowId(),
+                                                  finished.state().workflowStatus());
+                                     this.workflowExecutionRepository.remove(execution.workflowId());
+                                     checkpointWorkIndex.markSafe(execution.workflowId());
+                                     checkpointingSupport.requestCheckpoint(replaySupport.currentToken());
+                                 }
+                         );
+                     } catch (Throwable t) {
+                         throw new RuntimeException("Error during workflow execution", t);
+                     }
+                 });
     }
 
-    @Nullable
-    private TrackingToken captureCurrentTrackingToken(@Nonnull ProcessingContext processingContext) {
-        var token = (TrackingToken) processingContext.resources().get(TrackingToken.RESOURCE_KEY);
-        if (token != null) {
-            // Unwrap ReplayToken (and any other WrappedToken) to the raw underlying position before storing.
-            // Without this, restart tokens captured across replay events mix raw and wrapped types, which
-            // makes determineEngineSafePoint crash with "Incompatible token type provided: ReplayToken".
-            currentTrackingToken.set(WrappedToken.unwrapLowerBound(token));
-        }
-        return currentTrackingToken.get();
-    }
-
-    private void persistEngineSafePoint() {
-        var safePoint = determineEngineSafePoint();
-        if (safePoint != null) {
-            safePointStore.storeSafePointToken(safePoint).join();
-        }
-    }
-
-    private TrackingToken determineEngineSafePoint() {
+    /**
+     * Shuts downs the engine and removes all running workflow executions.
+     * <p>
+     * Before clearing the repository, all in-flight step futures are interrupted so that workflow driver threads parked
+     * in {@code sleepAsync} / {@code waitForEvent} / async {@code execute} can exit. This is an interrupt, not a
+     * cancellation: no {@code <Step>Cancelled} / {@code <Workflow>Cancelled} events are emitted, so the persisted event
+     * stream still reflects the most recent {@code <Step>Started} and the step resumes on the next app start. Without
+     * this, a graceful shutdown can hang because the workflow executor (e.g. a virtual-thread-per-task executor) blocks
+     * on {@code close()} waiting for those threads to terminate. See issue #125.
+     */
+    public void shutdown() {
         var executions = workflowExecutionRepository.findAll();
-        if (executions.isEmpty()) {
-            return currentTrackingToken.get();
-        }
-        TrackingToken earliestToken = null;
+        logger.info("Shutting down WorkflowEngine: interrupting running steps of {} workflow instance(s).",
+                    executions.size());
         for (var execution : executions) {
-            var executionToken = execution.restartToken();
-            if (executionToken == null) {
-                return null;
-            }
-            earliestToken = earliestToken == null ? executionToken : earliestToken.lowerBound(executionToken);
+            execution.interrupt();
         }
-        return earliestToken;
+        workflowExecutionRepository.clear();
+        checkpointWorkIndex.clear();
     }
 }
