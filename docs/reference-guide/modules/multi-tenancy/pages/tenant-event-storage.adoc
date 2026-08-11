@@ -26,6 +26,41 @@ If no tenant can be resolved, the operation fails with a `TenantNotResolvedExcep
 All events in a single append must belong to the same tenant.
 ====
 
+== Aggregate-based Axon Server storage
+
+The default tenant event-storage factory uses Axon Server's tag-based storage and requires contexts with Dynamic Consistency Boundary (DCB) support.
+For legacy Axon Server contexts without DCB support, replace that factory with `AggregateBasedAxonServerTenantEventStorageEngineFactory`.
+It creates and caches one aggregate-based event storage engine per tenant context; the tenant-routing `EventStorageEngine` remains unchanged.
+
+[tabs]
+====
+Declarative - Configuration API::
++
+--
+Register the aggregate-based factory while configuring event sourcing:
+
+[source,java]
+----
+include::example$multitenancy/tenanteventstorage/DeclarativeAggregateBasedEventStorageConfiguration.java[tag=aggregate-based-factory,indent=0]
+----
+<1> Replace the default factory that builds each tenant's event storage engine.
+<2> Construct an aggregate-based engine for each tenant's Axon Server context.
+--
+Spring Boot::
++
+--
+Expose the factory as a Spring bean:
+
+[source,java]
+----
+include::example$multitenancy/tenanteventstorage/SpringAggregateBasedEventStorageConfiguration.java[tag=aggregate-based-factory,indent=0]
+----
+<1> The factory selects the aggregate-based event storage engine for every tenant context.
+--
+====
+
+Use this option only for non-DCB contexts. Applications using DCB contexts need no configuration and should retain the default tag-based factory.
+
 [#snapshots]
 == Snapshots
 

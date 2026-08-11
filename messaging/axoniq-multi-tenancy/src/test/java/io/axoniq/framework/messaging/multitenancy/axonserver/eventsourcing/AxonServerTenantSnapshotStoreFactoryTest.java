@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing;
 
-import io.axoniq.framework.axonserver.connector.api.RecordingAxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
@@ -35,6 +34,7 @@ import org.junit.jupiter.api.*;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
+import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.RecordingAxonServerConnectionManager;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -124,10 +124,8 @@ class AxonServerTenantSnapshotStoreFactoryTest {
     @Test
     void usesTheConfiguredConverterWhenNoTenantConverterProviderIsRegistered() {
         Configuration configuration = MessagingConfigurer.create()
-                                                       .componentRegistry(registry -> {
-                                                           registry.registerComponent(AxonServerConnectionManager.class,
-                                                                                      config -> connectionManager);
-                                                       })
+                                                       .componentRegistry(registry -> registry.registerComponent(AxonServerConnectionManager.class,
+                                                                                  config -> connectionManager))
                                                        .build();
         AxonServerTenantSnapshotStoreFactory factory = new AxonServerTenantSnapshotStoreFactory(configuration);
         factory.registerTenant(TENANT_A);

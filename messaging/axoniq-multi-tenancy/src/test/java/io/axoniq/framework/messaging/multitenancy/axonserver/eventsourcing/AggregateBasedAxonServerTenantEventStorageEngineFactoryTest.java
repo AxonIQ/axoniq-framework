@@ -20,17 +20,17 @@
 package io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
-import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
-import io.axoniq.framework.axonserver.connector.event.TaggedEventConverter;
+import io.axoniq.framework.axonserver.connector.event.AggregateBasedAxonServerEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import org.junit.jupiter.api.*;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
@@ -38,7 +38,7 @@ import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.Recor
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class AxonServerTenantEventStorageEngineFactoryTest {
+class AggregateBasedAxonServerTenantEventStorageEngineFactoryTest {
 
     private final RecordingAxonServerConnectionManager connectionManager = new RecordingAxonServerConnectionManager();
     private final Configuration configuration =
@@ -46,8 +46,8 @@ class AxonServerTenantEventStorageEngineFactoryTest {
                                .componentRegistry(registry -> registry.registerComponent(
                                        AxonServerConnectionManager.class, config -> connectionManager))
                                .build();
-    private final AxonServerTenantEventStorageEngineFactory testSubject =
-            new AxonServerTenantEventStorageEngineFactory(configuration);
+    private final AggregateBasedAxonServerTenantEventStorageEngineFactory testSubject =
+            new AggregateBasedAxonServerTenantEventStorageEngineFactory(configuration);
 
     @BeforeEach
     void registerTenants() {
@@ -56,13 +56,11 @@ class AxonServerTenantEventStorageEngineFactoryTest {
     }
 
     @Test
-    void buildsAnAxonServerEngineAgainstTheTenantContext() {
-        assertThat(testSubject.engineFor(TENANT_A)).isInstanceOf(AxonServerEventStorageEngine.class);
+    void buildsAnAggregateBasedAxonServerEngineAgainstTheTenantContext() {
+        assertThat(testSubject.engineFor(TENANT_A)).isInstanceOf(AggregateBasedAxonServerEventStorageEngine.class);
         assertThat(connectionManager.requestedContexts()).containsExactly(TENANT_A.tenantId());
     }
 
-    // Combining a tenant's engine with that tenant's snapshot store is the routing engine's job, not this factory's, so
-    // the engine arrives raw. MultiTenantEventStorageEngineTest covers the combining itself.
     @Test
     void buildsTheEngineWithoutDecoratingItWithASnapshotStore() {
         assertThat(testSubject.engineFor(TENANT_A)).isNotInstanceOf(SnapshotCapableEventStorageEngine.class);
@@ -72,12 +70,10 @@ class AxonServerTenantEventStorageEngineFactoryTest {
     void usesTheConfiguredEventConverterWhenNoTenantConverterProviderIsRegistered() {
         EventConverter defaultConverter = configuration.getComponent(EventConverter.class);
         MockComponentDescriptor engineDescriptor = new MockComponentDescriptor();
-        MockComponentDescriptor converterDescriptor = new MockComponentDescriptor();
 
         testSubject.engineFor(TENANT_A).describeTo(engineDescriptor);
-        engineDescriptor.<TaggedEventConverter>getProperty("converter").describeTo(converterDescriptor);
 
-        assertThat(converterDescriptor.<EventConverter>getProperty("converter")).isSameAs(defaultConverter);
+        assertThat(engineDescriptor.<EventConverter>getProperty("converter")).isSameAs(defaultConverter);
     }
 
     @Test
@@ -96,7 +92,6 @@ class AxonServerTenantEventStorageEngineFactoryTest {
         assertThat(connectionManager.requestedContexts()).isEmpty();
     }
 
-    // The connection manager disconnects a removed tenant's connection, so a cached engine bound to it must be dropped.
     @Test
     void aReAddedTenantGetsAFreshEngineAgainstANewConnection() {
         EventStorageEngine before = testSubject.engineFor(TENANT_A);
