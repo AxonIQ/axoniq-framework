@@ -23,6 +23,7 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -132,6 +133,26 @@ public interface Checkpointing {
      */
     default void onSegmentClaimed(Segment segment, CheckpointTrigger trigger) {
         // No-op by default; override only if the trigger must be retained at claim time.
+    }
+
+    /**
+     * Invoked when {@code segment} is claimed, handing the unit its {@link CheckpointTrigger} together with the
+     * position the segment resumes from.
+     * <p>
+     * The counterpart of {@link #onSegmentReleased(Segment, TrackingToken)}, which carries the same position. Without
+     * {@code from}, a unit restoring state at claim time cannot tell a segment sitting at the end of the stream from
+     * one far behind and about to replay, so it cannot decide whether acting immediately is safe.
+     * <p>
+     * Defaults to {@link #onSegmentClaimed(Segment, CheckpointTrigger)}, ignoring the position. Retention and throwing
+     * behave as described there.
+     *
+     * @param segment the segment that was claimed
+     * @param from    the segment's stored {@link TrackingToken}, the position processing resumes from, or {@code null}
+     *                when nothing is stored yet and processing starts at the beginning of the stream
+     * @param trigger the handle to request checkpoints for {@code segment}
+     */
+    default void onSegmentClaimed(Segment segment, @Nullable TrackingToken from, CheckpointTrigger trigger) {
+        onSegmentClaimed(segment, trigger);
     }
 
     /**
