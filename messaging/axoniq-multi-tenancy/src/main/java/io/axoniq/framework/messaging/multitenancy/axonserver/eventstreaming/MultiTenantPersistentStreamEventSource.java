@@ -27,15 +27,18 @@ import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
+import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
+import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.SubscribableEventSource;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -254,7 +257,7 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
                 name,
                 configuration.getComponent(AxonServerConnectionManager.class),
                 configuration.getComponent(AxonServerConfiguration.class),
-                configuration.getComponent(EventConverter.class),
+                tenantEventConverter(tenant),
                 configuration.getOptionalComponent(EventTypeResolver.class).orElse(EventTypeResolver.DEFAULT),
                 properties,
                 scheduler,
@@ -267,6 +270,14 @@ public class MultiTenantPersistentStreamEventSource implements SubscribableEvent
         tenantStream.subscribe(consumer);
         logger.debug("Opened persistent stream [{}] for tenant [{}].", name, tenant.tenantId());
         return tenantStream;
+    }
+
+    private EventConverter tenantEventConverter(TenantDescriptor tenant) {
+        EventConverter defaultConverter = configuration.getComponent(EventConverter.class);
+        return TenantComponentProviderUtil.find(configuration, Converter.class)
+                                          .<EventConverter>map(provider -> new DelegatingEventConverter(
+                                              provider.componentFor(tenant)))
+                                          .orElse(defaultConverter);
     }
 
     private void releaseTenantStream(TenantDescriptor tenant, TenantStream tenantStream) {

@@ -28,6 +28,12 @@ Covers per-tenant event stores: appending to and sourcing from the event store o
 
 See xref:multi-tenancy:tenant-event-storage.adoc[Tenant-aware event storage] for details.
 
+== Data protection
+
+Covers using a separate data-protection converter and crypto engine for each tenant, so protected fields in events, snapshots, commands, queries, and persistent streams remain isolated.
+
+See xref:multi-tenancy:tenant-data-protection.adoc[Multi-tenancy with data protection] for details.
+
 [#event-processing]
 == Event processing
 

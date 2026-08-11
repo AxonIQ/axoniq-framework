@@ -22,11 +22,14 @@ package io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.api.RecordingAxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
+import io.axoniq.framework.axonserver.connector.event.TaggedEventConverter;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.junit.jupiter.api.*;
 
@@ -63,6 +66,18 @@ class AxonServerTenantEventStorageEngineFactoryTest {
     @Test
     void buildsTheEngineWithoutDecoratingItWithASnapshotStore() {
         assertThat(testSubject.engineFor(TENANT_A)).isNotInstanceOf(SnapshotCapableEventStorageEngine.class);
+    }
+
+    @Test
+    void usesTheConfiguredEventConverterWhenNoTenantConverterProviderIsRegistered() {
+        EventConverter defaultConverter = configuration.getComponent(EventConverter.class);
+        MockComponentDescriptor engineDescriptor = new MockComponentDescriptor();
+        MockComponentDescriptor converterDescriptor = new MockComponentDescriptor();
+
+        testSubject.engineFor(TENANT_A).describeTo(engineDescriptor);
+        engineDescriptor.<TaggedEventConverter>getProperty("converter").describeTo(converterDescriptor);
+
+        assertThat(converterDescriptor.<EventConverter>getProperty("converter")).isSameAs(defaultConverter);
     }
 
     @Test

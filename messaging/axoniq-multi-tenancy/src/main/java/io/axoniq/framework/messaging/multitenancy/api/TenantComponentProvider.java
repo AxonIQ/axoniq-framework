@@ -31,12 +31,12 @@ package io.axoniq.framework.messaging.multitenancy.api;
  * register a separate provider per type. Each provider is matched to handler parameters by its
  * {@link #componentType() component type}.
  * <p>
- * The default provider, obtained through {@link #withFactory(Class, TenantComponentFactory)}, creates instances
- * lazily through a {@link TenantComponentFactory} on first {@link #componentFor(TenantDescriptor) access} for a
- * tenant, and releases them again when that tenant is unregistered.
+ * The default provider, obtained through {@link #withFactory(Class, TenantComponentFactory)}, creates instances lazily
+ * through a {@link TenantComponentFactory} on first {@link #componentFor(TenantDescriptor) access} for a tenant, and
+ * releases them again when that tenant is unregistered.
  * <p>
- * As a {@link MultiTenantAwareComponent} the provider participates in tenant lifecycle management. Registering a
- * tenant makes it eligible for component instances and unregistering it releases them.
+ * As a {@link MultiTenantAwareComponent} the provider participates in tenant lifecycle management. Registering a tenant
+ * makes it eligible for component instances and unregistering it releases them.
  *
  * @param <T> the type of component provided per tenant
  * @author Theo Emanuelsson
@@ -45,7 +45,8 @@ package io.axoniq.framework.messaging.multitenancy.api;
  * @see TenantComponentFactory
  * @since 5.3.0
  */
-public interface TenantComponentProvider<T> extends MultiTenantAwareComponent, TenantDescriptors {
+public interface TenantComponentProvider<T>
+        extends TenantComponentLookup<T>, MultiTenantAwareComponent, TenantDescriptors {
 
     /**
      * Creates a {@code TenantComponentProvider} for the given {@code componentType}, building and destroying the
@@ -83,14 +84,15 @@ public interface TenantComponentProvider<T> extends MultiTenantAwareComponent, T
      * @return the component instance belonging to the given {@code tenant}
      * @throws TenantNotResolvedException if the given {@code tenant} is not served by this provider
      */
+    @Override
     T componentFor(TenantDescriptor tenant);
 
     /**
      * Returns the type of component provided per tenant.
      * <p>
-     * Used to match this provider against message-handler parameters during parameter resolution. Matching is based
-     * on the raw type: generic type parameters of the component type are not distinguished, so components differing
-     * only in their generics need distinct wrapper types.
+     * Used to match this provider against message-handler parameters during parameter resolution. Matching is based on
+     * the raw type: generic type parameters of the component type are not distinguished, so components differing only
+     * in their generics need distinct wrapper types.
      *
      * @return the component type provided per tenant
      */

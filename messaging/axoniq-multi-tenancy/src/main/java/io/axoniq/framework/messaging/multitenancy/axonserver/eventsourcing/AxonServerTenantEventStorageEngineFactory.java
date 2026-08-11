@@ -22,7 +22,9 @@ package io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing;
 import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
+import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
+import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
@@ -30,8 +32,12 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
+import org.axonframework.conversion.Converter;
+import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 
 /**
@@ -91,6 +97,15 @@ public class AxonServerTenantEventStorageEngineFactory
     }
 
     private static Function<TenantDescriptor, EventStorageEngine> perTenantEngine(Configuration configuration) {
-        return tenant -> AxonServerEventStorageEngineFactory.constructForContext(tenant.tenantId(), configuration);
+        EventConverter defaultConverter = configuration.getComponent(EventConverter.class);
+        Optional<TenantComponentProvider<Converter>> tenantConverters =
+                TenantComponentProviderUtil.find(configuration, Converter.class);
+        return tenant -> AxonServerEventStorageEngineFactory.constructForContext(
+                tenant.tenantId(),
+                configuration,
+                tenantConverters.<EventConverter>map(
+                                        provider -> new DelegatingEventConverter(provider.componentFor(tenant)))
+                                .orElse(defaultConverter)
+        );
     }
 }

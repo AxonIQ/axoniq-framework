@@ -101,9 +101,11 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
     public static final int TENANT_PROVIDER_PHASE = -10;
 
     /**
-     * The lifecycle phase of the {@link TenantComponentProviderSubscriber}. It starts after the {@link TenantProvider},
-     * so the tenants replayed on subscription are complete. Shutdown runs in reverse phase order, so the subscriptions
-     * are cancelled while the {@code TenantProvider} is still running.
+     * The lifecycle phase in which tenant-routing components subscribe to the {@link TenantProvider}. It starts after
+     * the {@link TenantComponentProviderSubscriber} has made every {@link TenantComponentProvider} follow the tenant
+     * lifecycle, so a routing component can safely resolve a tenant-scoped dependency while it creates that tenant's
+     * part. Shutdown runs in reverse phase order, so the subscriptions are cancelled while the {@code TenantProvider}
+     * is still running.
      * <p>
      * Public so that backend-specific enhancers registering a per-tenant command bus connector (e.g.
      * {@link io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults})
@@ -112,14 +114,15 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
     public static final int TENANT_COMPONENT_SUBSCRIBER_PHASE = TENANT_PROVIDER_PHASE + 5;
 
     /**
-     * The start phase in which the components a tenant-routing component composes from are subscribed to the
+     * The start phase in which {@link TenantComponentProvider TenantComponentProviders} and the components a
+     * tenant-routing component composes from are subscribed to the
      * {@link io.axoniq.framework.messaging.multitenancy.api.TenantProvider TenantProvider}, one before
      * {@link #TENANT_COMPONENT_SUBSCRIBER_PHASE}.
      * <p>
      * A tenant-routing component builds a tenant's parts through these factories, and announces a tenant only once it
-     * holds it. Whatever acts on that announcement therefore reaches the factories, which must already hold the tenant
-     * by then. Subscribing them a phase earlier makes that order structural rather than a consequence of the order the
-     * components happen to be registered in.
+     * holds it. Whatever acts on that announcement therefore reaches the factories and tenant-scoped providers, which
+     * must already hold the tenant by then. Subscribing them a phase earlier makes that order structural rather than a
+     * consequence of the order the components happen to be registered in.
      */
     public static final int TENANT_COMPONENT_FACTORY_PHASE = TENANT_COMPONENT_SUBSCRIBER_PHASE - 1;
 
@@ -191,6 +194,12 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
      * {@link TenantProvider} at startup, so providers follow the tenant lifecycle: known tenants are replayed on
      * subscription and tenants added or removed at runtime reach every provider. At shutdown the retained subscriptions
      * are cancelled, destroying each tenant's component instances.
+     * <p>
+     * The subscriber starts in {@link #TENANT_COMPONENT_FACTORY_PHASE}, one phase before tenant-routing components
+     * subscribe. A routing component can create a tenant-specific connector, storage engine, or converter as soon as
+     * it receives a tenant; its {@link TenantComponentProvider} dependencies must therefore have registered that tenant
+     * first. Keeping this in a separate lifecycle phase prevents the result from depending on registration order within
+     * a phase.
      *
      * @param componentRegistry the registry to register the subscriber with
      */
@@ -201,9 +210,9 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
                 ComponentDefinition
                         .ofType(TenantComponentProviderSubscriber.class)
                         .withBuilder(TenantComponentProviderSubscriber::new)
-                        .onStart(TENANT_COMPONENT_SUBSCRIBER_PHASE,
+                        .onStart(TENANT_COMPONENT_FACTORY_PHASE,
                                  TenantComponentProviderSubscriber::subscribeProviders)
-                        .onShutdown(TENANT_COMPONENT_SUBSCRIBER_PHASE,
+                        .onShutdown(TENANT_COMPONENT_FACTORY_PHASE,
                                     TenantComponentProviderSubscriber::cancelSubscriptions)
         );
     }
