@@ -232,7 +232,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
             @Nullable TrackingToken processorToken,
             @Nullable TrackingToken latestToken
     ) {
-        replaySupport.initializeReplayTracking(processorToken, latestToken);
+        replaySupport.setInitialEngineTokens(processorToken, latestToken);
         return workflowEngine.start(processorToken, requiresReplay(processorToken, latestToken));
     }
 

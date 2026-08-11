@@ -30,18 +30,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 /**
- * Tests for {@link WorkflowExecutionCheckpointSupport}.
+ * Tests for {@link WorkflowExecutionCheckpointingSupport}.
  */
-class WorkflowExecutionCheckpointSupportTest {
+class WorkflowExecutionCheckpointingSupportTest {
 
     @Test
     void coalescesCallbacksUntilTheInlineBarrierIsConsumed() {
-        var taskQueue = new InlineCheckpointBarrierTaskQueue();
-        var support = new WorkflowExecutionCheckpointSupport(taskQueue);
+        var taskQueue = new InlineExecutionTaskQueue();
+        var support = new WorkflowExecutionCheckpointingSupport(taskQueue);
         var callbacks = new AtomicInteger();
 
-        support.appendCheckpointIntent(callbacks::incrementAndGet);
-        support.appendCheckpointIntent(callbacks::incrementAndGet);
+        support.addCheckpointLatch(callbacks::incrementAndGet);
+        support.addCheckpointLatch(callbacks::incrementAndGet);
 
         assertThat(taskQueue.tasks).hasSize(1);
         assertThat(support.hasUnsafeCheckpointWork()).isTrue();
@@ -54,12 +54,12 @@ class WorkflowExecutionCheckpointSupportTest {
 
     @Test
     void invokesTheCallbackImmediatelyWhenTheTaskQueueIsNotRunning() {
-        var taskQueue = new InlineCheckpointBarrierTaskQueue();
+        var taskQueue = new InlineExecutionTaskQueue();
         taskQueue.running = false;
-        var support = new WorkflowExecutionCheckpointSupport(taskQueue);
+        var support = new WorkflowExecutionCheckpointingSupport(taskQueue);
         var callbacks = new AtomicInteger();
 
-        support.appendCheckpointIntent(callbacks::incrementAndGet);
+        support.addCheckpointLatch(callbacks::incrementAndGet);
 
         assertThat(callbacks).hasValue(1);
         assertThat(taskQueue.tasks).isEmpty();
@@ -68,19 +68,19 @@ class WorkflowExecutionCheckpointSupportTest {
 
     @Test
     void reportsCheckpointWorkStateTransitions() {
-        var taskQueue = new InlineCheckpointBarrierTaskQueue();
+        var taskQueue = new InlineExecutionTaskQueue();
         var unsafeTransitions = new AtomicInteger();
         var safeTransitions = new AtomicInteger();
-        var support = new WorkflowExecutionCheckpointSupport(
+        var support = new WorkflowExecutionCheckpointingSupport(
                 taskQueue,
                 new WorkflowExecution.CheckpointWorkStateListener() {
                     @Override
-                    public void onCheckpointWorkBecameUnsafe() {
+                    public void onMarkedUnsafe() {
                         unsafeTransitions.incrementAndGet();
                     }
 
                     @Override
-                    public void onCheckpointWorkBecameSafe() {
+                    public void onMarkedSafe() {
                         safeTransitions.incrementAndGet();
                     }
                 }
@@ -97,8 +97,8 @@ class WorkflowExecutionCheckpointSupportTest {
         assertThat(safeTransitions).hasValue(1);
     }
 
-    private static final class InlineCheckpointBarrierTaskQueue
-            implements WorkflowExecutionCheckpointSupport.CheckpointBarrierTaskQueue {
+    private static final class InlineExecutionTaskQueue
+            implements WorkflowExecutionCheckpointingSupport.ExecutionTaskQueue {
 
         private final Queue<Consumer<WorkflowExecution>> tasks = new ArrayDeque<>();
         private boolean running = true;

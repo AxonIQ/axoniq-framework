@@ -150,14 +150,15 @@ public interface WorkflowExecution extends DescribableComponent {
     void cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause);
 
     /**
-     * Appends intent to advance the checkpoint token.
+     * Adds a {@code latch} task to this {@code WorkflowExecution} representing a point in time when a checkpoint can be made.
      *
-     * @param onDrained runnable to execute on completion
+     * @param latch the latch to run when reached in this {@code WorkflowExecution's} task queue
      */
-    void appendCheckpointIntent(@Nonnull Runnable onDrained);
+    void addCheckpointLatch(@Nonnull Runnable latch);
 
     /**
-     * Checks whether checkpoint advancement is unsafe because workflow work is active, queued, or barriered.
+     * Checks whether checkpoint advancement is unsafe because workflow work is active, queued, or blocked through a
+     * barrier.
      *
      * @return {@code true} if checkpoint advancement is unsafe, {@code false} otherwise
      */
@@ -175,15 +176,28 @@ public interface WorkflowExecution extends DescribableComponent {
      */
     interface CheckpointWorkStateListener {
 
+        CheckpointWorkStateListener NO_OP = new CheckpointWorkStateListener() {
+
+            @Override
+            public void onMarkedUnsafe() {
+                // No-op
+            }
+
+            @Override
+            public void onMarkedSafe() {
+                // No-op
+            }
+        };
+
         /**
          * Invoked when the workflow execution has checkpoint-relevant work.
          */
-        void onCheckpointWorkBecameUnsafe();
+        void onMarkedUnsafe();
 
         /**
          * Invoked when the workflow execution no longer has checkpoint-relevant work.
          */
-        void onCheckpointWorkBecameSafe();
+        void onMarkedSafe();
     }
 
     /**

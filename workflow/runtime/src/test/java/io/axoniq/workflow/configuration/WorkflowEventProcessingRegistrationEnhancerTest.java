@@ -51,7 +51,7 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         ).join();
 
         var inOrder = inOrder(replaySupport, workflowEngine);
-        inOrder.verify(replaySupport).initializeReplayTracking(processorToken, latestToken);
+        inOrder.verify(replaySupport).setInitialEngineTokens(processorToken, latestToken);
         inOrder.verify(workflowEngine).start(processorToken, true);
     }
 
@@ -70,7 +70,7 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
                 token
         ).join();
 
-        verify(replaySupport).initializeReplayTracking(token, token);
+        verify(replaySupport).setInitialEngineTokens(token, token);
         verify(workflowEngine).start(token, false);
     }
 
