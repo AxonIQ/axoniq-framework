@@ -86,16 +86,16 @@ class WorkflowEngineReplayTest {
         workflowConfigurationRegistry = mock(WorkflowConfigurationRegistry.class);
         workflowStore = mock(WorkflowStore.class);
         startupUnitOfWorkFactory = mock(UnitOfWorkFactory.class);
-        replaySupport = spy(new WorkflowEngineReplaySupport(workflowEngine));
-        checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
+
         workflowEngine = new WorkflowEngine(
                 workflowConfigurationRegistry,
                 workflowExecutionRepository,
                 workflowStore,
-                startupUnitOfWorkFactory,
-                replaySupport,
-                checkpointingSupport
+                startupUnitOfWorkFactory
         );
+        replaySupport = spy(new WorkflowEngineReplaySupport(workflowEngine));
+        checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
+        workflowEngine.setEngineSupportComponents(replaySupport, checkpointingSupport);
     }
 
     @Test

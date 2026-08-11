@@ -69,12 +69,14 @@ public class WorkflowEngine implements
     private final WorkflowExecutionRepository workflowExecutionRepository;
     private final WorkflowStore workflowStore;
     private final UnitOfWorkFactory unitOfWorkFactory;
-    private final WorkflowEngineReplaySupport replaySupport;
-    private final WorkflowEngineCheckpointingSupport checkpointingSupport;
+    private WorkflowEngineReplaySupport replaySupport;
+    private WorkflowEngineCheckpointingSupport checkpointingSupport;
     private final UnsafeCheckpointWorkIndex checkpointWorkIndex = new UnsafeCheckpointWorkIndex();
 
     /**
-     * Creates a new workflow engine.
+     * Creates a new workflow engine. Be sure to follow-up construction of a {@code WorkflowEngine} with an invocation
+     * of {@link #setEngineSupportComponents(WorkflowEngineReplaySupport, WorkflowEngineCheckpointingSupport)}, as
+     * otherwise replay and checkpointing support is unavailable.
      *
      * @param workflowConfigurationRegistry registry containing a
      *                                      {@link
@@ -86,16 +88,12 @@ public class WorkflowEngine implements
      *                                      {@link WorkflowState}
      * @param unitOfWorkFactory             a unit of work factory dedicated to construct a unit of work during
      *                                      {@link #start(TrackingToken, boolean)} of this engine
-     * @param replaySupport                 provides replayability support to this {@code WorkflowEngine}
-     * @param checkpointingSupport          provides checkpointing support to this {@code WorkflowEngine}
      */
     public WorkflowEngine(
             @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
             @Nonnull WorkflowExecutionRepository workflowExecutionRepository,
             @Nonnull WorkflowStore workflowStore,
-            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
-            @Nonnull WorkflowEngineReplaySupport replaySupport,
-            @Nonnull WorkflowEngineCheckpointingSupport checkpointingSupport
+            @Nonnull UnitOfWorkFactory unitOfWorkFactory
     ) {
         this.workflowConfigurationRegistry = requireNonNull(
                 workflowConfigurationRegistry, "The WorkflowConfigurationRegistry must not be null."
@@ -105,11 +103,27 @@ public class WorkflowEngine implements
         );
         this.workflowStore = requireNonNull(workflowStore, "The WorkflowStore must not be null.");
         this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
+        EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
+    }
+
+    /**
+     * Sets {@code WorkflowEngine} support components which are <b>required</b> for the engine to work.
+     * <p>
+     * Both {@code replaySupport} and {@code checkpointingSupport} are set outside the
+     * {@link #WorkflowEngine(WorkflowConfigurationRegistry, WorkflowExecutionRepository, WorkflowStore,
+     * UnitOfWorkFactory)}, because they require <b>this</b> {@code WorkflowEngine} itself to function. Hence, a cyclic
+     * dependency would exist upon start-up if done otherwise.
+     *
+     * @param replaySupport        provides replayability support to this {@code WorkflowEngine}
+     * @param checkpointingSupport provides checkpointing support to this {@code WorkflowEngine}
+     */
+    @Internal
+    public void setEngineSupportComponents(@Nonnull WorkflowEngineReplaySupport replaySupport,
+                                           @Nonnull WorkflowEngineCheckpointingSupport checkpointingSupport) {
         this.replaySupport = requireNonNull(replaySupport, "The WorkflowEngineReplaySupport must not be null.");
         this.checkpointingSupport = requireNonNull(
                 checkpointingSupport, "The WorkflowEngineCheckpointingSupport must not be null."
         );
-        EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
     }
 
     @Nonnull

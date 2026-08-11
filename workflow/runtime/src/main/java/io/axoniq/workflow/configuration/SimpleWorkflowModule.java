@@ -33,8 +33,10 @@ import io.axoniq.workflow.runtime.execution.WorkflowStore;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.BaseModule;
 import org.axonframework.common.configuration.ComponentBuilder;
+import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.LifecycleRegistry;
+import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.jspecify.annotations.Nullable;
 
@@ -145,16 +147,19 @@ class SimpleWorkflowModule<C extends WorkflowContext>
             }
 
             cr.registerComponent(
-                    WorkflowEngine.class,
-                    COMPONENT_WORKFLOW_ENGINE,
-                    cfg -> new WorkflowEngine(
-                            cfg.getComponent(WorkflowConfigurationRegistry.class),
-                            cfg.getComponent(WorkflowExecutionRepository.class),
-                            cfg.getComponent(WorkflowStore.class),
-                            cfg.getComponent(UnitOfWorkFactory.class),
-                            cfg.getComponent(WorkflowEngineReplaySupport.class),
-                            cfg.getComponent(WorkflowEngineCheckpointingSupport.class)
-                    )
+                    ComponentDefinition.ofTypeAndName(WorkflowEngine.class, COMPONENT_WORKFLOW_ENGINE)
+                                       .withBuilder(cfg -> new WorkflowEngine(
+                                               cfg.getComponent(WorkflowConfigurationRegistry.class),
+                                               cfg.getComponent(WorkflowExecutionRepository.class),
+                                               cfg.getComponent(WorkflowStore.class),
+                                               cfg.getComponent(UnitOfWorkFactory.class)
+                                       ))
+                                       .onStart(Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS, (config, engine) -> {
+                                           engine.setEngineSupportComponents(
+                                                   config.getComponent(WorkflowEngineReplaySupport.class),
+                                                   config.getComponent(WorkflowEngineCheckpointingSupport.class)
+                                           );
+                                       })
             );
 
             if (workflowHistoryProjectorBuilder != null) {
