@@ -102,6 +102,9 @@ class WorkflowEngineReplayTest {
     void replayEventsAreDeliveredToExecution() {
         String workflowId = "workflowId";
         WorkflowExecution execution = mock(WorkflowExecution.class);
+        WorkflowState state = mock(WorkflowState.class);
+        when(execution.state()).thenReturn(state);
+        when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(workflowId, () -> execution);
 
         EventMessage eventMessage = mock(EventMessage.class);
@@ -112,6 +115,9 @@ class WorkflowEngineReplayTest {
         when(processingContext.resources()).thenReturn(Map.of());
         when(processingContext.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
         when(processingContext.component(WorkflowEngineCheckpointingSupport.class)).thenReturn(checkpointingSupport);
+
+        // Keep replay in progress so the engine does not switch to live mode and try to (re)start executions.
+        replaySupport.setInitialEngineTokens(token(0), token(1));
 
         workflowEngine.handle(eventMessage, processingContext);
 
@@ -297,6 +303,7 @@ class WorkflowEngineReplayTest {
         WorkflowState existingState = mock(WorkflowState.class);
         when(existing.state()).thenReturn(existingState);
         when(existingState.workflowDefinitionVersion()).thenReturn("1.0.0");
+        when(existingState.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(baseId, () -> existing);
         clearInvocations(workflowExecutionRepository);
 
@@ -325,6 +332,9 @@ class WorkflowEngineReplayTest {
 
         ProcessingContext processingContext = processingContext(null);
 
+        // Keep replay in progress so the engine does not switch to live mode and try to (re)start executions.
+        replaySupport.setInitialEngineTokens(token(0), token(1));
+
         workflowEngine.handle(eventMessage, processingContext);
 
         // A v2 spawn was saved under the disambiguated id.
@@ -342,6 +352,7 @@ class WorkflowEngineReplayTest {
         WorkflowState existingState = mock(WorkflowState.class);
         when(existing.state()).thenReturn(existingState);
         when(existingState.workflowDefinitionVersion()).thenReturn("2.0.0");
+        when(existingState.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(workflowId, () -> existing);
         clearInvocations(workflowExecutionRepository);
 
@@ -358,6 +369,9 @@ class WorkflowEngineReplayTest {
         when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
         when(eventMessage.type()).thenReturn(new MessageType(eventName));
 
+        // Keep replay in progress so the engine does not switch to live mode and try to (re)start executions.
+        replaySupport.setInitialEngineTokens(token(0), token(1));
+
         workflowEngine.handle(eventMessage, processingContext(null));
 
         // Same-version duplicate: nothing is spawned. The v1 (and this case v2) instance stays untouched.
@@ -373,6 +387,7 @@ class WorkflowEngineReplayTest {
         WorkflowState existingState = mock(WorkflowState.class);
         when(existing.state()).thenReturn(existingState);
         when(existingState.workflowDefinitionVersion()).thenReturn("1.0.0");
+        when(existingState.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(workflowId, () -> existing);
         clearInvocations(workflowExecutionRepository);
 
@@ -393,6 +408,9 @@ class WorkflowEngineReplayTest {
         when(eventMessage.type()).thenReturn(new MessageType(eventName));
 
         ProcessingContext processingContext = processingContext(null);
+
+        // Keep replay in progress so the engine does not switch to live mode and try to (re)start executions.
+        replaySupport.setInitialEngineTokens(token(0), token(1));
 
         workflowEngine.handle(eventMessage, processingContext);
 
@@ -596,6 +614,7 @@ class WorkflowEngineReplayTest {
             resources.put(TrackingToken.RESOURCE_KEY, token);
         }
         when(processingContext.resources()).thenReturn(resources);
+        when(processingContext.getResource(any())).thenAnswer(invocation -> resources.get(invocation.getArgument(0)));
         doAnswer(invocation -> {
             Context.ResourceKey<?> key = invocation.getArgument(0);
             Object value = invocation.getArgument(1);
@@ -733,12 +752,14 @@ class WorkflowEngineReplayTest {
         WorkflowState v1State = mock(WorkflowState.class);
         when(v1Existing.state()).thenReturn(v1State);
         when(v1State.workflowDefinitionVersion()).thenReturn("1.0.0");
+        when(v1State.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(baseId, () -> v1Existing);
 
         WorkflowExecution v2Existing = mock(WorkflowExecution.class);
         WorkflowState v2State = mock(WorkflowState.class);
         when(v2Existing.state()).thenReturn(v2State);
         when(v2State.workflowDefinitionVersion()).thenReturn("2.0.0");
+        when(v2State.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(disambiguatedId, () -> v2Existing);
         clearInvocations(workflowExecutionRepository);
 
@@ -753,6 +774,9 @@ class WorkflowEngineReplayTest {
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(Metadata.emptyInstance());
         when(eventMessage.type()).thenReturn(new MessageType(eventName));
+
+        // Keep replay in progress so the engine does not switch to live mode and try to (re)start executions.
+        replaySupport.setInitialEngineTokens(token(0), token(1));
 
         workflowEngine.handle(eventMessage, processingContext(null));
 

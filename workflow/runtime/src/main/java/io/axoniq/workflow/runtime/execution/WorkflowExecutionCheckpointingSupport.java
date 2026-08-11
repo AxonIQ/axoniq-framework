@@ -149,8 +149,9 @@ import static java.util.Objects.requireNonNull;
         }
 
         synchronized (this) {
-            latchCallback = latchCallback == NO_OP ? latch : () -> {
-                latchCallback.run();
+            Runnable previous = latchCallback;
+            latchCallback = previous == NO_OP ? latch : () -> {
+                previous.run();
                 latch.run();
             };
             if (latchQueued) {
