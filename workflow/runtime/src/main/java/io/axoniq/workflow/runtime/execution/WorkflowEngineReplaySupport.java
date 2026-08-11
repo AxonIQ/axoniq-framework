@@ -24,6 +24,7 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.WrappedToken;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
@@ -31,78 +32,99 @@ import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandl
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static java.util.Objects.requireNonNull;
+
 /**
- * Support object that owns replay tracking and the transition from replay mode to live mode for one workflow engine.
+ * Support object that owns replay tracking and the transition from replay mode to live mode for a
+ * {@link WorkflowEngine} by implementing the {@link ReplayStatusChangedHandler}.
  * <p>
- * The workflow engine itself only needs a small replay API:
- * capture the current tracking token from the processor callback, seed restored execution contexts with the processor
- * position, initialize startup replay boundaries, and switch to live mode exactly once when replay has completed.
- * This class owns that lifecycle so the engine no longer mixes replay bookkeeping with event routing or checkpoint
- * advancement.
+ * The {@code WorkflowEngine} itself only needs a small replay API: capture the current {@link TrackingToken} from the
+ * processor callback, seed restored execution contexts with the processor position, initialize startup replay
+ * boundaries, and switch to live mode exactly once when replay has completed. This class owns that lifecycle so the
+ * engine no longer mixes replay bookkeeping with
+ * {@link org.axonframework.messaging.eventhandling.EventHandler event handling} or
+ * {@link io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing checkpoint advancement}.
  * <p>
- * Replay state is intentionally kept separate from checkpoint advancement state:
- * {@link #currentTrackingToken} tracks where the processor callback currently is,
- * {@link #startupLatestToken} remembers the stream position that marked the end of replay at startup, and
- * {@link #liveMode} gates whether restored executions should start immediately. None of those concerns are required to
- * ask for a checkpoint, so they live here instead of inside checkpoint support.
+ * Replay state is intentionally kept separate from checkpoint advancement state: {@link #currentToken} tracks where the
+ * processor callback currently is, {@link #startupLatestToken} remembers the stream position that marked the end of
+ * replay at startup, and {@link #inLiveMode} gates whether restored executions should start immediately. None of those
+ * concerns are required to ask for a checkpoint, so they live here instead of inside checkpoint support.
  * <p>
- * Replay state is read frequently from processor callbacks, so the tracking-token references are {@code volatile}.
- * The live-mode state uses an {@link AtomicBoolean} to perform the one-time transition atomically without a monitor.
- * The live-mode callback runs after the successful transition, outside any coordination mechanism.
+ * Replay state is read frequently from processor callbacks, so the {@code TrackingToken} references are
+ * {@code volatile}. The live-mode state uses an {@link AtomicBoolean} to perform the one-time transition atomically
+ * without a monitor. The live-mode callback runs after the successful transition, outside any coordination mechanism.
  *
  * @author Simon Zambrovski
+ * @author Steven van Beelen
  * @since 1.0.0
  */
 @Internal
 public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
 
-    /**
-     * Callback invoked once replay has transitioned to live mode.
-     */
-    @Internal
-    @FunctionalInterface
-    public interface LiveModeActivatedCallback {
+    private static final Logger logger = LoggerFactory.getLogger(WorkflowEngineReplaySupport.class);
 
-        /**
-         * Reacts to the first transition from replay mode to live mode.
-         *
-         * @param processingContext the current processor context
-         */
-        void onLiveModeActivated(@Nonnull ProcessingContext processingContext);
-    }
+    private final LiveModeActivatedCallback liveModeCallback;
 
-    private final static Logger logger = LoggerFactory.getLogger(WorkflowEngineReplaySupport.class);
-    private final LiveModeActivatedCallback liveModeActivatedCallback;
-    private final AtomicBoolean liveMode = new AtomicBoolean();
     @Nullable
-    private volatile TrackingToken currentTrackingToken;
+    private volatile TrackingToken currentToken;
     @Nullable
     private volatile TrackingToken startupLatestToken;
+    private final AtomicBoolean inLiveMode = new AtomicBoolean();
 
     /**
      * Creates replay support for the given live-mode activation callback.
      *
-     * @param liveModeActivatedCallback the workflow-engine callback invoked when live mode starts
+     * @param liveModeCallback the workflow-engine callback invoked when live mode starts
      */
-    public WorkflowEngineReplaySupport(@Nonnull LiveModeActivatedCallback liveModeActivatedCallback) {
-        this.liveModeActivatedCallback = Objects.requireNonNull(
-                liveModeActivatedCallback,
-                "Live mode activated callback must not be null"
-        );
+    public WorkflowEngineReplaySupport(@Nonnull LiveModeActivatedCallback liveModeCallback) {
+        this.liveModeCallback = requireNonNull(liveModeCallback, "The LiveModeActivatedCallback must not be null");
+    }
+
+    @Nonnull
+    @Override
+    public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
+                                               @Nonnull ProcessingContext context) {
+        getAndSetTokenFrom(context);
+        logger.debug("Replay status changed from [{}] to [{}].",
+                     statusChange.status(), context.resources().get(TrackingToken.RESOURCE_KEY));
+        if (!statusChange.status().isReplay() && !switchToLiveMode(context)) {
+            logger.warn("Workflow execution is already started.");
+        }
+        return MessageStream.empty();
     }
 
     /**
-     * Initializes replay tracking from the processor token known at startup.
+     * Get and sets the {@link TrackingToken} from the given {@code context} when available.
+     * <p>
+     * If a {@code TrackingToken} is present in the context, it is normalized to the lower bound. This ensures
+     * {@link WrappedToken} like the
+     * {@link org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken} are handled consistently
+     * among unwrapped {@code TrackingTokens}.
      *
-     * @param processorToken the token currently stored for the segment
-     * @param latestToken the latest known token at startup, used to detect replay completion
+     * @param context the current processing context
+     * @return the normalized current {@link TrackingToken}, if present
      */
-    public void initializeReplayTracking(@Nullable TrackingToken processorToken,
-                                         @Nullable TrackingToken latestToken) {
-        currentTrackingToken = processorToken;
+    @Nullable
+    TrackingToken getAndSetTokenFrom(@Nonnull ProcessingContext context) {
+        TrackingToken.fromContext(context)
+                     .ifPresent(token -> currentToken = WrappedToken.unwrapLowerBound(token));
+        return currentToken;
+    }
+
+    /**
+     * Sets the {@link TrackingToken TrackingTokens} present when initializing a {@link WorkflowEngine}.
+     *
+     * @param processorToken the token currently stored by the
+     *                       {@link
+     *                       org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor}
+     *                       backing the {@link WorkflowEngine}
+     * @param latestToken    the latest known token at startup, used to detect replay completion
+     */
+    public void setInitialEngineTokens(@Nullable TrackingToken processorToken,
+                                       @Nullable TrackingToken latestToken) {
+        currentToken = processorToken;
         startupLatestToken = latestToken;
     }
 
@@ -111,9 +133,9 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      *
      * @param processorToken processor token supplied during engine startup
      */
-    void initializeProcessorTokenIfAbsent(@Nullable TrackingToken processorToken) {
-        if (currentTrackingToken == null) {
-            currentTrackingToken = processorToken;
+    void setCurrentTokenIfNull(@Nullable TrackingToken processorToken) {
+        if (currentToken == null) {
+            currentToken = processorToken;
         }
     }
 
@@ -123,10 +145,10 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      * @return {@code true} if this call performed the transition, otherwise {@code false}
      */
     public boolean switchToLiveMode(@Nonnull ProcessingContext processingContext) {
-        if (!liveMode.compareAndSet(false, true)) {
+        if (!inLiveMode.compareAndSet(false, true)) {
             return false;
         }
-        liveModeActivatedCallback.onLiveModeActivated(processingContext);
+        liveModeCallback.invoke(processingContext);
         return true;
     }
 
@@ -135,8 +157,8 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      *
      * @return {@code true} once live mode has been entered
      */
-    public boolean isLiveMode() {
-        return liveMode.get();
+    public boolean inLiveMode() {
+        return inLiveMode.get();
     }
 
     /**
@@ -145,78 +167,38 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      * @return the current normalized tracking token, if present
      */
     @Nullable
-    public TrackingToken currentTrackingToken() {
-        return currentTrackingToken;
+    public TrackingToken currentToken() {
+        return currentToken;
     }
 
     /**
-     * Observes replay-related state from the current processor callback.
-     * <p>
-     * If a tracking token is present in the context, it is normalized to the lower bound so replay tokens are handled
-     * consistently with ordinary tracking tokens.
+     * Validates if the replay has finished for the given {@code token}, to be invoked by
+     * {@link WorkflowEngine#handle(EventMessage, ProcessingContext)} upon processing any event.
      *
-     * @param processingContext the current processor context
-     * @return the normalized current tracking token, if present
+     * @param token   the token of the {@link EventMessage} that's just been handled by
+     *                {@link WorkflowEngine#handle(EventMessage, ProcessingContext)}
+     * @param context the context used to {@link #switchToLiveMode(ProcessingContext) switch to live mode with}
      */
-    @Nullable
-    TrackingToken observeProcessingContext(@Nonnull ProcessingContext processingContext) {
-        var token = (TrackingToken) processingContext.resources().get(TrackingToken.RESOURCE_KEY);
-        if (token != null) {
-            currentTrackingToken = WrappedToken.unwrapLowerBound(token);
-        }
-        return currentTrackingToken;
-    }
-
-    /**
-     * Makes the processor token visible in a context used to construct restored workflow executions.
-     *
-     * @param processingContext the context used to create restored executions
-     */
-    public void initializeRestoreProcessingContext(@Nonnull ProcessingContext processingContext) {
-        var processorToken = currentTrackingToken;
-        if (processorToken != null && !processingContext.resources().containsKey(TrackingToken.RESOURCE_KEY)) {
-            processingContext.putResource(TrackingToken.RESOURCE_KEY, processorToken);
-        }
-    }
-
-    /**
-     * Advances replay progress for the currently handled callback and switches to live mode once replay has caught up.
-     *
-     * @param currentToken the normalized token associated with the observed callback
-     */
-    void advanceReplayPosition(@Nullable TrackingToken currentToken, @Nonnull ProcessingContext context) {
+    void validateIfReplayFinished(@Nullable TrackingToken token,
+                                  @Nonnull ProcessingContext context) {
         var latest = startupLatestToken;
-        if (latest != null && !liveMode.get() && covers(currentToken, latest)) {
+        if (!inLiveMode.get() && (latest == null || token != null && token.covers(latest))) {
             switchToLiveMode(context);
         }
     }
 
     /**
-     * Reacts to Axon's replay-status callbacks.
-     *
-     * @param statusChange the replay-status change notification
-     * @param context the current processor context
-     * @return an empty stream because replay-status callbacks never emit follow-up messages
+     * Callback invoked once event processing has transitioned to live mode.
      */
-    @Nonnull
-    @Override
-    public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
-                                               @Nonnull ProcessingContext context) {
-        observeProcessingContext(context);
-        logger.debug("Replay status changed to {} at {}",
-                     statusChange.status(),
-                     context.resources().get(TrackingToken.RESOURCE_KEY));
-        if (!statusChange.status().isReplay() && !switchToLiveMode(context)) {
-            logger.warn("Workflow execution is already started.");
-        }
-        return MessageStream.empty();
-    }
+    @Internal
+    @FunctionalInterface
+    public interface LiveModeActivatedCallback {
 
-    private static boolean covers(@Nullable TrackingToken current,
-                                  @Nullable TrackingToken target) {
-        if (target == null) {
-            return true;
-        }
-        return current != null && (current.covers(target) || current.samePositionAs(target));
+        /**
+         * Reacts to the first transition from replay mode to live mode.
+         *
+         * @param context the current processor context
+         */
+        void invoke(@Nonnull ProcessingContext context);
     }
 }

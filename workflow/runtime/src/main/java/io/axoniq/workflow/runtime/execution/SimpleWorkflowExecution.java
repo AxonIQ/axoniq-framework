@@ -27,6 +27,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowReplayDriftExcep
 import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.workflow.runtime.execution.WorkflowExecutionCheckpointingSupport.ExecutionTaskQueue;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -78,32 +79,38 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final WorkflowContextDelegation contextDelegate;
 
     // Runtime
+    private boolean running = false;
+    private volatile Thread workflowThread;
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
     private final RunningSteps runningSteps = new RunningSteps();
     private final WorkflowStepProgress workflowStepProgress = new WorkflowStepProgress();
     private final WorkflowTerminalTransition terminalTransition = this::transitionToTerminalState;
     private final WorkflowCancellation.External workflowCancellation;
-    private final WorkflowExecutionCheckpointSupport checkpointSupport = new WorkflowExecutionCheckpointSupport(
-            new WorkflowExecutionCheckpointSupport.CheckpointBarrierTaskQueue() {
-                @Override
-                public boolean isRunning() {
-                    return running;
-                }
+    private final WorkflowExecutionCheckpointingSupport checkpointingSupport =
+            new WorkflowExecutionCheckpointingSupport(
+                    new ExecutionTaskQueue() {
+                        @Override
+                        public boolean isRunning() {
+                            return running;
+                        }
 
-                @Override
-                public boolean hasQueuedTasks() {
-                    return !taskQueue.isEmpty();
-                }
+                        @Override
+                        public boolean hasQueuedTasks() {
+                            return !taskQueue.isEmpty();
+                        }
 
-                @Override
-                public void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
-                    SimpleWorkflowExecution.this.enqueueTask(task);
-                }
-            }
-    );
-    private boolean running = false;
-    private volatile Thread workflowThread;
+                        @Override
+                        public void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
+                            if (taskQueue.offer(task)) {
+                                return;
+                            }
+                            // whoops, we're overloading this workflow with events. STOP!!!
+                            throw new RuntimeException("Too many tasks to perform workflow instance"); // FIXME <- task queue is full, backpressure?
+                        }
+                    },
+                    CheckpointWorkStateListener.NO_OP
+            );
 
     /**
      * Constructs a new instance.
@@ -166,7 +173,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     @Override
     public void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler) {
         this.running = true;
-        checkpointSupport.refreshCheckpointWorkState();
+        checkpointingSupport.refreshCheckpointWorkState();
         // run in a separate thread to avoid blocking the replay status change handler thread ( = WorkPackage)
 
         ProcessingContextUtils
@@ -382,11 +389,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         this.taskQueue.clear();
         // Terminal cleanup removes queued barriers too. Release their callbacks because no workflow driver remains to
         // consume them; otherwise a fully deferred processor checkpoint would wait forever.
-        this.checkpointSupport.completePendingCheckpointIntent();
+        this.checkpointingSupport.completePendingCheckpointLatch();
         this.eventWaitConditions.clear();
         this.runningSteps.cancelAll(null, s -> {
         });
-        this.checkpointSupport.refreshCheckpointWorkState();
+        this.checkpointingSupport.refreshCheckpointWorkState();
         terminationHandler.accept(this);
     }
 
@@ -394,7 +401,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         runningSteps.cancelAll(new StepInterruptedException("Workflow reached terminal state"), cancelled -> {
         });
         // Keep checkpoint barriers until finishWorkflow can release their callbacks after the terminal event is durable.
-        this.taskQueue.removeIf(task -> !checkpointSupport.isCheckpointIntent(task));
+        this.taskQueue.removeIf(task -> !checkpointingSupport.isCheckpointLatch(task));
         terminalEventPublication.run();
         try {
             awaitStateChange(s -> s.workflowStatus().isTerminal());
@@ -409,7 +416,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     ) throws InterruptedException {
         do {
             var taken = taskQueue.take();
-            checkpointSupport.runTask(taken, this);
+            checkpointingSupport.runTask(taken, this);
         } while (!predicate.test(this.state()));
     }
 
@@ -444,40 +451,30 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     @Override
-    public void appendCheckpointIntent(@Nonnull Runnable onDrained) {
-        checkpointSupport.appendCheckpointIntent(onDrained);
+    public void addCheckpointLatch(@Nonnull Runnable latch) {
+        checkpointingSupport.addCheckpointLatch(latch);
     }
 
     @Override
     public boolean hasUnsafeCheckpointWork() {
-        return checkpointSupport.hasUnsafeCheckpointWork();
+        return checkpointingSupport.hasUnsafeCheckpointWork();
+    }
+
+    @Override
+    public void registerCheckpointWorkStateListener(@Nonnull CheckpointWorkStateListener listener) {
+        checkpointingSupport.registerListener(listener);
     }
 
     @Override
     @Nullable
     public Consumer<WorkflowExecution> getNextTask() {
         var task = this.taskQueue.poll();
-        return task == null ? null : execution -> checkpointSupport.runTask(task, execution);
+        return task == null ? null : execution -> checkpointingSupport.runTask(task, execution);
     }
 
     @Override
     public void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
-        // Workflow tasks must pass through checkpoint support so it can publish the unsafe-work transition.
-        checkpointSupport.appendTask(task);
-    }
-
-    private void enqueueTask(@Nonnull Consumer<WorkflowExecution> task) {
-        if (!this.taskQueue.offer(task)) {
-            // whoops, we're overloading this workflow with events. STOP!!!
-            throw new RuntimeException("Too many tasks to perform workflow instance"); // FIXME <- task queue is full, backpressure?
-        }
-    }
-
-    @Override
-    public void registerCheckpointWorkStateListener(
-            @Nonnull CheckpointWorkStateListener listener
-    ) {
-        checkpointSupport.registerCheckpointWorkStateListener(listener);
+        checkpointingSupport.appendTask(task);
     }
 
     @Override
@@ -490,11 +487,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         return running;
     }
 
-    private CompletableFuture<Void> sendWorkflowEvent(
-            @Nonnull EventMessage eventMessage,
-            @Nonnull ProcessingContext processingContext) {
+    private CompletableFuture<Void> sendWorkflowEvent(@Nonnull EventMessage eventMessage,
+                                                      @Nonnull ProcessingContext processingContext) {
         // TODO: make sure the consistency marker is used
-
         return ProcessingContextUtils
                 .executeWithResult(
                         UUID.randomUUID().toString(),

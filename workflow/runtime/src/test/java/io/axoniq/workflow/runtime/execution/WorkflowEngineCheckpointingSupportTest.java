@@ -32,7 +32,7 @@ class WorkflowEngineCheckpointingSupportTest {
 
     @Test
     void waitsForTheInlineBarrierBeforeCompletingCheckpointAdvancement() {
-        var coordinator = new InlineCheckpointBarrierCoordinator();
+        var coordinator = new InlineCheckpointLatchCoordinator();
         coordinator.pendingWork = true;
         var support = new WorkflowEngineCheckpointingSupport(coordinator);
         var requested = new GlobalSequenceTrackingToken(42);
@@ -50,7 +50,7 @@ class WorkflowEngineCheckpointingSupportTest {
 
     @Test
     void completesImmediatelyWhenNoCheckpointWorkIsPending() {
-        var support = new WorkflowEngineCheckpointingSupport(new InlineCheckpointBarrierCoordinator());
+        var support = new WorkflowEngineCheckpointingSupport(new InlineCheckpointLatchCoordinator());
         var requested = new GlobalSequenceTrackingToken(42);
 
         var result = support.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
@@ -70,8 +70,8 @@ class WorkflowEngineCheckpointingSupportTest {
         assertThat(coordinator.scheduledBarriers).isEqualTo(2);
     }
 
-    private static final class InlineCheckpointBarrierCoordinator
-            implements WorkflowEngineCheckpointingSupport.CheckpointBarrierCoordinator {
+    private static final class InlineCheckpointLatchCoordinator
+            implements WorkflowEngineCheckpointingSupport.CheckpointLatchCoordinator {
 
         private boolean pendingWork;
         private Runnable barrier;
@@ -83,8 +83,8 @@ class WorkflowEngineCheckpointingSupportTest {
         }
 
         @Override
-        public void scheduleCheckpointIntent(@Nonnull Runnable onDrained) {
-            barrier = onDrained;
+        public void addCheckpointLatch(@Nonnull Runnable latch) {
+            barrier = latch;
             scheduledBarriers++;
         }
 
@@ -94,7 +94,7 @@ class WorkflowEngineCheckpointingSupportTest {
     }
 
     private static final class ConcurrentWorkCoordinator
-            implements WorkflowEngineCheckpointingSupport.CheckpointBarrierCoordinator {
+            implements WorkflowEngineCheckpointingSupport.CheckpointLatchCoordinator {
 
         private boolean workAppended;
         private int scheduledBarriers;
@@ -105,11 +105,11 @@ class WorkflowEngineCheckpointingSupportTest {
         }
 
         @Override
-        public void scheduleCheckpointIntent(@Nonnull Runnable onDrained) {
+        public void addCheckpointLatch(@Nonnull Runnable latch) {
             scheduledBarriers++;
             // The first schedule sees an empty snapshot. A workflow thread appends work before the callback re-checks.
             workAppended = scheduledBarriers == 1;
-            onDrained.run();
+            latch.run();
         }
     }
 }

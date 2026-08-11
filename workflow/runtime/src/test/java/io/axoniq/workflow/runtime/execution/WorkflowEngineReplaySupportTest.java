@@ -42,7 +42,7 @@ class WorkflowEngineReplaySupportTest {
         assertThat(support.switchToLiveMode(context)).isTrue();
         assertThat(support.switchToLiveMode(context)).isFalse();
 
-        assertThat(support.isLiveMode()).isTrue();
+        assertThat(support.inLiveMode()).isTrue();
         assertThat(callbackInvocations).hasValue(1);
     }
 
@@ -52,10 +52,10 @@ class WorkflowEngineReplaySupportTest {
         var support = new WorkflowEngineReplaySupport(context -> callbackInvocations.incrementAndGet());
         TrackingToken boundary = new GlobalSequenceTrackingToken(42);
 
-        support.initializeReplayTracking(new GlobalSequenceTrackingToken(18), boundary);
-        support.advanceReplayPosition(new GlobalSequenceTrackingToken(42), mock(ProcessingContext.class));
+        support.setInitialEngineTokens(new GlobalSequenceTrackingToken(18), boundary);
+        support.validateIfReplayFinished(new GlobalSequenceTrackingToken(42), mock(ProcessingContext.class));
 
-        assertThat(support.isLiveMode()).isTrue();
+        assertThat(support.inLiveMode()).isTrue();
         assertThat(callbackInvocations).hasValue(1);
     }
 }

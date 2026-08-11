@@ -18,34 +18,32 @@
  */
 package io.axoniq.workflow.configuration;
 
-import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
-import io.axoniq.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.workflow.runtime.execution.AllEventEventHandlingComponent;
+import io.axoniq.workflow.runtime.execution.EventHandlingComponentHandlingAny;
+import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineReplaySupport;
-import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.CompletePhase;
-import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.RequiredComponentPhase;
-import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentRegistry;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
+import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.CompletePhase;
+import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.RequiredComponentPhase;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 
-import static io.axoniq.workflow.runtime.execution.AllEventEventHandlingComponent.ANY_EVENT_IN_ONE_SEGMENT;
+import static io.axoniq.workflow.runtime.execution.EventHandlingComponentHandlingAny.ANY_EVENT_IN_ONE_SEGMENT;
 
 /**
  * Enhancer for registration of the workflow engine event processing.
@@ -107,7 +105,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                         .pooledStreaming(moduleName)
                         .eventHandlingComponents(eventHandlingComponents())
                         .customized(ANY_EVENT_IN_ONE_SEGMENT)
-                        .componentRegistry(componentRegistryConsumer())
+                        .componentRegistry(this::registerWorkflowEngineStartHandler)
                         .build()
         );
     }
@@ -120,13 +118,13 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                          : DEFAULT_MODULE_NAME + "ExecutionEventing",
                                  cfg -> {
                                      if (engineComponentName != null) {
-                                         return new AllEventEventHandlingComponent(
+                                         return new EventHandlingComponentHandlingAny(
                                                  cfg.getComponent(WorkflowEngine.class, engineComponentName),
                                                  cfg.getComponent(WorkflowEngineReplaySupport.class),
                                                  cfg.getComponent(WorkflowEngineCheckpointingSupport.class)
                                          );
                                      } else {
-                                         return new AllEventEventHandlingComponent(
+                                         return new EventHandlingComponentHandlingAny(
                                                  cfg.getComponent(WorkflowEngine.class)
                                          );
                                      }
@@ -140,13 +138,13 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                         : DEFAULT_MODULE_NAME + "HistoryEventing",
                                 cfg -> {
                                     if (projectorComponentName != null) {
-                                        return new AllEventEventHandlingComponent(
+                                        return new EventHandlingComponentHandlingAny(
                                                 cfg.getComponent(WorkflowHistoryProjector.class, projectorComponentName)
                                         );
                                     } else {
                                         // FIXME: eventually history projector doesn't need to be replayed.
                                         // configure this separately InMemoryHistoryRepo = InMemoryTokeStore and replay
-                                        return new AllEventEventHandlingComponent(
+                                        return new EventHandlingComponentHandlingAny(
                                                 cfg.getComponent(WorkflowHistoryProjector.class)
                                         );
                                     }
@@ -157,61 +155,60 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
         };
     }
 
-    private Consumer<ComponentRegistry> componentRegistryConsumer() {
-        return cr -> cr.registerComponent(
-                ComponentDefinition
-                        .ofTypeAndName(Object.class, moduleName + "ReplayResetHook")
-                        .withInstance(new Object())
-                        .onStart(PRE_PROCESSOR_START_PHASE,
-                                 (cfg, ignored) -> {
-                                     // @formatter:off
-                                     var tokenStore = cfg.getComponent(TokenStore.class, tokenStoreName(moduleName));
-                                     var eventSource = cfg.getComponent(StreamableEventSource.class);
-                                     var processor = cfg.getComponent(StreamingEventProcessor.class, moduleName);
-                                     var replaySupport = cfg.getComponent(WorkflowEngineReplaySupport.class);
-                                     var workflowEngine = engineComponentName != null
-                                             ? cfg.getComponent(WorkflowEngine.class, engineComponentName)
-                                             : cfg.getComponent(WorkflowEngine.class);
-                                     // @formatter:on
-                                     return ensureSegmentsInitialized(tokenStore, eventSource)
-                                             .thenCompose(processorToken -> eventSource
-                                                     .latestToken(null)
-                                                     .thenCompose(
-                                                             latestToken -> initializeWorkflowEngine(
-                                                                     workflowEngine,
-                                                                     replaySupport,
-                                                                     processorToken,
-                                                                     latestToken
-                                                             )
-                                                     )
-                                             );
-                                 }
-                        )
+    /**
+     * Registers the start handler of a {@link WorkflowEngine}, ensuring a stream is correctly initialized and a replay
+     * is triggered when applicable.
+     * <p>
+     * Uses the given {@code registry} to register a {@link ComponentDefinition} with an
+     * {@link ComponentDefinition#onStart(int, BiConsumer)} as the real start handler. Ideally, the
+     * {@link org.axonframework.common.configuration.LifecycleRegistry} would be used instead here. However, the handler
+     * is to be registered with what's exposed by the {@link EventProcessorModule}, which does not expose the
+     * aforementioned {@code LifecycleRegistry}. Hence, a {@code ComponentDefinition} spoof is used instead, leading to
+     * the same behavior in the end: the {@code WorkflowEngine} is initialized.
+     */
+    private void registerWorkflowEngineStartHandler(ComponentRegistry registry) {
+        registry.registerComponent(
+                ComponentDefinition.ofTypeAndName(Object.class, moduleName + "ReplayResetHook")
+                                   .withInstance(new Object())
+                                   .onStart(
+                                           PRE_PROCESSOR_START_PHASE,
+                                           (c, ignored) -> (CompletableFuture<Void>) workflowEngineStartHandler(c)
+                                   )
         );
     }
 
-    private CompletableFuture<TrackingToken> ensureSegmentsInitialized(
-            TokenStore tokenStore,
-            StreamableEventSource eventSource
-    ) {
-        return tokenStore
-                .fetchSegments(moduleName, null)
-                .thenCompose(segments -> {
-                    if (!segments.isEmpty()) {
-                        return tokenStore.fetchToken(moduleName, 0, null)
-                                         .handle((token, ex) -> tokenStore
-                                                 .releaseClaim(moduleName, 0, null)
-                                                 .thenApply(ignored -> passOrThrow(token, ex)))
-                                         .thenCompose(future -> future);
-                    }
-                    return eventSource.firstToken(null)
-                                      .thenCompose(firstToken -> tokenStore.initializeTokenSegments(
-                                              moduleName,
-                                              1, // FIXME #190 (https://github.com/AxonIQ/extension-workflow/issues/190) -> should be configurable?
-                                              firstToken,
-                                              null
-                                      ).thenApply(ignored -> firstToken));
-                });
+    private CompletableFuture<Void> workflowEngineStartHandler(Configuration config) {
+        TokenStore tokenStore = config.getComponent(TokenStore.class, tokenStoreName(moduleName));
+        StreamableEventSource eventSource = config.getComponent(StreamableEventSource.class);
+        WorkflowEngineReplaySupport replaySupport = config.getComponent(WorkflowEngineReplaySupport.class);
+        WorkflowEngine workflowEngine = engineComponentName != null
+                ? config.getComponent(WorkflowEngine.class, engineComponentName)
+                : config.getComponent(WorkflowEngine.class);
+        return ensureSegmentsInitialized(tokenStore, eventSource).thenCompose(
+                processorToken -> eventSource.latestToken(null).thenCompose(latestToken -> initializeWorkflowEngine(
+                        workflowEngine,
+                        replaySupport,
+                        processorToken,
+                        latestToken
+                ))
+        );
+    }
+
+    // FIXME #190 (https://github.com/AxonIQ/extension-workflow/issues/190) -> should be configurable?
+    private CompletableFuture<TrackingToken> ensureSegmentsInitialized(TokenStore tokenStore,
+                                                                       StreamableEventSource eventSource) {
+        return tokenStore.fetchSegments(moduleName, null).thenCompose(
+                segments -> !segments.isEmpty()
+                        ? tokenStore.fetchToken(moduleName, 0, null)
+                                    .handle((token, ex) -> tokenStore.releaseClaim(moduleName, 0, null)
+                                                                     .thenApply(ignored -> passOrThrow(token, ex)))
+                                    .thenCompose(future -> future)
+                        : eventSource.firstToken(null)
+                                     .thenCompose(firstToken -> tokenStore.initializeTokenSegments(
+                                                                                  moduleName, 1, firstToken, null
+                                                                          )
+                                                                          .thenApply(ignored -> firstToken))
+        );
     }
 
     /**
@@ -235,7 +232,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
             @Nullable TrackingToken processorToken,
             @Nullable TrackingToken latestToken
     ) {
-        replaySupport.initializeReplayTracking(processorToken, latestToken);
+        replaySupport.setInitialEngineTokens(processorToken, latestToken);
         return workflowEngine.start(processorToken, requiresReplay(processorToken, latestToken));
     }
 

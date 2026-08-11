@@ -41,6 +41,7 @@ import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
+import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -222,7 +223,6 @@ class WorkflowReplayPreparedStateTest {
         }
     }
 
-
     private static Map<String, Object> payload(String id, String mode) {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("id", id);
@@ -270,14 +270,18 @@ class WorkflowReplayPreparedStateTest {
         }
 
         private void appendWorkflowCompleted(String workflowId) {
-            appendEvent(new GenericEventMessage(
+            Metadata metadata = MetadataUtils.create(
+                    workflowId,
+                    WorkflowStatus.COMPLETED,
+                    new MessageType(new QualifiedName("ReplayAwareWorkflow"), MessageType.DEFAULT_VERSION)
+            );
+            EventMessage workflowCompleted = new GenericEventMessage(
                     new MessageType("ReplayAwareWorkflowCompleted"),
                     Map.of(),
-                    MetadataUtils.create(workflowId,
-                                         WorkflowStatus.COMPLETED,
-                                         new MessageType(new QualifiedName("ReplayAwareWorkflow"),
-                                                                  MessageType.DEFAULT_VERSION))
-            ).withConverter(eventConverter));
+                    metadata
+            ).withConverter(eventConverter);
+
+            appendEvent(workflowCompleted);
         }
 
         private void appendStepStarted(String workflowId, String stepName) {

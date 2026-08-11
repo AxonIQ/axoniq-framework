@@ -51,10 +51,10 @@ import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
 import org.axonframework.messaging.core.configuration.reflection.ParameterResolverFactoryUtils;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.modelling.repository.Repository;
 
 import java.time.Clock;
@@ -211,6 +211,12 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                            cfg.getComponent(WorkflowStore.class),
                                            cfg.getComponent(UnitOfWorkFactory.class)
                                    ))
+                                   .onStart(Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS, (config, engine) -> {
+                                       engine.setEngineSupportComponents(
+                                               config.getComponent(WorkflowEngineReplaySupport.class),
+                                               config.getComponent(WorkflowEngineCheckpointingSupport.class)
+                                       );
+                                   })
                                    .onShutdown(Phase.INBOUND_EVENT_CONNECTORS,
                                                WorkflowEngine::shutdown));
     }
@@ -290,7 +296,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                                        WorkflowEngine.class)
                                                ));
     }
-
 
     @Override
     public int order() {

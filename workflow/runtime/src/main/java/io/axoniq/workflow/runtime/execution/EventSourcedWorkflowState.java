@@ -48,10 +48,10 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getStepName;
+import static java.util.Objects.requireNonNull;
 
 /**
  * Holds the current state of a workflow and modified by the {@link #evolve} method receiving messages.
@@ -71,21 +71,21 @@ public class EventSourcedWorkflowState implements WorkflowState {
     private final static Logger logger = LoggerFactory.getLogger(EventSourcedWorkflowState.class);
 
     private final String workflowId;
+    private Map<String, Object> payload;
+    private volatile MessageType workflowDefinition;
+    private final WorkflowStateListenerSupport listenerSupport;
+
     private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
     private final Map<String, String> versions = new ConcurrentHashMap<>();
     private WorkflowStatus status = WorkflowStatus.NONE;
-    private Map<String, Object> payload;
     private volatile Throwable terminationCause;
-    private volatile MessageType workflowDefinition;
 
-    private final WorkflowStateListenerSupport listenerSupport;
 
     /**
      * Creates a new workflow state without reference to a workflow context and with an empty initial payload.
      *
-     * @param workflowId           workflow id of the workflow execution
-     * @param workflowDefinition workflow definition representing the reference to the definition (name and
-     *                             version)
+     * @param workflowId         workflow id of the workflow execution
+     * @param workflowDefinition workflow definition representing the reference to the definition (name and version)
      */
     @Internal
     public EventSourcedWorkflowState(@Nonnull String workflowId,
@@ -96,10 +96,9 @@ public class EventSourcedWorkflowState implements WorkflowState {
     /**
      * Creates a new workflow state without reference to a workflow context.
      *
-     * @param workflowId           workflow id of the workflow execution
-     * @param payload              initial workflow payload
-     * @param workflowDefinition workflow definition representing the reference to the definition (name and
-     *                             version)
+     * @param workflowId         workflow id of the workflow execution
+     * @param payload            initial workflow payload
+     * @param workflowDefinition workflow definition representing the reference to the definition (name and version)
      */
     @Internal
     public EventSourcedWorkflowState(
@@ -107,21 +106,20 @@ public class EventSourcedWorkflowState implements WorkflowState {
             @Nonnull Map<String, Object> payload,
             @Nonnull MessageType workflowDefinition
     ) {
-        this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must be set.");
+        this.workflowId = requireNonNull(workflowId, "Workflow id must be set.");
+        this.payload = requireNonNull(payload, "Payload must be set.");
+        this.workflowDefinition = requireNonNull(workflowDefinition, "Workflow definition id must be set.");
         this.listenerSupport = WorkflowStateListenerSupport.EMPTY;
-        this.payload = Objects.requireNonNull(payload, "Payload must be set.");
-        this.workflowDefinition = Objects.requireNonNull(workflowDefinition,
-                                                         "Workflow definition id must be set.");
     }
 
     /**
      * Creates a new workflow state seeded with the workflow definition identity.
      *
-     * @param workflowId           workflow id
-     * @param payload              initial workflow payload
+     * @param workflowId         workflow id
+     * @param payload            initial workflow payload
      * @param workflowDefinition stable workflow definition identifier
-     * @param context              workflow context to use
-     * @param listeners            workflow status change listeners
+     * @param context            workflow context to use
+     * @param listeners          workflow status change listeners
      */
     EventSourcedWorkflowState(
             @Nonnull String workflowId,
@@ -130,13 +128,12 @@ public class EventSourcedWorkflowState implements WorkflowState {
             @Nonnull WorkflowContext context,
             @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
-        this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must be set.");
-        this.payload = Objects.requireNonNull(payload, "Payload must be set.");
-        this.workflowDefinition = Objects.requireNonNull(workflowDefinition,
-                                                         "Workflow definition id must be set.");
+        this.workflowId = requireNonNull(workflowId, "Workflow id must be set.");
+        this.payload = requireNonNull(payload, "Payload must be set.");
+        this.workflowDefinition = requireNonNull(workflowDefinition, "Workflow definition id must be set.");
         this.listenerSupport = new WorkflowStateListenerSupport(
-                Objects.requireNonNull(listeners, "Workflow status listeners must be set."),
-                Objects.requireNonNull(context, "Workflow context must be set.")
+                requireNonNull(listeners, "Workflow status listeners must be set."),
+                requireNonNull(context, "Workflow context must be set.")
         );
     }
 
@@ -170,7 +167,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
             @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
         this(
-                Objects.requireNonNull(sourcedState, "Sourced workflow state must not be null").workflowId,
+                requireNonNull(sourcedState, "Sourced workflow state must not be null").workflowId,
                 sourcedState.payload,
                 sourcedState.workflowDefinition,
                 context,
@@ -212,7 +209,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     @Override
     @Nonnull
     public String currentWorkflowVersion(@Nonnull String changeId) {
-        Objects.requireNonNull(changeId, "changeId must not be null");
+        requireNonNull(changeId, "changeId must not be null");
         return versions.getOrDefault(changeId, workflowDefinition.version());
     }
 
@@ -264,9 +261,9 @@ public class EventSourcedWorkflowState implements WorkflowState {
     /**
      * Applies an event while optionally notifying workflow status listeners.
      *
-     * @param eventMessage            event to apply
-     * @param processingContext       context in which the event is applied
-     * @param notifyStatusListeners   whether a workflow status transition notifies its live listeners
+     * @param eventMessage          event to apply
+     * @param processingContext     context in which the event is applied
+     * @param notifyStatusListeners whether a workflow status transition notifies its live listeners
      * @return this evolved workflow state
      */
     WorkflowState evolve(
@@ -449,8 +446,8 @@ public class EventSourcedWorkflowState implements WorkflowState {
     /**
      * Sets state and optional termination cause.
      *
-     * @param workflowStatus   workflow status to set
-     * @param terminationCause cause of termination
+     * @param workflowStatus        workflow status to set
+     * @param terminationCause      cause of termination
      * @param notifyStatusListeners whether a workflow status transition notifies its live listeners
      */
     void setStatus(
