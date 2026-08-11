@@ -256,15 +256,20 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
         // engine without the snapshot sourcing strategy.
         componentRegistry.disableEnhancer(SnapshotSourcingConfigurationEnhancer.class);
         componentRegistry.registerIfNotPresent(
-                subscribedComponent(TenantSnapshotStoreFactory.class,
-                                    AxonServerTenantSnapshotStoreFactory::new,
-                                    MultiTenancyConfigurationDefaults.TENANT_COMPONENT_FACTORY_PHASE),
+                ComponentDefinition.ofType(TenantSnapshotStoreFactory.class)
+                                   .withBuilder(AxonServerTenantSnapshotStoreFactory::new),
                 SearchScope.ALL);
         componentRegistry.registerIfNotPresent(
-                subscribedComponent(TenantEventStorageEngineFactory.class,
-                                    AxonServerTenantEventStorageEngineFactory::new,
-                                    MultiTenancyConfigurationDefaults.TENANT_COMPONENT_FACTORY_PHASE),
+                ComponentDefinition.ofType(TenantEventStorageEngineFactory.class)
+                                   .withBuilder(AxonServerTenantEventStorageEngineFactory::new),
                 SearchScope.ALL);
+        componentRegistry.registerComponent(
+                ComponentDefinition.ofType(TenantEventStorageComponentSubscriber.class)
+                                   .withBuilder(TenantEventStorageComponentSubscriber::new)
+                                   .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_FACTORY_PHASE,
+                                            TenantEventStorageComponentSubscriber::subscribeFactories)
+                                   .onShutdown(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_FACTORY_PHASE,
+                                               TenantEventStorageComponentSubscriber::cancelSubscriptions));
         componentRegistry.registerComponent(
                 subscribedComponent(EventStorageEngine.class,
                                     AxonServerMultiTenancyConfigurationDefaults::routingEngine)
@@ -359,7 +364,7 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
         Optional<TenantComponentProvider<Converter>> converterProvider = TenantComponentProviderUtil.find(configuration,
                                                                                                           Converter.class);
 
-        Optional<Function<TenantDescriptor, MessageConverter>> fn = converterProvider.<Function<TenantDescriptor, MessageConverter>>map(
+        Optional<Function<TenantDescriptor, MessageConverter>> fn = converterProvider.map(
                 provider -> tenant -> new DelegatingMessageConverter(provider.componentFor(tenant)));
 
         return fn.<TenantComponentLookup<MessageConverter>>map(tenantDescriptorMessageConverterFunction -> tenantDescriptorMessageConverterFunction::apply)
@@ -378,30 +383,10 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
      */
     private static <C> ComponentDefinition<C> subscribedComponent(Class<C> componentType,
                                                                   Function<Configuration, C> builder) {
-        return subscribedComponent(componentType,
-                                   builder,
-                                   MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE);
-    }
-
-    /**
-     * Builds a {@link ComponentDefinition} for a component that follows the tenant lifecycle, subscribing it in the
-     * given {@code subscriberPhase}. When the built component is a {@link MultiTenantAwareComponent}, it is subscribed
-     * to the {@link TenantProvider} at startup and unsubscribed at shutdown, so tenant additions and removals reach its
-     * per-tenant cache.
-     *
-     * @param componentType   the component type to register
-     * @param builder         the builder constructing the component from the {@link Configuration}
-     * @param subscriberPhase the start phase in which to subscribe the component
-     * @param <C>             the component type
-     * @return a {@link ComponentDefinition} for the subscribed component
-     */
-    private static <C> ComponentDefinition<C> subscribedComponent(Class<C> componentType,
-                                                                  Function<Configuration, C> builder,
-                                                                  int subscriberPhase) {
         AtomicReference<@Nullable Registration> subscription = new AtomicReference<>();
         return ComponentDefinition.ofType(componentType)
                                   .withBuilder(builder::apply)
-                                  .onStart(subscriberPhase,
+                                  .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
                                            (config, component) -> {
                                                if (component instanceof MultiTenantAwareComponent aware) {
                                                    subscription.set(config.getComponent(TenantProvider.class)
@@ -409,7 +394,7 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                                                }
                                                return FutureUtils.emptyCompletedFuture();
                                            })
-                                  .onShutdown(subscriberPhase,
+                                  .onShutdown(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,
                                               (config, ignored) -> {
                                                   Registration registration = subscription.getAndSet(null);
                                                   if (registration != null) {

@@ -56,6 +56,7 @@ import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageE
 import org.axonframework.eventsourcing.snapshot.inmemory.InMemorySnapshotStore;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
 import org.mockito.*;
@@ -74,8 +75,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
- * Verifies the {@link AxonServerMultiTenancyConfigurationDefaults} against a real {@link MessagingConfigurer}: the
- * Axon Server-backed multi-tenancy components are wired for a given configuration out of the box, and stay away once
+ * Verifies the {@link AxonServerMultiTenancyConfigurationDefaults} against a real {@link MessagingConfigurer}: the Axon
+ * Server-backed multi-tenancy components are wired for a given configuration out of the box, and stay away once
  * multi-tenancy is disabled.
  *
  * @author Jan Galinski
@@ -441,6 +442,31 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
+        void subscribesAReplacementEventStorageEngineFactoryToTheTenantProviderAtStartup() {
+            TenantEventStorageEngineFactory replacement = mock(TenantEventStorageEngineFactory.class,
+                                                               withSettings().extraInterfaces(
+                                                                       MultiTenantAwareComponent.class));
+            MultiTenantAwareComponent awareReplacement = (MultiTenantAwareComponent) replacement;
+            when(awareReplacement.registerTenant(any())).thenReturn(() -> true);
+
+            AxonConfiguration replacementConfiguration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TenantProvider.class, config -> tenantProvider)
+                                               .registerComponent(TenantEventStorageEngineFactory.class,
+                                                                  config -> replacement))
+                                       .build();
+            replacementConfiguration.start();
+            try {
+                assertThat(tenantProvider.subscribedComponents()).contains(awareReplacement);
+            } finally {
+                replacementConfiguration.shutdown();
+            }
+
+            assertThat(tenantProvider.subscribedComponents()).doesNotContain(awareReplacement);
+        }
+
+        @Test
         void subscribesTheRoutingEngineToTheTenantProviderAtStartup() {
             MultiTenantAwareComponent routingEngine =
                     (MultiTenantAwareComponent) configuration.getComponent(EventStorageEngine.class);
@@ -524,7 +550,8 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
-        void tenantConnectorsArePopulatedForEveryTenantTheRealProviderDiscoveredAtStartupForCommandConnector() throws Exception {
+        void tenantConnectorsArePopulatedForEveryTenantTheRealProviderDiscoveredAtStartupForCommandConnector()
+                throws Exception {
             // AxonServerTenantProvider#start() runs at TENANT_PROVIDER_PHASE and the connector subscribes one phase
             // later, so by the time this runs, the tenant discovered during start() must already have a connector.
             MultiTenantAxonServerCommandBusConnector connector =
@@ -586,6 +613,7 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
 
     // The PayloadConvertingCommandBusConnector decorator declares "delegate" on a superclass, not on itself.
     // Returns null when no such field exists anywhere in the hierarchy, i.e. connector isn't wrapped at all.
+    @Nullable
     private static Field delegateField(Class<?> type) {
         for (Class<?> current = type; current != null; current = current.getSuperclass()) {
             try {
@@ -597,18 +625,11 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         return null;
     }
 
-    private static final class CourseRepository implements AutoCloseable {
-
-        private final TenantDescriptor tenant;
-        private boolean closed;
-
-        private CourseRepository(TenantDescriptor tenant) {
-            this.tenant = tenant;
-        }
+    private record CourseRepository(TenantDescriptor tenant) implements AutoCloseable {
 
         @Override
         public void close() {
-            this.closed = true;
+            // unsused, but the component provider requires AutoCloseable to be able to close all tenant components on shutdown
         }
     }
 }
