@@ -19,8 +19,9 @@
 
 package io.axoniq.framework.integrationtests.multitenancy;
 
-import io.axoniq.axonserver.connector.event.EventStream;
-import io.axoniq.axonserver.grpc.event.EventWithToken;
+import io.axoniq.axonserver.connector.ResultStream;
+import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
+import io.axoniq.axonserver.grpc.event.dcb.StreamEventsResponse;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.dataprotection.api.DataSubjectId;
 import io.axoniq.framework.dataprotection.api.FieldEncryptingConverter;
@@ -165,18 +166,22 @@ final class TenantDataProtectionFixture {
     String rawStoredPayload(String tenantId) {
         AtomicReference<String> payload = new AtomicReference<>();
         await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            EventWithToken event = firstStoredEvent(tenantId);
+            StreamEventsResponse event = firstStoredEvent(tenantId);
             assertThat(event)
                     .as("an event stored in tenant [%s]", tenantId)
                     .isNotNull();
-            payload.set(event.getEvent().getPayload().getData().toStringUtf8());
+            payload.set(event.getEvent().getEvent().getPayload().toStringUtf8());
         });
         return payload.get();
     }
 
-    private EventWithToken firstStoredEvent(String tenantId) {
+    private StreamEventsResponse firstStoredEvent(String tenantId) {
         AxonServerConnectionManager connectionManager = application.getComponent(AxonServerConnectionManager.class);
-        try (EventStream stream = connectionManager.getConnection(tenantId).eventChannel().openStream(0, 1)) {
+        try (ResultStream<StreamEventsResponse> stream = connectionManager.getConnection(tenantId)
+                                                                          .dcbEventChannel()
+                                                                          .stream(StreamEventsRequest.newBuilder()
+                                                                                                      .setFromSequence(0)
+                                                                                                      .build())) {
             return stream.nextIfAvailable(1, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
