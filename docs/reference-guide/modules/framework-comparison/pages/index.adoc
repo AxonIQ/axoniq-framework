@@ -237,7 +237,7 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | **X**
 | —
 | **✓**
-| TBD
+| 5.4.0
 |
 
 | Distributed Command Priority
@@ -302,7 +302,7 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | **X**
 | —
 | **✓**
-| TBD
+| 5.5.0
 |
 
 6+h| Query Dispatching and Handling
@@ -374,7 +374,7 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | **X**
 | —
 | **✓**
-| TBD
+| 5.4.0
 |
 
 | Distributed Query Priority
@@ -433,7 +433,7 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | —
 | **✓**
 | TBD
-|
+| May be replaced by overall event stream caching. Investigation will start in 5.5.0.
 
 | Entity Creation Policy
 | **✓**
@@ -577,7 +577,7 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | —
 | **✓**
 | TBD
-|
+| Aim for 5.4.0 of Axoniq Framework, potential overflow to 5.5.0
 
 | Persistent Stream integration
 | **X**
@@ -682,17 +682,17 @@ If you depended strongly on any of the removed features, be sure to reach out.
 |
 
 | Message Handler Timeout support
-| **TBD**
-| —
-| **TBD**
-| —
+| **✓**
+| 5.4.0
+| **✓**
+| 5.4.0
 |
 
 | UnitOfWork Timeout support
-| **TBD**
-| —
-| **TBD**
-| —
+| **✓**
+| 5.4.0
+| **✓**
+| 5.4.0
 |
 
 6+h| Conversion, versioning, and upcasting
@@ -777,6 +777,13 @@ If you depended strongly on any of the removed features, be sure to reach out.
 |
 
 6+h| Event Scheduling and Deadline Management
+
+| Message Scheduling API
+| **TBD**
+| —
+| **TBD**
+| —
+| Intent is to provide a generic message scheduling integration to support both event scheduling and deadline/command scheduling. Design is underway.
 
 | Event Scheduling API
 | **TBD**
@@ -926,7 +933,7 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | **X**
 | —
 | **✓**
-| 5.2.0
+| 5.3.0
 |
 
 6+h| Multi-tenancy
@@ -935,7 +942,7 @@ If you depended strongly on any of the removed features, be sure to reach out.
 | **X**
 | —
 | **✓**
-| TBD
+| 5.3.0
 |
 
 6+h| Dependency Injection integration
