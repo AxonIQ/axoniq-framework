@@ -129,6 +129,48 @@ class SimpleWorkflowConfigurationRegistryTest {
     }
 
     @Test
+    void getHighestVersionConfigurationsReturnsEmptyListForUnknownEvent() {
+        assertThat(registry.getHighestVersionConfigurations(new QualifiedName("Unknown"))).isEmpty();
+    }
+
+    @Test
+    void getHighestVersionConfigurationsReturnsOnlyTheHighestRegisteredVersion() {
+        QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
+        registry.register(eventName, new VersionedStub("OrderWorkflow", "1.0.0"));
+        registry.register(eventName, new VersionedStub("OrderWorkflow", "2.0.0"));
+
+        var configs = registry.getHighestVersionConfigurations(eventName);
+        assertThat(configs).hasSize(1);
+        assertThat(configs.getFirst().configuration().workflowVersion()).isEqualTo("2.0.0");
+    }
+
+    @Test
+    void getHighestVersionConfigurationsReflectsLaterRegistrations() {
+        QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
+        registry.register(eventName, new VersionedStub("OrderWorkflow", "1.0.0"));
+        assertThat(registry.getHighestVersionConfigurations(eventName))
+                .singleElement()
+                .satisfies(c -> assertThat(c.configuration().workflowVersion()).isEqualTo("1.0.0"));
+
+        registry.register(eventName, new VersionedStub("OrderWorkflow", "2.0.0"));
+        assertThat(registry.getHighestVersionConfigurations(eventName))
+                .singleElement()
+                .satisfies(c -> assertThat(c.configuration().workflowVersion()).isEqualTo("2.0.0"));
+    }
+
+    @Test
+    void getHighestVersionConfigurationsReturnsAllConfigurationsAtTheHighestVersion() {
+        QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
+        registry.register(eventName, new VersionedStub("OrderWorkflow", "2.0.0"));
+        registry.register(eventName, new VersionedStub("OtherWorkflow", "2.0.0"));
+        registry.register(eventName, new VersionedStub("OrderWorkflow", "1.0.0"));
+
+        var configs = registry.getHighestVersionConfigurations(eventName);
+        assertThat(configs).hasSize(2);
+        assertThat(configs).allSatisfy(c -> assertThat(c.configuration().workflowVersion()).isEqualTo("2.0.0"));
+    }
+
+    @Test
     void testDescribeTo() {
         QualifiedName eventName = new QualifiedName("com.example.MyEvent");
         WorkflowDefinition<WorkflowContext> definition = mock(WorkflowDefinition.class);

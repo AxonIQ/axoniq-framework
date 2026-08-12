@@ -1,0 +1,259 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+package io.axoniq.workflow.runtime.execution;
+
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.workflow.runtime.util.MetadataUtils;
+import jakarta.annotation.Nullable;
+import org.axonframework.messaging.core.Context;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+import java.util.stream.IntStream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+/**
+ * Claiming a segment sources its instances from the event store <em>head</em>, while the segment's own processor
+ * position can be far behind it. Starting such an instance's body immediately makes it act on the state at the end of
+ * the stream while the events between the segment's position and that head are still being delivered to it: live side
+ * effects during replay, and every delivered event applied to an already-advanced instance.
+ * <p>
+ * The claim must therefore materialize the instance and leave the body parked until the claimed segment itself catches
+ * up. The last step asserts the other half of that: the deferral really is lifted by the segment reaching the startup
+ * latest token, so a deferred instance is not parked forever.
+ */
+class WorkflowEngineClaimDuringReplayTest {
+
+    private static final int SEGMENT_COUNT = 4;
+    private static final List<Segment> FOUR_SEGMENTS = IntStream.range(0, SEGMENT_COUNT)
+                                                                .mapToObj(id -> new Segment(id, SEGMENT_COUNT - 1))
+                                                                .toList();
+    private static final String RESIDENT_ID = "sharded-0";
+    private static final MessageType DEFINITION_ID =
+            new MessageType(new QualifiedName("RestoredWorkflow"), "1.0.0");
+
+    private static final long STARTUP_LATEST_POSITION = 100;
+    private static final long SEGMENT_POSITION_BEFORE_RELEASE = 7;
+
+    private WorkflowConfigurationRegistry<?> configurationRegistry;
+    private WorkflowStore workflowStore;
+    private WorkflowEngine workflowEngine;
+    private WorkflowEngineReplaySupport replaySupport;
+    private WorkflowEngineCheckpointingSupport checkpointingSupport;
+
+    /** Body starts observed for the resident instance, in order. The observation channel. */
+    private final List<String> bodyStarts = new ArrayList<>();
+
+    @BeforeEach
+    void setUp() {
+        configurationRegistry = mock(WorkflowConfigurationRegistry.class);
+        workflowStore = mock(WorkflowStore.class);
+        workflowEngine = new WorkflowEngine(
+                configurationRegistry,
+                new InMemoryWorkflowExecutionRepository(),
+                workflowStore,
+                mock(UnitOfWorkFactory.class)
+        );
+        replaySupport = new WorkflowEngineReplaySupport(workflowEngine);
+        checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
+        workflowEngine.setEngineSupportComponents(replaySupport, checkpointingSupport);
+        registerRestorableWorkflow();
+    }
+
+    @Test
+    void reclaimingASegmentThatIsStillReplayingDoesNotRunTheRestoredBodyAtHeadState() {
+        var owner = owningSegment(RESIDENT_ID);
+
+        // --- precondition evidence -------------------------------------------------------------------------------
+        assertThat(SegmentedWorkflowRouting.ownedBy(owner, RESIDENT_ID))
+                .as("segment %s must own '%s'", owner, RESIDENT_ID).isTrue();
+        assertThat(token(SEGMENT_POSITION_BEFORE_RELEASE).covers(token(STARTUP_LATEST_POSITION)))
+                .as("the segment at %s must NOT have reached the startup latest token %s",
+                    SEGMENT_POSITION_BEFORE_RELEASE, STARTUP_LATEST_POSITION)
+                .isFalse();
+
+        replaySupport.setInitialEngineTokens(token(0), token(STARTUP_LATEST_POSITION));
+
+        // 1. The node holds the segment and delivers one event on it, leaving it at position 7 of a stream whose
+        //    startup latest token is 100.
+        workflowEngine.claimSegment(owner, token(0), sourcingContext(), executionContext());
+        workflowEngine.handle(engineEvent(RESIDENT_ID),
+                              deliveryContext(owner, token(SEGMENT_POSITION_BEFORE_RELEASE)));
+        bodyStarts.clear();
+
+        // 2. The segment is handed away and comes back, still at position 7.
+        workflowEngine.releaseSegment(owner);
+        workflowEngine.claimSegment(owner,
+                                    token(SEGMENT_POSITION_BEFORE_RELEASE),
+                                    sourcingContext(),
+                                    executionContext());
+
+        // --- precondition evidence -------------------------------------------------------------------------------
+        assertThat(workflowEngine.workflowExecutions())
+                .as("the re-claim must still materialize the instance, it only defers running its body")
+                .hasSize(1);
+
+        // --- oracle ----------------------------------------------------------------------------------------------
+        assertThat(bodyStarts)
+                .as("""
+                    Workflow bodies started by the re-claim of segment %s: %s. Expected: none. The claim sourced \
+                    '%s' from the event-store head while segment %s sits at position %s and the startup latest token \
+                    is %s, so positions %s..%s are still to be delivered to it. A body started here runs at head \
+                    state and emits live side effects while those events replay onto it.""",
+                    owner, bodyStarts, RESIDENT_ID, owner, SEGMENT_POSITION_BEFORE_RELEASE, STARTUP_LATEST_POSITION,
+                    SEGMENT_POSITION_BEFORE_RELEASE + 1, STARTUP_LATEST_POSITION)
+                .isEmpty();
+
+        // 3. The segment catches up. The deferral must be lifted, or the instance is parked forever.
+        workflowEngine.handle(engineEvent(RESIDENT_ID), deliveryContext(owner, token(STARTUP_LATEST_POSITION)));
+
+        assertThat(bodyStarts)
+                .as("reaching the startup latest token must start the instances the claim deferred")
+                .containsExactly(RESIDENT_ID);
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // rig
+    // ---------------------------------------------------------------------------------------------------------
+
+    /**
+     * Wires the store and the registry so {@link #RESIDENT_ID} can be rehydrated, and gives the resulting execution the
+     * counting body. The execution reports {@code isRunning() == false} throughout, the state of an instance whose body
+     * has not been started, so nothing but the engine's own gate can keep it from being started.
+     */
+    @SuppressWarnings("unchecked")
+    private void registerRestorableWorkflow() {
+        var restoredState = mock(WorkflowState.class);
+        when(restoredState.workflowDefinitionId()).thenReturn(DEFINITION_ID);
+        when(restoredState.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
+        when(restoredState.payload()).thenReturn(Map.of("id", RESIDENT_ID));
+
+        var running = new EventSourcedRunningWorkflows();
+        running.evolve(MetadataUtils.create(RESIDENT_ID, WorkflowStatus.STARTED));
+        when(workflowStore.loadRunningWorkflows(any())).thenReturn(CompletableFuture.completedFuture(running));
+        when(workflowStore.loadWorkflow(eq(RESIDENT_ID), any()))
+                .thenReturn(CompletableFuture.completedFuture(restoredState));
+
+        var workflowContext = mock(WorkflowContext.class);
+        var bodyContext = mock(ProcessingContext.class);
+        when(workflowContext.processingContext()).thenReturn(bodyContext);
+        when(bodyContext.whenComplete(any())).thenAnswer(invocation -> {
+            invocation.<Consumer<ProcessingContext>>getArgument(0).accept(bodyContext);
+            return bodyContext;
+        });
+
+        WorkflowConfiguration<WorkflowContext> configuration = mock(WorkflowConfiguration.class);
+        WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
+        WorkflowExecutionFactory executionFactory = mock(WorkflowExecutionFactory.class);
+        when(configuration.workflowContextFactory()).thenReturn(contextFactory);
+        when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
+        when(contextFactory.createContext(anyMap(), eq(RESIDENT_ID), any(), eq(configuration)))
+                .thenReturn(workflowContext);
+        when(executionFactory.create(workflowContext)).thenAnswer(invocation -> {
+            var execution = mock(WorkflowExecution.class);
+            when(execution.workflowId()).thenReturn(RESIDENT_ID);
+            when(execution.state()).thenReturn(restoredState);
+            when(execution.isRunning()).thenReturn(false);
+            when(execution.workflowContext()).thenReturn(workflowContext);
+            doAnswer(ignored -> {
+                bodyStarts.add(RESIDENT_ID);
+                return null;
+            }).when(execution).execute(any());
+            return execution;
+        });
+        when(configurationRegistry.getWorkflowConfiguration(DEFINITION_ID)).thenReturn(Optional.of(configuration));
+    }
+
+    private ProcessingContext sourcingContext() {
+        var context = mock(ProcessingContext.class);
+        when(context.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
+        return context;
+    }
+
+    private ProcessingContext executionContext() {
+        var context = mock(ProcessingContext.class);
+        when(context.resources()).thenReturn(new HashMap<>());
+        when(context.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
+        when(context.component(WorkflowEngineCheckpointingSupport.class)).thenReturn(checkpointingSupport);
+        return context;
+    }
+
+    /** A processor batch context carrying the segment the event is delivered under, and its position. */
+    private ProcessingContext deliveryContext(Segment segment, @Nullable TrackingToken trackingToken) {
+        Map<Context.ResourceKey<?>, Object> resources = new HashMap<>();
+        resources.put(Segment.RESOURCE_KEY, segment);
+        if (trackingToken != null) {
+            resources.put(TrackingToken.RESOURCE_KEY, trackingToken);
+        }
+        var context = mock(ProcessingContext.class);
+        when(context.resources()).thenReturn(resources);
+        doAnswer(invocation -> resources.get(invocation.<Context.ResourceKey<?>>getArgument(0)))
+                .when(context).getResource(any());
+        when(context.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
+        when(context.component(WorkflowEngineCheckpointingSupport.class)).thenReturn(checkpointingSupport);
+        return context;
+    }
+
+    private static EventMessage engineEvent(String workflowId) {
+        var eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(Metadata.with("workflowId", workflowId));
+        when(eventMessage.type()).thenReturn(new MessageType("SomeStepCompleted"));
+        return eventMessage;
+    }
+
+    private static TrackingToken token(long position) {
+        return new GlobalSequenceTrackingToken(position);
+    }
+
+    private static Segment owningSegment(String workflowId) {
+        return FOUR_SEGMENTS.stream()
+                            .filter(segment -> SegmentedWorkflowRouting.ownedBy(segment, workflowId))
+                            .findFirst()
+                            .orElseThrow();
+    }
+}

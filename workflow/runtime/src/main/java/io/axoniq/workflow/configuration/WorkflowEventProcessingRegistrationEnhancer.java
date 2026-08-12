@@ -32,18 +32,31 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.CompletePhase;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.RequiredComponentPhase;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
+import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.SegmentChangeListener;
+import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.SequenceOverridingEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.UnableToClaimTokenException;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import static io.axoniq.workflow.runtime.execution.EventHandlingComponentHandlingAny.ANY_EVENT_IN_ONE_SEGMENT;
+import static java.util.concurrent.CompletableFuture.completedFuture;
 
 /**
  * Enhancer for registration of the workflow engine event processing.
@@ -55,6 +68,8 @@ import static io.axoniq.workflow.runtime.execution.EventHandlingComponentHandlin
 @Internal
 public class WorkflowEventProcessingRegistrationEnhancer implements ConfigurationEnhancer {
 
+    private static final Logger logger = LoggerFactory.getLogger(WorkflowEventProcessingRegistrationEnhancer.class);
+
     private static final int PRE_PROCESSOR_START_PHASE = Phase.INBOUND_EVENT_CONNECTORS - 10;
 
     /**
@@ -62,16 +77,30 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
      */
     public static final String DEFAULT_MODULE_NAME = "Workflow";
 
+    /**
+     * Default number of segments the workflow event processor is initialized with.
+     * <p>
+     * Multiple segments are safe since workflow instances are partitioned over segments by workflow id:
+     * engine events and unique spawn candidates are sequenced to the owning segment, and correlated business events
+     * are sequenced by {@code SequencingPolicy#BROADCAST}, delivering them to every segment. Four balances
+     * instance-level parallelism against the per-segment broadcast delivery cost; override via
+     * {@link #WorkflowEventProcessingRegistrationEnhancer(String, String, String, boolean, int)} or the
+     * {@code axoniq.workflow.initial-segment-count} Spring property.
+     */
+    public static final int DEFAULT_INITIAL_SEGMENT_COUNT = 4;
+
     private final String moduleName;
     @Nullable
     private final String engineComponentName;
     @Nullable
     private final String projectorComponentName;
     private final boolean registerHistoryProjector;
+    private final int initialSegmentCount;
 
     /**
-     * Creates a workflow event processing registration enhancer, responsible for registering the workflow engine and
-     * history projector components to the event processing module.
+     * Creates a workflow event processing registration enhancer with the
+     * {@link #DEFAULT_INITIAL_SEGMENT_COUNT default segment count}, responsible for registering the workflow engine
+     * and history projector components to the event processing module.
      *
      * @param moduleName               name of the event processing module
      * @param engineComponentName      name of the workflow engine component
@@ -84,10 +113,33 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
             @Nullable String projectorComponentName,
             boolean registerHistoryProjector
     ) {
+        this(moduleName, engineComponentName, projectorComponentName, registerHistoryProjector,
+             DEFAULT_INITIAL_SEGMENT_COUNT);
+    }
+
+    /**
+     * Creates a workflow event processing registration enhancer, responsible for registering the workflow engine and
+     * history projector components to the event processing module.
+     *
+     * @param moduleName               name of the event processing module
+     * @param engineComponentName      name of the workflow engine component
+     * @param projectorComponentName   name of the workflow history projector component
+     * @param registerHistoryProjector flag indicating whether to register the history projector component
+     * @param initialSegmentCount      number of segments to initialize the event processor with; workflow instances
+     *                                 are partitioned over segments by workflow id
+     */
+    public WorkflowEventProcessingRegistrationEnhancer(
+            String moduleName,
+            @Nullable String engineComponentName,
+            @Nullable String projectorComponentName,
+            boolean registerHistoryProjector,
+            int initialSegmentCount
+    ) {
         this.moduleName = moduleName;
         this.engineComponentName = engineComponentName;
         this.projectorComponentName = projectorComponentName;
         this.registerHistoryProjector = registerHistoryProjector;
+        this.initialSegmentCount = initialSegmentCount;
     }
 
     /**
@@ -104,10 +156,56 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                 EventProcessorModule
                         .pooledStreaming(moduleName)
                         .eventHandlingComponents(eventHandlingComponents())
-                        .customized(ANY_EVENT_IN_ONE_SEGMENT)
+                        .customized(processorCustomization())
                         .componentRegistry(this::registerWorkflowEngineStartHandler)
                         .build()
         );
+    }
+
+    private BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
+            PooledStreamingEventProcessorConfiguration> processorCustomization() {
+        var base = EventHandlingComponentHandlingAny.anyEventInSegments(initialSegmentCount);
+        return (cfg, processorConfiguration) -> base
+                .apply(cfg, processorConfiguration)
+                .addSegmentChangeListener(segmentChangeListener(cfg));
+    }
+
+    /**
+     * Returns the listener that moves workflow executions with their segment: instances are restored on the
+     * node claiming their segment and dropped again when it releases them, so segments migrating between nodes carry
+     * their instances along without a restart.
+     */
+    private SegmentChangeListener segmentChangeListener(Configuration cfg) {
+        var unitOfWorkFactory = cfg.getComponent(UnitOfWorkFactory.class);
+        return new SegmentChangeListener() {
+            @Override
+            public CompletableFuture<Void> onSegmentClaimed(Segment segment, @Nullable TrackingToken from) {
+                return unitOfWorkFactory
+                        .create(moduleName + "SegmentClaim" + segment.getSegmentId())
+                        .executeWithResult(sourcingContext -> {
+                            var executionUnitOfWork = new SimpleUnitOfWorkFactory(sourcingContext)
+                                    .create(moduleName + "SegmentExecutionContext" + segment.getSegmentId());
+                            return executionUnitOfWork.executeWithResult(executionContext -> {
+                                workflowEngine(cfg).claimSegment(segment, from, sourcingContext, executionContext);
+                                return completedFuture(null);
+                            });
+                        })
+                        .thenRun(() -> {
+                        });
+            }
+
+            @Override
+            public CompletableFuture<Void> onSegmentReleased(Segment segment) {
+                workflowEngine(cfg).releaseSegment(segment);
+                return completedFuture(null);
+            }
+        };
+    }
+
+    private WorkflowEngine workflowEngine(Configuration cfg) {
+        return engineComponentName != null
+                ? cfg.getComponent(WorkflowEngine.class, engineComponentName)
+                : cfg.getComponent(WorkflowEngine.class);
     }
 
     private Function<RequiredComponentPhase, CompletePhase> eventHandlingComponents() {
@@ -117,17 +215,20 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                          ? engineComponentName + "ExecutionEventing"
                                          : DEFAULT_MODULE_NAME + "ExecutionEventing",
                                  cfg -> {
-                                     if (engineComponentName != null) {
-                                         return new EventHandlingComponentHandlingAny(
-                                                 cfg.getComponent(WorkflowEngine.class, engineComponentName),
-                                                 cfg.getComponent(WorkflowEngineReplaySupport.class),
-                                                 cfg.getComponent(WorkflowEngineCheckpointingSupport.class)
-                                         );
-                                     } else {
-                                         return new EventHandlingComponentHandlingAny(
-                                                 cfg.getComponent(WorkflowEngine.class)
-                                         );
-                                     }
+                                     // The workflow routing overrides the component's default sequencing so engine
+                                     // events and unique spawn candidates reach the owning segment and all other
+                                     // business events are broadcast to every segment.
+                                     var workflowEngine = workflowEngine(cfg);
+                                     var component = engineComponentName != null
+                                             ? new EventHandlingComponentHandlingAny(
+                                                     workflowEngine,
+                                                     cfg.getComponent(WorkflowEngineReplaySupport.class),
+                                                     cfg.getComponent(WorkflowEngineCheckpointingSupport.class))
+                                             : new EventHandlingComponentHandlingAny(workflowEngine);
+                                     return new SequenceOverridingEventHandlingComponent(
+                                             workflowEngine.segmentedRouting(),
+                                             component
+                                     );
                                  }
                     );
             if (registerHistoryProjector) {
@@ -137,17 +238,17 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                         ? projectorComponentName + "Eventing"
                                         : DEFAULT_MODULE_NAME + "HistoryEventing",
                                 cfg -> {
-                                    if (projectorComponentName != null) {
-                                        return new EventHandlingComponentHandlingAny(
-                                                cfg.getComponent(WorkflowHistoryProjector.class, projectorComponentName)
-                                        );
-                                    } else {
-                                        // FIXME: eventually history projector doesn't need to be replayed.
-                                        // configure this separately InMemoryHistoryRepo = InMemoryTokeStore and replay
-                                        return new EventHandlingComponentHandlingAny(
-                                                cfg.getComponent(WorkflowHistoryProjector.class)
-                                        );
-                                    }
+                                    // The projector shares the engine's routing policy so both components yield
+                                    // the same sequence identifier per event and no extra segment deliveries occur.
+                                    var projector = projectorComponentName != null
+                                            ? cfg.getComponent(WorkflowHistoryProjector.class, projectorComponentName)
+                                            : cfg.getComponent(WorkflowHistoryProjector.class);
+                                    // FIXME: eventually history projector doesn't need to be replayed.
+                                    // configure this separately InMemoryHistoryRepo = InMemoryTokeStore and replay
+                                    return new SequenceOverridingEventHandlingComponent(
+                                            workflowEngine(cfg).segmentedRouting(),
+                                            new EventHandlingComponentHandlingAny(projector)
+                                    );
                                 }
                         );
             }
@@ -181,9 +282,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
         TokenStore tokenStore = config.getComponent(TokenStore.class, tokenStoreName(moduleName));
         StreamableEventSource eventSource = config.getComponent(StreamableEventSource.class);
         WorkflowEngineReplaySupport replaySupport = config.getComponent(WorkflowEngineReplaySupport.class);
-        WorkflowEngine workflowEngine = engineComponentName != null
-                ? config.getComponent(WorkflowEngine.class, engineComponentName)
-                : config.getComponent(WorkflowEngine.class);
+        WorkflowEngine workflowEngine = workflowEngine(config);
         return ensureSegmentsInitialized(tokenStore, eventSource).thenCompose(
                 processorToken -> eventSource.latestToken(null).thenCompose(latestToken -> initializeWorkflowEngine(
                         workflowEngine,
@@ -194,36 +293,115 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
         );
     }
 
-    // FIXME #190 (https://github.com/AxonIQ/extension-workflow/issues/190) -> should be configurable?
-    private CompletableFuture<TrackingToken> ensureSegmentsInitialized(TokenStore tokenStore,
-                                                                       StreamableEventSource eventSource) {
-        return tokenStore.fetchSegments(moduleName, null).thenCompose(
-                segments -> !segments.isEmpty()
-                        ? tokenStore.fetchToken(moduleName, 0, null)
-                                    .handle((token, ex) -> tokenStore.releaseClaim(moduleName, 0, null)
-                                                                     .thenApply(ignored -> passOrThrow(token, ex)))
-                                    .thenCompose(future -> future)
-                        : eventSource.firstToken(null)
-                                     .thenCompose(firstToken -> tokenStore.initializeTokenSegments(
-                                                                                  moduleName, 1, firstToken, null
-                                                                          )
-                                                                          .thenApply(ignored -> firstToken))
-        );
+    CompletableFuture<TrackingToken> ensureSegmentsInitialized(
+            TokenStore tokenStore,
+            StreamableEventSource eventSource
+    ) {
+        return tokenStore.fetchSegments(moduleName, null)
+                         .thenCompose(segments -> segments.isEmpty()
+                                 ? initializeSegments(tokenStore, eventSource)
+                                 : adoptExistingSegments(tokenStore, segments));
     }
 
     /**
-     * Checks if an exception is not null and throws it if it is, otherwise returns the value.
-     *
-     * @param ex    throwable to check and rethrow
-     * @param value value to return
-     * @throws RuntimeException if the exception is not null
+     * Reads the replay position of segments that already exist, and reports the count this node ends up running when it
+     * is not the count this node asked for.
+     * <p>
+     * The configured segment count only takes effect on a virgin token store: the layout is created once, by whichever
+     * node starts first, and every later node adopts it. That is the right behaviour - re-partitioning a live processor
+     * from a starting node would move instances out from under their owners - but silence about it is not. Without this
+     * the count a node runs and the count it was configured with diverge invisibly, so a half-finished rolling deploy,
+     * a value edited after the first start and a typo all look exactly like a working cluster.
+     */
+    private CompletableFuture<TrackingToken> adoptExistingSegments(TokenStore tokenStore, List<Segment> segments) {
+        if (segments.size() != initialSegmentCount) {
+            logger.warn("Processor {} is configured for {} segment(s) but its token store already holds {}; running "
+                                + "with {}. The configured count only applies to an empty token store - the layout is"
+                                + " created once by the node that starts first and adopted by every node after it. To"
+                                + " change it, stop every node and delete the processor's tokens.",
+                        moduleName, initialSegmentCount, segments.size(), segments.size());
+        }
+        return earliestSegmentToken(tokenStore, segments);
+    }
+
+    /**
+     * Initializes the segments, tolerating a replica that got there first: reading the segments and initializing them
+     * is not one atomic step, so replicas starting at the same time all see an empty store and all try to initialize.
+     * The losers read back the segments the winner created instead of failing to start.
+     */
+    private CompletableFuture<TrackingToken> initializeSegments(TokenStore tokenStore,
+                                                                StreamableEventSource eventSource) {
+        return eventSource
+                .firstToken(null)
+                .thenCompose(firstToken -> tokenStore
+                        .initializeTokenSegments(moduleName, initialSegmentCount, firstToken, null)
+                        .thenApply(ignored -> firstToken)
+                        .exceptionallyCompose(ex -> tokenStore
+                                .fetchSegments(moduleName, null)
+                                .thenCompose(segments -> segments.isEmpty()
+                                        ? CompletableFuture.<TrackingToken>failedFuture(ex)
+                                        : earliestSegmentToken(tokenStore, segments))));
+    }
+
+    /**
+     * Returns the earliest position over the segment tokens this node can read. With multiple segments the replay
+     * decision and the engine's replay tracking must consider the segment that is furthest behind, otherwise catch-up
+     * work of lagging segments would be treated as already-live processing.
+     * <p>
+     * A segment owned by another node is skipped: it is already being processed there and is not part of this node's
+     * replay decision. If no segment can be read the result is {@code null}, and the node starts without a replay;
+     * its executions are restored per segment by the segment change listener once it actually claims one.
+     * <p>
+     * Segments are read one at a time and the claim the read takes is released before the next one is read, so a
+     * starting node never holds a claim on one segment while reading another. Holding them makes two nodes starting
+     * at the same time block each other.
+     */
+    private CompletableFuture<TrackingToken> earliestSegmentToken(TokenStore tokenStore,
+                                                                  List<Segment> segments) {
+        var readable = new ArrayList<TrackingToken>();
+        CompletableFuture<Void> scan = completedFuture(null);
+        for (var segment : segments) {
+            var segmentId = segment.getSegmentId();
+            scan = scan.thenCompose(ignored -> fetchTokenAndReleaseClaim(tokenStore, segmentId)
+                    .thenAccept(readable::add)
+                    .exceptionally(ex -> skipSegmentOwnedByAnotherNode(ex, segmentId)));
+        }
+        return scan.thenApply(ignored -> earliest(readable));
+    }
+
+    /**
+     * Swallows the failure of a segment owned by another node, and rethrows anything else.
      */
     @Nullable
-    private static <T> T passOrThrow(@Nullable T value, @Nullable Throwable ex) {
-        if (ex != null) {
-            throw ex instanceof RuntimeException ? (RuntimeException) ex : new RuntimeException(ex);
+    private Void skipSegmentOwnedByAnotherNode(Throwable ex, int segmentId) {
+        var cause = ex instanceof CompletionException && ex.getCause() != null ? ex.getCause() : ex;
+        if (!(cause instanceof UnableToClaimTokenException)) {
+            throw cause instanceof RuntimeException runtime ? runtime : new CompletionException(cause);
         }
-        return value;
+        logger.info("Segment {} of processor {} is owned by another node; leaving it out of the replay decision.",
+                    segmentId, moduleName);
+        return null;
+    }
+
+    /**
+     * Returns the lowest of the given tokens, or {@code null} when there is nothing to fold or a token is unknown.
+     */
+    @Nullable
+    private static TrackingToken earliest(List<TrackingToken> tokens) {
+        if (tokens.isEmpty() || tokens.contains(null)) {
+            return null;
+        }
+        var earliest = tokens.get(0);
+        for (var token : tokens) {
+            earliest = earliest.lowerBound(token);
+        }
+        return earliest;
+    }
+
+    private CompletableFuture<TrackingToken> fetchTokenAndReleaseClaim(TokenStore tokenStore, int segmentId) {
+        return tokenStore.fetchToken(moduleName, segmentId, null)
+                         .thenCompose(token -> tokenStore.releaseClaim(moduleName, segmentId, null)
+                                                         .thenApply(ignored -> token));
     }
 
     CompletableFuture<Void> initializeWorkflowEngine(

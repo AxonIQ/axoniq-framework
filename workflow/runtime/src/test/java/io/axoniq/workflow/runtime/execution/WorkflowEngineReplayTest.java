@@ -241,7 +241,7 @@ class WorkflowEngineReplayTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void startRestoresExecutionStateUsingSeparateSourcingAndExecutionContexts() {
+    void segmentClaimRestoresExecutionStateUsingSeparateSourcingAndExecutionContexts() {
         String workflowId = "wf-1";
         TrackingToken checkpointToken = token(30);
         ProcessingContext processingContext = processingContext(checkpointToken);
@@ -274,6 +274,7 @@ class WorkflowEngineReplayTest {
         when(contextFactory.createContext(anyMap(), eq(workflowId), any(ProcessingContext.class), eq(configuration)))
                 .thenReturn(workflowContext);
         var restoredExecution = mock(WorkflowExecution.class);
+        when(restoredExecution.workflowId()).thenReturn(workflowId);
         when(restoredExecution.state()).thenReturn(restoredState);
         when(restoredExecution.isRunning()).thenReturn(true);
         when(executionFactory.create(workflowContext)).thenReturn(restoredExecution);
@@ -284,6 +285,9 @@ class WorkflowEngineReplayTest {
                 .thenAnswer(invocation -> invocation.<java.util.function.Function<ProcessingContext, CompletableFuture<Void>>>getArgument(0).apply(processingContext));
 
         workflowEngine.start(checkpointToken, false).join();
+        ProcessingContext executionContext = processingContext(checkpointToken);
+        // A single segment owns every instance, keeping this test about the two contexts rather than about ownership.
+        workflowEngine.claimSegment(new Segment(0, 0), checkpointToken, processingContext, executionContext);
 
         verify(restoredExecution).initializeState(restoredState);
         verify(replaySupport).setCurrentTokenIfNull(checkpointToken);
@@ -466,10 +470,10 @@ class WorkflowEngineReplayTest {
         });
 
         replaySupport.setInitialEngineTokens(safePoint, tokenAtReset);
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
-        workflowEngine.handle(startEvent(eventName, "wf-1"), processingContext(firstReplayToken));
-        workflowEngine.handle(startEvent(eventName, "wf-2"), processingContext(secondReplayToken));
+        workflowEngine.handle(startEvent(eventName, "wf-1"), segmentedContext(firstReplayToken));
+        workflowEngine.handle(startEvent(eventName, "wf-2"), segmentedContext(secondReplayToken));
 
         verify(trigger).requestCheckpoint(token(10));
         verify(trigger).requestCheckpoint(token(15));
@@ -496,7 +500,7 @@ class WorkflowEngineReplayTest {
 
         var trigger = mock(CheckpointTrigger.class);
         replaySupport.setInitialEngineTokens(token(18), token(30));
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
         var requested = token(25);
         var advanced = checkpointingSupport.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
@@ -519,28 +523,33 @@ class WorkflowEngineReplayTest {
         var trigger = mock(CheckpointTrigger.class);
         var requested = token(25);
         replaySupport.setInitialEngineTokens(token(18), token(30));
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
-        checkpointingSupport.requestCheckpoint(requested);
+        checkpointingSupport.requestCheckpoint(Segment.ROOT_SEGMENT, requested);
 
         verify(trigger).requestCheckpoint(requested);
     }
 
+    /**
+     * A request made while the segment is not claimed has no trigger to reach and is dropped rather than held: the
+     * claim it was safe for is not this one, and replaying it into the next claim would advance that claim's stored
+     * token past events it has to redeliver.
+     */
     @Test
-    void checkpointRequestsAreCoalescedUntilSegmentTriggerIsAvailable() throws Exception {
+    void checkpointRequestsMadeWhileTheSegmentIsNotClaimedAreIgnored() throws Exception {
         var trigger = mock(CheckpointTrigger.class);
-        var firstRequested = token(25);
-        var secondRequested = token(27);
+        var beforeClaim = token(25);
+        var afterClaim = token(27);
         replaySupport.setInitialEngineTokens(token(18), token(30));
 
-        checkpointingSupport.requestCheckpoint(firstRequested);
-        checkpointingSupport.requestCheckpoint(secondRequested);
+        checkpointingSupport.requestCheckpoint(Segment.ROOT_SEGMENT, beforeClaim);
 
         verifyNoInteractions(trigger);
 
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
+        checkpointingSupport.requestCheckpoint(Segment.ROOT_SEGMENT, afterClaim);
 
-        verify(trigger).requestCheckpoint(secondRequested);
+        verify(trigger).requestCheckpoint(afterClaim);
         verifyNoMoreInteractions(trigger);
     }
 
@@ -550,10 +559,10 @@ class WorkflowEngineReplayTest {
         var firstRequested = token(25);
         var secondRequested = token(27);
         replaySupport.setInitialEngineTokens(token(18), token(30));
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
-        checkpointingSupport.requestCheckpoint(firstRequested);
-        checkpointingSupport.requestCheckpoint(secondRequested);
+        checkpointingSupport.requestCheckpoint(Segment.ROOT_SEGMENT, firstRequested);
+        checkpointingSupport.requestCheckpoint(Segment.ROOT_SEGMENT, secondRequested);
 
         verify(trigger).requestCheckpoint(firstRequested);
         verify(trigger).requestCheckpoint(secondRequested);
@@ -607,6 +616,13 @@ class WorkflowEngineReplayTest {
         return new GlobalSequenceTrackingToken(globalIndex);
     }
 
+    /** A processor batch context: it carries the segment being handled, exactly as a work package's context does. */
+    private ProcessingContext segmentedContext(TrackingToken token) {
+        ProcessingContext processingContext = processingContext(token);
+        when(processingContext.getResource(Segment.RESOURCE_KEY)).thenReturn(Segment.ROOT_SEGMENT);
+        return processingContext;
+    }
+
     private ProcessingContext processingContext(TrackingToken token) {
         ProcessingContext processingContext = mock(ProcessingContext.class);
         Map<Context.ResourceKey<?>, Object> resources = new HashMap<>();
@@ -657,6 +673,10 @@ class WorkflowEngineReplayTest {
         );
 
         workflowEngine.handle(startEvent(eventName, execution.workflowId()), processingContext(null));
+        // The same delivery also reaches the instance it just spawned, which queues the wait-condition match because
+        // its body has not started. Draining it here leaves a quiescent instance, so each test below controls exactly
+        // what sits in the queue.
+        drainAllTasks(execution);
     }
 
     private SimpleWorkflowExecution simpleExecution(

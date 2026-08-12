@@ -43,6 +43,14 @@ public class SimpleWorkflowConfigurationRegistry
 
     private final ConcurrentHashMap<QualifiedName, List<PredicatedWorkflowConfiguration>> workflowsConfigurations = new ConcurrentHashMap<>();
 
+    /**
+     * Highest-version configurations per start-event name, recomputed on registration. The lookup runs for every
+     * streamed event (see {@code SegmentedWorkflowRouting} and {@code WorkflowEngine}), so it must not re-derive
+     * version ordering per call; events without a registered start condition resolve to an empty list without
+     * creating an entry.
+     */
+    private final ConcurrentHashMap<QualifiedName, List<PredicatedWorkflowConfiguration>> highestVersionConfigurations = new ConcurrentHashMap<>();
+
     @Override
     @Nonnull
     public SimpleWorkflowConfigurationRegistry register(
@@ -63,8 +71,18 @@ public class SimpleWorkflowConfigurationRegistry
                                                                            workflowConfiguration));
             return workflowConfigurations;
         });
+        highestVersionConfigurations.put(
+                eventCondition.qualifiedName(),
+                WorkflowConfigurationRegistry.super.getHighestVersionConfigurations(eventCondition.qualifiedName())
+        );
 
         return this;
+    }
+
+    @Nonnull
+    @Override
+    public List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(@Nonnull QualifiedName qualifiedName) {
+        return highestVersionConfigurations.getOrDefault(qualifiedName, List.of());
     }
 
     @Override

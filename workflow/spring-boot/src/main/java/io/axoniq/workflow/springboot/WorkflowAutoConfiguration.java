@@ -19,6 +19,7 @@
 package io.axoniq.workflow.springboot;
 
 import io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -50,13 +51,19 @@ public class WorkflowAutoConfiguration {
     /**
      * Configures the event handling for the top-level workflow module.
      *
+     * @param initialSegmentCount number of segments to initialize the workflow event processor with; workflow
+     *                            instances are partitioned over segments by workflow id. Defaults
+     *                            to
+     *                            {@link WorkflowEventProcessingRegistrationEnhancer#DEFAULT_INITIAL_SEGMENT_COUNT}.
      * @return enhancer.
      */
     @Bean
     @ConditionalOnMissingBean
-    public WorkflowEventProcessingRegistrationEnhancer workflowEventHandlersDefaults() {
+    public WorkflowEventProcessingRegistrationEnhancer workflowEventHandlersDefaults(
+            @Value("${axoniq.workflow.initial-segment-count:4}") int initialSegmentCount
+    ) {
         return new WorkflowEventProcessingRegistrationEnhancer(
-                DEFAULT_MODULE_NAME, null, null, true
+                DEFAULT_MODULE_NAME, null, null, true, initialSegmentCount
         );
     }
 }

@@ -394,13 +394,20 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
         if (running) {
             // live mode
-            eventWaitConditions.evaluateAndApply(eventMessage, processingContext, contextDelegate::eventReceived);
-            appendTask(i -> state().evolve(eventMessage, processingContext));
+            appendTask(i -> {
+                eventWaitConditions.evaluateAndApply(eventMessage, processingContext, contextDelegate::eventReceived);
+                state().evolve(eventMessage, processingContext);
+            });
         } else {
             // replay mode
             // Rehydration reconstructs durable state only. Workflow status listeners are live lifecycle callbacks and
             // may perform user side effects, so they must not run again for historical events after a restart.
             workflowState.evolve(eventMessage, processingContext, false);
+            // The wake must not be discarded with them: an event that produced no engine event before the crash is not
+            // in the durable state, so evolving alone leaves the instance waiting for something already gone past.
+            appendTask(i -> eventWaitConditions.evaluateAndApply(eventMessage,
+                                                                 processingContext,
+                                                                 contextDelegate::eventReceived));
         }
     }
 

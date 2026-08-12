@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -39,6 +40,42 @@ public final class WorkflowSpawnRouting {
     private static final Logger logger = LoggerFactory.getLogger(WorkflowSpawnRouting.class);
 
     private WorkflowSpawnRouting() {
+    }
+
+    /**
+     * Reports whether the given configuration's {@code workflowIdProvider} derived a workflow id from the given event,
+     * logging the misconfiguration that produced no id and rejecting the spawn when it did not.
+     * <p>
+     * A provider deriving no id (an {@code idProperty} naming a property the event does not carry, typically) is never
+     * transient: every event of that type derives the same nothing. Failing the spawn would fail the work package and
+     * stall the segment processing it, taking down every instance that segment owns instead of just the misconfigured
+     * definition; skipping the spawn keeps the damage to that one definition, and naming the definition and the event
+     * here keeps it attributable. The provider is an arbitrary function over the event that resolves property names
+     * against the converted payload, so registration cannot reject it up front.
+     *
+     * @param baseWorkflowId        the id the provider derived, or {@code null} when it derived none.
+     * @param workflowConfiguration configuration whose provider was asked.
+     * @param eventMessage          event the id was to be derived from.
+     * @return {@code true} when an id was derived and the spawn may proceed.
+     */
+    public static boolean hasDerivedWorkflowId(
+            @Nullable String baseWorkflowId,
+            @Nonnull WorkflowConfiguration<?> workflowConfiguration,
+            @Nonnull EventMessage eventMessage
+    ) {
+        if (baseWorkflowId != null) {
+            return true;
+        }
+        logger.error(
+                "The workflowIdProvider ({}) of workflow '{}' version '{}' derived no workflow id from event '{}'; "
+                        + "not spawning an instance. Check that the configured idProperty names a property the event "
+                        + "actually carries.",
+                workflowConfiguration.workflowIdProvider().getClass().getName(),
+                workflowConfiguration.workflowName(),
+                workflowConfiguration.workflowVersion(),
+                eventMessage.type().qualifiedName()
+        );
+        return false;
     }
 
     /**
