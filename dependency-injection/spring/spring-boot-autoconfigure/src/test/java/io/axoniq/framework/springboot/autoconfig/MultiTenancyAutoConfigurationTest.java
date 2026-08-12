@@ -25,11 +25,14 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
+import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.conversion.Converter;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
@@ -37,6 +40,7 @@ import org.junit.jupiter.api.*;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.stream.Stream;
@@ -253,10 +257,33 @@ class MultiTenancyAutoConfigurationTest {
                          });
         }
 
+        @Test
+        void exposesASpringTenantConverterProviderToTheMultiTenantConfiguration() {
+            contextRunner.withUserConfiguration(TenantConverterConfiguration.class)
+                         .withPropertyValues("axon.axonserver.enabled=true")
+                         .run(context -> {
+                             TenantComponentProvider provider = context.getBean("tenantConverterProvider",
+                                                                                    TenantComponentProvider.class);
+                             AxonConfiguration configuration = context.getBean(AxonConfiguration.class);
+
+                             assertThat(TenantComponentProviderUtil.find(configuration, Converter.class))
+                                     .containsSame(provider);
+                         });
+        }
+
         @Configuration
         @EnableAutoConfiguration
         static class FullAutoConfigurationContext {
 
+        }
+
+        @Configuration
+        static class TenantConverterConfiguration {
+
+            @Bean
+            TenantComponentProvider<Converter> tenantConverterProvider() {
+                return TenantComponentProvider.withFactory(Converter.class, tenant -> new JacksonConverter());
+            }
         }
     }
 

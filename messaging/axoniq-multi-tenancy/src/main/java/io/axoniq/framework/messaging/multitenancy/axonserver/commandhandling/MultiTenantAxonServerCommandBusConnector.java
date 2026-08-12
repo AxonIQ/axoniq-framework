@@ -27,6 +27,7 @@ import io.axoniq.framework.axonserver.connector.command.AxonServerCommandBusConn
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenancyAxoniqAddon;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
+import io.axoniq.framework.messaging.multitenancy.api.TenantComponentLookup;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
@@ -46,13 +47,13 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 
 import static io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException.tenantNotResolved;
+import static java.util.Objects.requireNonNull;
 
 /**
  * Multi-tenant Axon Server {@link CommandBusConnector}.
@@ -79,7 +80,7 @@ public class MultiTenantAxonServerCommandBusConnector
     private final TenantRouter tenantRouter;
     private final AxonServerConnectionManager connectionManager;
     private final AxonServerConfiguration configuration;
-    private final MessageConverter converter;
+    private final TenantComponentLookup<MessageConverter> messageConverterLookup;
 
     private final Map<String, AxonServerCommandBusConnector> tenantConnectors = new ConcurrentHashMap<>();
     private final Map<QualifiedName, Integer> knownSubscriptions = new ConcurrentHashMap<>();
@@ -88,22 +89,24 @@ public class MultiTenantAxonServerCommandBusConnector
     private @Nullable Handler incomingHandler;
 
     /**
-     * Constructs a {@code MultiTenantAxonServerCommandBusConnector}.
+     * Constructs a connector that obtains the message converter for every tenant while constructing that tenant's
+     * connector.
      *
-     * @param tenantRouter      the router deciding which tenant a dispatched {@link CommandMessage} is routed to
-     * @param connectionManager the manager used to obtain the {@link AxonServerConnection} for a given tenant
-     * @param configuration     the configuration applied to each per-tenant {@link AxonServerCommandBusConnector}
-     * @param converter         the {@link MessageConverter} used by each per-tenant
-     *                          {@link AxonServerCommandBusConnector}
+     * @param tenantRouter           the router deciding which tenant a dispatched command is routed to
+     * @param connectionManager      the manager used to obtain the connection for a given tenant
+     * @param configuration          the configuration applied to each per-tenant connector
+     * @param messageConverterLookup lookup providing the message converter for each tenant
      */
     public MultiTenantAxonServerCommandBusConnector(TenantRouter tenantRouter,
                                                     AxonServerConnectionManager connectionManager,
                                                     AxonServerConfiguration configuration,
-                                                    MessageConverter converter) {
-        this.tenantRouter = Objects.requireNonNull(tenantRouter, "The tenantRouter must not be null.");
-        this.connectionManager = Objects.requireNonNull(connectionManager, "The connectionManager must not be null.");
-        this.configuration = Objects.requireNonNull(configuration, "The configuration must not be null.");
-        this.converter = Objects.requireNonNull(converter, "The converter must not be null.");
+                                                    TenantComponentLookup<MessageConverter> messageConverterLookup) {
+        this.tenantRouter = requireNonNull(tenantRouter, "The tenantRouter must not be null.");
+        this.connectionManager = requireNonNull(connectionManager, "The connectionManager must not be null.");
+        this.configuration = requireNonNull(configuration, "The configuration must not be null.");
+        this.messageConverterLookup = requireNonNull(messageConverterLookup,
+                                                     "The messageConverterLookup must not be null.");
+
         EntitlementManager.INSTANCE.registerAddon(MultiTenancyAxoniqAddon.class);
     }
 
@@ -254,7 +257,7 @@ public class MultiTenantAxonServerCommandBusConnector
 
     private Registration addTenant(TenantDescriptor tenantDescriptor) {
         tenantConnectors.computeIfAbsent(tenantDescriptor.tenantId(), tenantId -> {
-            AxonServerCommandBusConnector connector = createConnector(tenantId);
+            AxonServerCommandBusConnector connector = createConnector(tenantDescriptor);
             // Known subscriptions are replayed only while creating a new connector. An already-registered tenant's
             // connector is already in sync, and re-subscribing it would leak an orphaned registration, since
             // AxonServerCommandBusConnector#subscribe(QualifiedName, int) does not cancel a prior registration for the
@@ -298,11 +301,14 @@ public class MultiTenantAxonServerCommandBusConnector
         return true;
     }
 
-    private AxonServerCommandBusConnector createConnector(String tenantId) {
-        AxonServerConnection connection = connectionManager.getConnection(tenantId);
-        AxonServerCommandBusConnector connector = new AxonServerCommandBusConnector(connection,
-                                                                                    configuration,
-                                                                                    converter);
+    private AxonServerCommandBusConnector createConnector(TenantDescriptor tenant) {
+        AxonServerConnection connection = connectionManager.getConnection(tenant.tenantId());
+        AxonServerCommandBusConnector connector = new AxonServerCommandBusConnector(
+                connection,
+                configuration,
+                messageConverterLookup.componentFor(tenant)
+        );
+
         if (started.get()) {
             connector.start();
         }
