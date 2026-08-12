@@ -1,7 +1,9 @@
 # ADR-004: Workflow Replay Safe-Point Tracking Tokens
 
-- Status: Accepted
+- Status: Deprecated
 - Date: 2026-05-18
+
+Superseded by [ADR-012](./012-checkpoint-driven-replay-lower-bound.md).
 
 ## Context
 
@@ -11,6 +13,11 @@ start. Today `WorkflowEventProcessingRegistrationEnhancer` resets the workflow p
 replay is needed, and `WorkflowExecutionRepository` only keeps in-memory executions for the current process.
 We need one restart tracking token per active workflow execution and one durable safe-point tracking token per workflow
 engine.
+
+This ADR described the first replay-position design, based on a dedicated engine `SafePointStore` and the earliest
+restart token of active workflow executions. That model is now deprecated. The current target design uses the workflow
+processor checkpoint as the replay lower bound, as documented in
+[ADR-012](./012-checkpoint-driven-replay-lower-bound.md).
 
 ## Decision
 

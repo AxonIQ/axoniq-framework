@@ -36,9 +36,10 @@ public interface EventCondition {
 
 
     /**
-     * Returns the predicate on an {@link EventMessage} and it's accompanying {@link ProcessingContext} through which this condition can be evaluated.
-    *
-    * @return the predicate on an {@link EventMessage} and it's accompanying {@link ProcessingContext} through which this condition can be evaluated.
+     * Returns the predicate on an {@link EventMessage} and its accompanying {@link ProcessingContext} through which
+     * this condition can be evaluated.
+     *
+     * @return the constructed predicate
      */
     @Nonnull
     BiPredicate<EventMessage, ProcessingContext> predicate();
@@ -57,7 +58,7 @@ public interface EventCondition {
      * @return serialized association strings
      */
     @Nonnull
-    default Set<String> serializedAssociations() {
+    default Set<String> associations() {
         return Set.of();
     }
 }

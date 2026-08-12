@@ -18,34 +18,39 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.common.infra.DescribableComponent;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Store for the persisted safe point token of a workflow engine.
+ * Narrow adapter around workflow-state repositories used during startup.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
  */
 @Internal
-public interface SafePointStore extends DescribableComponent {
+public interface WorkflowStore {
 
     /**
-     * Fetches the currently stored engine safe point tracking token.
+     * Loads the singleton running-workflows projection.
      *
-     * @return future of stored safe point tracking token, or empty future if none has been stored yet
+     * @param processingContext processing context used for sourcing
+     * @return current running workflow ids
      */
-    CompletableFuture<TrackingToken> fetchSafePointToken();
+    @Nonnull
+    CompletableFuture<RunningWorkflows> loadRunningWorkflows(@Nonnull ProcessingContext processingContext);
 
     /**
-     * Stores the given engine safe point tracking token.
+     * Loads the event-sourced durable state for a workflow id.
      *
-     * @param token safe point tracking token to store
-     * @return future indicating completion of token storage
+     * @param workflowId        workflow identifier
+     * @param processingContext processing context used for sourcing
+     * @return durable workflow state
      */
-    CompletableFuture<Void> storeSafePointToken(@Nonnull TrackingToken token);
+    @Nonnull
+    CompletableFuture<WorkflowState> loadWorkflow(@Nonnull String workflowId,
+                                                  @Nonnull ProcessingContext processingContext);
 }

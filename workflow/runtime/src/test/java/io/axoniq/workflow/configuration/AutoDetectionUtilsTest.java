@@ -181,7 +181,7 @@ class AutoDetectionUtilsTest {
 
         EventCondition condition = AutoDetectionUtils.eventConditionComponentBuilder(attributes).build(configuration);
 
-        assertThat(condition.serializedAssociations()).containsExactly("payload:status=vip");
+        assertThat(condition.associations()).containsExactly("payload:status=vip");
     }
 
     @Test

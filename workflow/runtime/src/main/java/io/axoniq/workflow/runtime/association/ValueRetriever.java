@@ -49,10 +49,9 @@ public interface ValueRetriever {
     /**
      * Retrieves association value from the event message.
      *
-     * @param eventMessage event message
-     * @param processingContext processing context
+     * @param eventMessage      event message to retrieve value from
+     * @param processingContext processing context for retrieving addition resources
      * @return retrieved value
      */
     Object apply(EventMessage eventMessage, ProcessingContext processingContext);
-
 }

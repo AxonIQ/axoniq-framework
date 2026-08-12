@@ -42,8 +42,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+import static io.axoniq.workflow.dsl.api.EventAssociationsUtils.equalsTo;
 import static io.axoniq.workflow.runtime.association.Associations.associate;
-import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 

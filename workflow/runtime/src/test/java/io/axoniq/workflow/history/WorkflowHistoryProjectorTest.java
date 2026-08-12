@@ -24,6 +24,7 @@ import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -33,6 +34,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class WorkflowHistoryProjectorTest {
+
+    private static final MessageType DEFINITION_ID =
+            new MessageType(new QualifiedName("test-workflow"), "1.0.0");
 
     private InMemoryWorkflowHistoryRepository repository;
     private WorkflowHistoryProjector projector;
@@ -46,7 +50,11 @@ class WorkflowHistoryProjectorTest {
     @Test
     void shouldCreateNewHistoryEntryOnEvent() {
         String workflowId = "wf-1";
-        EventMessage event = new GenericEventMessage(new MessageType("test"), new Object(), MetadataUtils.create(workflowId));
+        EventMessage event = new GenericEventMessage(
+                new MessageType("test"),
+                new Object(),
+                MetadataUtils.withWorkflowDefinitionId(MetadataUtils.create(workflowId), DEFINITION_ID)
+        );
         ProcessingContext context = mock(ProcessingContext.class);
 
         projector.handle(event, context);
@@ -61,13 +69,21 @@ class WorkflowHistoryProjectorTest {
         ProcessingContext context = mock(ProcessingContext.class);
 
         // First event
-        EventMessage event1 = new GenericEventMessage(new MessageType("test1"), new Object(), MetadataUtils.create(workflowId));
+        EventMessage event1 = new GenericEventMessage(
+                new MessageType("test1"),
+                new Object(),
+                MetadataUtils.withWorkflowDefinitionId(MetadataUtils.create(workflowId), DEFINITION_ID)
+        );
         projector.handle(event1, context);
 
         WorkflowHistory firstHistory = repository.findById(workflowId).get();
 
         // Second event
-        EventMessage event2 = new GenericEventMessage(new MessageType("test2"), new Object(), MetadataUtils.create(workflowId));
+        EventMessage event2 = new GenericEventMessage(
+                new MessageType("test2"),
+                new Object(),
+                MetadataUtils.withWorkflowDefinitionId(MetadataUtils.create(workflowId), DEFINITION_ID)
+        );
         projector.handle(event2, context);
 
         WorkflowHistory secondHistory = repository.findById(workflowId).get();
@@ -78,7 +94,9 @@ class WorkflowHistoryProjectorTest {
 
     @Test
     void shouldIgnoreEventWithoutWorkflowId() {
-        EventMessage event = new GenericEventMessage(new MessageType("test"), new Object(), Metadata.with("other", "value"));
+        EventMessage event = new GenericEventMessage(new MessageType("test"),
+                                                     new Object(),
+                                                     Metadata.with("other", "value"));
         ProcessingContext context = mock(ProcessingContext.class);
 
         projector.handle(event, context);

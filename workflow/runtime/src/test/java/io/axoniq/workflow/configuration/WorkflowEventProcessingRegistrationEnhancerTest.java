@@ -19,98 +19,69 @@
 package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
-import io.axoniq.workflow.runtime.execution.SafePointStore;
-import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.GapAwareTrackingToken;
+import io.axoniq.workflow.runtime.execution.WorkflowEngineReplaySupport;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.axonframework.messaging.eventstreaming.StreamableEventSource;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 /**
- * Test for reset / resume logic based on provided token.
- *
- * @author Simon Zambrovski
- * @since 1.0.0
+ * Test for processor-token based replay initialization.
  */
 class WorkflowEventProcessingRegistrationEnhancerTest {
 
     @Test
-    void storedSafepointTokenResetsProcessorFromStoredToken() {
+    void earlierProcessorTokenStartsCheckpointCatchUpAfterRehydration() {
         var enhancer = new WorkflowEventProcessingRegistrationEnhancer("Workflow", null, null, true);
-        var eventSource = mock(StreamableEventSource.class);
-        var processor = mock(StreamingEventProcessor.class);
         var workflowEngine = mock(WorkflowEngine.class);
-        var safePointStore = mock(SafePointStore.class);
-        TrackingToken storedToken = token(18);
+        var replaySupport = mock(WorkflowEngineReplaySupport.class);
+        var processorToken = token(18);
+        var latestToken = token(192);
+        when(workflowEngine.start(processorToken, true)).thenReturn(CompletableFuture.completedFuture(null));
 
-        when(safePointStore.fetchSafePointToken()).thenReturn(CompletableFuture.completedFuture(storedToken));
-        when(processor.resetTokens(any(TrackingToken.class))).thenReturn(CompletableFuture.completedFuture(null));
+        enhancer.initializeWorkflowEngine(
+                workflowEngine,
+                replaySupport,
+                processorToken,
+                latestToken
+        ).join();
 
-        enhancer.resetOrSwitchToLiveMode(eventSource, processor, workflowEngine, safePointStore, token(192)).join();
-
-        var tokenCaptor = org.mockito.ArgumentCaptor.forClass(TrackingToken.class);
-        verify(processor).resetTokens(tokenCaptor.capture());
-        assertSameToken(tokenCaptor.getValue(), storedToken);
-        verify(workflowEngine).initializeSafePoint(storedToken);
-        verifyNoInteractions(eventSource);
-        verify(workflowEngine, never()).switchToLiveMode();
+        var inOrder = inOrder(replaySupport, workflowEngine);
+        inOrder.verify(replaySupport).setInitialEngineTokens(processorToken, latestToken);
+        inOrder.verify(workflowEngine).start(processorToken, true);
     }
 
     @Test
-    void missingStoredTokenFallsBackToFirstEventSourceToken() {
+    void matchingProcessorAndLatestTokenSwitchesToLiveMode() {
         var enhancer = new WorkflowEventProcessingRegistrationEnhancer("Workflow", null, null, true);
-        var eventSource = mock(StreamableEventSource.class);
-        var processor = mock(StreamingEventProcessor.class);
         var workflowEngine = mock(WorkflowEngine.class);
-        var safePointStore = mock(SafePointStore.class);
-        TrackingToken firstToken = token(5);
+        var replaySupport = mock(WorkflowEngineReplaySupport.class);
+        var token = token(192);
+        when(workflowEngine.start(token, false)).thenReturn(CompletableFuture.completedFuture(null));
 
-        when(safePointStore.fetchSafePointToken()).thenReturn(CompletableFuture.completedFuture(null));
-        when(eventSource.firstToken(null)).thenReturn(CompletableFuture.completedFuture(firstToken));
-        when(processor.resetTokens(any(TrackingToken.class))).thenReturn(CompletableFuture.completedFuture(null));
+        enhancer.initializeWorkflowEngine(
+                workflowEngine,
+                replaySupport,
+                token,
+                token
+        ).join();
 
-        enhancer.resetOrSwitchToLiveMode(eventSource, processor, workflowEngine, safePointStore, token(192)).join();
-
-        var tokenCaptor = org.mockito.ArgumentCaptor.forClass(TrackingToken.class);
-        verify(processor).resetTokens(tokenCaptor.capture());
-        assertSameToken(tokenCaptor.getValue(), firstToken);
-        verify(workflowEngine).initializeSafePoint(firstToken);
-        verify(workflowEngine, never()).switchToLiveMode();
+        verify(replaySupport).setInitialEngineTokens(token, token);
+        verify(workflowEngine).start(token, false);
     }
 
     @Test
-    void latestTrackingTokenSeedsEngineAndSwitchesToLiveModeWhenReplayIsNotRequired() {
+    void replayIsNotRequiredWhenEitherTokenIsMissing() {
         var enhancer = new WorkflowEventProcessingRegistrationEnhancer("Workflow", null, null, true);
-        var eventSource = mock(StreamableEventSource.class);
-        var processor = mock(StreamingEventProcessor.class);
-        var workflowEngine = mock(WorkflowEngine.class);
-        var safePointStore = mock(SafePointStore.class);
-        TrackingToken latestToken = token(192);
-
-        when(safePointStore.fetchSafePointToken()).thenReturn(CompletableFuture.completedFuture(latestToken));
-
-        enhancer.resetOrSwitchToLiveMode(eventSource, processor, workflowEngine, safePointStore, latestToken)
-                .join();
-
-        verify(workflowEngine).initializeSafePoint(latestToken);
-        verify(workflowEngine).switchToLiveMode();
-        verify(processor, never()).resetTokens(any(TrackingToken.class));
-        verifyNoInteractions(eventSource);
+        assertThat(enhancer.requiresReplay(null, token(1))).isFalse();
+        assertThat(enhancer.requiresReplay(token(1), null)).isFalse();
     }
 
     private static TrackingToken token(long globalIndex) {
         return new GlobalSequenceTrackingToken(globalIndex);
-    }
-
-    private static void assertSameToken(TrackingToken actual, TrackingToken expected) {
-        assertThat(actual.lowerBound(expected)).isEqualTo(expected);
-        assertThat(expected.lowerBound(actual)).isEqualTo(actual);
     }
 }

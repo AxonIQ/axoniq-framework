@@ -24,11 +24,8 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.slf4j.LoggerFactory;
 
-import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -44,13 +41,6 @@ import java.util.function.Function;
  */
 @Internal
 public class ProcessingContextUtils {
-
-    /**
-     * Resource key for a workflow execution restart token.
-     */
-    public static final Context.ResourceKey<Optional<TrackingToken>> RESTART_TOKEN_RESOURCE_KEY =
-            Context.ResourceKey.withLabel("workflowRestartToken");
-
 
     private ProcessingContextUtils() {
         // avoid instantiation
@@ -138,20 +128,5 @@ public class ProcessingContextUtils {
         //noinspection unchecked
         fromResource.forEach((k, v) -> to.putResource((Context.ResourceKey<Object>) k, v));
         return to;
-    }
-
-    /**
-     * Resolves a workflow execution restart token from the processing context.
-     *
-     * @param processingContext processing context
-     * @return restart token or current tracking token if no restart token is present
-     */
-    @Nullable
-    @SuppressWarnings("unchecked")
-    public static TrackingToken resolveRestartToken(@Nonnull ProcessingContext processingContext) {
-        var resource = Objects.requireNonNull((Optional<TrackingToken>)
-                                                      processingContext.resources().get(RESTART_TOKEN_RESOURCE_KEY),
-                                              "Restart token resource not found");
-        return resource.orElse((TrackingToken) processingContext.resources().get(TrackingToken.RESOURCE_KEY));
     }
 }
