@@ -21,7 +21,6 @@ package io.axoniq.framework.messaging.multitenancy.axonserver.commandhandling;
 
 import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.connector.AxonServerConnection;
-import io.axoniq.axonserver.connector.AxonServerConnectionFactory;
 import io.axoniq.axonserver.connector.admin.AdminChannel;
 import io.axoniq.axonserver.connector.command.CommandChannel;
 import io.axoniq.axonserver.connector.control.ControlChannel;
@@ -68,6 +67,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.RecordingAxonServerConnectionManager;
 
 class MultiTenantAxonServerCommandBusConnectorTest {
 
@@ -81,7 +81,7 @@ class MultiTenantAxonServerCommandBusConnectorTest {
 
         private final AxonServerConfiguration configuration = defaultConfiguration();
         private final AxonServerConnectionManager connectionManager =
-                new RecordingConnectionManager(configuration, Map.of());
+                new RecordingAxonServerConnectionManager(configuration, Map.of());
         private final MessageConverter converter = Mockito.mock(MessageConverter.class);
         private final TenantRouter tenantRouter = new TenantRouter(
                 new TenantResolver() {
@@ -687,7 +687,7 @@ class MultiTenantAxonServerCommandBusConnectorTest {
         MessageConverter converter = Mockito.mock(MessageConverter.class);
         MultiTenantAxonServerCommandBusConnector connector = new MultiTenantAxonServerCommandBusConnector(
                 tenantRouter,
-                new RecordingConnectionManager(configuration, connections),
+                new RecordingAxonServerConnectionManager(configuration, connections),
                 configuration,
                 unused -> converter
         );
@@ -759,71 +759,6 @@ class MultiTenantAxonServerCommandBusConnectorTest {
         private void addTenant(TenantDescriptor tenantDescriptor) {
             tenants.add(tenantDescriptor);
             components.forEach(component -> component.registerAndStartTenant(tenantDescriptor));
-        }
-    }
-
-    private static final class RecordingConnectionManager extends AxonServerConnectionManager {
-
-        private final Map<String, RecordingConnection> connections;
-
-        private RecordingConnectionManager(AxonServerConfiguration configuration,
-                                           Map<String, RecordingConnection> connections) {
-            super(builder(configuration), new RecordingConnectionFactory(builder(configuration), connections));
-            this.connections = connections;
-        }
-
-        @Override
-        public AxonServerConnection getConnection(String context) {
-            RecordingConnection connection = connections.get(context);
-            if (connection == null) {
-                throw new IllegalArgumentException("Unknown context " + context);
-            }
-            return connection;
-        }
-
-        private static AxonServerConnectionManager.Builder builder(AxonServerConfiguration configuration) {
-            return AxonServerConnectionManager.builder()
-                                              .axonServerConfiguration(configuration)
-                                              .routingServers("localhost:8124");
-        }
-    }
-
-    private static final class RecordingConnectionFactory extends AxonServerConnectionFactory {
-
-        private final Map<String, RecordingConnection> connections;
-
-        private RecordingConnectionFactory(AxonServerConnectionManager.Builder builder,
-                                           Map<String, RecordingConnection> connections) {
-            super(new AxonServerConnectionFactoryBuilder(builder));
-            this.connections = connections;
-        }
-
-        @Override
-        public AxonServerConnection connect(String context) {
-            RecordingConnection connection = connections.get(context);
-            if (connection == null) {
-                throw new IllegalArgumentException("Unknown context " + context);
-            }
-            return connection;
-        }
-
-        @Override
-        public void shutdown() {
-            // no-op
-        }
-    }
-
-    private static final class AxonServerConnectionFactoryBuilder
-            extends AxonServerConnectionFactory.Builder {
-
-        private AxonServerConnectionFactoryBuilder(AxonServerConnectionManager.Builder builder) {
-            super("component-name", "client-id");
-            routingServers(new io.axoniq.axonserver.connector.impl.ServerAddress("localhost", 8124));
-        }
-
-        @Override
-        public AxonServerConnectionFactory build() {
-            throw new UnsupportedOperationException("Not used in tests");
         }
     }
 
