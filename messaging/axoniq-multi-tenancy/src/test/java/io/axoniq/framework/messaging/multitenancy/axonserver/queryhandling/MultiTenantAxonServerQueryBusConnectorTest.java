@@ -20,7 +20,6 @@
 package io.axoniq.framework.messaging.multitenancy.axonserver.queryhandling;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
-import io.axoniq.axonserver.connector.AxonServerConnectionFactory;
 import io.axoniq.axonserver.connector.ErrorCategory;
 import io.axoniq.axonserver.connector.FlowControl;
 import io.axoniq.axonserver.connector.ReplyChannel;
@@ -76,6 +75,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.*;
+import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.RecordingAxonServerConnectionManager;
 
 class MultiTenantAxonServerQueryBusConnectorTest {
 
@@ -565,7 +565,7 @@ class MultiTenantAxonServerQueryBusConnectorTest {
         MessageConverter converter = Mockito.mock(MessageConverter.class);
         MultiTenantAxonServerQueryBusConnector connector = new MultiTenantAxonServerQueryBusConnector(
                 routerFor(tenantProvider),
-                new RecordingConnectionManager(configuration, connections),
+                new RecordingAxonServerConnectionManager(configuration, connections),
                 configuration,
                 unused -> converter
         );
@@ -659,71 +659,6 @@ class MultiTenantAxonServerQueryBusConnectorTest {
         private void addTenant(TenantDescriptor tenantDescriptor) {
             tenants.add(tenantDescriptor);
             components.forEach(component -> component.registerAndStartTenant(tenantDescriptor));
-        }
-    }
-
-    private static final class RecordingConnectionManager extends AxonServerConnectionManager {
-
-        private final Map<String, RecordingConnection> connections;
-
-        private RecordingConnectionManager(AxonServerConfiguration configuration,
-                                           Map<String, RecordingConnection> connections) {
-            super(builder(configuration), new RecordingConnectionFactory(builder(configuration), connections));
-            this.connections = connections;
-        }
-
-        @Override
-        public AxonServerConnection getConnection(String context) {
-            RecordingConnection connection = connections.get(context);
-            if (connection == null) {
-                throw new IllegalArgumentException("Unknown context " + context);
-            }
-            return connection;
-        }
-
-        private static AxonServerConnectionManager.Builder builder(AxonServerConfiguration configuration) {
-            return AxonServerConnectionManager.builder()
-                                              .axonServerConfiguration(configuration)
-                                              .routingServers("localhost:8124");
-        }
-    }
-
-    private static final class RecordingConnectionFactory extends AxonServerConnectionFactory {
-
-        private final Map<String, RecordingConnection> connections;
-
-        private RecordingConnectionFactory(AxonServerConnectionManager.Builder builder,
-                                           Map<String, RecordingConnection> connections) {
-            super(new AxonServerConnectionFactoryBuilder(builder));
-            this.connections = connections;
-        }
-
-        @Override
-        public AxonServerConnection connect(String context) {
-            RecordingConnection connection = connections.get(context);
-            if (connection == null) {
-                throw new IllegalArgumentException("Unknown context " + context);
-            }
-            return connection;
-        }
-
-        @Override
-        public void shutdown() {
-            // no-op
-        }
-    }
-
-    private static final class AxonServerConnectionFactoryBuilder
-            extends AxonServerConnectionFactory.Builder {
-
-        private AxonServerConnectionFactoryBuilder(AxonServerConnectionManager.Builder builder) {
-            super("component-name", "client-id");
-            routingServers(new io.axoniq.axonserver.connector.impl.ServerAddress("localhost", 8124));
-        }
-
-        @Override
-        public AxonServerConnectionFactory build() {
-            throw new UnsupportedOperationException("Not used in tests");
         }
     }
 
