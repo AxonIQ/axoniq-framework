@@ -33,6 +33,7 @@ import org.axonframework.messaging.eventhandling.processing.EventProcessor;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
@@ -54,7 +55,7 @@ import static org.awaitility.Awaitility.await;
  * checkpointed.
  * <p>
  * Here the projection acquires its {@link CheckpointTrigger} by <em>retaining</em> the one handed to it through
- * {@link Checkpointing#onSegmentClaimed(Segment, CheckpointTrigger)}, keyed by {@link Segment}. This is the
+ * {@link Checkpointing#onSegmentClaimed(Segment, TrackingToken, CheckpointTrigger)}, keyed by {@link Segment}. This is the
  * counterpart of {@link CheckpointTriggerResumeInMemoryIT}, which proves the identical resume guarantee for a
  * projection that instead obtains the trigger through a handler-method <em>parameter</em> (the
  * {@code CheckpointTriggerParameterResolverFactory}). Both acquisition paths are public API, so both are exercised
@@ -153,7 +154,9 @@ public class CheckpointResumeInMemoryIT extends AbstractStudentIT {
         }
 
         @Override
-        public void onSegmentClaimed(@NonNull Segment segment, @NonNull CheckpointTrigger trigger) {
+        public void onSegmentClaimed(@NonNull Segment segment,
+                                     @Nullable TrackingToken from,
+                                     @NonNull CheckpointTrigger trigger) {
             triggers.put(segment, trigger);
         }
 
