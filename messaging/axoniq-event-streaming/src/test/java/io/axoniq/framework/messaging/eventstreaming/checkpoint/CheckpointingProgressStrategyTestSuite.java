@@ -723,16 +723,11 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
                 CompletableFuture::completedFuture;
 
         @Override
-        public void onSegmentClaimed(@NonNull Segment segment, @NonNull CheckpointTrigger trigger) {
-            this.trigger = trigger;
-        }
-
-        @Override
         public void onSegmentClaimed(@NonNull Segment segment,
                                      @Nullable TrackingToken from,
                                      @NonNull CheckpointTrigger trigger) {
             this.claimedFrom = from;
-            onSegmentClaimed(segment, trigger);
+            this.trigger = trigger;
         }
 
         @Override
@@ -759,7 +754,9 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
         private final Map<Segment, CheckpointTrigger> triggers = new ConcurrentHashMap<>();
 
         @Override
-        public void onSegmentClaimed(@NonNull Segment segment, @NonNull CheckpointTrigger trigger) {
+        public void onSegmentClaimed(@NonNull Segment segment,
+                                     @Nullable TrackingToken from,
+                                     @NonNull CheckpointTrigger trigger) {
             triggers.put(segment, trigger);
         }
 

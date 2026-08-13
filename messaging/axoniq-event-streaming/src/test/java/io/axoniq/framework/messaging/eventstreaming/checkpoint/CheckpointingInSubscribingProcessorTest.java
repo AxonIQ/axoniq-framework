@@ -31,6 +31,7 @@ import org.axonframework.messaging.eventhandling.processing.errorhandling.Propag
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -126,7 +127,9 @@ class CheckpointingInSubscribingProcessorTest {
         }
 
         @Override
-        public void onSegmentClaimed(@NonNull Segment segment, @NonNull CheckpointTrigger trigger) {
+        public void onSegmentClaimed(@NonNull Segment segment,
+                                     @Nullable TrackingToken from,
+                                     @NonNull CheckpointTrigger trigger) {
             segmentClaimed.set(true);
         }
 
