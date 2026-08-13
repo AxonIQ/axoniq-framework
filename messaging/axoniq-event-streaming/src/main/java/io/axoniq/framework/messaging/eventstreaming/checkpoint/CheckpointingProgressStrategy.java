@@ -138,37 +138,7 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
         }
         return requestEach(participant -> requestAdvance(participant, requested))
                 .thenCompose(this::reconcile)
-                .thenCompose(agreed -> context.persistProgress(reportIfBeyondConsumed(agreed), processingContext));
-    }
-
-    /**
-     * Returns {@code agreed} unchanged, warning when it reaches past the segment's {@code lastConsumedToken}, which a
-     * participant may report and which is stored as given, but leaves the events in between undelivered to this
-     * processor with nothing afterwards to attribute that to.
-     */
-    private @Nullable TrackingToken reportIfBeyondConsumed(@Nullable TrackingToken agreed) {
-        TrackingToken consumed = context.lastConsumedToken();
-        if (agreed != null && !covered(consumed, agreed)) {
-            logger.warn("Storing checkpoint [{}] for {}, which reaches past its last consumed position [{}]. "
-                                + "Events up to the checkpoint are not delivered to this processor again after a "
-                                + "restart; verify the requesting component is durable at that position and that its "
-                                + "CheckpointTrigger belongs to this segment.",
-                        agreed, context.segment(), consumed);
-        }
-        return agreed;
-    }
-
-    /**
-     * Whether {@code consumed} covers {@code agreed}, treating an incomparable pair as covered. This feeds a warning
-     * only, so it must never fail the checkpoint it describes: tokens from unrelated sources reject the comparison
-     * outright.
-     */
-    private static boolean covered(@Nullable TrackingToken consumed, TrackingToken agreed) {
-        try {
-            return consumed != null && TrackingTokenUtils.coversWhenUnwrapped(consumed, agreed);
-        } catch (RuntimeException e) {
-            return true;
-        }
+                .thenCompose(agreed -> context.persistProgress(agreed, processingContext));
     }
 
     @Override
