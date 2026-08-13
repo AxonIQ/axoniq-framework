@@ -53,7 +53,7 @@ import static org.awaitility.Awaitility.await;
  * checkpointed token -- idempotently reprocessing only the uncheckpointed window.
  * <p>
  * This is the parameter-based counterpart of {@link CheckpointResumeInMemoryIT}, which retains the trigger handed to it
- * through {@link Checkpointing#onSegmentClaimed(Segment, CheckpointTrigger)} instead.
+ * through {@link Checkpointing#onSegmentClaimed(Segment, TrackingToken, CheckpointTrigger)} instead.
  *
  * @author Allard Buijze
  */

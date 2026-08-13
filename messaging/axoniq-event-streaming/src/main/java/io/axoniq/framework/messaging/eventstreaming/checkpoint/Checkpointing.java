@@ -23,6 +23,7 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -43,7 +44,7 @@ import java.util.concurrent.CompletableFuture;
  * Only a streaming processor (with a tracking token and segments) can honour this protocol. A processor that does not
  * stream (such as a
  * {@link org.axonframework.messaging.eventhandling.processing.subscribing.SubscribingEventProcessor}) simply never
- * invokes the lifecycle callbacks (no {@link #onSegmentClaimed(Segment, CheckpointTrigger)}, no checkpoints) and does
+ * invokes the lifecycle callbacks (no {@link #onSegmentClaimed(Segment, TrackingToken, CheckpointTrigger)}, no checkpoints) and does
  * not expose a {@link CheckpointTrigger}, so the checkpointing behaviour is inert there.
  * <p>
  * A checkpointing unit may use one of two styles:
@@ -100,7 +101,7 @@ import java.util.concurrent.CompletableFuture;
  * processor auto checkpointing wins and the component cannot actually defer its segment's token.
  * <p>
  * The <b>only method that must be implemented</b> is {@link #onCheckpointAdvanced(Segment, TrackingToken)};
- * {@link #onSegmentClaimed(Segment, CheckpointTrigger)} and {@link #onSegmentReleased(Segment, TrackingToken)} have
+ * {@link #onSegmentClaimed(Segment, TrackingToken, CheckpointTrigger)} and {@link #onSegmentReleased(Segment, TrackingToken)} have
  * sensible defaults (see each method).
  * <p>
  * <b>Internal API.</b> This interface is marked {@link Internal}: self-checkpointing is currently intended primarily
@@ -119,6 +120,11 @@ public interface Checkpointing {
      * positions for that segment. Retain it keyed by segment; it is invalid after
      * {@link #onSegmentReleased(Segment, TrackingToken)}.
      * <p>
+     * The {@code from} token is the position this segment resumes at, the same position
+     * {@link #onSegmentReleased(Segment, TrackingToken)} carries. It shows how far along the stream the segment is
+     * before the first event is delivered, so a unit restoring state at claim time can see whether it is picking up a
+     * segment at the end of the stream or one that still has history to replay.
+     * <p>
      * Defaults to a no-op: a unit that obtains its trigger another way (typically through a {@link CheckpointTrigger}
      * handler-method parameter) does not need to retain it here.
      * <p>
@@ -128,9 +134,11 @@ public interface Checkpointing {
      * throwing, but do not throw for transient conditions that a retained trigger would handle later.
      *
      * @param segment the segment that was claimed
+     * @param from    the segment's stored {@link TrackingToken}, the position processing resumes from, or {@code null}
+     *                when processing starts at the beginning of the stream
      * @param trigger the handle to request checkpoints for {@code segment}
      */
-    default void onSegmentClaimed(Segment segment, CheckpointTrigger trigger) {
+    default void onSegmentClaimed(Segment segment, @Nullable TrackingToken from, CheckpointTrigger trigger) {
         // No-op by default; override only if the trigger must be retained at claim time.
     }
 
