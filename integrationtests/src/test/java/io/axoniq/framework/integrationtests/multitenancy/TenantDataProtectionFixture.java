@@ -19,8 +19,9 @@
 
 package io.axoniq.framework.integrationtests.multitenancy;
 
-import io.axoniq.axonserver.connector.event.EventStream;
-import io.axoniq.axonserver.grpc.event.EventWithToken;
+import io.axoniq.axonserver.connector.ResultStream;
+import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
+import io.axoniq.axonserver.grpc.event.dcb.StreamEventsResponse;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.dataprotection.api.DataSubjectId;
 import io.axoniq.framework.dataprotection.api.FieldEncryptingConverter;
@@ -31,6 +32,7 @@ import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolve
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
+import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.conversion.Converter;
@@ -51,11 +53,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import javax.crypto.SecretKey;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Shared two-tenant application fixture for data-protection integration tests.
@@ -119,6 +124,10 @@ final class TenantDataProtectionFixture {
                                                                   ));
         customize.accept(configurer);
         application = configurer.start();
+        await().atMost(30, TimeUnit.SECONDS)
+               .untilAsserted(() -> assertThat(application.getComponent(TenantProvider.class).tenants())
+                       .extracting(TenantDescriptor::tenantId)
+                       .contains(TENANT_A, TENANT_B));
     }
 
     void stop() {
@@ -155,10 +164,25 @@ final class TenantDataProtectionFixture {
     }
 
     String rawStoredPayload(String tenantId) {
+        AtomicReference<String> payload = new AtomicReference<>();
+        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+            StreamEventsResponse event = firstStoredEvent(tenantId);
+            assertThat(event)
+                    .as("an event stored in tenant [%s]", tenantId)
+                    .isNotNull();
+            payload.set(event.getEvent().getEvent().getPayload().toStringUtf8());
+        });
+        return payload.get();
+    }
+
+    private StreamEventsResponse firstStoredEvent(String tenantId) {
         AxonServerConnectionManager connectionManager = application.getComponent(AxonServerConnectionManager.class);
-        try (EventStream stream = connectionManager.getConnection(tenantId).eventChannel().openStream(0, 1)) {
-            EventWithToken event = stream.nextIfAvailable(10, TimeUnit.SECONDS);
-            return event.getEvent().getPayload().getData().toStringUtf8();
+        try (ResultStream<StreamEventsResponse> stream = connectionManager.getConnection(tenantId)
+                                                                          .dcbEventChannel()
+                                                                          .stream(StreamEventsRequest.newBuilder()
+                                                                                                      .setFromSequence(0)
+                                                                                                      .build())) {
+            return stream.nextIfAvailable(1, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while retrieving the event stored for tenant [" + tenantId + "]", e);
