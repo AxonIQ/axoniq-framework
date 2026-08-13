@@ -26,6 +26,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Glob
 import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -105,6 +106,19 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
             // then -- the batch is processed, but no token is stored without a checkpoint request
             await().atMost(TIMEOUT).untilAsserted(() -> assertThat(testSubject.batchProcessor().processed()).hasSize(1));
             verify(tokenStore(), never()).storeToken(any(), anyString(), anyInt(), any());
+        }
+
+        @Test
+        void onSegmentClaimedCarriesThePositionTheSegmentResumesFrom() {
+            // given
+            RecordingCheckpointing participant = new RecordingCheckpointing();
+            WorkPackageHarness testSubject = deferred(participant);
+
+            // when
+            testSubject.onSegmentClaimed();
+
+            // then -- the participant can tell a segment at the end of the stream from one about to replay
+            assertThat(participant.claimedFrom).isEqualTo(initialToken());
         }
 
         @Test
@@ -702,13 +716,17 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
         private final List<TrackingToken> advanced = new CopyOnWriteArrayList<>();
         private final List<TrackingToken> released = new ArrayList<>();
         private volatile CheckpointTrigger trigger;
+        private volatile TrackingToken claimedFrom;
         private volatile Function<TrackingToken, CompletableFuture<TrackingToken>> advanceResult =
                 CompletableFuture::completedFuture;
         private volatile Function<TrackingToken, CompletableFuture<TrackingToken>> releaseResult =
                 CompletableFuture::completedFuture;
 
         @Override
-        public void onSegmentClaimed(@NonNull Segment segment, @NonNull CheckpointTrigger trigger) {
+        public void onSegmentClaimed(@NonNull Segment segment,
+                                     @Nullable TrackingToken from,
+                                     @NonNull CheckpointTrigger trigger) {
+            this.claimedFrom = from;
             this.trigger = trigger;
         }
 
@@ -736,7 +754,9 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
         private final Map<Segment, CheckpointTrigger> triggers = new ConcurrentHashMap<>();
 
         @Override
-        public void onSegmentClaimed(@NonNull Segment segment, @NonNull CheckpointTrigger trigger) {
+        public void onSegmentClaimed(@NonNull Segment segment,
+                                     @Nullable TrackingToken from,
+                                     @NonNull CheckpointTrigger trigger) {
             triggers.put(segment, trigger);
         }
 
