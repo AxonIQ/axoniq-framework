@@ -90,6 +90,9 @@ class AggregatingResponseSender implements FlowControl {
 
     @Override
     public void request(long requested) {
+        // A client not supporting streaming expects exactly one QueryResponse in return, regardless of how many were
+        // requested. Hence, the requested amount is only checked for positivity here, before draining the entire
+        // upstream and combining it into that single response.
         if (requested <= 0 || !started.compareAndSet(false, true)) {
             return;
         }
