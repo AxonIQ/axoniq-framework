@@ -790,7 +790,12 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
 
         @Override
         public boolean covers(TrackingToken other) {
-            TwoAxisToken that = (TwoAxisToken) other;
+            // The harness always bootstraps a work package's lastStoredToken from a GlobalSequenceTrackingToken,
+            // regardless of the token type a test exercises afterward, so the very first store compares this token
+            // against that foreign sentinel; treat it as trivially covered rather than throwing on the failed cast.
+            if (!(other instanceof TwoAxisToken that)) {
+                return true;
+            }
             return a >= that.a && b >= that.b;
         }
     }
