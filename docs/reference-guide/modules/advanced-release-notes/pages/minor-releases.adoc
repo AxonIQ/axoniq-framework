@@ -16,7 +16,7 @@ Any patch release made for an Axon project is tailored towards resolving bugs. T
 
 - Include `TrackingToken` on `Checkpointing.onSegmentClaimed` | Warn on a checkpoint past the consumed position (link:https://github.com/AxonIQ/axoniq-framework/issues/350[#350], link:https://github.com/AxonIQ/axoniq-framework/pull/357[#357], by @schananas)
 
-==== Bug Fixes
+==== Bug fixes
 
 - Distinguish a rejected append from an undetermined one (link:https://github.com/AxonIQ/axoniq-framework/issues/299[#299], link:https://github.com/AxonIQ/axoniq-framework/pull/347[#347], by @schananas)
 
