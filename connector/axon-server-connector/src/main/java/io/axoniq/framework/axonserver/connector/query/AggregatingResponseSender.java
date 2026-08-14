@@ -63,6 +63,7 @@ class AggregatingResponseSender implements FlowControl {
     private final ReplyChannel<QueryResponse> downstream;
     private final @Nullable Converter converter;
     private final AtomicBoolean started = new AtomicBoolean(false);
+    private final AtomicBoolean cancelled = new AtomicBoolean(false);
 
     /**
      * Constructs an {@code AggregatingResponseSender} that sends {@code upstream}'s combined messages to
@@ -98,6 +99,9 @@ class AggregatingResponseSender implements FlowControl {
         }
         upstream.collect(ArrayList<QueryResponseMessage>::new, List::add)
                 .whenComplete((messages, error) -> {
+                    if (cancelled.get()) {
+                        return;
+                    }
                     if (error != null) {
                         downstream.sendLast(buildErrorResponse(clientId, queryIdentifier, error, converter));
                     } else if (messages.isEmpty()) {
@@ -168,6 +172,9 @@ class AggregatingResponseSender implements FlowControl {
 
     @Override
     public void cancel() {
+        // Guards against the whenComplete callback in #request still sending a (now stale) response on the
+        // downstream channel if cancel() is invoked while upstream#collect is in flight.
+        cancelled.set(true);
         upstream.close();
     }
 }
