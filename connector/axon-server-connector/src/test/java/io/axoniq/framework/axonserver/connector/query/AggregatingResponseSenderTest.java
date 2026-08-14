@@ -22,6 +22,7 @@ package io.axoniq.framework.axonserver.connector.query;
 import io.axoniq.axonserver.connector.ErrorCategory;
 import io.axoniq.axonserver.connector.ReplyChannel;
 import io.axoniq.axonserver.grpc.query.QueryResponse;
+import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
 import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.jackson.JacksonConverter;
@@ -103,6 +104,52 @@ class AggregatingResponseSenderTest {
             );
             assertThat(combined).containsExactly("a", "b", "c");
         }));
+    }
+
+    @Test
+    void combiningWithoutAConverterCastsElementsAlreadyMatchingTheirDeclaredTypeButStillErrorsOnWireSerialization() {
+        // given...
+        AggregatingResponseSender testSubject =
+                new AggregatingResponseSender("testCase", "test", upstream, stubDownstream, null);
+
+        // Each element's declared payload type already matches the resolved element type, so combine() casts them
+        // via payloadAs(elementType, null) without needing the converter.
+        upstream.offer(responseMsgFor("a"), Context.empty());
+        upstream.offer(responseMsgFor("b"), Context.empty());
+        upstream.seal();
+        // when...
+        testSubject.request(1);
+        // then...
+        // Combining succeeds without a converter, but serializing the resulting String[] payload into bytes for the
+        // wire still requires one, so the overall response is an error. The missing converter is reported as a
+        // non-transient failure, unlike the other combine failures in this test class.
+        verify(stubDownstream, never()).send(any());
+        verify(stubDownstream).sendLast(assertArg(
+                response -> assertThat(response.getErrorCode())
+                        .isEqualTo(ErrorCode.QUERY_EXECUTION_NON_TRANSIENT_ERROR.errorCode())
+        ));
+    }
+
+    @Test
+    void sendsErrorResponseWhenAnElementsActualTypeDoesNotMatchTheResolvedElementType() {
+        // given...
+        AggregatingResponseSender testSubject =
+                new AggregatingResponseSender("testCase", "test", upstream, stubDownstream, null);
+
+        // Declares String as its type, matching the first element, but actually carries an Integer payload,
+        // triggering an IllegalArgumentException when combine() stores it into the String[] array.
+        upstream.offer(responseMsgFor("a"), Context.empty());
+        upstream.offer(responseMsgWithMismatchedDeclaredType(new MessageType(String.class), 42, String.class),
+                       Context.empty());
+        upstream.seal();
+        // when...
+        testSubject.request(1);
+        // then...
+        verify(stubDownstream, never()).send(any());
+        verify(stubDownstream).sendLast(assertArg(
+                response -> assertThat(response.getErrorCode())
+                        .isEqualTo(ErrorCategory.QUERY_EXECUTION_ERROR.errorCode())
+        ));
     }
 
     @Test
@@ -196,5 +243,12 @@ class AggregatingResponseSenderTest {
 
     private static @NonNull GenericQueryResponseMessage responseMsgFor(Object payload) {
         return new GenericQueryResponseMessage(new MessageType(String.class), payload);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> GenericQueryResponseMessage responseMsgWithMismatchedDeclaredType(MessageType type,
+                                                                                          Object actualPayload,
+                                                                                          Class<T> declaredType) {
+        return new GenericQueryResponseMessage(type, (T) actualPayload, declaredType);
     }
 }
