@@ -29,7 +29,7 @@ import java.util.Optional;
 /**
  * Handle through which a {@link Checkpointing} unit tells the owning processor how far it is safe to advance the stored
  * {@link TrackingToken} for a single claimed {@link Segment}. Handed to the unit on
- * {@link Checkpointing#onSegmentClaimed(Segment, CheckpointTrigger)} and valid only for the duration of that claim.
+ * {@link Checkpointing#onSegmentClaimed(Segment, org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken, CheckpointTrigger)} and valid only for the duration of that claim.
  * <p>
  * Requesting never blocks: it wakes the segment's worker, which runs the checkpoint on the processing thread (asking
  * every self-checkpointing component to cover the requested position and storing the single position they reconcile to,
