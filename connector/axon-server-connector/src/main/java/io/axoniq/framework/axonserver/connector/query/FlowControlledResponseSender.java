@@ -21,11 +21,7 @@ package io.axoniq.framework.axonserver.connector.query;
 
 import io.axoniq.axonserver.connector.FlowControl;
 import io.axoniq.axonserver.connector.ReplyChannel;
-import io.axoniq.axonserver.grpc.ErrorMessage;
-import io.axoniq.axonserver.grpc.SerializedObject;
 import io.axoniq.axonserver.grpc.query.QueryResponse;
-import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
-import io.axoniq.framework.axonserver.connector.shared.ExceptionConverter;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.MessageStream;
@@ -34,6 +30,8 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static io.axoniq.framework.axonserver.connector.query.QueryConverter.*;
 
 /**
  * Implementation of the {@link FlowControl} interface that sends {@link QueryResponse}s provided by a
@@ -94,8 +92,10 @@ class FlowControlledResponseSender implements FlowControl {
     private void responseSendingLoop() {
         // this is to make sure that we check the status again if the gate was flipped to false
         // there may have been messages that were sent after the last check
-        while (!sendingGate.get() && ((requests.get() > 0 && upstream.hasNextAvailable()) || (!upstream.hasNextAvailable() && upstream.isCompleted()
-                && !closed.get()))) {
+        while (!sendingGate.get() && (
+                (requests.get() > 0 && upstream.hasNextAvailable())
+                        || (!upstream.hasNextAvailable() && upstream.isCompleted() && !closed.get())
+        )) {
             sendResponses();
         }
     }
@@ -113,33 +113,20 @@ class FlowControlledResponseSender implements FlowControl {
                 }
                 next.ifPresent(i -> {
                     anySent.set(true);
-                    downstream.send(QueryConverter.convertQueryResponseMessage(queryIdentifier, i.message()));
+                    downstream.send(convertQueryResponseMessage(queryIdentifier, i.message()));
                 });
             }
             if (!upstream.hasNextAvailable() && upstream.isCompleted()) {
                 closed.set(true);
                 upstream.error().ifPresentOrElse(
-                        error -> {
-                            ErrorCode errorCode = ErrorCode.getQueryExecutionErrorCode(error);
-                            ErrorMessage ex = ExceptionConverter.convertToErrorMessage(clientId, errorCode, error);
-                            QueryResponse.Builder errorResponseBuilder =
-                                    QueryResponse.newBuilder()
-                                                 .setErrorCode(errorCode.errorCode())
-                                                 .setErrorMessage(ex)
-                                                 .setRequestIdentifier(queryIdentifier);
-                            SerializedObject detailsPayload = ExceptionConverter.convertToDetails(error, converter);
-                            if (detailsPayload != null) {
-                                errorResponseBuilder.setPayload(detailsPayload);
-                            }
-                            downstream.sendLast(errorResponseBuilder.build());
-                        },
+                        error -> downstream.sendLast(buildErrorResponse(clientId, queryIdentifier, error, converter)),
                         () -> {
                             if (anySent.get()) {
                                 downstream.complete();
                             } else {
                                 // A direct query must yield at least one response on the wire, to
                                 // remain compatible with the Axon Framework 4 wire protocol.
-                                downstream.sendLast(QueryConverter.emptyQueryResponse(queryIdentifier));
+                                downstream.sendLast(emptyQueryResponse(queryIdentifier));
                             }
                         }
                 );
