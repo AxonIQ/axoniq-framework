@@ -118,9 +118,9 @@ class AggregatingResponseSender implements FlowControl {
      * of all payloads.
      * <p>
      * Each payload is decoded into the concrete type named by its {@link QueryResponseMessage#type()} (resolved via
-     * {@link Class#forName(String)}, matching how message types are named by default in the first place), since a
-     * generic decode target such as {@code Object.class} would trivially match the still-serialized {@code byte[]}
-     * payload without ever invoking the {@code converter}.
+     * {@link Class#forName(String)}, matching how message types are named by default in the first place); a generic
+     * decode target such as {@code Object.class} would decode into untyped maps rather than the declared element
+     * type.
      * <p>
      * The combined payload is a Java array of that element type, rather than a {@link List}: an array's runtime class
      * retains its component type (e.g. {@code CustomerDto[]}), whereas a {@code List}'s runtime class
