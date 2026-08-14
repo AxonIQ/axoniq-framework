@@ -222,6 +222,34 @@ public final class QueryConverter {
     }
 
     /**
+     * Builds a {@link QueryResponse} carrying error details derived from the given {@code error}.
+     *
+     * @param clientId        the identifier of this application, used as the location reported in the error response
+     * @param queryIdentifier the {@link QueryMessage#identifier()} that initiated the query. Used to associate the
+     *                        resulting {@link QueryResponse} with the original request
+     * @param error           the {@link Throwable} to derive the {@link QueryResponse}'s error details from
+     * @param converter       the {@link Converter} to use for serializing application-specific exception details onto
+     *                        the error response, or {@code null} if no such conversion is available
+     * @return a {@link QueryResponse} carrying the {@code error}'s details
+     */
+    static QueryResponse buildErrorResponse(String clientId,
+                                            String queryIdentifier,
+                                            Throwable error,
+                                            @Nullable Converter converter) {
+        ErrorCode errorCode = ErrorCode.getQueryExecutionErrorCode(error);
+        ErrorMessage errorMessage = ExceptionConverter.convertToErrorMessage(clientId, errorCode, error);
+        QueryResponse.Builder builder = QueryResponse.newBuilder()
+                                                     .setErrorCode(errorCode.errorCode())
+                                                     .setErrorMessage(errorMessage)
+                                                     .setRequestIdentifier(queryIdentifier);
+        SerializedObject detailsPayload = ExceptionConverter.convertToDetails(error, converter);
+        if (detailsPayload != null) {
+            builder.setPayload(detailsPayload);
+        }
+        return builder.build();
+    }
+
+    /**
      * Constructs a {@link QueryResponse} carrying no payload, marked with the {@link #EMPTY_PAYLOAD_TYPE} sentinel.
      * <p>
      * Used when a direct query is handled without producing a single result (e.g. a {@code @QueryHandler} returning

@@ -56,6 +56,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.LockSupport;
 
+import static io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils.clientSupportsQueryStreaming;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -257,12 +258,19 @@ public class AxonServerQueryBusConnector implements QueryBusConnector, Connector
             if (previous != null) {
                 previous.run();
             }
-            return new FlowControlledResponseSender(
-                    clientId,
-                    query.getMessageIdentifier(),
-                    result.onClose(queriesInProgress.remove(query.getMessageIdentifier())),
-                    responseHandler,
-                    converter
+            var responses = result.onClose(queriesInProgress.remove(query.getMessageIdentifier()));
+
+            // Switching on the clientSupportsStreaming allows us to deviate between AF5 and AF4 applications.
+            // An AF4 application will always have that setting to false, making it so that we can aggregate several
+            // results into a single message. This allows for the ResponseType#multipleInstancesOf structure, which
+            // uses a single Message.
+            boolean clientSupportsStreaming = clientSupportsQueryStreaming(query.getProcessingInstructionsList());
+            return clientSupportsStreaming
+                    ? new FlowControlledResponseSender(
+                    clientId, query.getMessageIdentifier(), responses, responseHandler, converter
+            )
+                    : new AggregatingResponseSender(
+                    clientId, query.getMessageIdentifier(), responses, responseHandler, converter
             );
         }
 
