@@ -3,6 +3,30 @@
 
 Any patch release made for an Axon project is tailored towards resolving bugs. This page aims to provide a dedicated overview of patch releases for Axoniq Framework features.
 
+[#release_5_3]
+== Release 5.3
+
+=== Release 5.3.1
+
+==== Features
+
+- Multitenancy Data Protection support (link:https://github.com/AxonIQ/axoniq-framework/pull/354[#354], by @jangalinski)
+
+==== Enhancements
+
+- Include `TrackingToken` on `Checkpointing.onSegmentClaimed` | Warn on a checkpoint past the consumed position (link:https://github.com/AxonIQ/axoniq-framework/issues/350[#350], link:https://github.com/AxonIQ/axoniq-framework/pull/357[#357], by @schananas)
+
+==== Bug Fixes
+
+- Distinguish a rejected append from an undetermined one (link:https://github.com/AxonIQ/axoniq-framework/issues/299[#299], link:https://github.com/AxonIQ/axoniq-framework/pull/347[#347], by @schananas)
+
+==== Contributors
+
+A heartfelt thank you to all contributors who worked on this section:
+
+- link:https://github.com/jangalinski[@jangalinski]
+- link:https://github.com/schananas[@schananas]
+
 [#release_5_2]
 == Release 5.2
 
