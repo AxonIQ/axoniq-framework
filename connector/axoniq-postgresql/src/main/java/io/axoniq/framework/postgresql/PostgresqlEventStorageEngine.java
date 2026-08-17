@@ -916,6 +916,18 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         };
 
         return connectionExecutor(null).apply(connection -> {
+
+            /*
+             * Repeatable read is used here because EVENTS_READ_MULTIPLE is two statements - the page
+             * read and a trailing MAX(global_index) watermark - and under READ COMMITTED each would
+             * take its own snapshot, letting a commit land in between and silently skip events. This
+             * only affects this dedicated, single-call, read-only connection - not
+             * CONSISTENCY_TAGS_LOCK's append-side connection, which relies on READ COMMITTED's
+             * per-statement refresh instead.
+             */
+
+            connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+
             try (PreparedStatement ps = connection.prepareStatement(query)) {
                 int parameterIndex = 1;
 
