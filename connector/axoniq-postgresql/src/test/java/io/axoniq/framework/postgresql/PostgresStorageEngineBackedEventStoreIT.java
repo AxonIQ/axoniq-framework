@@ -45,7 +45,9 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
+import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.axonframework.messaging.eventstreaming.Tag;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
@@ -62,14 +64,18 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 import javax.sql.DataSource;
@@ -688,6 +694,115 @@ public class PostgresStorageEngineBackedEventStoreIT extends StorageEngineBacked
 
         @Event
         record SnapshotTestEvent(@EventTag(key = "Course") String id, String data) {}
+    }
+
+    /**
+     * Regression test for a race in {@link PostgresqlEventStorageEngine#EVENTS_READ_MULTIPLE}: its
+     * trailing {@code SELECT MAX(global_index)} watermark statement runs as its own, separately
+     * snapshotted {@code READ COMMITTED} statement, immediately after the page-read statement rather
+     * than as part of it. If {@link PostgresqlFinalizer} finalizes new events in the gap between the
+     * two, that watermark can see them even though the page-read never did. {@link
+     * PostgresqlEventStorageEngine#stream} advances its cursor straight past whatever the watermark
+     * reports - any event caught in that gap is skipped for good.
+     * <p>
+     * Reproduced here by continuously appending events one commit at a time - so the asynchronous
+     * finalizer is always racing a fresh commit - while a single long-lived tracking stream consumes
+     * them concurrently. On buggy code, some events never arrive, no matter how long the test waits.
+     */
+    @Nested
+    class StreamingUnderConcurrentAppends {
+
+        private static final int EVENT_COUNT = 400;
+
+        @Test
+        @Timeout(value = 5, unit = TimeUnit.MINUTES)
+        void streamMustDeliverEveryAppendedEventDespiteConcurrentFinalization() throws InterruptedException {
+            Tag tag = new Tag("Course", UUID.randomUUID().toString());
+            EventCriteria criteria = EventCriteria.havingTags(tag);
+            TrackingToken token = unitOfWork().executeWithResult(eventStore::latestToken).join();
+
+            Set<String> delivered = Collections.synchronizedSet(new LinkedHashSet<>());
+            AtomicBoolean running = new AtomicBoolean(true);
+            MessageStream<EventMessage> stream = eventStore.open(StreamingCondition.conditionFor(token, criteria), null);
+
+            Thread consumer = Thread.ofPlatform().name("stream-skip-consumer").start(() -> {
+                while (running.get()) {
+                    Optional<MessageStream.Entry<EventMessage>> entry = stream.next();
+
+                    if (entry.isEmpty()) {
+                        try {
+                            Thread.sleep(1);
+                        }
+                        catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            return;
+                        }
+                        continue;
+                    }
+
+                    EventMessage converted = entry.get().message().withConvertedPayload(StreamSkipProbe.class, eventConverter);
+
+                    delivered.add(converted.payloadAs(StreamSkipProbe.class).seq());
+                }
+            });
+
+            List<String> appended = new ArrayList<>();
+
+            try {
+                for (int i = 0; i < EVENT_COUNT; i++) {
+                    String seq = "e" + i;
+
+                    appended.add(seq);
+                    appendProbe(tag, seq);
+                }
+
+                List<String> missing = missingAfterSettling(appended, delivered);
+
+                assertThat(missing)
+                    .as("every appended event must be delivered by the stream, %d of %d were skipped",
+                        missing.size(), EVENT_COUNT)
+                    .isEmpty();
+            }
+            finally {
+                running.set(false);
+                consumer.interrupt();
+                consumer.join(TimeUnit.SECONDS.toMillis(10));
+                stream.close();
+            }
+        }
+
+        private void appendProbe(Tag tag, String seq) {
+            UnitOfWork uow = unitOfWork();
+
+            uow.runOnInvocation(pc -> eventStore.transaction(pc).appendEvent(message(new StreamSkipProbe(tag.value(), seq))));
+
+            execute(uow);
+        }
+
+        /**
+         * Returns the events the consumer never received, once it has stopped receiving anything new.
+         * A skipped event is gone for good, so waiting longer cannot recover it - this only has to
+         * outlast normal delivery.
+         */
+        private List<String> missingAfterSettling(List<String> appended, Set<String> delivered) throws InterruptedException {
+            int previous = -1;
+
+            for (int quietRounds = 0; quietRounds < 5; ) {
+                Thread.sleep(500);
+
+                int current = delivered.size();
+
+                quietRounds = current == previous ? quietRounds + 1 : 0;
+                previous = current;
+            }
+
+            synchronized (delivered) {
+                return appended.stream().filter(seq -> !delivered.contains(seq)).toList();
+            }
+        }
+
+        @Event
+        record StreamSkipProbe(@EventTag(key = "Course") String id, String seq) {}
     }
 
     @Override
