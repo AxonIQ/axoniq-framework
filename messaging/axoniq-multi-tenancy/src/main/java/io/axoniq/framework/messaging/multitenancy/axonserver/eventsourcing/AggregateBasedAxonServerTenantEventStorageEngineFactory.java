@@ -26,11 +26,9 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantComponentLookup;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
-import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
@@ -38,8 +36,9 @@ import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Objects;
-import java.util.Optional;
 
 /**
  * Axon Server implementation of the {@link TenantEventStorageEngineFactory}, building one
@@ -61,13 +60,37 @@ public class AggregateBasedAxonServerTenantEventStorageEngineFactory
 
     /**
      * Constructs an {@code AggregateBasedAxonServerTenantEventStorageEngineFactory} building per-tenant aggregate
-     * storage engines from the given {@code configuration}.
+     * storage engines from the given components.
      *
-     * @param configuration the configuration used to construct each tenant's Axon Server event storage engine
+     * @param connectionManager the connection manager providing each tenant's Axon Server connection
+     * @param defaultConverter the converter used when no tenant-specific converter is configured
+     * @param eventTypeResolver the resolver for the event types stored in each tenant's context
      */
-    public AggregateBasedAxonServerTenantEventStorageEngineFactory(Configuration configuration) {
-        Objects.requireNonNull(configuration, "The configuration must not be null");
-        this.engineCache = new TenantScopedCache<>(perTenantEngine(configuration),
+    public AggregateBasedAxonServerTenantEventStorageEngineFactory(
+            AxonServerConnectionManager connectionManager,
+            EventConverter defaultConverter,
+            EventTypeResolver eventTypeResolver) {
+        this(connectionManager, defaultConverter, eventTypeResolver, null);
+    }
+
+    /**
+     * Constructs an {@code AggregateBasedAxonServerTenantEventStorageEngineFactory} building per-tenant aggregate
+     * storage engines from the given components.
+     *
+     * @param connectionManager the connection manager providing each tenant's Axon Server connection
+     * @param defaultConverter the converter used when no tenant-specific converter is configured
+     * @param eventTypeResolver the resolver for the event types stored in each tenant's context
+     * @param tenantConverterProvider the optional provider of tenant-specific converters
+     */
+    public AggregateBasedAxonServerTenantEventStorageEngineFactory(
+            AxonServerConnectionManager connectionManager,
+            EventConverter defaultConverter,
+            EventTypeResolver eventTypeResolver,
+            @Nullable TenantComponentProvider<Converter> tenantConverterProvider) {
+        this.engineCache = new TenantScopedCache<>(perTenantEngine(connectionManager,
+                                                                    defaultConverter,
+                                                                    eventTypeResolver,
+                                                                    tenantConverterProvider),
                                                   "the tenant aggregate-based event storage engine factory");
     }
 
@@ -91,17 +114,19 @@ public class AggregateBasedAxonServerTenantEventStorageEngineFactory
         engineCache.describeTo(descriptor);
     }
 
-    private static TenantComponentLookup<EventStorageEngine> perTenantEngine(Configuration configuration) {
-        AxonServerConnectionManager connectionManager = configuration.getComponent(AxonServerConnectionManager.class);
-        EventConverter defaultConverter = configuration.getComponent(EventConverter.class);
-        EventTypeResolver eventTypeResolver = configuration.getOptionalComponent(EventTypeResolver.class)
-                                                       .orElse(EventTypeResolver.DEFAULT);
-        Optional<TenantComponentProvider<Converter>> tenantConverters = TenantComponentProviderUtil.find(configuration, Converter.class);
+    private static TenantComponentLookup<EventStorageEngine> perTenantEngine(
+            AxonServerConnectionManager connectionManager,
+            EventConverter defaultConverter,
+            EventTypeResolver eventTypeResolver,
+            @Nullable TenantComponentProvider<Converter> tenantConverterProvider) {
+        Objects.requireNonNull(connectionManager, "The connection manager must not be null");
+        Objects.requireNonNull(defaultConverter, "The default converter must not be null");
+        Objects.requireNonNull(eventTypeResolver, "The event type resolver must not be null");
         return tenant -> new AggregateBasedAxonServerEventStorageEngine(
                 connectionManager.getConnection(tenant.tenantId()),
-                tenantConverters.<EventConverter>map(
-                                        provider -> new DelegatingEventConverter(provider.componentFor(tenant)))
-                                .orElse(defaultConverter),
+                tenantConverterProvider != null
+                        ? new DelegatingEventConverter(tenantConverterProvider.componentFor(tenant))
+                        : defaultConverter,
                 eventTypeResolver
         );
     }

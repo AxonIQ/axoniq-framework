@@ -20,11 +20,14 @@
 package io.axoniq.framework.integrationtests.multitenancy;
 
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AggregateBasedAxonServerTenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -79,7 +82,10 @@ class MultiTenantAggregateBasedEventStorageIT {
                 tenantPrefix,
                 registry -> registry.registerComponent(
                         TenantEventStorageEngineFactory.class,
-                        AggregateBasedAxonServerTenantEventStorageEngineFactory::new
+                        config -> new AggregateBasedAxonServerTenantEventStorageEngineFactory(
+                                config.getComponent(AxonServerConnectionManager.class),
+                                config.getComponent(EventConverter.class),
+                                config.getOptionalComponent(EventTypeResolver.class).orElse(EventTypeResolver.DEFAULT))
                 )
         );
         await().atMost(DEFAULT_TIMEOUT)

@@ -27,6 +27,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -47,7 +48,11 @@ class AggregateBasedAxonServerTenantEventStorageEngineFactoryTest {
                                        AxonServerConnectionManager.class, config -> connectionManager))
                                .build();
     private final AggregateBasedAxonServerTenantEventStorageEngineFactory testSubject =
-            new AggregateBasedAxonServerTenantEventStorageEngineFactory(configuration);
+            new AggregateBasedAxonServerTenantEventStorageEngineFactory(
+                    connectionManager,
+                    configuration.getComponent(EventConverter.class),
+                    EventTypeResolver.DEFAULT
+            );
 
     @BeforeEach
     void registerTenants() {
