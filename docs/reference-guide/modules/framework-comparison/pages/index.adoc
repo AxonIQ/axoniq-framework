@@ -778,13 +778,6 @@ If you depended strongly on any of the removed features, be sure to reach out.
 
 6+h| Event Scheduling and Deadline Management
 
-| Message Scheduling API
-| **TBD**
-| —
-| **TBD**
-| —
-| Intent is to provide a generic message scheduling integration to support both event scheduling and deadline/command scheduling. Design is underway.
-
 | Event Scheduling API
 | **TBD**
 | —
