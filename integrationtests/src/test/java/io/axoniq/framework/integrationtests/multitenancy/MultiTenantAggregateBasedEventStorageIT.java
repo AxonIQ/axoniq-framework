@@ -31,6 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -46,6 +47,8 @@ import static org.awaitility.Awaitility.await;
  */
 @ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
 class MultiTenantAggregateBasedEventStorageIT {
+
+    private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5);
 
     private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
     private static final String ACCOUNT_ID = "shared-account";
@@ -79,7 +82,7 @@ class MultiTenantAggregateBasedEventStorageIT {
                         AggregateBasedAxonServerTenantEventStorageEngineFactory::new
                 )
         );
-        await().atMost(30, TimeUnit.SECONDS)
+        await().atMost(DEFAULT_TIMEOUT)
                .untilAsserted(() -> assertThat(application.getComponent(TenantProvider.class).tenants())
                        .extracting(TenantDescriptor::tenantId)
                        .contains(tenantA, tenantB));
@@ -109,7 +112,7 @@ class MultiTenantAggregateBasedEventStorageIT {
         dispatch(commands, tenantB, new TenantBankFixture.RecordBalance(ACCOUNT_ID));
 
         // then
-        await().atMost(30, TimeUnit.SECONDS)
+        await().atMost(DEFAULT_TIMEOUT)
                .untilAsserted(() -> {
                    assertThat(stores.get(tenantA).observedBalance(ACCOUNT_ID)).isEqualTo(10);
                    assertThat(stores.get(tenantB).observedBalance(ACCOUNT_ID)).isEqualTo(20);
@@ -121,7 +124,7 @@ class MultiTenantAggregateBasedEventStorageIT {
     private void dispatch(CommandGateway commands, String tenant, Object command) {
         commands.send(command, TenantBankFixture.tenantMetadata(tenant), null)
                 .getResultMessage()
-                .orTimeout(15, TimeUnit.SECONDS)
+                .orTimeout(DEFAULT_TIMEOUT.toSeconds(), TimeUnit.SECONDS)
                 .join();
     }
 }
