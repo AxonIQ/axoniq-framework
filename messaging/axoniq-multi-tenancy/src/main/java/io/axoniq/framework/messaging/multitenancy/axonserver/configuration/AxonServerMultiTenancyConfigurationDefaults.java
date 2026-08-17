@@ -264,13 +264,6 @@ public class AxonServerMultiTenancyConfigurationDefaults implements Configuratio
                                    .withBuilder(AxonServerTenantEventStorageEngineFactory::new),
                 SearchScope.ALL);
         componentRegistry.registerComponent(
-                ComponentDefinition.ofType(TenantEventStorageComponentSubscriber.class)
-                                   .withBuilder(TenantEventStorageComponentSubscriber::new)
-                                   .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_FACTORY_PHASE,
-                                            TenantEventStorageComponentSubscriber::subscribeFactories)
-                                   .onShutdown(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_FACTORY_PHASE,
-                                               TenantEventStorageComponentSubscriber::cancelSubscriptions));
-        componentRegistry.registerComponent(
                 subscribedComponent(EventStorageEngine.class,
                                     AxonServerMultiTenancyConfigurationDefaults::routingEngine)
                         .onStart(MultiTenancyConfigurationDefaults.TENANT_COMPONENT_SUBSCRIBER_PHASE,

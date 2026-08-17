@@ -21,7 +21,9 @@ package io.axoniq.framework.messaging.multitenancy.configuration;
 
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
+import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.Configuration;
 import org.junit.jupiter.api.*;
@@ -31,11 +33,13 @@ import java.util.Map;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.withSettings;
 
 /**
- * Verifies {@link TenantComponentProviderSubscriber} subscribes every {@link TenantComponentProvider} to the
+ * Verifies {@link TenantComponentProviderSubscriber} subscribes multi-tenant-aware components to the
  * {@link TenantProvider}, keeps them in sync with the tenant lifecycle, and cancels their registrations again.
  */
 class TenantComponentProviderSubscriberTest {
@@ -44,12 +48,13 @@ class TenantComponentProviderSubscriberTest {
     private final TenantComponentProvider<CourseRepository> componentProvider =
             TenantComponentProvider.withFactory(CourseRepository.class, CourseRepository::new);
 
+    private Configuration configuration;
     private TenantComponentProviderSubscriber testSubject;
 
     @BeforeEach
     void setUp() {
         tenantProvider.addTenant(TENANT_A);
-        Configuration configuration = mock(Configuration.class);
+        configuration = mock(Configuration.class);
         when(configuration.getComponent(TenantProvider.class)).thenReturn(tenantProvider);
         when(configuration.getComponents(TenantComponentProvider.class))
                 .thenReturn(Map.of("componentProvider", componentProvider));
@@ -57,9 +62,9 @@ class TenantComponentProviderSubscriberTest {
     }
 
     @Test
-    void subscribeProvidersSubscribesEveryProviderAndReplaysKnownTenants() {
+    void subscribeComponentsSubscribesEveryProviderAndReplaysKnownTenants() {
         // when
-        testSubject.subscribeProviders();
+        testSubject.subscribeComponents();
 
         // then
         assertThat(tenantProvider.subscribedComponents()).contains(componentProvider);
@@ -69,7 +74,7 @@ class TenantComponentProviderSubscriberTest {
     @Test
     void propagatesTenantsAddedAtRuntimeToTheProvider() {
         // given
-        testSubject.subscribeProviders();
+        testSubject.subscribeComponents();
 
         // when
         tenantProvider.addTenant(TENANT_B);
@@ -81,7 +86,7 @@ class TenantComponentProviderSubscriberTest {
     @Test
     void removingATenantDestroysItsComponentInstance() {
         // given
-        testSubject.subscribeProviders();
+        testSubject.subscribeComponents();
         tenantProvider.addTenant(TENANT_B);
         CourseRepository repository = componentProvider.componentFor(TENANT_B);
 
@@ -96,7 +101,7 @@ class TenantComponentProviderSubscriberTest {
     @Test
     void tenantProviderShutdownDestroysAllComponentInstancesWithoutCancelSubscriptionsBeingCalled() {
         // given
-        testSubject.subscribeProviders();
+        testSubject.subscribeComponents();
         CourseRepository repository = componentProvider.componentFor(TENANT_A);
 
         // when the tenant provider shuts down on its own, deregistering all subscribed components
@@ -110,7 +115,7 @@ class TenantComponentProviderSubscriberTest {
     @Test
     void cancelSubscriptionsDestroysAllComponentInstances() {
         // given
-        testSubject.subscribeProviders();
+        testSubject.subscribeComponents();
         tenantProvider.addTenant(TENANT_B);
         CourseRepository repositoryA = componentProvider.componentFor(TENANT_A);
         CourseRepository repositoryB = componentProvider.componentFor(TENANT_B);
@@ -122,6 +127,23 @@ class TenantComponentProviderSubscriberTest {
         assertThat(repositoryA.closed).isTrue();
         assertThat(repositoryB.closed).isTrue();
         assertThat(componentProvider.tenants()).isEmpty();
+    }
+
+    @Test
+    void subscribesATenantAwareStorageFactoryRegisteredUnderItsFactoryType() {
+        // given
+        TenantEventStorageEngineFactory factory = mock(TenantEventStorageEngineFactory.class,
+                                                       withSettings().extraInterfaces(MultiTenantAwareComponent.class));
+        MultiTenantAwareComponent tenantAwareFactory = (MultiTenantAwareComponent) factory;
+        when(tenantAwareFactory.registerTenant(any())).thenReturn(() -> true);
+        when(configuration.hasComponent(TenantEventStorageEngineFactory.class)).thenReturn(true);
+        when(configuration.getComponent(TenantEventStorageEngineFactory.class)).thenReturn(factory);
+
+        // when
+        testSubject.subscribeComponents();
+
+        // then
+        assertThat(tenantProvider.subscribedComponents()).contains(tenantAwareFactory);
     }
 
     private static final class CourseRepository implements AutoCloseable {
@@ -138,4 +160,5 @@ class TenantComponentProviderSubscriberTest {
             this.closed = true;
         }
     }
+
 }
