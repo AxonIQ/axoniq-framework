@@ -43,6 +43,8 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.UnableToClaimTokenException;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
+import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -161,11 +163,31 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
         );
     }
 
+    /**
+     * Configures the workflow event processor: it streams any event, partitioned over
+     * {@link #initialSegmentCount} segments, with workflow instances distributed over segments by their workflow id.
+     * <p>
+     * The processor uses the {@link TokenStore} registered as a component when present — a durable store makes
+     * segment claims visible across nodes, the precondition for multi-node sharding. Without one, an
+     * {@link InMemoryTokenStore} is used and claims stay process-local (single-node operation).
+     */
     private BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
             PooledStreamingEventProcessorConfiguration> processorCustomization() {
-        var base = EventHandlingComponentHandlingAny.anyEventInSegments(initialSegmentCount);
-        return (cfg, processorConfiguration) -> base
-                .apply(cfg, processorConfiguration)
+        return (cfg, processorConfiguration) -> processorConfiguration
+                .eventCriteria(set -> set.isEmpty()
+                        ? EventCriteria.havingAnyTag()
+                        : EventCriteria.havingAnyTag().andBeingOneOfTypes(set))
+                .eventSource(cfg.getComponent(StreamableEventSource.class))
+                .tokenStore(cfg.getOptionalComponent(TokenStore.class).orElseGet(() -> {
+                    logger.warn("No TokenStore component configured for the workflow event processor — falling "
+                                        + "back to an in-memory token store. Segment claims are process-local: "
+                                        + "multi-node sharding and failover require a durable TokenStore.");
+                    return new InMemoryTokenStore();
+                }))
+                .unitOfWorkFactory(cfg.getComponent(UnitOfWorkFactory.class))
+                .initialSegmentCount(initialSegmentCount)
+                // FIXME -> should be configurable? currently only 1 is supported / working blocked by https://github.com/AxonIQ/AxonFramework/issues/4323
+                .batchSize(1)
                 .addSegmentChangeListener(segmentChangeListener(cfg));
     }
 

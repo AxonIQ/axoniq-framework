@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointTrigger;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
-import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
@@ -30,19 +29,13 @@ import org.axonframework.messaging.core.sequencing.SequencingPolicy;
 import org.axonframework.messaging.core.sequencing.SequentialPerAggregatePolicy;
 import org.axonframework.messaging.core.sequencing.SequentialPolicy;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
-import org.axonframework.messaging.eventstreaming.EventCriteria;
-import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -50,7 +43,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.BiFunction;
 
 import static java.util.Objects.requireNonNull;
 
@@ -69,48 +61,6 @@ public class EventHandlingComponentHandlingAny implements EventHandlingComponent
     private static final Logger logger = LoggerFactory.getLogger(EventHandlingComponentHandlingAny.class);
 
     private static final boolean ANY_EVENT = true;
-
-    /**
-     * Processor customization streaming any event into a single segment. Kept for behavioral compatibility; see
-     * {@link #anyEventInSegments(int)} for the multi-segment variant.
-     */
-    public static final BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
-            PooledStreamingEventProcessorConfiguration> ANY_EVENT_IN_ONE_SEGMENT = anyEventInSegments(1);
-
-    /**
-     * Creates a processor customization streaming any event, partitioned over the given number of segments. Workflow
-     * instances are distributed over segments by their workflow id
-     * <p>
-     * The processor uses the {@link TokenStore} registered as a component when present — a durable store makes
-     * segment claims visible across nodes, the precondition for multi-node sharding. Without one, an
-     * {@link InMemoryTokenStore} is used and claims stay process-local (single-node operation).
-     *
-     * @param initialSegmentCount number of segments to use when initializing the processor's tracking tokens.
-     * @return processor customization.
-     */
-    public static BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
-            PooledStreamingEventProcessorConfiguration> anyEventInSegments(int initialSegmentCount) {
-        return (c, pcepc) ->
-                pcepc.eventCriteria(
-                             set -> {
-                                 if (set.isEmpty()) {
-                                     return EventCriteria.havingAnyTag();
-                                 } else {
-                                     return EventCriteria.havingAnyTag().andBeingOneOfTypes(set);
-                                 }
-                             }
-                     )
-                     .eventSource(c.getComponent(StreamableEventSource.class))
-                     .tokenStore(c.getOptionalComponent(TokenStore.class).orElseGet(() -> {
-                         logger.warn("No TokenStore component configured for the workflow event processor — falling "
-                                             + "back to an in-memory token store. Segment claims are process-local: "
-                                             + "multi-node sharding and failover require a durable TokenStore.");
-                         return new InMemoryTokenStore();
-                     }))
-                     .unitOfWorkFactory(c.getComponent(UnitOfWorkFactory.class))
-                     .initialSegmentCount(initialSegmentCount)
-                     .batchSize(1); // FIXME -> should be configurable? currently only 1 is supported / working blocked by https://github.com/AxonIQ/AxonFramework/issues/4323
-    }
 
     private final EventHandler eventHandler;
     private final SequencingPolicy<EventMessage> sequencingPolicy;
