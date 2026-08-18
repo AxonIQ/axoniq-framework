@@ -50,11 +50,12 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
-import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.LockSupport;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 
 import static io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils.clientSupportsQueryStreaming;
 import static java.util.Objects.requireNonNull;
@@ -200,7 +201,7 @@ public class AxonServerQueryBusConnector implements QueryBusConnector, Connector
      * phase.
      *
      * @return a completable future that resolves once the {@link AxonServerConnection#queryChannel()} has prepared
-     * disconnecting
+     * disconnecting and the active inbound queries have terminated or been cancelled
      */
     @Override
     public CompletableFuture<Void> disconnect() {
@@ -208,13 +209,22 @@ public class AxonServerQueryBusConnector implements QueryBusConnector, Connector
             return FutureUtils.emptyCompletedFuture();
         }
         logger.trace("Disconnecting the AxonServerQueryBusConnector.");
-        connection.queryChannel().prepareDisconnect();
-        if (!localSegmentAdapter.awaitTermination(queryInProgressAwait)) {
-            logger.info("Awaited termination of queries in progress without success. "
-                                + "Going to cancel remaining queries in progress.");
-            localSegmentAdapter.cancel();
-        }
-        return FutureUtils.emptyCompletedFuture();
+        return connection.queryChannel()
+                         .prepareDisconnect()
+                         .thenCompose(ignored -> localSegmentAdapter.awaitTermination(queryInProgressAwait))
+                         .handle((ignored, throwable) -> {
+                             if (throwable == null) {
+                                 return null;
+                             }
+                             if (throwable instanceof java.util.concurrent.TimeoutException
+                                     || throwable.getCause() instanceof java.util.concurrent.TimeoutException) {
+                                 logger.info("Awaited termination of queries in progress without success. "
+                                                     + "Going to cancel remaining queries in progress.");
+                                 localSegmentAdapter.cancel();
+                                 return null;
+                             }
+                             throw new CompletionException(throwable);
+                         });
     }
 
     /**
@@ -244,7 +254,7 @@ public class AxonServerQueryBusConnector implements QueryBusConnector, Connector
      */
     private class LocalSegmentAdapter implements QueryHandler {
 
-        private final Map<String, Runnable> queriesInProgress = new ConcurrentHashMap<>();
+        private final Map<String, QueryInProgress> queriesInProgress = new ConcurrentHashMap<>();
 
         @Override
         public void handle(QueryRequest query, ReplyChannel<QueryResponse> responseHandler) {
@@ -254,11 +264,15 @@ public class AxonServerQueryBusConnector implements QueryBusConnector, Connector
         @Override
         public FlowControl stream(QueryRequest query, ReplyChannel<QueryResponse> responseHandler) {
             var result = incomingHandler.query(QueryConverter.convertQueryRequest(query, converter));
-            var previous = queriesInProgress.put(query.getMessageIdentifier(), result::close);
+            QueryInProgress queryInProgress = new QueryInProgress(result::close);
+            var previous = queriesInProgress.put(query.getMessageIdentifier(), queryInProgress);
             if (previous != null) {
-                previous.run();
+                previous.cancel();
             }
-            var responses = result.onClose(queriesInProgress.remove(query.getMessageIdentifier()));
+            var responses = result.onClose(() -> {
+                queryInProgress.complete();
+                queriesInProgress.remove(query.getMessageIdentifier(), queryInProgress);
+            });
 
             // Switching on the clientSupportsStreaming allows us to deviate between AF5 and AF4 applications.
             // An AF4 application will always have that setting to false, making it so that we can aggregate several
@@ -284,26 +298,47 @@ public class AxonServerQueryBusConnector implements QueryBusConnector, Connector
             };
         }
 
-        private boolean awaitTermination(Duration timeout) {
-            Instant startAwait = Instant.now();
-            Instant endAwait = startAwait.plusSeconds(timeout.getSeconds());
-            while (Instant.now().isBefore(endAwait) && !queriesInProgress.isEmpty()) {
-                queriesInProgress.values()
-                                 .stream()
-                                 .findFirst()
-                                 .ifPresent(queryInProgress -> {
-                                     while (Instant.now().isBefore(endAwait)) {
-                                         LockSupport.parkNanos(10_000_000);
-                                     }
-                                 });
-            }
-            return queriesInProgress.isEmpty();
+        private CompletableFuture<Void> awaitTermination(Duration timeout) {
+            List<CompletableFuture<Void>> terminations = queriesInProgress.values()
+                                                                          .stream()
+                                                                          .map(QueryInProgress::termination)
+                                                                          .toList();
+            return CompletableFuture.allOf(terminations.toArray(CompletableFuture[]::new))
+                                    .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS);
         }
 
         private void cancel() {
-            queriesInProgress.values()
-                             .iterator()
-                             .forEachRemaining(Runnable::run);
+            queriesInProgress.values().forEach(QueryInProgress::cancel);
+            queriesInProgress.clear();
+        }
+
+        /**
+         * Tracks an inbound query while its response stream remains open.
+         * <p>
+         * The termination future completes when the stream closes, allowing disconnect to await all active queries.
+         * When that drain times out, the cancellation action closes the stream and completes the termination future.
+         */
+        private static final class QueryInProgress {
+
+            private final Runnable cancellation;
+            private final CompletableFuture<Void> termination = new CompletableFuture<>();
+
+            private QueryInProgress(Runnable cancellation) {
+                this.cancellation = cancellation;
+            }
+
+            private CompletableFuture<Void> termination() {
+                return termination;
+            }
+
+            private void complete() {
+                termination.complete(null);
+            }
+
+            private void cancel() {
+                cancellation.run();
+                complete();
+            }
         }
     }
 
