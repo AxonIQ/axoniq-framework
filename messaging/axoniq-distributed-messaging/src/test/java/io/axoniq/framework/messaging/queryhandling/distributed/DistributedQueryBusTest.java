@@ -25,6 +25,7 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.GenericSubscriptionQueryUpdateMessage;
@@ -45,6 +46,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -408,6 +410,258 @@ class DistributedQueryBusTest {
             assertThat(matchingCallbackOne.completeExceptionallyCount.get()).isEqualTo(1);
             assertThat(matchingCallbackTwo.completeExceptionallyCount.get()).isEqualTo(1);
             assertThat(nonMatchingCallback.completeExceptionallyCount.get()).isZero();
+        }
+    }
+
+    @Nested
+    @DisplayName("Processing Context Aware Dispatch Tests")
+    class ProcessingContextAwareDispatchTests {
+
+        private StubUpdateCallback matchingCallbackOne;
+        private StubUpdateCallback matchingCallbackTwo;
+        private StubUpdateCallback nonMatchingCallback;
+        private QueryMessage matchingQueryOne;
+        private QueryMessage matchingQueryTwo;
+        private Predicate<QueryMessage> matchingFilter;
+
+        @BeforeEach
+        void registerSubscriptionQueries() {
+            testSubject = new DistributedQueryBus(localSegment, connector, configuration);
+            QualifiedName queryName = new QualifiedName("TestQuery");
+            matchingQueryOne = queryMessage(queryName);
+            matchingQueryTwo = queryMessage(queryName);
+            QueryMessage nonMatchingQuery = queryMessage(queryName);
+            matchingFilter = query -> query.identifier().equals(matchingQueryOne.identifier())
+                    || query.identifier().equals(matchingQueryTwo.identifier());
+
+            matchingCallbackOne = new StubUpdateCallback();
+            matchingCallbackTwo = new StubUpdateCallback();
+            nonMatchingCallback = new StubUpdateCallback();
+            connector.incomingHandler.registerUpdateHandler(matchingQueryOne, matchingCallbackOne);
+            connector.incomingHandler.registerUpdateHandler(matchingQueryTwo, matchingCallbackTwo);
+            connector.incomingHandler.registerUpdateHandler(nonMatchingQuery, nonMatchingCallback);
+        }
+
+        @Test
+        void emitUpdateWithProcessingContextStagesDispatchToAfterCommit() {
+            // given
+            SubscriptionQueryUpdateMessage update =
+                    new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+
+            // when emitting on invocation, before the ProcessingContext has committed...
+            uow.onInvocation(context -> testSubject.emitUpdateAndCount(matchingFilter, () -> update, context));
+
+            // then no dispatch happened yet...
+            assertThat(matchingCallbackOne.sendUpdateCount.get()).isZero();
+            assertThat(matchingCallbackTwo.sendUpdateCount.get()).isZero();
+
+            // when executing the UnitOfWork, we pass the after commit phase
+            uow.execute().join();
+
+            // then the update is dispatched to matching subscriptions only
+            assertThat(matchingCallbackOne.sendUpdateCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.sendUpdateCount.get()).isEqualTo(1);
+            assertThat(nonMatchingCallback.sendUpdateCount.get()).isZero();
+        }
+
+        @Test
+        void emitUpdateWithAlreadyCommittedProcessingContextDispatchesImmediately() {
+            // given - A completed UnitOfWork == a committed ProcessingContext
+            SubscriptionQueryUpdateMessage update =
+                    new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
+            AtomicReference<ProcessingContext> committedContext = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(committedContext::set);
+            uow.execute().join();
+
+            // when emitting with an already-committed context...
+            testSubject.emitUpdateAndCount(matchingFilter, () -> update, committedContext.get())
+                       .orTimeout(1, TimeUnit.SECONDS)
+                       .join();
+
+            // then the update is dispatched immediately
+            assertThat(matchingCallbackOne.sendUpdateCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.sendUpdateCount.get()).isEqualTo(1);
+        }
+
+        @Test
+        void emitUpdateWithErroredProcessingContextDropsUpdate() {
+            // given - An exceptionally completed UnitOfWork/ProcessingContext
+            SubscriptionQueryUpdateMessage update =
+                    new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
+            AtomicReference<ProcessingContext> erroredContext = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(context -> {
+                erroredContext.set(context);
+                throw new RuntimeException("simulated error");
+            });
+            //noinspection DataFlowIssue
+            uow.execute().exceptionally(e -> null).join();
+
+            // when emitting with an errored context...
+            OptionalInt result = testSubject.emitUpdateAndCount(matchingFilter, () -> update, erroredContext.get())
+                                            .orTimeout(1, TimeUnit.SECONDS)
+                                            .join();
+
+            // then - the update must never be dispatched
+            assertThat(result).isEmpty();
+            assertThat(matchingCallbackOne.sendUpdateCount.get()).isZero();
+            assertThat(matchingCallbackTwo.sendUpdateCount.get()).isZero();
+        }
+
+        @Test
+        void emitUpdateAndCountReflectsMatchCountAtCallTimeEvenWhenDispatchIsDeferredToAfterCommit() {
+            // given
+            SubscriptionQueryUpdateMessage update =
+                    new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            AtomicReference<OptionalInt> matchCountRef = new AtomicReference<>();
+
+            // when emitting on invocation, before the ProcessingContext has committed...
+            uow.onInvocation(context -> {
+                CompletableFuture<OptionalInt> matchCountFuture =
+                        testSubject.emitUpdateAndCount(matchingFilter, () -> update, context);
+                // then the match count is already available, without waiting for the after-commit phase...
+                matchCountRef.set(matchCountFuture.orTimeout(1, TimeUnit.SECONDS).join());
+                return CompletableFuture.completedFuture(null);
+            });
+            uow.execute().join();
+
+            // then...
+            assertThat(matchCountRef.get()).hasValue(2);
+        }
+
+        @Test
+        void completeSubscriptionsWithProcessingContextStagesCompletionToAfterCommit() {
+            // given
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+
+            // when completing on invocation, before the ProcessingContext has committed...
+            uow.onInvocation(context -> testSubject.completeSubscriptionsAndCount(matchingFilter, context));
+
+            // then no completion happened yet...
+            assertThat(matchingCallbackOne.completeCount.get()).isZero();
+            assertThat(matchingCallbackTwo.completeCount.get()).isZero();
+
+            // when executing the UnitOfWork, we pass the after commit phase
+            uow.execute().join();
+
+            // then the matching subscriptions only are completed
+            assertThat(matchingCallbackOne.completeCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.completeCount.get()).isEqualTo(1);
+            assertThat(nonMatchingCallback.completeCount.get()).isZero();
+        }
+
+        @Test
+        void completeSubscriptionsWithAlreadyCommittedProcessingContextCompletesImmediately() {
+            // given - A completed UnitOfWork == a committed ProcessingContext
+            AtomicReference<ProcessingContext> committedContext = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(committedContext::set);
+            uow.execute().join();
+
+            // when completing with an already-committed context...
+            testSubject.completeSubscriptionsAndCount(matchingFilter, committedContext.get())
+                       .orTimeout(1, TimeUnit.SECONDS)
+                       .join();
+
+            // then the subscriptions are completed immediately
+            assertThat(matchingCallbackOne.completeCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.completeCount.get()).isEqualTo(1);
+        }
+
+        @Test
+        void completeSubscriptionsWithErroredProcessingContextDropsCompletion() {
+            // given - An exceptionally completed UnitOfWork/ProcessingContext
+            AtomicReference<ProcessingContext> erroredContext = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(context -> {
+                erroredContext.set(context);
+                throw new RuntimeException("simulated error");
+            });
+            //noinspection DataFlowIssue
+            uow.execute().exceptionally(e -> null).join();
+
+            // when completing with an errored context...
+            OptionalInt result = testSubject.completeSubscriptionsAndCount(matchingFilter, erroredContext.get())
+                                            .orTimeout(1, TimeUnit.SECONDS)
+                                            .join();
+
+            // then - completion must never be dispatched
+            assertThat(result).isEmpty();
+            assertThat(matchingCallbackOne.completeCount.get()).isZero();
+            assertThat(matchingCallbackTwo.completeCount.get()).isZero();
+        }
+
+        @Test
+        void completeSubscriptionsExceptionallyWithProcessingContextStagesCompletionToAfterCommit() {
+            // given
+            MockException cause = new MockException("Mock");
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+
+            // when completing exceptionally on invocation, before the ProcessingContext has committed...
+            uow.onInvocation(context ->
+                                     testSubject.completeSubscriptionsExceptionallyAndCount(matchingFilter,
+                                                                                            cause,
+                                                                                            context));
+
+            // then no completion happened yet...
+            assertThat(matchingCallbackOne.completeExceptionallyCount.get()).isZero();
+            assertThat(matchingCallbackTwo.completeExceptionallyCount.get()).isZero();
+
+            // when executing the UnitOfWork, we pass the after commit phase
+            uow.execute().join();
+
+            // then the matching subscriptions only are completed exceptionally
+            assertThat(matchingCallbackOne.completeExceptionallyCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.completeExceptionallyCount.get()).isEqualTo(1);
+            assertThat(nonMatchingCallback.completeExceptionallyCount.get()).isZero();
+        }
+
+        @Test
+        void completeSubscriptionsExceptionallyWithAlreadyCommittedProcessingContextCompletesImmediately() {
+            // given - A completed UnitOfWork == a committed ProcessingContext
+            MockException cause = new MockException("Mock");
+            AtomicReference<ProcessingContext> committedContext = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(committedContext::set);
+            uow.execute().join();
+
+            // when completing exceptionally with an already-committed context...
+            testSubject.completeSubscriptionsExceptionallyAndCount(matchingFilter, cause, committedContext.get())
+                       .orTimeout(1, TimeUnit.SECONDS)
+                       .join();
+
+            // then the subscriptions are completed exceptionally, immediately
+            assertThat(matchingCallbackOne.completeExceptionallyCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.completeExceptionallyCount.get()).isEqualTo(1);
+        }
+
+        @Test
+        void completeSubscriptionsExceptionallyWithErroredProcessingContextDropsCompletion() {
+            // given - An exceptionally completed UnitOfWork/ProcessingContext
+            MockException cause = new MockException("Mock");
+            AtomicReference<ProcessingContext> erroredContext = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(context -> {
+                erroredContext.set(context);
+                throw new RuntimeException("simulated error");
+            });
+            //noinspection DataFlowIssue
+            uow.execute().exceptionally(e -> null).join();
+
+            // when completing exceptionally with an errored context...
+            OptionalInt result = testSubject.completeSubscriptionsExceptionallyAndCount(matchingFilter,
+                                                                                        cause,
+                                                                                        erroredContext.get())
+                                            .orTimeout(1, TimeUnit.SECONDS)
+                                            .join();
+
+            // then - completion must never be dispatched
+            assertThat(result).isEmpty();
+            assertThat(matchingCallbackOne.completeExceptionallyCount.get()).isZero();
+            assertThat(matchingCallbackTwo.completeExceptionallyCount.get()).isZero();
         }
     }
 
