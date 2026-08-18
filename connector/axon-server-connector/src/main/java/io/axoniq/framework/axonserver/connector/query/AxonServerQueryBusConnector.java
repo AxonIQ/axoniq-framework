@@ -54,8 +54,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils.clientSupportsQueryStreaming;
 import static java.util.Objects.requireNonNull;
@@ -212,18 +212,15 @@ public class AxonServerQueryBusConnector implements QueryBusConnector, Connector
         return connection.queryChannel()
                          .prepareDisconnect()
                          .thenCompose(ignored -> localSegmentAdapter.awaitTermination(queryInProgressAwait))
-                         .handle((ignored, throwable) -> {
-                             if (throwable == null) {
-                                 return null;
-                             }
-                             if (throwable instanceof java.util.concurrent.TimeoutException
-                                     || throwable.getCause() instanceof java.util.concurrent.TimeoutException) {
+                         .exceptionallyCompose(throwable -> {
+                             if (throwable instanceof TimeoutException
+                                     || throwable.getCause() instanceof TimeoutException) {
                                  logger.info("Awaited termination of queries in progress without success. "
                                                      + "Going to cancel remaining queries in progress.");
                                  localSegmentAdapter.cancel();
-                                 return null;
+                                 return FutureUtils.emptyCompletedFuture();
                              }
-                             throw new CompletionException(throwable);
+                             return CompletableFuture.failedFuture(throwable);
                          });
     }
 
