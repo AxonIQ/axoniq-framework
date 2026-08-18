@@ -42,17 +42,14 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.SequenceOverridingEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.store.UnableToClaimTokenException;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -338,65 +335,9 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                         : earliestSegmentToken(tokenStore, segments))));
     }
 
-    /**
-     * Returns the earliest position over the segment tokens this node can read. With multiple segments the replay
-     * decision and the engine's replay tracking must consider the segment that is furthest behind, otherwise catch-up
-     * work of lagging segments would be treated as already-live processing.
-     * <p>
-     * A segment owned by another node is skipped: it is already being processed there and is not part of this node's
-     * replay decision. If no segment can be read the result is {@code null}, and the node starts without a replay;
-     * its executions are restored per segment by the segment change listener once it actually claims one.
-     * <p>
-     * Segments are read one at a time and the claim the read takes is released before the next one is read, so a
-     * starting node never holds a claim on one segment while reading another. Holding them makes two nodes starting
-     * at the same time block each other.
-     */
     private CompletableFuture<TrackingToken> earliestSegmentToken(TokenStore tokenStore,
                                                                   List<Segment> segments) {
-        var readable = new ArrayList<TrackingToken>();
-        CompletableFuture<Void> scan = completedFuture(null);
-        for (var segment : segments) {
-            var segmentId = segment.getSegmentId();
-            scan = scan.thenCompose(ignored -> fetchTokenAndReleaseClaim(tokenStore, segmentId)
-                    .thenAccept(readable::add)
-                    .exceptionally(ex -> skipSegmentOwnedByAnotherNode(ex, segmentId)));
-        }
-        return scan.thenApply(ignored -> earliest(readable));
-    }
-
-    /**
-     * Swallows the failure of a segment owned by another node, and rethrows anything else.
-     */
-    @Nullable
-    private Void skipSegmentOwnedByAnotherNode(Throwable ex, int segmentId) {
-        var cause = ex instanceof CompletionException && ex.getCause() != null ? ex.getCause() : ex;
-        if (!(cause instanceof UnableToClaimTokenException)) {
-            throw cause instanceof RuntimeException runtime ? runtime : new CompletionException(cause);
-        }
-        logger.info("Segment {} of processor {} is owned by another node; leaving it out of the replay decision.",
-                    segmentId, moduleName);
-        return null;
-    }
-
-    /**
-     * Returns the lowest of the given tokens, or {@code null} when there is nothing to fold or a token is unknown.
-     */
-    @Nullable
-    private static TrackingToken earliest(List<TrackingToken> tokens) {
-        if (tokens.isEmpty() || tokens.contains(null)) {
-            return null;
-        }
-        var earliest = tokens.get(0);
-        for (var token : tokens) {
-            earliest = earliest.lowerBound(token);
-        }
-        return earliest;
-    }
-
-    private CompletableFuture<TrackingToken> fetchTokenAndReleaseClaim(TokenStore tokenStore, int segmentId) {
-        return tokenStore.fetchToken(moduleName, segmentId, null)
-                         .thenCompose(token -> tokenStore.releaseClaim(moduleName, segmentId, null)
-                                                         .thenApply(ignored -> token));
+        return SegmentTokenScan.earliestSegmentToken(tokenStore, moduleName, segments);
     }
 
     CompletableFuture<Void> initializeWorkflowEngine(
