@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -27,13 +26,11 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.FOUR_SEGMENTS;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class SegmentedWorkflowRoutingTest {
 
-    private static final List<Segment> FOUR_SEGMENTS = IntStream.range(0, 4)
-                                                                .mapToObj(id -> new Segment(id, 3))
-                                                                .toList();
 
     @Test
     void everyIdIsOwnedByExactlyOneSegment() {

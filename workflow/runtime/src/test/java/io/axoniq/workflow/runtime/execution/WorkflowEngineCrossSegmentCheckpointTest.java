@@ -40,7 +40,6 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressContext;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,6 +56,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.FOUR_SEGMENTS;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.SEGMENT_COUNT;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.idOnAnotherSegmentThan;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.token;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
@@ -93,10 +97,6 @@ import static org.mockito.Mockito.when;
 class WorkflowEngineCrossSegmentCheckpointTest {
 
     private static final String PROCESSOR = "Workflow";
-    private static final int SEGMENT_COUNT = 4;
-    private static final List<Segment> FOUR_SEGMENTS = IntStream.range(0, SEGMENT_COUNT)
-                                                                .mapToObj(id -> new Segment(id, SEGMENT_COUNT - 1))
-                                                                .toList();
 
     /** Instance whose start event segment A handles, and whose asynchronous completion raises the leaking request. */
     private static final String STRAGGLER_ID = "sharded-0";
@@ -413,26 +413,6 @@ class WorkflowEngineCrossSegmentCheckpointTest {
 
     private TrackingToken storedToken(Segment segment) {
         return tokenStore.fetchToken(PROCESSOR, segment.getSegmentId(), null).join();
-    }
-
-    private static TrackingToken token(long position) {
-        return new GlobalSequenceTrackingToken(position);
-    }
-
-    private static Segment owningSegment(String workflowId) {
-        return FOUR_SEGMENTS.stream()
-                            .filter(segment -> SegmentedWorkflowRouting.ownedBy(segment, workflowId))
-                            .findFirst()
-                            .orElseThrow();
-    }
-
-    private static String idOnAnotherSegmentThan(String workflowId) {
-        var owner = owningSegment(workflowId);
-        return IntStream.range(1, 64)
-                        .mapToObj(i -> "sharded-" + i)
-                        .filter(candidate -> !SegmentedWorkflowRouting.ownedBy(owner, candidate))
-                        .findFirst()
-                        .orElseThrow();
     }
 
     private static String anotherIdOn(Segment segment, String otherThan) {

@@ -23,14 +23,13 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.IntStream;
 
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.idOnAnotherSegmentThan;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -45,9 +44,6 @@ import static org.mockito.Mockito.when;
  */
 class WorkflowEngineSegmentFailoverTest {
 
-    private static final List<Segment> FOUR_SEGMENTS = IntStream.range(0, 4)
-                                                                .mapToObj(id -> new Segment(id, 3))
-                                                                .toList();
     private static final String OWNED_ID = "sharded-0";
 
     private WorkflowExecutionRepository repository;
@@ -113,21 +109,5 @@ class WorkflowEngineSegmentFailoverTest {
         var execution = mock(WorkflowExecution.class);
         when(execution.workflowId()).thenReturn(workflowId);
         return execution;
-    }
-
-    private static Segment owningSegment(String workflowId) {
-        return FOUR_SEGMENTS.stream()
-                            .filter(segment -> SegmentedWorkflowRouting.ownedBy(segment, workflowId))
-                            .findFirst()
-                            .orElseThrow();
-    }
-
-    private static String idOnAnotherSegmentThan(String workflowId) {
-        var owner = owningSegment(workflowId);
-        return IntStream.range(1, 64)
-                        .mapToObj(i -> "sharded-" + i)
-                        .filter(candidate -> !SegmentedWorkflowRouting.ownedBy(owner, candidate))
-                        .findFirst()
-                        .orElseThrow();
     }
 }

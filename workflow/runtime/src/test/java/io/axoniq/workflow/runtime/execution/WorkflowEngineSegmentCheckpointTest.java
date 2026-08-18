@@ -26,7 +26,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageType;
@@ -43,8 +42,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.IntStream;
 
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.FOUR_SEGMENTS;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
@@ -64,9 +64,6 @@ import static org.mockito.Mockito.when;
  */
 class WorkflowEngineSegmentCheckpointTest {
 
-    private static final List<Segment> FOUR_SEGMENTS = IntStream.range(0, 4)
-                                                                .mapToObj(id -> new Segment(id, 3))
-                                                                .toList();
     private static final TrackingToken TOKEN = new GlobalSequenceTrackingToken(42);
     private static final String BUSY_WORKFLOW_ID = "busy-workflow";
     private static final QualifiedName START_EVENT = new QualifiedName("StartBusyWorkflow");
@@ -89,12 +86,12 @@ class WorkflowEngineSegmentCheckpointTest {
         workflowEngine.setEngineSupportComponents(replaySupport, checkpointingSupport);
         registerSpawningConfiguration(configurationRegistry);
         // Delivered on the segment that owns it, exactly as the routing sequences a unique spawn candidate.
-        workflowEngine.handle(startEvent(), processingContext(owningSegment()));
+        workflowEngine.handle(startEvent(), processingContext(owningSegment(BUSY_WORKFLOW_ID)));
     }
 
     @Test
     void busyWorkflowHoldsBackOnlyTheTokenOfTheSegmentOwningIt() {
-        var owner = owningSegment();
+        var owner = owningSegment(BUSY_WORKFLOW_ID);
 
         for (var segment : FOUR_SEGMENTS) {
             var advanced = checkpointingSupport.onCheckpointAdvanced(segment, TOKEN);
@@ -108,13 +105,6 @@ class WorkflowEngineSegmentCheckpointTest {
                         .isCompletedWithValue(TOKEN);
             }
         }
-    }
-
-    private static Segment owningSegment() {
-        return FOUR_SEGMENTS.stream()
-                            .filter(segment -> SegmentedWorkflowRouting.ownedBy(segment, BUSY_WORKFLOW_ID))
-                            .findFirst()
-                            .orElseThrow();
     }
 
     /**

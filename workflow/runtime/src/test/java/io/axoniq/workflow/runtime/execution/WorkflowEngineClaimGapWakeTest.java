@@ -48,8 +48,8 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
-import java.util.stream.IntStream;
 
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
 import static io.axoniq.workflow.configuration.WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,10 +75,6 @@ import static org.mockito.Mockito.when;
  */
 class WorkflowEngineClaimGapWakeTest {
 
-    private static final int SEGMENT_COUNT = 4;
-    private static final List<Segment> FOUR_SEGMENTS = IntStream.range(0, SEGMENT_COUNT)
-                                                                .mapToObj(id -> new Segment(id, SEGMENT_COUNT - 1))
-                                                                .toList();
     private static final String RESIDENT_ID = "sharded-0";
     private static final MessageType DEFINITION_ID =
             new MessageType(new QualifiedName("RestoredWorkflow"), "1.0.0");
@@ -262,12 +258,5 @@ class WorkflowEngineClaimGapWakeTest {
         when(eventMessage.type()).thenReturn(new MessageType(RESUME_EVENT));
         when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of("orderId", RESIDENT_ID));
         return eventMessage;
-    }
-
-    private static Segment owningSegment(String workflowId) {
-        return FOUR_SEGMENTS.stream()
-                            .filter(segment -> SegmentedWorkflowRouting.ownedBy(segment, workflowId))
-                            .findFirst()
-                            .orElseThrow();
     }
 }

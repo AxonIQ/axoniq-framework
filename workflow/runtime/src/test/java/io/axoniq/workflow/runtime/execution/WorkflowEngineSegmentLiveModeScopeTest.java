@@ -36,7 +36,6 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,8 +46,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
-import java.util.stream.IntStream;
 
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.FOUR_SEGMENTS;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.SEGMENT_COUNT;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.anotherSegmentThan;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.anyIdOn;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.token;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
@@ -71,10 +75,6 @@ import static org.mockito.Mockito.when;
  */
 class WorkflowEngineSegmentLiveModeScopeTest {
 
-    private static final int SEGMENT_COUNT = 4;
-    private static final List<Segment> FOUR_SEGMENTS = IntStream.range(0, SEGMENT_COUNT)
-                                                                .mapToObj(id -> new Segment(id, SEGMENT_COUNT - 1))
-                                                                .toList();
     private static final QualifiedName START_EVENT = new QualifiedName("StartShardedWorkflow");
 
     private static final long STARTUP_LATEST_POSITION = 100;
@@ -301,31 +301,5 @@ class WorkflowEngineSegmentLiveModeScopeTest {
         when(eventMessage.metadata()).thenReturn(Metadata.with("workflowId", workflowId));
         when(eventMessage.type()).thenReturn(new MessageType("SomeStepCompleted"));
         return eventMessage;
-    }
-
-    private static TrackingToken token(long position) {
-        return new GlobalSequenceTrackingToken(position);
-    }
-
-    private static Segment owningSegment(String workflowId) {
-        return FOUR_SEGMENTS.stream()
-                            .filter(segment -> SegmentedWorkflowRouting.ownedBy(segment, workflowId))
-                            .findFirst()
-                            .orElseThrow();
-    }
-
-    private static Segment anotherSegmentThan(Segment segment) {
-        return FOUR_SEGMENTS.stream()
-                            .filter(candidate -> candidate.getSegmentId() != segment.getSegmentId())
-                            .findFirst()
-                            .orElseThrow();
-    }
-
-    private static String anyIdOn(Segment segment) {
-        return IntStream.range(0, 512)
-                        .mapToObj(i -> "sharded-" + i)
-                        .filter(candidate -> SegmentedWorkflowRouting.ownedBy(segment, candidate))
-                        .findFirst()
-                        .orElseThrow();
     }
 }
