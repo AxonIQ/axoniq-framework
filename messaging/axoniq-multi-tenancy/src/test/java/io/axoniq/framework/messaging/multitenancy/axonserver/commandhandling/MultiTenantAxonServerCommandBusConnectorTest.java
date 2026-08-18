@@ -68,7 +68,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.RecordingAxonServerConnectionManager;
 
 class MultiTenantAxonServerCommandBusConnectorTest {
 

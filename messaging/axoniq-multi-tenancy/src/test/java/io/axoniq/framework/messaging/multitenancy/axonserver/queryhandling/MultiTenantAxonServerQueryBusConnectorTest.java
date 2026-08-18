@@ -76,7 +76,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.*;
-import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.RecordingAxonServerConnectionManager;
 
 class MultiTenantAxonServerQueryBusConnectorTest {
 
@@ -131,7 +130,7 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             assertThat(result).isNotNull();
             assertThat(connection1.recordingQueryChannel().sentQueries()).isEmpty();
             assertThat(connection2.recordingQueryChannel().sentQueries()).hasSize(1);
-            assertThat(connection2.recordingQueryChannel().sentQueries().get(0).getMessageIdentifier())
+            assertThat(connection2.recordingQueryChannel().sentQueries().getFirst().getMessageIdentifier())
                     .isEqualTo(query.identifier());
         }
 
