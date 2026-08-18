@@ -36,7 +36,7 @@ import java.util.concurrent.CompletableFuture;
  * This is the additive convenience that lets a self-checkpointing event handler declare a {@code CheckpointTrigger}
  * parameter and call {@link CheckpointTrigger#requestCheckpoint(org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken)
  * requestCheckpoint} directly, instead of retaining the trigger handed to it through
- * {@link Checkpointing#onSegmentClaimed(org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment, CheckpointTrigger)}.
+ * {@link Checkpointing#onSegmentClaimed(org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment, org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken, CheckpointTrigger)}.
  * <p>
  * Expects the {@code CheckpointTrigger} to reside in the {@link ProcessingContext} under
  * {@link CheckpointTrigger#RESOURCE_KEY}. A

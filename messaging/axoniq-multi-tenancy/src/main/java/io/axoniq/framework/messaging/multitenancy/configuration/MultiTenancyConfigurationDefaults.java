@@ -172,7 +172,7 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
                                                                           config.getComponent(TenantProvider.class)),
                                                SearchScope.ALL);
 
-        // Keep every TenantComponentProvider in sync with the tenants known to the TenantProvider.
+        // Keep tenant-scoped providers and tenant-aware storage factories in sync with the TenantProvider.
         registerTenantComponentProviderSubscription(componentRegistry);
 
         // Restart the running streaming event processors whenever the set of tenants changes.
@@ -190,10 +190,10 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
     }
 
     /**
-     * Registers the {@link TenantComponentProviderSubscriber}, subscribing every {@link TenantComponentProvider} to the
-     * {@link TenantProvider} at startup, so providers follow the tenant lifecycle: known tenants are replayed on
-     * subscription and tenants added or removed at runtime reach every provider. At shutdown the retained subscriptions
-     * are cancelled, destroying each tenant's component instances.
+     * Registers the {@link TenantComponentProviderSubscriber}, subscribing registered {@link TenantComponentProvider}
+     * instances and tenant-aware storage factories to the {@link TenantProvider} at startup. Known tenants are replayed
+     * on subscription and tenants added or removed at runtime reach every subscribed component. At shutdown the retained
+     * subscriptions are cancelled, destroying each tenant's component instances.
      * <p>
      * The subscriber starts in {@link #TENANT_COMPONENT_FACTORY_PHASE}, one phase before tenant-routing components
      * subscribe. A routing component can create a tenant-specific connector, storage engine, or converter as soon as
@@ -211,7 +211,7 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
                         .ofType(TenantComponentProviderSubscriber.class)
                         .withBuilder(TenantComponentProviderSubscriber::new)
                         .onStart(TENANT_COMPONENT_FACTORY_PHASE,
-                                 TenantComponentProviderSubscriber::subscribeProviders)
+                                 TenantComponentProviderSubscriber::subscribeComponents)
                         .onShutdown(TENANT_COMPONENT_FACTORY_PHASE,
                                     TenantComponentProviderSubscriber::cancelSubscriptions)
         );

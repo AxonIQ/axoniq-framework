@@ -20,17 +20,21 @@
 package io.axoniq.framework.integrationtests.multitenancy;
 
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AggregateBasedAxonServerTenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -46,6 +50,8 @@ import static org.awaitility.Awaitility.await;
  */
 @ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
 class MultiTenantAggregateBasedEventStorageIT {
+
+    private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5);
 
     private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
     private static final String ACCOUNT_ID = "shared-account";
@@ -76,10 +82,13 @@ class MultiTenantAggregateBasedEventStorageIT {
                 tenantPrefix,
                 registry -> registry.registerComponent(
                         TenantEventStorageEngineFactory.class,
-                        AggregateBasedAxonServerTenantEventStorageEngineFactory::new
+                        config -> new AggregateBasedAxonServerTenantEventStorageEngineFactory(
+                                config.getComponent(AxonServerConnectionManager.class),
+                                config.getComponent(EventConverter.class),
+                                config.getOptionalComponent(EventTypeResolver.class).orElse(EventTypeResolver.DEFAULT))
                 )
         );
-        await().atMost(30, TimeUnit.SECONDS)
+        await().atMost(DEFAULT_TIMEOUT)
                .untilAsserted(() -> assertThat(application.getComponent(TenantProvider.class).tenants())
                        .extracting(TenantDescriptor::tenantId)
                        .contains(tenantA, tenantB));
@@ -109,7 +118,7 @@ class MultiTenantAggregateBasedEventStorageIT {
         dispatch(commands, tenantB, new TenantBankFixture.RecordBalance(ACCOUNT_ID));
 
         // then
-        await().atMost(30, TimeUnit.SECONDS)
+        await().atMost(DEFAULT_TIMEOUT)
                .untilAsserted(() -> {
                    assertThat(stores.get(tenantA).observedBalance(ACCOUNT_ID)).isEqualTo(10);
                    assertThat(stores.get(tenantB).observedBalance(ACCOUNT_ID)).isEqualTo(20);
@@ -121,7 +130,7 @@ class MultiTenantAggregateBasedEventStorageIT {
     private void dispatch(CommandGateway commands, String tenant, Object command) {
         commands.send(command, TenantBankFixture.tenantMetadata(tenant), null)
                 .getResultMessage()
-                .orTimeout(15, TimeUnit.SECONDS)
+                .orTimeout(DEFAULT_TIMEOUT.toSeconds(), TimeUnit.SECONDS)
                 .join();
     }
 }

@@ -20,12 +20,14 @@
 package io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.api.RecordingAxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.event.AggregateBasedAxonServerEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -34,7 +36,6 @@ import org.junit.jupiter.api.Test;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_B;
-import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.RecordingAxonServerConnectionManager;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -47,7 +48,11 @@ class AggregateBasedAxonServerTenantEventStorageEngineFactoryTest {
                                        AxonServerConnectionManager.class, config -> connectionManager))
                                .build();
     private final AggregateBasedAxonServerTenantEventStorageEngineFactory testSubject =
-            new AggregateBasedAxonServerTenantEventStorageEngineFactory(configuration);
+            new AggregateBasedAxonServerTenantEventStorageEngineFactory(
+                    connectionManager,
+                    configuration.getComponent(EventConverter.class),
+                    EventTypeResolver.DEFAULT
+            );
 
     @BeforeEach
     void registerTenants() {

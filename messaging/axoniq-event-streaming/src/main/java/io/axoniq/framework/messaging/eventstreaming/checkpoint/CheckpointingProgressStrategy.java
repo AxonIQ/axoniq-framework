@@ -150,7 +150,8 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
     @Override
     public void onSegmentClaimed() {
         Segment segment = context.segment();
-        participants.forEach(participant -> participant.onSegmentClaimed(segment, trigger));
+        TrackingToken from = context.lastConsumedToken();
+        participants.forEach(participant -> participant.onSegmentClaimed(segment, from, trigger));
     }
 
     /**

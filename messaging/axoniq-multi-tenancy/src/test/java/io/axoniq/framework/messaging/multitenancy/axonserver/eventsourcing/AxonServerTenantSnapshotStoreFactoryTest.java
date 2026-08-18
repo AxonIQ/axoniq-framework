@@ -20,6 +20,7 @@
 package io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.api.RecordingAxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;

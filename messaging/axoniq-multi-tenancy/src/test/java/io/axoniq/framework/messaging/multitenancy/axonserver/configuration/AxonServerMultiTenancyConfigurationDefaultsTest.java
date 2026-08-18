@@ -629,7 +629,7 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
 
         @Override
         public void close() {
-            // unsused, but the component provider requires AutoCloseable to be able to close all tenant components on shutdown
+            // unused, but the component provider requires AutoCloseable to be able to close all tenant components on shutdown
         }
     }
 }
