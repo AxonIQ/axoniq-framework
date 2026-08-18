@@ -218,4 +218,14 @@ public interface WorkflowExecution extends DescribableComponent {
      * @return workflow configuration
      */
     WorkflowConfiguration<?> workflowConfiguration();
+
+    /**
+     * Returns the append condition of this execution, or {@code null} when it appends unconditionally.
+     *
+     * @return the append condition of this execution, or {@code null} to append unconditionally
+     */
+    @Nullable
+    default WorkflowAppendCondition appendCondition() {
+        return null;
+    }
 }

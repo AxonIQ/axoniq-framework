@@ -140,7 +140,7 @@ public class ProcessingContextUtils {
         var fromResource = from.resources();
         fromResource.forEach((k, v) -> {
             if (!(v instanceof EventStoreTransaction)) {
-                to.putResource((Context.ResourceKey<Object>) k, v);
+                to.putResourceIfAbsent((Context.ResourceKey<Object>) k, v);
             }
         });
         return to;

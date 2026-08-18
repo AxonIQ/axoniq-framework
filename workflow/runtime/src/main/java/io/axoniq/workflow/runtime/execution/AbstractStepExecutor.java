@@ -27,7 +27,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
-import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.FutureUtils;
@@ -229,7 +228,6 @@ public abstract class AbstractStepExecutor {
                 onCancelled.run();
                 var terminationCause = unwrapCancellation(e);
                 workflowExecution.appendTask(i -> {
-                    // FIXME - This is where we should publish using an append condition
                     if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)) {
                         cancelled(stepName, terminationCause, eventNameCustomizer);
                     }
@@ -306,18 +304,25 @@ public abstract class AbstractStepExecutor {
                                                                                        .status()
                             + ", cannot publish step event " + eventMessage.type()));
         }
-        logger.trace("Appending event {}", eventMessage.type());
-        return ProcessingContextUtils
-                .executeWithResult(
-                        workflowExecution.workflowId(),
-                        unitOfWorkFactory,
-                        executor,
-                        context,
-                        ctx -> {
-                            logger.trace("Thread: {}, ProcessingContext {}", Thread.currentThread(), ctx);
-                            return eventSink.publish(ctx, eventMessage);
-                        }
-                );
+        return appendEvent(eventMessage, context);
+    }
+
+    /**
+     * Appends the given {@code eventMessage} under its append condition, deriving the append's unit of work from the
+     * given {@code context}. Use this from a primitive that publishes an event without the step guards of
+     * {@code sendStepEvent}, so every append still shares one condition and one fencing path.
+     *
+     * @param eventMessage the event to append.
+     * @param context      the context the append's unit of work derives its resources from.
+     * @return a future completing once the event is appended.
+     */
+    protected CompletableFuture<Void> appendEvent(EventMessage eventMessage, Context context) {
+        return WorkflowAppendConditions.append(eventSink,
+                                               unitOfWorkFactory,
+                                               executor,
+                                               context,
+                                               eventMessage,
+                                               workflowExecution);
     }
 
     protected Map<String, @Nullable Object> sanitize(@Nullable Map<String, @Nullable Object> payload) {

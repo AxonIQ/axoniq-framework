@@ -26,6 +26,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -102,6 +103,7 @@ class VersionDelegateTest {
         when(workflowExecution.processingContext()).thenReturn(processingContext);
         when(workflowExecution.workflowContext()).thenReturn(workflowContext);
         when(workflowContext.processingContext()).thenReturn(processingContext);
+        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         when(processingContext.component(EventConverter.class)).thenReturn(TestEventConverter.INSTANCE);
         when(workflowExecution.state()).thenReturn(state);
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))

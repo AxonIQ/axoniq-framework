@@ -92,7 +92,7 @@ class ProcessingContextUtilsTest {
     void testCopyResources() {
         ProcessingContext result = ProcessingContextUtils.copyResources(parentContext, childContext);
         assertThat(result).isEqualTo(childContext);
-        verify(childContext).putResource(any(), eq("testValue"));
+        verify(childContext).putResourceIfAbsent(any(), eq("testValue"));
     }
 
     @Test
@@ -105,7 +105,7 @@ class ProcessingContextUtilsTest {
 
         assertThat(resultFuture.join()).isEqualTo("completion");
         verify(unitOfWorkFactory).create(any(Function.class));
-        verify(childContext).putResource(any(), eq("testValue"));
+        verify(childContext).putResourceIfAbsent(any(), eq("testValue"));
         // verify lifecycle hooks registration
         verify(childContext).whenComplete(any());
         verify(childContext).onAfterCommit(any());

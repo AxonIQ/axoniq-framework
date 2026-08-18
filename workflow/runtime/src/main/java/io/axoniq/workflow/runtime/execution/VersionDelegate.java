@@ -26,7 +26,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.workflow.runtime.util.FutureResolver;
-import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -145,12 +144,13 @@ public class VersionDelegate implements VersionPrimitive {
 
         workflowExecution.appendTask(e -> FutureResolver.resolve(
                 workflowExecution.processingContext(),
-                ProcessingContextUtils.executeWithResult(
-                        workflowExecution.workflowId(),
+                WorkflowAppendConditions.append(
+                        eventSink,
                         unitOfWorkFactory,
                         executor,
                         workflowExecution.processingContext(),
-                        ctx -> eventSink.publish(ctx, event)
+                        event,
+                        workflowExecution
                 )
         ));
 

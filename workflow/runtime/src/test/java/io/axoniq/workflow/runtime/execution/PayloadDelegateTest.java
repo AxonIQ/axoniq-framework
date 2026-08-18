@@ -28,6 +28,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadModification;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -95,6 +96,7 @@ class PayloadDelegateTest {
         when(workflowExecution.workflowContext()).thenReturn(workflowContext);
         when(workflowExecution.state()).thenReturn(mock(WorkflowState.class));
         when(workflowContext.processingContext()).thenReturn(processingContext);
+        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         when(processingContext.component(EventConverter.class)).thenReturn(TestEventConverter.INSTANCE);
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));

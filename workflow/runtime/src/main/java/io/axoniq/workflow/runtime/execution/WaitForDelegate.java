@@ -137,7 +137,6 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             if (remainingTimeout.isNegative()) {
                 workflowExecution.appendTask(i -> {
                     if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)) {
-                        // FIXME - This is where we should publish using an append condition
                         timedOutWaitForEvent(stepName, clock.instant(), eventNameCustomizer);
                     }
                 });

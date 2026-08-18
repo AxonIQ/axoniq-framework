@@ -26,7 +26,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.util.FutureResolver;
-import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -186,14 +185,14 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
 
         logger.error("Workflow '{}' failed", workflowExecution.workflowId(), exception);
 
-        awaitTerminalEventPublication(ProcessingContextUtils.executeWithResult(
-                workflowExecution.workflowId(),
+        awaitTerminalEventPublication(WorkflowAppendConditions.append(
+                eventSink,
                 unitOfWorkFactory,
                 executor,
                 workflowContext.processingContext(),
-                ctx -> eventSink.publish(ctx,
-                                         failedWorkflow(workflowContext, effectiveName, exception, workflowDefinitionId,
-                                                        eventNameCustomizer))), "FAILED");
+                failedWorkflow(workflowContext, effectiveName, exception, workflowDefinitionId,
+                               eventNameCustomizer),
+                workflowExecution), "FAILED");
     }
 
     private void publishCancelled(WorkflowLifecycleControl.CancelWorkflowCommand command,
@@ -202,14 +201,14 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         var eventNameCustomizer = command.eventNameCustomizer();
         var workflowDefinitionId = workflowExecution.state().workflowDefinitionId();
 
-        awaitTerminalEventPublication(ProcessingContextUtils.executeWithResult(
-                workflowExecution.workflowId(),
+        awaitTerminalEventPublication(WorkflowAppendConditions.append(
+                eventSink,
                 unitOfWorkFactory,
                 executor,
                 workflowContext.processingContext(),
-                ctx -> eventSink.publish(ctx,
-                                         cancelledWorkflow(workflowContext, effectiveName, cause, workflowDefinitionId,
-                                                           eventNameCustomizer))), "CANCELLED");
+                cancelledWorkflow(workflowContext, effectiveName, cause, workflowDefinitionId,
+                                  eventNameCustomizer),
+                workflowExecution), "CANCELLED");
     }
 
     /**

@@ -125,20 +125,20 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         var eventNameCustomizer = command.eventNameCustomizer();
         logger.trace("Execute {} called from thread {}", stepName, Thread.currentThread());
 
-        // AT-MOST-ONCE: snapshot the step state BEFORE this run publishes STARTED. A step already present-and-STARTED
-        // here can only be a prior incarnation's in-flight attempt rebuilt from the durable log (a fresh run has not
-        // published STARTED yet at this point), so its external effect may already have run. To keep effects
-        // at-most-once we must NOT re-run the action; instead route the interrupted attempt through the regular error
-        // flow via the passed-in failure handler (no retry policy -> step FAILED with StepIndeterminateException; retry
-        // policy -> RETRYING + next attempt). Live retry attempts reach this method with status RETRYING, never STARTED,
-        // so they are unaffected and still execute.
-        boolean resumedInFlight = WorkflowStateUtils.isStepStatus(
-                workflowExecution.state(), stepName, StepStatus.STARTED
-        );
-
         reachedSteps.record(stepName);
 
         acceptAllPendingTasksForStep(stepName);
+
+        // AT-MOST-ONCE: read the step state once every pending task is applied, and before this run publishes STARTED.
+        // A step present-and-STARTED here belongs to another run: either a prior incarnation's in-flight attempt
+        // rebuilt from the durable log, or the run of whichever execution owns the instance now. Both may already have
+        // performed the step's external effect, so this run must NOT execute the action; instead route the attempt
+        // through the regular error flow via the passed-in failure handler (no retry policy -> step FAILED with
+        // StepIndeterminateException; retry policy -> RETRYING + next attempt). Live retry attempts reach this method
+        // with status RETRYING, never STARTED, so they are unaffected and still execute.
+        boolean resumedInFlight = WorkflowStateUtils.isStepStatus(
+                workflowExecution.state(), stepName, StepStatus.STARTED
+        );
 
         if (resumedInFlight) {
             failureHandler.onFailure(stepName, new StepIndeterminateException(stepName), eventNameCustomizer);
@@ -164,7 +164,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
             var actualStartTime = step.timestamp();
             var timeoutDeadline = actualStartTime.plus(timeout);
             var remainingTimeout = Duration.between(clock.instant(), timeoutDeadline);
-            // FIXME - This is where we capture our current consistency marker
 
             var result = unitOfWorkFactory
                     .create(stepName,
@@ -192,7 +191,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
             if (remainingTimeout.isNegative()) {
                 workflowExecution.appendTask(i -> {
                     // TODO - Do one last check on the state to make sure we didn't have any concurrent state changes
-                    // FIXME - This is where we should publish using an append condition
                     timeoutHandler.onTimeout(stepName, eventNameCustomizer);
                 });
             } else {
@@ -210,17 +208,14 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                         // Normal completion — a null action result sanitizes to an empty map in completed(),
                         // so a null-returning action COMPLETES rather than wedging on a null-e dereference.
                         workflowExecution.appendTask(i -> {
-                            // FIXME - This is where we should publish using an append condition
                             completed(stepName, r, resultPayloadReducer.name(), eventNameCustomizer);
                         });
                     } else {
                         if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {
-                            // FIXME - This is where we should publish using an append condition
                             workflowExecution.appendTask(
                                     i -> timeoutHandler.onTimeout(stepName, eventNameCustomizer));
                         } else if (isCancellation(e)) {
                             var terminationCause = unwrapCancellation(e);
-                            // FIXME - This is where we should publish using an append condition
                             workflowExecution.appendTask(i -> {
                                 cancelled(stepName, terminationCause, eventNameCustomizer);
                             });
@@ -230,7 +225,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                 // A whole-workflow terminal transition interrupts a running step only to unblock the
                                 // workflow body. It has no corresponding durable step-terminal event.
                             } else {
-                                // FIXME - This is where we should publish using an append condition
                                 workflowExecution.appendTask(
                                         i -> failureHandler.onFailure(stepName, cause, eventNameCustomizer));
                             }

@@ -23,6 +23,9 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.common.configuration.ComponentNotFoundException;
+import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
+import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.sequencing.SequencingPolicy;
@@ -30,6 +33,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.Nullable;
@@ -411,6 +415,11 @@ public class WorkflowEngine implements
                                                          @Nullable TrackingToken claimedFrom,
                                                          ProcessingContext sourcingContext,
                                                          ProcessingContext executionContext) {
+        // Restored executions condition their appends from this claim's sourcing position. It is shared by every
+        // instance sourced here and sits at the head of the stream when the claim started, so it is past all events
+        // those instances had written. An event a previous owner writes after that point rejects their next append,
+        // which is what should happen.
+        var eventStore = eventStoreOf(sourcingContext);
         return workflowStore.loadRunningWorkflows(sourcingContext)
                             .thenCompose(runningWorkflows -> {
                                 var ownedIds = runningWorkflows.workflowIds()
@@ -432,7 +441,12 @@ public class WorkflowEngine implements
                                                                    .thenAccept(state -> restoreWorkflow(
                                                                            workflowId,
                                                                            state,
-                                                                           executionContext
+                                                                           executionContext,
+                                                                           eventStore == null
+                                                                                   ? null
+                                                                                   : eventStore
+                                                                                   .transaction(sourcingContext)
+                                                                                   .appendPosition()
                                                                    ))
                                                                    // Per instance, so one unrestorable workflow cannot
                                                                    // abort the whole restore pass. Aborting it would
@@ -457,9 +471,23 @@ public class WorkflowEngine implements
                             });
     }
 
+    /**
+     * Returns the event store the given context publishes through, or {@code null} when it has none, in which case
+     * restored executions append without a seeded consistency marker, matching an append path without conditions.
+     */
+    @Nullable
+    private static EventStore eventStoreOf(ProcessingContext context) {
+        try {
+            return context.component(EventSink.class) instanceof EventStore eventStore ? eventStore : null;
+        } catch (ComponentNotFoundException e) {
+            return null;
+        }
+    }
+
     private void restoreWorkflow(String workflowId,
                                  WorkflowState state,
-                                 ProcessingContext executionContext) {
+                                 ProcessingContext executionContext,
+                                 @Nullable ConsistencyMarker restoredAt) {
         var definitionId = state.workflowDefinitionId();
         var workflowName = definitionId.qualifiedName().toString();
         // Same routing as the replay path: a body may have moved its recorded version forward with
@@ -484,6 +512,10 @@ public class WorkflowEngine implements
         var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
         execution.initializeState(state);
         var storedExecution = workflowExecutionRepository.save(workflowId, () -> execution);
+        var appendCondition = storedExecution.appendCondition();
+        if (appendCondition != null) {
+            appendCondition.updateAppendPosition(restoredAt);
+        }
         checkpointWorkIndex.register(
                 storedExecution.workflowId(), storedExecution::registerCheckpointWorkStateListener
         );

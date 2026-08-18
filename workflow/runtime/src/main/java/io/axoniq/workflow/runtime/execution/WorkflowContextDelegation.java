@@ -302,10 +302,23 @@ public class WorkflowContextDelegation implements WorkflowContext {
     }
 
 
+    /**
+     * Appends the given workflow lifecycle {@code eventMessage} under its append condition, in a unit of work derived
+     * from the given {@code processingContext}.
+     *
+     * @param processingContext the context the append's unit of work derives its resources from.
+     * @param eventMessage      the event to append.
+     * @return a future completing once the event is appended.
+     */
     public CompletableFuture<Void> publishEvent(
             ProcessingContext processingContext,
             EventMessage eventMessage) {
-        return this.eventSink.publish(processingContext, eventMessage);
+        return WorkflowAppendConditions.append(this.eventSink,
+                                               this.unitOfWorkFactory,
+                                               this.executorService,
+                                               processingContext,
+                                               eventMessage,
+                                               this.workflowExecution);
     }
 
     public Clock clock() {
