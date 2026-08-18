@@ -263,6 +263,24 @@ class AxonServerCommandBusConnectorTest {
     }
 
     @Test
+    void subscribingSameCommandTwiceCancelsPreviousRegistration() {
+        // Arrange
+        Registration firstRegistration = mock(Registration.class);
+        Registration secondRegistration = mock(Registration.class);
+        when(commandChannel.registerCommandHandler(any(), eq(ANY_TEST_LOAD_FACTOR), eq(ANY_TEST_COMMAND_NAME.name())))
+                .thenReturn(firstRegistration, secondRegistration);
+
+        // Act
+        testSubject.subscribe(ANY_TEST_COMMAND_NAME, ANY_TEST_LOAD_FACTOR);
+        testSubject.subscribe(ANY_TEST_COMMAND_NAME, ANY_TEST_LOAD_FACTOR);
+
+        // Assert
+        verify(firstRegistration).cancel();
+        verify(secondRegistration, never()).cancel();
+        assertThat(getSubscriptions(testSubject)).containsEntry(ANY_TEST_COMMAND_NAME, secondRegistration);
+    }
+
+    @Test
     void subscribeWithNegativeLoadFactorThrowsException() {
         assertThatThrownBy(() -> testSubject.subscribe(ANY_TEST_COMMAND_NAME, -1))
                 .isInstanceOf(IllegalArgumentException.class);
