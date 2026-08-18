@@ -145,6 +145,42 @@ class WorkflowEngineSegmentLiveModeScopeTest {
     }
 
     @Test
+    void nodeStartingWithoutSegmentsStillDefersBodiesOnALaterClaimedLaggingSegment() {
+        var spawnId = "sharded-0";
+        var lagging = owningSegment(spawnId);
+
+        // --- precondition evidence -------------------------------------------------------------------------------
+        assertThat(token(LAGGING_SEGMENT_POSITION).covers(token(STARTUP_LATEST_POSITION)))
+                .as("the lagging segment at %s must NOT have reached the startup latest token %s",
+                    LAGGING_SEGMENT_POSITION, STARTUP_LATEST_POSITION)
+                .isFalse();
+
+        registerSpawningConfiguration(spawnId);
+        // A node that owns zero segments at startup: earliestSegmentToken() is null, so requiresReplay() is false
+        // and WorkflowEngine#start switches to live mode with a context that carries no segment.
+        replaySupport.setInitialEngineTokens(null, token(STARTUP_LATEST_POSITION));
+        replaySupport.switchToLiveMode(contextWithoutSegment());
+
+        // Later this node claims the lagging segment and its first delivery is an old event at position 7.
+        workflowEngine.handle(startEvent(spawnId), processingContext(lagging, token(LAGGING_SEGMENT_POSITION)));
+
+        // --- oracle ----------------------------------------------------------------------------------------------
+        assertThat(replaySupport.isReplaying(lagging, token(LAGGING_SEGMENT_POSITION)))
+                .as("""
+                    Segment %s was observed at position %s, behind the startup latest token %s, so it is replaying. \
+                    The engine-wide live-mode flag of a node that started owning nothing must not mask that.""",
+                    lagging, LAGGING_SEGMENT_POSITION, STARTUP_LATEST_POSITION)
+                .isTrue();
+        assertThat(bodyStarts)
+                .as("""
+                    Workflow bodies started on a still-replaying segment: %s. Expected: none. The node started \
+                    owning zero segments, which set the engine-wide live-mode flag; that flag must not make a \
+                    later-claimed lagging segment run bodies at head state during its catch-up.""",
+                    bodyStarts)
+                .isEmpty();
+    }
+
+    @Test
     void aRestoredExecutionIsSeededWithTheTokenOfItsOwnSegment() {
         var lagging = FOUR_SEGMENTS.get(0);
         var caughtUp = anotherSegmentThan(lagging);
@@ -227,9 +263,15 @@ class WorkflowEngineSegmentLiveModeScopeTest {
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
     }
 
-    private ProcessingContext processingContext(Segment segment, @Nullable TrackingToken trackingToken) {
+    private ProcessingContext contextWithoutSegment() {
+        return processingContext(null, null);
+    }
+
+    private ProcessingContext processingContext(@Nullable Segment segment, @Nullable TrackingToken trackingToken) {
         Map<Context.ResourceKey<?>, Object> resources = new HashMap<>();
-        resources.put(Segment.RESOURCE_KEY, segment);
+        if (segment != null) {
+            resources.put(Segment.RESOURCE_KEY, segment);
+        }
         if (trackingToken != null) {
             resources.put(TrackingToken.RESOURCE_KEY, trackingToken);
         }

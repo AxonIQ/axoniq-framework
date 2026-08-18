@@ -199,12 +199,17 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
 
     /**
      * Returns whether the given segment has finished replaying and may run workflow bodies.
+     * <p>
+     * The engine-wide flag answers only for non-segmented handling. A segment answers for itself alone: the
+     * engine-wide flag is set by a startup that found nothing to replay, and a node can start that way while owning
+     * nothing at all. Letting that flag stand in for a segment would declare every segment this node claims later
+     * live as well, including one whose observed position is still behind the stream.
      *
      * @param segment the segment handling the current callback, or {@code null} when handling is not segmented
      * @return {@code true} once this segment has caught up
      */
     public boolean inLiveMode(@Nullable Segment segment) {
-        return inLiveMode.get() || (segment != null && liveSegments.contains(segment.getSegmentId()));
+        return segment == null ? inLiveMode.get() : liveSegments.contains(segment.getSegmentId());
     }
 
     /**

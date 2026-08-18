@@ -157,7 +157,9 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         var slowWorker = new SegmentWorker(slow, autoCheckpointing);
         var straggler = registerSpawningConfiguration();
         replaySupport.setInitialEngineTokens(null, null);
-        replaySupport.switchToLiveMode(mock(ProcessingContext.class));
+        // Live mode is per segment: each segment this test drives is declared live on its own.
+        replaySupport.switchToLiveMode(processingContext(fast, null));
+        replaySupport.switchToLiveMode(processingContext(slow, null));
 
         // 1. The node claims the fast segment and handles the straggler's start event at position 100.
         fastWorker.claim();
