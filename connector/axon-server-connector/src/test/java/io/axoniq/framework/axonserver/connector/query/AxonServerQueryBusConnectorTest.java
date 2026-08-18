@@ -60,6 +60,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static com.google.protobuf.ByteString.copyFrom;
 import static com.google.protobuf.ByteString.copyFromUtf8;
@@ -147,6 +148,79 @@ class AxonServerQueryBusConnectorTest {
             verify(connection, never()).disconnect();
         }
 
+    }
+
+    @Nested
+    class InboundQueryDrain {
+
+        @Test
+        void disconnectCompletesAfterAnActiveInboundQueryFinishes() {
+            // given an active inbound query
+            CompletableFuture<QueryResponseMessage> queryResult = new CompletableFuture<>();
+            QueryBusConnector.Handler incomingHandler = mock(QueryBusConnector.Handler.class);
+            when(incomingHandler.query(any())).thenReturn(MessageStream.fromFuture(queryResult));
+            testSubject.onIncomingQuery(incomingHandler);
+            QueryHandler localSegmentAdapter = registerLocalSegmentAdapter();
+            localSegmentAdapter.stream(queryRequest(), mock(ReplyChannel.class)).request(Long.MAX_VALUE);
+
+            when(connection.isConnected()).thenReturn(true);
+            when(mockQueryChannel.prepareDisconnect()).thenReturn(CompletableFuture.completedFuture(null));
+
+            // when disconnecting while the query is still active
+            CompletableFuture<Void> disconnect = testSubject.disconnect();
+
+            // then the caller is not blocked, but shutdown awaits the active query asynchronously
+            assertThat(disconnect).isNotCompleted();
+
+            // and completes after the query has finished
+            queryResult.complete(new GenericQueryResponseMessage(new MessageType(String.class), "done"));
+            assertThat(disconnect).succeedsWithin(1, TimeUnit.SECONDS);
+        }
+
+        @Test
+        void disconnectCancelsAnInboundQueryThatExceedsTheDrainTimeout() {
+            // given an active inbound query that does not finish on its own
+            MessageStream<QueryResponseMessage> queryResult = spy(MessageStream.fromFuture(new CompletableFuture<>()));
+            QueryBusConnector.Handler incomingHandler = mock(QueryBusConnector.Handler.class);
+            when(incomingHandler.query(any())).thenReturn(queryResult);
+            testSubject.onIncomingQuery(incomingHandler);
+            QueryHandler localSegmentAdapter = registerLocalSegmentAdapter();
+            localSegmentAdapter.stream(queryRequest(), mock(ReplyChannel.class)).request(Long.MAX_VALUE);
+
+            when(connection.isConnected()).thenReturn(true);
+            when(mockQueryChannel.prepareDisconnect()).thenReturn(CompletableFuture.completedFuture(null));
+
+            // when disconnecting while the query remains active
+            CompletableFuture<Void> disconnect = testSubject.disconnect();
+
+            // then the query-drain timeout cancels the query and completes shutdown
+            assertThat(disconnect)
+                    .isNotCompleted()
+                    .succeedsWithin(6, TimeUnit.SECONDS);
+            verify(queryResult, atLeastOnce()).close();
+        }
+
+        private QueryRequest queryRequest() {
+            return QueryRequest.newBuilder()
+                               .setMessageIdentifier(UUID.randomUUID().toString())
+                               .setPayload(SerializedObject.newBuilder().setType("QueryType").build())
+                               .build();
+        }
+
+        private QueryHandler registerLocalSegmentAdapter() {
+            Registration registration = mock(Registration.class);
+            when(registration.onAck(any(Runnable.class))).thenAnswer(i -> {
+                i.getArgument(0, Runnable.class).run();
+                return null;
+            });
+            ArgumentCaptor<QueryHandler> handlerCaptor = ArgumentCaptor.forClass(QueryHandler.class);
+            when(mockQueryChannel.registerQueryHandler(handlerCaptor.capture(), any(QueryDefinition.class)))
+                    .thenReturn(registration);
+
+            testSubject.subscribe(new QualifiedName("TestQuery"));
+
+            return handlerCaptor.getValue();
+        }
     }
 
     @Nested

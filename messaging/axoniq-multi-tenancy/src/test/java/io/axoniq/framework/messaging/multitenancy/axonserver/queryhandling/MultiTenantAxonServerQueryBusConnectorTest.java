@@ -64,6 +64,7 @@ import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -420,6 +421,42 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             assertThat(connection1.disconnectCalls()).isZero();
             assertThat(connection2.disconnectCalls()).isZero();
         }
+
+        @Test
+        void disconnectsSlowQueriesForAllTenantsWithinASingleDrainTimeout() {
+            // given two tenants with an active query each
+            TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1, TENANT_2));
+            RecordingConnection connection1 = new RecordingConnection();
+            RecordingConnection connection2 = new RecordingConnection();
+            MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1,
+                                                                                      TENANT_2.tenantId(),
+                                                                                      connection2));
+            ArrayDeque<MessageStream<QueryResponseMessage>> responses = new ArrayDeque<>(List.of(
+                    MessageStream.fromFuture(new CompletableFuture<>()),
+                    MessageStream.fromFuture(new CompletableFuture<>())
+            ));
+            testSubject.onIncomingQuery(incomingQueryHandler(responses));
+            testSubject.subscribe(QUERY_ONE).join();
+            connection1.recordingQueryChannel()
+                       .simulateIncomingQuery(incomingQuery(), new NoOpReplyChannel())
+                       .request(Long.MAX_VALUE);
+            connection2.recordingQueryChannel()
+                       .simulateIncomingQuery(incomingQuery(), new NoOpReplyChannel())
+                       .request(Long.MAX_VALUE);
+
+            // when disconnecting all tenant query connectors
+            long startNanos = System.nanoTime();
+            CompletableFuture<Void> disconnect = testSubject.disconnect();
+            long invocationDurationMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+
+            // then disconnect returns asynchronously and drains both tenants within a single timeout
+            assertThat(invocationDurationMillis).isLessThan(1_000);
+            assertThat(disconnect)
+                    .isNotCompleted()
+                    .succeedsWithin(6, TimeUnit.SECONDS);
+        }
     }
 
     @Nested
@@ -611,6 +648,23 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             public MessageStream<QueryResponseMessage> query(QueryMessage query) {
                 receivedQueries.add(query);
                 return MessageStream.empty().cast();
+            }
+
+            @Override
+            public Registration registerUpdateHandler(QueryMessage subscriptionQueryMessage,
+                                                      QueryBusConnector.UpdateCallback updateCallback) {
+                return () -> true;
+            }
+        };
+    }
+
+    private static QueryBusConnector.Handler incomingQueryHandler(
+            ArrayDeque<MessageStream<QueryResponseMessage>> responses
+    ) {
+        return new QueryBusConnector.Handler() {
+            @Override
+            public MessageStream<QueryResponseMessage> query(QueryMessage query) {
+                return responses.removeFirst();
             }
 
             @Override
