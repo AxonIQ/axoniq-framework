@@ -6,9 +6,11 @@
 
 ## Context
 
-The workflow engine ran every instance on every node. A node handled the whole event stream, held all running
-instances in memory and re-ran their bodies after a restart. Throughput was bounded by one node, and adding nodes
-duplicated work instead of dividing it.
+The workflow engine ran every instance on a single segment. A node handled the whole event stream, held all
+running instances in memory and re-ran their bodies after a restart. Throughput was bounded by one node, and adding
+nodes did not divide the work: with a durable token store the single segment kept every workflow on whichever node
+claimed it first, leaving the others idle, and with the in-memory default each node processed the whole stream on
+its own, duplicating the work.
 
 Axon's pooled streaming event processor already partitions a stream over segments and claims those segments through a
 token store. The engine needed a rule that maps a workflow instance to a segment, and a way to make every routing,

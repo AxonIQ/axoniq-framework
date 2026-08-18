@@ -178,7 +178,6 @@ public class WorkflowEngine implements
         return MessageStream.empty();
     }
 
-
     private void checkAndCreateNewWorkflow(@Nonnull EventMessage eventMessage,
                                            @Nonnull ProcessingContext processingContext) {
         // For brand-new starts, only the highest-registered version spawns instances.

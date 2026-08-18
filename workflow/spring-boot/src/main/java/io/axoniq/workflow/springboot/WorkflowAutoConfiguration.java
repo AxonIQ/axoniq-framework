@@ -26,6 +26,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Role;
 
+import static io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer.DEFAULT_INITIAL_SEGMENT_COUNT;
 import static io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME;
 
 /**
@@ -60,7 +61,8 @@ public class WorkflowAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public WorkflowEventProcessingRegistrationEnhancer workflowEventHandlersDefaults(
-            @Value("${axoniq.workflow.initial-segment-count:4}") int initialSegmentCount
+            @Value("${axoniq.workflow.initial-segment-count:" + DEFAULT_INITIAL_SEGMENT_COUNT + "}")
+            int initialSegmentCount
     ) {
         return new WorkflowEventProcessingRegistrationEnhancer(
                 DEFAULT_MODULE_NAME, null, null, true, initialSegmentCount

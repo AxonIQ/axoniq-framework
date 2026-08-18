@@ -139,6 +139,9 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
      * The request is dropped when this node does not currently hold the segment, which includes a request without a
      * segment to attribute it to. The trigger of a segment that is not claimed is inert and ignores requests anyway;
      * pushing the token through any other segment's trigger would advance that segment past events it never handled.
+     * A request can also arrive for a segment this node holds whose trigger has not been registered yet, and is
+     * dropped the same way. That is safe: the stored token merely stays behind, so the events are re-processed after
+     * a restart instead of being skipped.
      *
      * @param segment the segment the requested position belongs to, ignored when {@code null}
      * @param token   the token to request, ignored when {@code null}

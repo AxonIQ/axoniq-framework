@@ -187,10 +187,8 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                     .create(moduleName + "SegmentExecutionContext" + segment.getSegmentId());
                             return executionUnitOfWork.executeWithResult(executionContext -> {
                                 workflowEngine(cfg).claimSegment(segment, from, sourcingContext, executionContext);
-                                return completedFuture(null);
+                                return CompletableFuture.<Void>completedFuture(null);
                             });
-                        })
-                        .thenRun(() -> {
                         });
             }
 
