@@ -40,8 +40,12 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -58,6 +62,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
     private static final Logger logger = LoggerFactory.getLogger(ExecuteDelegate.class);
     private final ExecuteStepActionResolver actionResolver;
+    /** Steps this execution published a {@code STARTED} event for, so their state is known to be its own. */
+    private final Set<String> ownStartedSteps = ConcurrentHashMap.newKeySet();
 
     /**
      * Constructs the delegate.
@@ -138,7 +144,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         // with status RETRYING, never STARTED, so they are unaffected and still execute.
         boolean resumedInFlight = WorkflowStateUtils.isStepStatus(
                 workflowExecution.state(), stepName, StepStatus.STARTED
-        );
+        ) && !ownStartedSteps.contains(stepName);
 
         if (resumedInFlight) {
             failureHandler.onFailure(stepName, new StepIndeterminateException(stepName), eventNameCustomizer);
@@ -147,13 +153,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
         if (!workflowExecution.state().containsStep(stepName)) {
             reachedSteps.assertNoReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
-            workflowExecution.appendTask(i ->
-                                                 started(stepName, sanitize(local), eventNameCustomizer)
-            );
-            try {
-                workflowExecution.awaitStateChange(WorkflowStateUtils.stepStatus(stepName, StepStatus.STARTED));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+            if (!tryStartStep(stepName, local, eventNameCustomizer)) {
                 return WorkflowStepResults.canceled(stepName);
             }
         }
@@ -235,5 +235,38 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         }
 
         return stateBased(stepName, eventNameCustomizer, workflowExecution);
+    }
+
+    /**
+     * Publishes this execution's {@code STARTED} event for the given step and waits, without bound, until the step is
+     * present with status {@link StepStatus#STARTED}. That state change carries no writer identity: the event may have
+     * been recorded by another execution of the same workflow instance and delivered here over this execution's own
+     * event stream. The store accepting this execution's own append is therefore the only proof that this execution
+     * took the step.
+     *
+     * @param stepName            name of the step to start.
+     * @param local               local payload to record on the {@code STARTED} event.
+     * @param eventNameCustomizer event name customizer.
+     * @return {@code true} when the store accepted this execution's append, so this execution owns the step and may
+     * run its action. {@code false} when the append was rejected, when the step turned STARTED before this execution's
+     * append ran, or when the wait was interrupted (the interrupt flag is restored).
+     */
+    private boolean tryStartStep(String stepName, Map<String, Object> local, EventNameCustomizer eventNameCustomizer) {
+        var ownStarted = new AtomicReference<CompletableFuture<Void>>();
+        ownStartedSteps.add(stepName);
+        workflowExecution.appendTask(i -> ownStarted.set(started(stepName, sanitize(local), eventNameCustomizer)));
+        try {
+            workflowExecution.awaitStateChange(WorkflowStateUtils.stepStatus(stepName, StepStatus.STARTED));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+        var ownAppend = ownStarted.get();
+        boolean accepted = ownAppend != null && ownAppend.handle((result, failure) -> failure == null).join();
+        if (!accepted) {
+            logger.warn("The STARTED event of step '{}' of workflow '{}' is not this execution's. Leaving the step "
+                                + "to the execution that recorded it.", stepName, workflowExecution.workflowId());
+        }
+        return accepted;
     }
 }
