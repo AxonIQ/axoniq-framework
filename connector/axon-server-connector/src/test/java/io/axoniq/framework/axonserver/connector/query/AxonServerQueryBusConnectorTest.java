@@ -131,6 +131,21 @@ class AxonServerQueryBusConnectorTest {
             boolean result = testSubject.unsubscribe(new QualifiedName("TestQuery"));
             assertThat(result).isFalse();
         }
+
+        @Test
+        void subscribingSameQueryTwiceCancelsPreviousRegistration() {
+            Registration firstRegistration = mock(Registration.class);
+            Registration secondRegistration = mock(Registration.class);
+            when(mockQueryChannel.registerQueryHandler(any(), any(QueryDefinition.class)))
+                    .thenReturn(firstRegistration, secondRegistration);
+            QualifiedName name = new QualifiedName("TestQuery");
+
+            testSubject.subscribe(name);
+            testSubject.subscribe(name);
+
+            verify(firstRegistration).cancel();
+            verify(secondRegistration, never()).cancel();
+        }
     }
 
     @Nested

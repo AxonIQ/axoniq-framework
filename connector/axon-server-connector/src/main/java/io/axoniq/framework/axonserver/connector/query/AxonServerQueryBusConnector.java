@@ -133,7 +133,12 @@ public class AxonServerQueryBusConnector implements QueryBusConnector, Connector
         Registration registration = connection.queryChannel()
                                               .registerQueryHandler(localSegmentAdapter, definition);
 
-        this.subscriptions.put(name, registration);
+        this.subscriptions.compute(name, (queryName, previous) -> {
+            if (previous != null) {
+                previous.cancel();
+            }
+            return registration;
+        });
 
         CompletableFuture<Void> completion = new CompletableFuture<>();
         registration.onAck(() -> completion.complete(null));
