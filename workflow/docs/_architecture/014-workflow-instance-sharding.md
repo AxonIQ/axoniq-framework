@@ -109,6 +109,14 @@ node A dies
   -> node B resumes those instances from their persisted state
 ```
 
+### Only streaming processors are supported
+
+Restoration and release hang off the processor's segment claim lifecycle, the `SegmentChangeListener`, which only the
+pooled streaming event processor provides. A `SubscribingEventProcessor` - and with it Axon Server's Persistent
+Streams - has no claim and release callbacks, so no node would ever restore or drop instances. Workflows therefore
+cannot be backed by Persistent Streams. Whether the segment lifecycle can be integrated there is tracked as a
+separate investigation; until then the pooled streaming processor is the only supported event source for workflows.
+
 ## Consequences
 
 - Instances are distributed over segments, so nodes divide work instead of duplicating it.
@@ -120,3 +128,5 @@ node A dies
   exactly-once, so the cost is delivery, never correctness.
 - Multi-node operation requires the application to register a durable `TokenStore`. With the in-memory fallback,
   claims never leave the process and the engine runs on one node.
+- Workflows require the pooled streaming event processor. Persistent Streams run on a `SubscribingEventProcessor`,
+  which has no segment claim lifecycle, so they cannot back workflows.
