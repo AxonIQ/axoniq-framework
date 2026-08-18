@@ -32,7 +32,6 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
-import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.CompletePhase;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.RequiredComponentPhase;
@@ -170,34 +169,10 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                 .addSegmentChangeListener(segmentChangeListener(cfg));
     }
 
-    /**
-     * Returns the listener that moves workflow executions with their segment: instances are restored on the
-     * node claiming their segment and dropped again when it releases them, so segments migrating between nodes carry
-     * their instances along without a restart.
-     */
     private SegmentChangeListener segmentChangeListener(Configuration cfg) {
-        var unitOfWorkFactory = cfg.getComponent(UnitOfWorkFactory.class);
-        return new SegmentChangeListener() {
-            @Override
-            public CompletableFuture<Void> onSegmentClaimed(Segment segment, @Nullable TrackingToken from) {
-                return unitOfWorkFactory
-                        .create(moduleName + "SegmentClaim" + segment.getSegmentId())
-                        .executeWithResult(sourcingContext -> {
-                            var executionUnitOfWork = new SimpleUnitOfWorkFactory(sourcingContext)
-                                    .create(moduleName + "SegmentExecutionContext" + segment.getSegmentId());
-                            return executionUnitOfWork.executeWithResult(executionContext -> {
-                                workflowEngine(cfg).claimSegment(segment, from, sourcingContext, executionContext);
-                                return CompletableFuture.<Void>completedFuture(null);
-                            });
-                        });
-            }
-
-            @Override
-            public CompletableFuture<Void> onSegmentReleased(Segment segment) {
-                workflowEngine(cfg).releaseSegment(segment);
-                return completedFuture(null);
-            }
-        };
+        return new WorkflowSegmentChangeListener(moduleName,
+                                                 cfg.getComponent(UnitOfWorkFactory.class),
+                                                 () -> workflowEngine(cfg));
     }
 
     private WorkflowEngine workflowEngine(Configuration cfg) {
