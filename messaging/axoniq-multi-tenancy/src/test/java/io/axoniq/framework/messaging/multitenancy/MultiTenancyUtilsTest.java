@@ -26,6 +26,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
 import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
+import io.axoniq.framework.messaging.multitenancy.deadletter.DeadLetterMultiTenancyConfigurationEnhancer;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
@@ -70,8 +71,9 @@ class MultiTenancyUtilsTest {
             // then every enhancer it switches off is one the module actually contributes, and the only one left
             // running is the parameter-resolver enhancer, which stays so handlers with tenant-scoped parameters can
             // still be inspected
-            assertThat(contributed).containsAll(MultiTenancyUtils.enhancers());
-            assertThat(contributed).hasSize(MultiTenancyUtils.enhancers().size() + 1);
+            assertThat(contributed)
+                    .containsAll(MultiTenancyUtils.enhancers())
+                    .hasSize(MultiTenancyUtils.enhancers().size() + 1);
             assertThat(MultiTenancyUtils.enhancers())
                     .doesNotContain(TenantComponentParameterResolverFactoryConfigurationEnhancer.class);
         }
@@ -80,7 +82,8 @@ class MultiTenancyUtilsTest {
         void enhancersFormOneBlockAnchoredOnTheGenericDefaults() {
             // given the anchor and the enhancers ordered against it
             int anchor = MultiTenancyConfigurationDefaults.ENHANCER_ORDER;
-            List<Integer> siblings = List.of(AxonServerMultiTenancyConfigurationDefaults.ENHANCER_ORDER);
+            List<Integer> siblings = List.of(AxonServerMultiTenancyConfigurationDefaults.ENHANCER_ORDER,
+                                             DeadLetterMultiTenancyConfigurationEnhancer.ENHANCER_ORDER);
 
             // then the generic defaults run strictly first, so ordering below them disables the whole block
             assertThat(siblings).allSatisfy(order -> assertThat(order).isGreaterThan(anchor));
@@ -88,6 +91,8 @@ class MultiTenancyUtilsTest {
             assertThat(siblings).allSatisfy(
                     order -> assertThat(order).isLessThan(AxonServerConfigurationEnhancer.ENHANCER_ORDER)
             );
+            assertThat(DeadLetterMultiTenancyConfigurationEnhancer.ENHANCER_ORDER)
+                    .isGreaterThan(AxonServerMultiTenancyConfigurationDefaults.ENHANCER_ORDER + 1);
             assertThat(anchor).isLessThan(AxonServerConfigurationEnhancer.ENHANCER_ORDER);
         }
     }

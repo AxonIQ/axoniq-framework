@@ -45,7 +45,7 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
      * The order at which dead-letter queue support is configured after the general and Axon Server multi-tenancy
      * components.
      */
-    public static final int ENHANCER_ORDER = MultiTenancyConfigurationDefaults.ENHANCER_ORDER + 3;
+    public static final int ENHANCER_ORDER = MultiTenancyConfigurationDefaults.ENHANCER_ORDER + 4;
 
     @Override
     public int order() {
