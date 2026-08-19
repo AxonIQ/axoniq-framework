@@ -172,7 +172,7 @@ public class WorkflowEngine implements
                                            @Nonnull ProcessingContext processingContext) {
         // For brand-new starts, only the highest-registered version spawns instances.
         // Older registered versions stay available for replay routing (selected later in the execution path
-        // based on state.workflowDefinitionVersion(), itself sourced from the workflow's started event metadata).
+        // based on state.workflowDefinitionId().version(), itself sourced from the workflow's started event metadata).
         // Same-version duplicates spawn in parallel only if their workflowIdProviders produce distinct ids;
         // otherwise the second spawn is rejected as a same-version duplicate in resolveWorkflowIdForNewSpawn.
         // The "multiple definitions at the same version" warning is emitted ONCE at engine startup (see

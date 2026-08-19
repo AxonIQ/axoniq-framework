@@ -39,13 +39,14 @@ event sourcing. It is not the holder of per-workflow state.
 
 ### Workflow definition identity
 
-Workflow lifecycle events carry a stable workflow definition identity as an Axon Framework `MessageType` containing:
+Workflow lifecycle events carry the current workflow definition reference as an Axon Framework `MessageType` containing:
 
 - the workflow definition name
 - the workflow definition version
 
-`EventSourcedWorkflowState` stores this `MessageType` as part of sourced state. Startup uses it to resolve the exact
-workflow configuration that must recreate the execution.
+`EventSourcedWorkflowState` stores this `MessageType` as part of sourced state. Its version advances when a workflow
+records a version migration, so it identifies the effective definition reference for the current execution state.
+Startup uses it to resolve the workflow configuration that must recreate the execution.
 
 ### Startup order
 

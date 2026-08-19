@@ -63,7 +63,7 @@ class EventSourcedWorkflowStateRepositoryIntegrationTest extends AbstractEventSo
         assertThat(state.payload()).containsEntry("orderId", "wf-1")
                                    .containsEntry("approved", true);
         assertThat(state.workflowDefinitionId()).isEqualTo(definitionId);
-        assertThat(state.workflowDefinitionVersion()).isEqualTo("1.0.0");
+        assertThat(state.workflowDefinitionId().version()).isEqualTo("1.0.0");
         assertThat(state.getStep("approveOrder").status())
                 .isEqualTo(COMPLETED);
     }

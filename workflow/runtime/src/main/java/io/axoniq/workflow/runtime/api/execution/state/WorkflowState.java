@@ -50,7 +50,9 @@ public interface WorkflowState extends DescribableComponent {
     String workflowId();
 
     /**
-     * Returns the stable workflow definition identity.
+     * Returns the workflow definition identity, including its current definition version.
+     * <p>
+     * Use {@link MessageType#version()} to obtain the definition version.
      *
      * @return workflow definition identity
      */
@@ -97,35 +99,25 @@ public interface WorkflowState extends DescribableComponent {
     Map<String, Object> payload();
 
     /**
-     * Returns the recorded version-migration string for the given {@code changeId}, or
-     * {@link #workflowDefinitionVersion()} if no version-migration step has been projected for it. The default value is
-     * implicit — workflows that have never executed a {@code ctx.migrateVersion(changeId, newVersion)} call carry no
-     * version-migration step in their event history and yet still observe the workflow version via this accessor.
+     * Returns the effective version for the given {@code changeId}.
+     * <p>
+     * The effective version is the recorded version-migration string when a migration step has been projected for the
+     * change. Otherwise, it is {@link #workflowDefinitionId()}'s version. This fallback is implicit, so workflows
+     * that have never executed a {@code ctx.migrateVersion(changeId, newVersion)} call carry no version-migration step
+     * in their event history.
      *
      * @param changeId the change identifier to query
-     * @return recorded version, or the workflow definition version if none was projected for {@code changeId}
+     * @return effective version for the change
      */
     @Nonnull
-    String currentWorkflowVersion(@Nonnull String changeId);
-
-    /**
-     * Returns the workflow's definition version — the version this instance was started under, possibly bumped by
-     * intervening {@code ctx.migrateVersion(...)} calls. Tracked from {@code eventMessage.type().version()} on the
-     * started event and updated by migration steps whenever the new version is strictly greater than the previous
-     * (semver). Defaults to {@link org.axonframework.messaging.core.MessageType#DEFAULT_VERSION} ({@code "0.0.1"}) for
-     * legacy event streams without a version on the started event.
-     *
-     * @return the workflow's definition version
-     */
-    @Nonnull
-    String workflowDefinitionVersion();
+    String effectiveVersionFor(@Nonnull String changeId);
 
     /**
      * Returns {@code true} iff a migration step has been projected into state for the given {@code changeId}.
      * <p>
-     * Used by the migration primitive to distinguish "no recorded step, defaulting to current" from "an explicit
-     * migration step at the current version" — only the former permits a new step to be written for a different version
-     * number.
+     * Used by the migration primitive to distinguish "no recorded step, using the definition identity's version" from
+     * "an explicit migration step at the effective version". Only the former permits a new step to be written for a
+     * different version number.
      *
      * @param changeId the change identifier to query
      * @return {@code true} iff a migration step was recorded for this {@code changeId}

@@ -257,7 +257,7 @@ class EventSourcedWorkflowStateTest {
                                                    new MessageType(new QualifiedName("OrderWorkflow"), "1.2.3"),
                                                    mock(WorkflowContext.class),
                                                    Map.of());
-        assertThat(seeded.workflowDefinitionVersion()).isEqualTo("1.2.3");
+        assertThat(seeded.workflowDefinitionId().version()).isEqualTo("1.2.3");
     }
 
     @Test
@@ -281,13 +281,13 @@ class EventSourcedWorkflowStateTest {
 
         seeded.evolve(started, processingContext);
 
-        assertThat(seeded.workflowDefinitionVersion()).isEqualTo("1.0.0");
+        assertThat(seeded.workflowDefinitionId().version()).isEqualTo("1.0.0");
     }
 
     @Test
-    void version_returnsCurrentWorkflowVersion_whenNoMarkerRecorded() {
+    void version_returnsEffectiveVersion_whenNoMarkerRecorded() {
         // Default before any STARTED event applies is MessageType.DEFAULT_VERSION ("0.0.1").
-        assertThat(state.currentWorkflowVersion("payment-redesign"))
+        assertThat(state.effectiveVersionFor("payment-redesign"))
                 .isEqualTo(MessageType.DEFAULT_VERSION);
         assertThat(state.hasVersionMigrationStep("payment-redesign")).isFalse();
     }
@@ -300,9 +300,9 @@ class EventSourcedWorkflowStateTest {
         state.evolve(eventMessage, processingContext);
 
         assertThat(state.hasVersionMigrationStep("payment-redesign")).isTrue();
-        assertThat(state.currentWorkflowVersion("payment-redesign")).isEqualTo("0.0.2");
+        assertThat(state.effectiveVersionFor("payment-redesign")).isEqualTo("0.0.2");
         // Migration also bumps the workflow's current version (new > previous).
-        assertThat(state.workflowDefinitionVersion()).isEqualTo("0.0.2");
+        assertThat(state.workflowDefinitionId().version()).isEqualTo("0.0.2");
         // Migration is registered as a real step under the changeId as stepName.
         assertThat(state.containsStep("payment-redesign")).isTrue();
     }
@@ -316,7 +316,7 @@ class EventSourcedWorkflowStateTest {
         state.evolve(mockMigrationStepEvent(second), processingContext);
 
         // First-writer wins — replay must stay deterministic.
-        assertThat(state.currentWorkflowVersion("shipping-redesign")).isEqualTo("0.0.3");
+        assertThat(state.effectiveVersionFor("shipping-redesign")).isEqualTo("0.0.3");
     }
 
     @Test
@@ -327,8 +327,8 @@ class EventSourcedWorkflowStateTest {
         state.evolve(mockMigrationStepEvent(a), processingContext);
         state.evolve(mockMigrationStepEvent(b), processingContext);
 
-        assertThat(state.currentWorkflowVersion("change-a")).isEqualTo("0.0.2");
-        assertThat(state.currentWorkflowVersion("change-b")).isEqualTo("0.0.5");
+        assertThat(state.effectiveVersionFor("change-a")).isEqualTo("0.0.2");
+        assertThat(state.effectiveVersionFor("change-b")).isEqualTo("0.0.5");
     }
 
     private EventMessage mockMigrationStepEvent(Metadata metadata) {

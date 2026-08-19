@@ -169,11 +169,11 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
         var state = workflowExecution.state();
         var requested = Version.of(newVersion);
         if (state.hasVersionMigrationStep(stepName)) {
-            return Version.of(state.currentWorkflowVersion(stepName)).isGreaterThanOrEqualTo(requested);
+            return Version.of(state.effectiveVersionFor(stepName)).isGreaterThanOrEqualTo(requested);
         }
         // No step recorded: either same-as-current path (true) or guard-blocked (false).
         // Inspect current workflow version to distinguish.
-        return Version.of(state.workflowDefinitionVersion()).isGreaterThanOrEqualTo(requested);
+        return Version.of(state.workflowDefinitionId().version()).isGreaterThanOrEqualTo(requested);
     }
 
 

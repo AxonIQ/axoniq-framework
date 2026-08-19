@@ -86,7 +86,7 @@ class MultiVersionRoutingWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
         testDriver.historyMatches(h -> h.state().workflowStatus() == WorkflowStatus.COMPLETED);
 
         var state = testDriver.testingState().state();
-        assertThat(state.workflowDefinitionVersion())
+        assertThat(state.workflowDefinitionId().version())
                 .as("Fresh start should pick the highest registered version")
                 .isEqualTo("2.0.0");
         testDriver.testingState().hasSteps("v2-only-step");
@@ -113,7 +113,7 @@ class MultiVersionRoutingWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
         testDriver.historyMatches(h -> h.state().workflowStatus() == WorkflowStatus.COMPLETED);
 
         var state = testDriver.testingState().state();
-        assertThat(state.workflowDefinitionVersion())
+        assertThat(state.workflowDefinitionId().version())
                 .as("ctx.migrateVersion bumped state to 2.0.1")
                 .isEqualTo("2.0.1");
         testDriver.testingState().hasSteps("v2-only-step");

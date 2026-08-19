@@ -117,7 +117,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
      *
      * @param workflowId         workflow id
      * @param payload            initial workflow payload
-     * @param workflowDefinition stable workflow definition identifier
+     * @param workflowDefinition current workflow definition reference
      * @param context            workflow context to use
      * @param listeners          workflow status change listeners
      */
@@ -208,7 +208,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
 
     @Override
     @Nonnull
-    public String currentWorkflowVersion(@Nonnull String changeId) {
+    public String effectiveVersionFor(@Nonnull String changeId) {
         requireNonNull(changeId, "changeId must not be null");
         return versions.getOrDefault(changeId, workflowDefinition.version());
     }
@@ -216,12 +216,6 @@ public class EventSourcedWorkflowState implements WorkflowState {
     @Override
     public boolean hasVersionMigrationStep(@Nonnull String changeId) {
         return versions.containsKey(changeId);
-    }
-
-    @Override
-    @Nonnull
-    public String workflowDefinitionVersion() {
-        return workflowDefinition.version();
     }
 
     @Override
