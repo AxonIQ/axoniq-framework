@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
+import io.axoniq.workflow.runtime.api.execution.context.retry.BackoffStrategy;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
@@ -44,6 +45,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayDeque;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
@@ -85,6 +87,28 @@ class RetryableExecuteDelegateTest {
         }
     }
 
+    @Test
+    void recoveredDelayedRetry_cancelsItsTimerWhenTheParkedStepIsCancelled() {
+        var fixture = fixture();
+        try (fixture) {
+            var timerCompletion = new CompletableFuture<Void>();
+            var scheduledRetry = mock(WorkflowScheduler.ScheduledTask.class);
+            when(scheduledRetry.completion()).thenReturn(timerCompletion);
+            when(fixture.scheduler.schedule(eq(NOW.plusSeconds(1)), any())).thenReturn(scheduledRetry);
+
+            fixture.delegate.execute(commandWithBackoff());
+
+            assertThat(fixture.runningSteps.cancelWithCause(
+                    STEP_NAME, new WorkflowCancelledException("workflow cancelled")
+            )).isTrue();
+            verify(scheduledRetry).cancel();
+
+            timerCompletion.complete(null);
+
+            verify(fixture.executeDelegate, never()).execute(eq(commandWithBackoff()), any(), any());
+        }
+    }
+
     private static Fixture fixture() {
         var workflowExecution = mock(WorkflowExecution.class);
         var state = mock(WorkflowState.class);
@@ -92,6 +116,7 @@ class RetryableExecuteDelegateTest {
         var queuedTasks = new ArrayDeque<Consumer<WorkflowExecution>>();
         var runningSteps = new RunningSteps();
         var executor = Executors.newSingleThreadExecutor();
+        var scheduler = mock(WorkflowScheduler.class);
 
         when(workflowExecution.state()).thenReturn(state);
         when(state.containsStep(STEP_NAME)).thenReturn(true);
@@ -113,9 +138,9 @@ class RetryableExecuteDelegateTest {
                 mock(UnitOfWorkFactory.class),
                 mock(EventSink.class),
                 executor,
-                mock(WorkflowScheduler.class)
+                scheduler
         );
-        return new Fixture(delegate, executeDelegate, workflowExecution, runningSteps, queuedTasks, executor);
+        return new Fixture(delegate, executeDelegate, workflowExecution, runningSteps, queuedTasks, executor, scheduler);
     }
 
     private static WorkflowStep retryingStep() {
@@ -124,6 +149,14 @@ class RetryableExecuteDelegateTest {
     }
 
     private static ExecutePrimitive.ExecuteCommand command() {
+        return command(RetryPolicy.maxRetries(2));
+    }
+
+    private static ExecutePrimitive.ExecuteCommand commandWithBackoff() {
+        return command(RetryPolicy.maxRetries(2).withBackoff(BackoffStrategy.fixed(Duration.ofSeconds(1))));
+    }
+
+    private static ExecutePrimitive.ExecuteCommand command(RetryPolicy retryPolicy) {
         PayloadProcessor action = (context, payload) -> Map.of();
         return new PrimitiveCommands.WorkflowStepResultExecuteCommand(
                 STEP_NAME,
@@ -133,7 +166,7 @@ class RetryableExecuteDelegateTest {
                 GlobalOnlyPayloadReducer.INSTANCE,
                 Duration.ofSeconds(5),
                 DefaultEventNameCustomizer.Builder.defaults(),
-                RetryPolicy.maxRetries(2)
+                retryPolicy
         );
     }
 
@@ -142,7 +175,8 @@ class RetryableExecuteDelegateTest {
                            WorkflowExecution workflowExecution,
                            RunningSteps runningSteps,
                            Queue<Consumer<WorkflowExecution>> queuedTasks,
-                           ExecutorService executor) implements AutoCloseable {
+                           ExecutorService executor,
+                           WorkflowScheduler scheduler) implements AutoCloseable {
 
         void runNextTask() {
             var task = queuedTasks.remove();

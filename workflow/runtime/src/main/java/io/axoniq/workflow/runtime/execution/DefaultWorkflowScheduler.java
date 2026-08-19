@@ -26,6 +26,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -37,7 +39,21 @@ import java.util.concurrent.TimeUnit;
 @Internal
 public class DefaultWorkflowScheduler implements WorkflowScheduler {
 
+    private static final ScheduledThreadPoolExecutor TIMER_EXECUTOR = new ScheduledThreadPoolExecutor(
+            1,
+            runnable -> {
+                var thread = new Thread(runnable, "axon-workflow-timer");
+                thread.setDaemon(true);
+                return thread;
+            }
+    );
+
+    static {
+        TIMER_EXECUTOR.setRemoveOnCancelPolicy(true);
+    }
+
     private final Clock clock;
+    private final ScheduledThreadPoolExecutor timerExecutor;
 
     /**
      * Creates a scheduler.
@@ -45,7 +61,13 @@ public class DefaultWorkflowScheduler implements WorkflowScheduler {
      * @param clock workflow clock.
      */
     public DefaultWorkflowScheduler(@Nonnull Clock clock) {
+        this(clock, TIMER_EXECUTOR);
+    }
+
+    DefaultWorkflowScheduler(@Nonnull Clock clock, @Nonnull ScheduledThreadPoolExecutor timerExecutor) {
         this.clock = Objects.requireNonNull(clock, "Clock must not be null");
+        this.timerExecutor = Objects.requireNonNull(timerExecutor, "Timer executor must not be null");
+        this.timerExecutor.setRemoveOnCancelPolicy(true);
     }
 
     @Nonnull
@@ -54,7 +76,7 @@ public class DefaultWorkflowScheduler implements WorkflowScheduler {
         var completion = new CompletableFuture<Void>();
         var delay = Duration.between(clock.instant(), deadline);
         var delayMillis = Math.max(0, delay.toMillis());
-        CompletableFuture.runAsync(
+        ScheduledFuture<?> scheduledTask = timerExecutor.schedule(
                 () -> {
                     if (completion.isDone()) {
                         return;
@@ -66,7 +88,8 @@ public class DefaultWorkflowScheduler implements WorkflowScheduler {
                         completion.completeExceptionally(t);
                     }
                 },
-                CompletableFuture.delayedExecutor(delayMillis, TimeUnit.MILLISECONDS)
+                delayMillis,
+                TimeUnit.MILLISECONDS
         );
         return new ScheduledTask() {
             @Nonnull
@@ -77,7 +100,9 @@ public class DefaultWorkflowScheduler implements WorkflowScheduler {
 
             @Override
             public void cancel() {
-                completion.cancel(false);
+                if (scheduledTask.cancel(false)) {
+                    completion.cancel(false);
+                }
             }
         };
     }

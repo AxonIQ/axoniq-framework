@@ -224,8 +224,21 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             // the workflow being terminal. Anything that ends the parked phase exceptionally (a step cancellation, an
             // engine shutdown interrupt, a whole-workflow terminal interrupt) makes the later tick a no-op, so a
             // doomed attempt can never launch.
-            var backoffFuture = timeoutScheduler.schedule(retryReadyAt, () -> {
-            }).completion();
+            var scheduledRetry = timeoutScheduler.schedule(retryReadyAt, () -> {
+            });
+            var backoffFuture = new CompletableFuture<Void>();
+            scheduledRetry.completion().whenComplete((result, error) -> {
+                if (error == null) {
+                    backoffFuture.complete(null);
+                } else {
+                    backoffFuture.completeExceptionally(error);
+                }
+            });
+            backoffFuture.whenComplete((result, error) -> {
+                if (error != null && isCancellation(error)) {
+                    scheduledRetry.cancel();
+                }
+            });
             backoffFuture.thenRun(() -> workflowExecution.appendTask(i -> {
                 if (!i.state().getStep(stepName).status().isTerminal()
                         && !i.state().workflowStatus().isTerminal()) {
