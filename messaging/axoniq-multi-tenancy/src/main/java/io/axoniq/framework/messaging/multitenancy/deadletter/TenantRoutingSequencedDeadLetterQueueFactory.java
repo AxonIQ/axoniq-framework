@@ -21,12 +21,13 @@ package io.axoniq.framework.messaging.multitenancy.deadletter;
 
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
-import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.Objects;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Adapts a regular dead-letter queue factory into one that creates a tenant-routing queue for each handling component.
@@ -38,22 +39,22 @@ import java.util.Objects;
 public class TenantRoutingSequencedDeadLetterQueueFactory implements SequencedDeadLetterQueueFactory {
 
     private final SequencedDeadLetterQueueFactory delegate;
-    private final TenantProvider tenantProvider;
+    private final TenantRoutingSequencedDeadLetterQueueRegistry registry;
 
     /**
      * Creates a factory that routes each queue operation to the queue of the tenant in its processing context.
      *
      * @param delegate       the factory creating the underlying queues
-     * @param tenantProvider the provider of known tenants
+     * @param registry       the registry-owning tenant lifecycle and tenant-specific queues
      */
     public TenantRoutingSequencedDeadLetterQueueFactory(SequencedDeadLetterQueueFactory delegate,
-                                                        TenantProvider tenantProvider) {
-        this.delegate = Objects.requireNonNull(delegate, "The delegate must not be null");
-        this.tenantProvider = Objects.requireNonNull(tenantProvider, "The tenant provider must not be null");
+                                                         TenantRoutingSequencedDeadLetterQueueRegistry registry) {
+        this.delegate = requireNonNull(delegate, "The delegate must not be null");
+        this.registry = requireNonNull(registry, "The registry must not be null");
     }
 
     @Override
     public SequencedDeadLetterQueue<EventMessage> create(String processingGroup, Configuration configuration) {
-        return new TenantRoutingSequencedDeadLetterQueue(processingGroup, configuration, delegate, tenantProvider);
+        return new TenantRoutingSequencedDeadLetterQueue(processingGroup, configuration, delegate, registry);
     }
 }

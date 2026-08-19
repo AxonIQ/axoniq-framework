@@ -31,6 +31,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,9 +55,11 @@ class TenantRoutingSequencedDeadLetterQueueTest {
         SequencedDeadLetterQueueFactory factory = (processingGroup, ignored) -> tenantQueue;
         when(context.getResource(TenantDescriptor.RESOURCE_KEY)).thenReturn(TENANT_A);
         when(tenantQueue.enqueue(any(), any(), any())).thenReturn(CompletableFuture.completedFuture(null));
+        TenantRoutingSequencedDeadLetterQueueRegistry registry = new TenantRoutingSequencedDeadLetterQueueRegistry();
+        tenantProvider.subscribe(registry);
 
         TenantRoutingSequencedDeadLetterQueue testSubject = new TenantRoutingSequencedDeadLetterQueue(
-                "DeadLetterQueue[projection]", configuration, factory, tenantProvider
+                "DeadLetterQueue[projection]", configuration, factory, registry
         );
 
         testSubject.enqueue("account-1", letter, context).join();
@@ -68,7 +71,7 @@ class TenantRoutingSequencedDeadLetterQueueTest {
     void rejectsProcessingWithoutATenantCarryingContext() {
         TenantRoutingSequencedDeadLetterQueue testSubject = new TenantRoutingSequencedDeadLetterQueue(
                 "DeadLetterQueue[projection]", mock(Configuration.class), (processingGroup, configuration) -> null,
-                new StubTenantProvider()
+                new TenantRoutingSequencedDeadLetterQueueRegistry()
         );
 
         CompletableFuture<Boolean> result = testSubject.process(
@@ -78,5 +81,37 @@ class TenantRoutingSequencedDeadLetterQueueTest {
         assertThat(result).isCompletedExceptionally();
         assertThat(result.handle((ignored, exception) -> exception.getCause()))
                 .isCompletedWithValueMatching(TenantNotResolvedException.class::isInstance);
+    }
+
+    @Test
+    void createsAFreshQueueWhenATenantIsReAdded() {
+        StubTenantProvider tenantProvider = new StubTenantProvider();
+        tenantProvider.addTenant(TENANT_A);
+        Configuration configuration = mock(Configuration.class);
+        ProcessingContext context = mock(ProcessingContext.class);
+        @SuppressWarnings("unchecked")
+        SequencedDeadLetterQueue<EventMessage> firstQueue = mock(SequencedDeadLetterQueue.class);
+        @SuppressWarnings("unchecked")
+        SequencedDeadLetterQueue<EventMessage> reAddedTenantQueue = mock(SequencedDeadLetterQueue.class);
+        AtomicInteger creations = new AtomicInteger();
+        SequencedDeadLetterQueueFactory factory = (processingGroup, ignored) ->
+                creations.getAndIncrement() == 0 ? firstQueue : reAddedTenantQueue;
+        when(context.getResource(TenantDescriptor.RESOURCE_KEY)).thenReturn(TENANT_A);
+        when(firstQueue.size(context)).thenReturn(CompletableFuture.completedFuture(1L));
+        when(reAddedTenantQueue.size(context)).thenReturn(CompletableFuture.completedFuture(2L));
+        TenantRoutingSequencedDeadLetterQueueRegistry registry = new TenantRoutingSequencedDeadLetterQueueRegistry();
+        tenantProvider.subscribe(registry);
+
+        TenantRoutingSequencedDeadLetterQueue testSubject = new TenantRoutingSequencedDeadLetterQueue(
+                "DeadLetterQueue[projection]", configuration, factory, registry
+        );
+
+        testSubject.size(context).join();
+        tenantProvider.removeTenant(TENANT_A);
+        tenantProvider.addTenant(TENANT_A);
+        testSubject.size(context).join();
+
+        verify(firstQueue).size(context);
+        verify(reAddedTenantQueue).size(context);
     }
 }

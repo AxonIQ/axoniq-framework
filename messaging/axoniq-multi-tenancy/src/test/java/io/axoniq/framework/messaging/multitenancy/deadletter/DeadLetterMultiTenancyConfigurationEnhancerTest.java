@@ -65,6 +65,7 @@ class DeadLetterMultiTenancyConfigurationEnhancerTest {
                                                    PooledStreamingEventProcessorConfiguration.class
                                            ));
         assertThat(processorConfig).isPresent();
+        assertThat(configuration.hasComponent(TenantRoutingSequencedDeadLetterQueueRegistry.class)).isTrue();
         assertThat(processorConfig.orElseThrow()
                                   .extension(DeadLetterQueueConfiguration.class)
                                   .factory()).isInstanceOf(TenantRoutingSequencedDeadLetterQueueFactory.class);

@@ -25,16 +25,13 @@ import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
-import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
@@ -56,17 +53,16 @@ public class TenantRoutingSequencedDeadLetterQueue implements SequencedDeadLette
     private final String processingGroup;
     private final Configuration configuration;
     private final SequencedDeadLetterQueueFactory factory;
-    private final TenantProvider tenantProvider;
-    private final Map<TenantDescriptor, SequencedDeadLetterQueue<EventMessage>> queues = new ConcurrentHashMap<>();
+    private final TenantRoutingSequencedDeadLetterQueueRegistry registry;
 
     TenantRoutingSequencedDeadLetterQueue(String processingGroup,
                                           Configuration configuration,
                                           SequencedDeadLetterQueueFactory factory,
-                                          TenantProvider tenantProvider) {
+                                          TenantRoutingSequencedDeadLetterQueueRegistry registry) {
         this.processingGroup = requireNonNull(processingGroup, "The processing group must not be null");
         this.configuration = requireNonNull(configuration, "The configuration must not be null");
         this.factory = requireNonNull(factory, "The factory must not be null");
-        this.tenantProvider = requireNonNull(tenantProvider, "The tenant provider must not be null");
+        this.registry = requireNonNull(registry, "The registry must not be null");
     }
 
     @Override
@@ -138,15 +134,26 @@ public class TenantRoutingSequencedDeadLetterQueue implements SequencedDeadLette
         return queueFor(context).thenCompose(queue -> queue.clear(context));
     }
 
+    /**
+     * Resolves the dead-letter queue for the tenant carried by the given processing context.
+     * <p>
+     * A missing or unregistered tenant is reported through an exceptionally completed future, preserving the
+     * asynchronous dead-letter queue contract.
+     *
+     * @param context the context carrying the tenant descriptor
+     * @return a future completing with the tenant's dead-letter queue
+     */
     private CompletableFuture<SequencedDeadLetterQueue<EventMessage>> queueFor(@Nullable ProcessingContext context) {
         TenantDescriptor tenant = context == null ? null : context.getResource(TenantDescriptor.RESOURCE_KEY);
 
-        if (tenant == null || !tenantProvider.isKnown(tenant)) {
+        if (tenant == null) {
             return CompletableFuture.failedFuture(new TenantNotResolvedException(
                     "Dead-letter queue operations require a tenant-carrying processing context"));
         }
-        return CompletableFuture.completedFuture(
-                queues.computeIfAbsent(tenant, ignored -> factory.create(processingGroup, configuration))
-        );
+        try {
+            return CompletableFuture.completedFuture(registry.queueFor(processingGroup, configuration, factory, tenant));
+        } catch (TenantNotResolvedException exception) {
+            return CompletableFuture.failedFuture(exception);
+        }
     }
 }
