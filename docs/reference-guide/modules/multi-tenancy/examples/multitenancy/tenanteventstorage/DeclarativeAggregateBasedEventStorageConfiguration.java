@@ -20,8 +20,11 @@
 package multitenancy.tenanteventstorage;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing.AggregateBasedAxonServerTenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
+import org.axonframework.common.TypeReference;
+import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
@@ -35,7 +38,9 @@ public class DeclarativeAggregateBasedEventStorageConfiguration {
                 config -> new AggregateBasedAxonServerTenantEventStorageEngineFactory( // <2>
                         config.getComponent(AxonServerConnectionManager.class),
                         config.getComponent(EventConverter.class),
-                        config.getOptionalComponent(EventTypeResolver.class).orElse(EventTypeResolver.DEFAULT))
+                        config.getOptionalComponent(EventTypeResolver.class).orElse(EventTypeResolver.DEFAULT),
+                        config.getOptionalComponent(new TypeReference<TenantComponentProvider<Converter>>() {
+                        }).orElse(null))
         ));
     }
     // end::aggregate-based-factory[]

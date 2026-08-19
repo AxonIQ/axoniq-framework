@@ -11,10 +11,10 @@
  * You may not use this file except in compliance with the License.
  *
  * You may obtain a copy of the License at:
- * https://www.axoniq.io/legal/terms-of-service
+ *  https://www.axoniq.io/legal/terms-of-service
  *
  * For licensing information and to register, visit:
- * https://www.axoniq.io/pricing
+ *  https://www.axoniq.io/pricing
  */
 
 package io.axoniq.framework.messaging.multitenancy.configuration;

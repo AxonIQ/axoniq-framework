@@ -51,7 +51,8 @@ class AggregateBasedAxonServerTenantEventStorageEngineFactoryTest {
             new AggregateBasedAxonServerTenantEventStorageEngineFactory(
                     connectionManager,
                     configuration.getComponent(EventConverter.class),
-                    EventTypeResolver.DEFAULT
+                    EventTypeResolver.DEFAULT,
+                    null
             );
 
     @BeforeEach
