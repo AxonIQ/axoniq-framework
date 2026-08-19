@@ -20,13 +20,12 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -37,7 +36,6 @@ import static org.mockito.Mockito.*;
  * {@link WorkflowStepResult#isCompleted()} predicate (terminal semantics, formerly {@code race()}).
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class AnyMatchCombinatorDelegateCompletesTest {
 
@@ -49,8 +47,10 @@ class AnyMatchCombinatorDelegateCompletesTest {
         workflowState = mock(WorkflowState.class);
         workflowExecution = mock(WorkflowExecution.class);
         when(workflowExecution.state()).thenReturn(workflowState);
-        when(workflowState.firstCompletedAmong(any())).thenReturn(Optional.empty());
-        when(workflowState.sortedCompletedAmong(any())).thenReturn(List.of());
+    }
+
+    private void givenTerminalStep(String name, Instant timestamp) {
+        when(workflowState.getStep(name)).thenReturn(WorkflowStep.completed(name, null, timestamp, null));
     }
 
     // --- getStepName ---
@@ -259,9 +259,9 @@ class AnyMatchCombinatorDelegateCompletesTest {
         when(r2.isCompleted()).thenReturn(true);
         when(r2.success()).thenReturn(true);
 
-        // Event-sourced state says stepB completed first
-        when(workflowState.firstCompletedAmong(Set.of("stepA", "stepB")))
-                .thenReturn(Optional.of("stepB"));
+        // Event-sourced state says stepB completed first.
+        givenTerminalStep("stepA", Instant.ofEpochMilli(2));
+        givenTerminalStep("stepB", Instant.ofEpochMilli(1));
 
         var race = new AnyMatchCombinatorDelegate(workflowExecution).anyMatch(WorkflowStepResult::isCompleted, r1, r2);
 
