@@ -73,78 +73,80 @@ public class TenantRoutingSequencedDeadLetterQueue implements SequencedDeadLette
     public CompletableFuture<Void> enqueue(Object sequenceIdentifier,
                                            DeadLetter<? extends EventMessage> letter,
                                            @Nullable ProcessingContext context) {
-        return queueFor(context).enqueue(sequenceIdentifier, letter, context);
+        return queueFor(context).thenCompose(queue -> queue.enqueue(sequenceIdentifier, letter, context));
     }
 
     @Override
     public CompletableFuture<Void> evict(DeadLetter<? extends EventMessage> letter,
                                          @Nullable ProcessingContext context) {
-        return queueFor(context).evict(letter, context);
+        return queueFor(context).thenCompose(queue -> queue.evict(letter, context));
     }
 
     @Override
     public CompletableFuture<Void> requeue(DeadLetter<? extends EventMessage> letter,
                                            UnaryOperator<DeadLetter<? extends EventMessage>> letterUpdater,
                                            @Nullable ProcessingContext context) {
-        return queueFor(context).requeue(letter, letterUpdater, context);
+        return queueFor(context).thenCompose(queue -> queue.requeue(letter, letterUpdater, context));
     }
 
     @Override
     public CompletableFuture<Boolean> contains(Object sequenceIdentifier, @Nullable ProcessingContext context) {
-        return queueFor(context).contains(sequenceIdentifier, context);
+        return queueFor(context).thenCompose(queue -> queue.contains(sequenceIdentifier, context));
     }
 
     @Override
     public CompletableFuture<Iterable<DeadLetter<? extends EventMessage>>> deadLetterSequence(
             Object sequenceIdentifier, @Nullable ProcessingContext context) {
-        return queueFor(context).deadLetterSequence(sequenceIdentifier, context);
+        return queueFor(context).thenCompose(queue -> queue.deadLetterSequence(sequenceIdentifier, context));
     }
 
     @Override
     public CompletableFuture<Iterable<Iterable<DeadLetter<? extends EventMessage>>>> deadLetters(
             @Nullable ProcessingContext context) {
-        return queueFor(context).deadLetters(context);
+        return queueFor(context).thenCompose(queue -> queue.deadLetters(context));
     }
 
     @Override
     public CompletableFuture<Boolean> isFull(Object sequenceIdentifier, @Nullable ProcessingContext context) {
-        return queueFor(context).isFull(sequenceIdentifier, context);
+        return queueFor(context).thenCompose(queue -> queue.isFull(sequenceIdentifier, context));
     }
 
     @Override
     public CompletableFuture<Long> size(@Nullable ProcessingContext context) {
-        return queueFor(context).size(context);
+        return queueFor(context).thenCompose(queue -> queue.size(context));
     }
 
     @Override
     public CompletableFuture<Long> sequenceSize(Object sequenceIdentifier, @Nullable ProcessingContext context) {
-        return queueFor(context).sequenceSize(sequenceIdentifier, context);
+        return queueFor(context).thenCompose(queue -> queue.sequenceSize(sequenceIdentifier, context));
     }
 
     @Override
     public CompletableFuture<Long> amountOfSequences(@Nullable ProcessingContext context) {
-        return queueFor(context).amountOfSequences(context);
+        return queueFor(context).thenCompose(queue -> queue.amountOfSequences(context));
     }
 
     @Override
     public CompletableFuture<Boolean> process(Predicate<DeadLetter<? extends EventMessage>> sequenceFilter,
                                               Function<DeadLetter<? extends EventMessage>, CompletableFuture<EnqueueDecision<EventMessage>>> processingTask,
                                               @Nullable ProcessingContext context) {
-        return queueFor(context).process(sequenceFilter, processingTask, context);
+        return queueFor(context).thenCompose(queue -> queue.process(sequenceFilter, processingTask, context));
     }
 
     @Override
     public CompletableFuture<Void> clear(@Nullable ProcessingContext context) {
-        return queueFor(context).clear(context);
+        return queueFor(context).thenCompose(queue -> queue.clear(context));
     }
 
-    private SequencedDeadLetterQueue<EventMessage> queueFor(@Nullable ProcessingContext context) {
+    private CompletableFuture<SequencedDeadLetterQueue<EventMessage>> queueFor(@Nullable ProcessingContext context) {
         TenantDescriptor tenant = context == null ? null : context.getResource(TenantDescriptor.RESOURCE_KEY);
+
         if (tenant == null || !tenantProvider.isKnown(tenant)) {
-            throw new TenantNotResolvedException(
-                    "Dead-letter queue operations require a tenant-carrying processing context"
-            );
+            return CompletableFuture.failedFuture(new TenantNotResolvedException(
+                    "Dead-letter queue operations require a tenant-carrying processing context"));
         }
-        return queues.computeIfAbsent(tenant, ignored -> factory.create(processingGroup, configuration));
+        return CompletableFuture.completedFuture(
+                queues.computeIfAbsent(tenant, ignored -> factory.create(processingGroup, configuration))
+        );
     }
 }

@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.multitenancy.deadletter;
 import io.axoniq.framework.messaging.deadletter.DeadLetter;
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.Configuration;
@@ -32,7 +33,7 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.CompletableFuture;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -51,7 +52,7 @@ class TenantRoutingSequencedDeadLetterQueueTest {
         @SuppressWarnings("unchecked")
         DeadLetter<EventMessage> letter = mock(DeadLetter.class);
         SequencedDeadLetterQueueFactory factory = (processingGroup, ignored) -> tenantQueue;
-        when(context.getResource(TENANT_A.RESOURCE_KEY)).thenReturn(TENANT_A);
+        when(context.getResource(TenantDescriptor.RESOURCE_KEY)).thenReturn(TENANT_A);
         when(tenantQueue.enqueue(any(), any(), any())).thenReturn(CompletableFuture.completedFuture(null));
 
         TenantRoutingSequencedDeadLetterQueue testSubject = new TenantRoutingSequencedDeadLetterQueue(
@@ -70,8 +71,12 @@ class TenantRoutingSequencedDeadLetterQueueTest {
                 new StubTenantProvider()
         );
 
-        assertThatThrownBy(() -> testSubject.process(
+        CompletableFuture<Boolean> result = testSubject.process(
                 letter -> true, letter -> CompletableFuture.completedFuture(null), null
-        )).isInstanceOf(TenantNotResolvedException.class);
+        );
+
+        assertThat(result).isCompletedExceptionally();
+        assertThat(result.handle((ignored, exception) -> exception.getCause()))
+                .isCompletedWithValueMatching(TenantNotResolvedException.class::isInstance);
     }
 }
