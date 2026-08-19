@@ -72,12 +72,12 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
     private static void registerDeadLetterQueueDecorator(ComponentRegistry componentRegistry) {
         componentRegistry.registerDecorator(forType(PooledStreamingEventProcessorConfiguration.class)
                                                     .with((configuration, name, processorConfiguration) -> {
-                                                        DeadLetterQueueConfiguration deadLetters =
+                                                        DeadLetterQueueConfiguration dlqConfig =
                                                                 processorConfiguration.extension(
                                                                         DeadLetterQueueConfiguration.class);
-                                                        if (deadLetters != null && deadLetters.isEnabled()) {
-                                                            deadLetters.factory(new TenantRoutingSequencedDeadLetterQueueFactory(
-                                                                    deadLetters.factory(),
+                                                        if (dlqConfig != null && dlqConfig.isEnabled()) {
+                                                            dlqConfig.factory(new TenantRoutingSequencedDeadLetterQueueFactory(
+                                                                    dlqConfig.factory(),
                                                                     configuration.getComponent(TenantProvider.class)
                                                             ));
                                                         }
