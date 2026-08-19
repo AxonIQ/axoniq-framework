@@ -10,10 +10,10 @@ Use a BDD fixture when you want to test workflow behavior as a sequence of obser
 ----
 fixture.given()
        .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
-       .executeStep("createUser");
+       .execute("createUser");
 
 fixture.when()
-       .executeStepReturning("activateUser", Map.of());
+       .executeReturning("activateUser", Map.of());
 
 fixture.then()
        .executionExists()
@@ -120,7 +120,7 @@ class UserSignupFixtureTest {
 
         fixture.when()
                .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
-               .executeStep("createUser");
+               .execute("createUser");
 
         fixture.then()
                .executionExists()
@@ -174,7 +174,7 @@ They make the test read as a scenario while keeping the runtime interactions exp
 ----
 fixture.given()
        .publishEvent(startEvent)
-       .executeStep("prepare");
+       .execute("prepare");
 
 fixture.when()
        .publishEvent(domainEvent);
@@ -222,7 +222,7 @@ To release the production action:
 [source,java]
 ----
 fixture.when()
-       .executeStep("createUser");
+       .execute("createUser");
 ----
 
 To replace the production action with a successful fake result and assert that the step completes:
@@ -230,7 +230,7 @@ To replace the production action with a successful fake result and assert that t
 [source,java]
 ----
 fixture.when()
-       .executeStepReturning("activateUser", Map.of("activated", true));
+       .executeReturning("activateUser", Map.of("activated", true));
 ----
 
 To provide a custom payload processor:
@@ -238,7 +238,7 @@ To provide a custom payload processor:
 [source,java]
 ----
 fixture.when()
-       .executeStep("reserveCredit", (processingContext, inputPayload) -> Map.of(
+       .execute("reserveCredit", (processingContext, inputPayload) -> Map.of(
                "reservationId", "res-123",
                "amount", inputPayload.get("amount")
        ));
@@ -252,7 +252,7 @@ To make a step fail and assert that it failed:
 [source,java]
 ----
 fixture.when()
-       .executeStepFailing(
+       .executeFailing(
                "reserveCredit",
                new StepFailedException("credit denied")
        );
@@ -267,9 +267,9 @@ Use `timePasses(...)` to advance fixture-controlled time and run timeout tasks t
 ----
 fixture.given()
        .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
-       .executeStep("createUser")
-       .executeStepReturning("activateUser", Map.of())
-       .executeStepReturning("sendWelcomeEmail", Map.of());
+       .execute("createUser")
+       .executeReturning("activateUser", Map.of())
+       .executeReturning("sendWelcomeEmail", Map.of());
 
 fixture.when()
        .timePasses(Duration.ofSeconds(1));
@@ -279,6 +279,38 @@ fixture.then()
 ----
 
 This is useful for `sleep`, `waitForEvent` timeouts, execute-step timeouts, and retry backoff behavior that is wired through the workflow scheduler.
+
+=== Testing retry backoff
+
+Retry backoff uses the same fixture-controlled scheduler. Supply a failing action for the first attempt, advance time
+past the configured backoff, then release the retry attempt with its successful result.
+
+The following example assumes that `reserveCredit` uses a retry policy with a one-second fixed backoff:
+
+[source,java]
+----
+fixture.given()
+       .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
+       .executionExists();
+
+fixture.when()
+       .execute("reserveCredit", (processingContext, inputPayload) -> {
+           throw new StepFailedException("temporary credit failure");
+       });
+
+fixture.then()
+       .step("reserveCredit", StepStatus.RETRYING);
+
+fixture.when()
+       .timePasses(Duration.ofSeconds(1))
+       .executeReturning("reserveCredit", Map.of("reservationId", "res-123"));
+
+fixture.then()
+       .step("reserveCredit", StepStatus.COMPLETED);
+----
+
+Use `execute(...)` for the failed retry attempt. `executeFailing(...)` is for steps expected to reach terminal `FAILED`
+state, whereas a retrying step first reaches `RETRYING`.
 
 == Assertions
 
@@ -394,9 +426,9 @@ class SignupGivenWhen extends GivenWhen<SignupGivenWhen, SignupThen> {
 
     SignupGivenWhen customerRegistrationCompleted() {
         return executionExists()
-                .executeStep("createUser")
-                .executeStepReturning("activateUser", Map.of())
-                .executeStepReturning("sendWelcomeEmail", Map.of());
+                .execute("createUser")
+                .executeReturning("activateUser", Map.of())
+                .executeReturning("sendWelcomeEmail", Map.of());
     }
 
     SignupGivenWhen magicHappens(String magician) {
@@ -480,9 +512,9 @@ void vip_registration_completes_after_magic_event() {
     fixture.given()
            .publishEvent(new RegistrationReceivedEvent("2", "piggy@muppets.biz", "vip"))
            .executionExists()
-           .executeStep("createUser")
-           .executeStepReturning("activateUser", Map.of())
-           .executeStepReturning("sendWelcomeEmail", Map.of())
+           .execute("createUser")
+           .executeReturning("activateUser", Map.of())
+           .executeReturning("sendWelcomeEmail", Map.of())
            .timePasses(Duration.ofSeconds(1))
            .then()
            .waitingIn("waitForMagicToHappen");
