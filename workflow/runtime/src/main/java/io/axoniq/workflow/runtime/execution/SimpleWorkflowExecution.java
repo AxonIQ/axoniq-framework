@@ -229,7 +229,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                     workflowPayload,
                     currentThread());
 
-        // Reset the runtime "book" — step-reference tracker for the drift guard.
+        // Reset the runtime "book" - step-reference tracker for the drift guard.
         this.referencedStepNames.clear();
 
         // Dispatch to the definition matching state.workflowDefinitionVersion().
@@ -496,7 +496,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                             && workflowState.getStep(stepName).status().isTerminal());
             // If every cancelled step is already terminal (e.g., the future had already
             // completed before we requested cancellation), there are no pending tasks
-            // to wait for — awaitStateChange would block on an empty task queue.
+            // to wait for - awaitStateChange would block on an empty task queue.
             if (allTerminal.test(this.state())) {
                 return;
             }

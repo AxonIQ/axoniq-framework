@@ -148,7 +148,7 @@ class WorkflowEngineClaimGapWakeTest {
         drainOneTask();
 
         assertThat(waitStep.isCancelled())
-                .as("the ordinary live ordering — condition first, event second — must keep waking the instance")
+                .as("the ordinary live ordering - condition first, event second - must keep waking the instance")
                 .isTrue();
     }
 
@@ -176,7 +176,7 @@ class WorkflowEngineClaimGapWakeTest {
 
     /**
      * Wires the store and the registry so {@link #RESIDENT_ID} can be rehydrated into a real
-     * {@link SimpleWorkflowExecution} whose body is submitted to an executor that never runs it — the state a claim
+     * {@link SimpleWorkflowExecution} whose body is submitted to an executor that never runs it - the state a claim
      * leaves behind the moment it returns.
      */
     @SuppressWarnings("unchecked")

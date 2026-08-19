@@ -84,7 +84,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
             return List.of();
         }
         // Use the defensive Version.tryOf(...) so a single unparseable (legacy) version string skips the
-        // comparison rather than aborting startup — warnAboutSameVersionDuplicates() calls this in a loop.
+        // comparison rather than aborting startup - warnAboutSameVersionDuplicates() calls this in a loop.
         Optional<Version> highest = all.stream()
                                        .flatMap(c -> Version.tryOf(c.configuration().workflowVersion()).stream())
                                        .max(Version::compareTo);
@@ -152,7 +152,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * Finds the "best routing match" for a given {@code workflowName} + {@code version}: the registered configuration
      * whose {@code workflowVersion()} is the <strong>highest version less than or equal to</strong> the requested
      * {@code version} (semver-ordered). Used to dispatch a workflow whose state version was bumped mid-flight via
-     * {@code ctx.migrateVersion(...)} to a value that no exact sibling is registered for — e.g. v1.0.0 + v2.0.0
+     * {@code ctx.migrateVersion(...)} to a value that no exact sibling is registered for - e.g. v1.0.0 + v2.0.0
      * registered, state recorded "1.0.1", we want to route to the v1.0.0 definition, not jump to v2.0.0.
      * <p>
      * Returns empty when no registered version is {@code <=} the requested one (the workflow's recorded version is
@@ -176,7 +176,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * Finds the "next higher" routing match for {@code workflowName} + {@code version}: the registered configuration
      * whose {@code workflowVersion()} is the <strong>lowest version strictly greater than</strong> the requested
      * {@code version} (semver-ordered). Used to route an in-flight workflow forward to a newer definition when the
-     * developer bumped {@code @Workflow(workflowVersion=...)} past the version recorded in the workflow's state — e.g.
+     * developer bumped {@code @Workflow(workflowVersion=...)} past the version recorded in the workflow's state - e.g.
      * instances started at "0.0.1" before the annotation was bumped to "0.0.2" must still find a body to replay
      * against.
      * <p>
@@ -266,14 +266,14 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * Resolves which {@link WorkflowConfiguration} should drive an in-flight workflow's body, picking the definition
      * that matches the version recorded in state. Five-pass routing:
      * <ol>
-     *   <li>{@code exact-match-start-config} — start config matches state version.</li>
-     *   <li>{@code exact-match-sibling} — registry has a sibling at the exact state version.</li>
-     *   <li>{@code closest-sibling} — highest registered version ≤ state (covers mid-flight
+     *   <li>{@code exact-match-start-config} - start config matches state version.</li>
+     *   <li>{@code exact-match-sibling} - registry has a sibling at the exact state version.</li>
+     *   <li>{@code closest-sibling} - highest registered version ≤ state (covers mid-flight
      *       {@code ctx.migrateVersion()} bumps to a value not statically registered).</li>
-     *   <li>{@code closest-higher-sibling} — lowest registered version &gt; state (covers the case
+     *   <li>{@code closest-higher-sibling} - lowest registered version &gt; state (covers the case
      *       where {@code @Workflow(workflowVersion=...)} has been bumped past the version recorded
      *       on the workflow's started event; in-flight instances still find a body to replay).</li>
-     *   <li>{@code no-match-fallback} — nothing registered for this workflow name. WARN + start
+     *   <li>{@code no-match-fallback} - nothing registered for this workflow name. WARN + start
      *       config; the drift safety net pauses if step names diverge.</li>
      * </ol>
      * Unparseable state versions (legacy streams) short-circuit to the start config. Every dispatch
@@ -310,7 +310,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
                                "registry has a sibling definition at the same version as recorded state");
             return exact.get();
         }
-        // Pass 3: closest-sibling — highest registered version <= stateVersion.
+        // Pass 3: closest-sibling - highest registered version <= stateVersion.
         var closest = findClosestRegisteredVersion(workflowName, stateVersion);
         if (closest.isPresent()) {
             logRoutingDecision(workflowName, workflowId, stateVersion, registered,
@@ -318,7 +318,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
                                "no exact-version sibling registered; using highest registered version <= recorded state");
             return closest.get();
         }
-        // Pass 4: closest-higher-sibling — lowest registered version > stateVersion. Routes in-flight
+        // Pass 4: closest-higher-sibling - lowest registered version > stateVersion. Routes in-flight
         // workflows forward when the annotation has been bumped past the version recorded on their
         // started event (and no older sibling is still registered).
         var higher = findClosestHigherRegisteredVersion(workflowName, stateVersion);

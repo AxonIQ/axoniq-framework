@@ -315,7 +315,7 @@ class EventSourcedWorkflowStateTest {
         state.evolve(mockMigrationStepEvent(first), processingContext);
         state.evolve(mockMigrationStepEvent(second), processingContext);
 
-        // First-writer wins — replay must stay deterministic.
+        // First-writer wins - replay must stay deterministic.
         assertThat(state.currentWorkflowVersion("shipping-redesign")).isEqualTo("0.0.3");
     }
 

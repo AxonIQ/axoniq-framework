@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.execution.EventHandlingComponentHandlingAny;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineReplaySupport;
+import io.axoniq.workflow.runtime.execution.WorkflowSegmentChangeListener;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
@@ -164,7 +165,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
      * Configures the workflow event processor: it streams any event, partitioned over
      * {@link #initialSegmentCount} segments, with workflow instances distributed over segments by their workflow id.
      * <p>
-     * The processor uses the {@link TokenStore} registered as a component when present — a durable store makes
+     * The processor uses the {@link TokenStore} registered as a component when present - a durable store makes
      * segment claims visible across nodes, the precondition for multi-node sharding. Without one, an
      * {@link InMemoryTokenStore} is used and claims stay process-local (single-node operation).
      */
@@ -176,7 +177,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                         : EventCriteria.havingAnyTag().andBeingOneOfTypes(set))
                 .eventSource(cfg.getComponent(StreamableEventSource.class))
                 .tokenStore(cfg.getOptionalComponent(TokenStore.class).orElseGet(() -> {
-                    logger.warn("No TokenStore component configured for the workflow event processor — falling "
+                    logger.warn("No TokenStore component configured for the workflow event processor - falling "
                                         + "back to an in-memory token store. Segment claims are process-local: "
                                         + "multi-node sharding and failover require a durable TokenStore.");
                     return new InMemoryTokenStore();

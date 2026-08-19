@@ -316,7 +316,7 @@ class WorkflowEngineReplayTest {
         WorkflowIdProvider idProvider = event -> baseId;
         when(v2.workflowIdProvider()).thenReturn(idProvider);
         when(v2.workflowVersion()).thenReturn("2.0.0");
-        // Other lookups are exercised after disambiguation — return safe stubs.
+        // Other lookups are exercised after disambiguation - return safe stubs.
         var contextFactory = mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory.class);
         var workflowContext = mock(WorkflowContext.class);
         when(contextFactory.createContext(anyMap(), anyString(), any(), any())).thenReturn(workflowContext);
@@ -343,7 +343,7 @@ class WorkflowEngineReplayTest {
 
         // A v2 start was saved under the disambiguated id.
         verify(workflowExecutionRepository).save(eq(baseId + "#2.0.0"), any());
-        // The base id was NOT reused — the v1 instance is untouched.
+        // The base id was NOT reused - the v1 instance is untouched.
         verify(workflowExecutionRepository, never()).save(eq(baseId), any());
     }
 
@@ -396,7 +396,7 @@ class WorkflowEngineReplayTest {
         clearInvocations(workflowExecutionRepository);
 
         // A configuration that matches the incoming event and resolves to the same id AT THE SAME VERSION.
-        // This is the "same-version duplicate" branch of resolveWorkflowIdForNewInstance — should be rejected.
+        // This is the "same-version duplicate" branch of resolveWorkflowIdForNewInstance - should be rejected.
         WorkflowConfiguration<?> configuration = mock(WorkflowConfiguration.class);
         WorkflowIdProvider idProvider = event -> workflowId;
         when(configuration.workflowIdProvider()).thenReturn(idProvider);
@@ -800,7 +800,7 @@ class WorkflowEngineReplayTest {
 
         workflowEngine.handle(eventMessage, processingContext(null));
 
-        // Even the disambiguated id is taken — nothing new is started.
+        // Even the disambiguated id is taken - nothing new is started.
         verify(workflowExecutionRepository, never()).save(anyString(), any());
     }
 

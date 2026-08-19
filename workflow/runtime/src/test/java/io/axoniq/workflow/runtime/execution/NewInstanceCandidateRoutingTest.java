@@ -259,8 +259,8 @@ class NewInstanceCandidateRoutingTest {
      * package would fail and stall the segment, losing every instance that segment owns rather than only the one
      * misconfigured definition.
      * <p>
-     * The provider is only known at runtime — an arbitrary function over the event, resolving property names against
-     * the converted payload — so registration cannot reject it. Instead the start path reports the definition and
+     * The provider is only known at runtime - an arbitrary function over the event, resolving property names against
+     * the converted payload - so registration cannot reject it. Instead the start path reports the definition and
      * skips it: no instance, no stall, and an attributable error.
      */
     @Test

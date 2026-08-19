@@ -152,7 +152,7 @@ public class WorkflowEngine implements
             // Skip events whose workflowId isn't owned by this engine (expected in multi-module setups).
             var executionOpt = workflowExecutionRepository.findById(workflowId);
             if (executionOpt.isEmpty()) {
-                logger.debug("Ignoring event [{}] for workflowId [{}] — no matching execution in this engine.",
+                logger.debug("Ignoring event [{}] for workflowId [{}] - no matching execution in this engine.",
                              event.type(), workflowId);
                 checkpointingSupport.requestCheckpoint(segment, currentToken);
                 replaySupport.validateIfReplayFinished(currentToken, context);
@@ -254,8 +254,9 @@ public class WorkflowEngine implements
      * {@code segment} that are still performing tasks.
      * <p>
      * The given {@code latch} is attached to all {@code WorkflowExecutions} that still have tasks to perform. Or in
-     * other terms, executions that are "unsafe" to checkpoint on. When the snapshot is empty, the latch runs straight
-     * away so safety is re-checked, covering a workflow that appended work concurrently with the snapshot.
+     * other terms, executions that are "unsafe" to checkpoint on. When no execution is unsafe at the moment the latch
+     * is attached, the latch runs straight away so safety is re-checked, covering a workflow that appended work
+     * concurrently.
      *
      * @param segment the segment whose checkpoint is being advanced
      * @param latch   the latch to invoke after all unsafe {@link WorkflowExecution WorkflowExecutions} have reached it

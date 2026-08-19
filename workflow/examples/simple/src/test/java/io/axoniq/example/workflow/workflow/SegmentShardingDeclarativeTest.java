@@ -56,10 +56,10 @@ import static org.awaitility.Awaitility.await;
  *     <li>instances whose ids hash to different segments both start (unique start candidates route to their owning
  *     segment) and complete;</li>
  *     <li>their correlated resume events have no start candidate, so they are broadcast to every segment via
- *     {@code SequencingPolicy.BROADCAST} — each instance is woken by the delivery at its owning segment, regardless
+ *     {@code SequencingPolicy.BROADCAST} - each instance is woken by the delivery at its owning segment, regardless
  *     of where the event's natural sequencing hash lands (cross-segment wake);</li>
  *     <li>a start event matching several definitions (multiple start candidates, hence broadcast to all four
- *     segments) starts each candidate exactly once — the ownership guard skips the start on every non-owning
+ *     segments) starts each candidate exactly once - the ownership guard skips the start on every non-owning
  *     segment.</li>
  * </ul>
  *

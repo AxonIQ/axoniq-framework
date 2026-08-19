@@ -45,9 +45,7 @@ import static java.util.Objects.requireNonNull;
  * engine should switch to live mode}.
  * <p>
  * Everything here is kept <em>per segment</em>. The processor hands out one {@link CheckpointTrigger} per claimed
- * segment, a request through it advances only that segment's stored token, and it is inert once that claim ends. A
- * single shared trigger would push a position reached by one segment through another segment's trigger, advancing a
- * stored token past events that segment never handled.
+ * segment, a request through it advances only that segment's stored token, and it is inert once that claim ends.
  * <p>
  * The trigger map is concurrent, and its updates are deliberately small: they never invoke processor or workflow
  * callbacks while a claim is being recorded or dropped. The coordinator callback supplied to
@@ -164,8 +162,7 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
 
         /**
          * Returns whether any {@link WorkflowExecution WorkflowExecutions} owned by the given {@code segment} still
-         * makes checkpoint advancement unsafe. Executions of other segments are irrelevant: their progress is tracked
-         * by their own segment token.
+         * makes checkpoint advancement unsafe.
          *
          * @param segment the segment whose checkpoint is being advanced
          * @return {@code true} when checkpoint advancement must wait, {@code false} otherwise

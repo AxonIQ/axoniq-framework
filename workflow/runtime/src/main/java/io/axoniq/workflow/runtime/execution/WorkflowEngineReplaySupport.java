@@ -58,9 +58,8 @@ import static java.util.Objects.requireNonNull;
  * checkpoint support.
  * <p>
  * Both the position and the live-mode flag are kept <em>per segment</em>. Segments of one processor catch up
- * independently, so a shared flag would let the first segment to reach {@link #startupLatestToken} start workflow
- * bodies of segments that are still replaying, and a shared position would tell a restored execution it resumes from a
- * position its own segment never reached.
+ * independently, so each segment starts its workflow bodies exactly when it has caught up, and each restored
+ * execution resumes from the position its own segment reached.
  * <p>
  * Replay state is read frequently from processor callbacks, so the {@code TrackingToken} references are
  * {@code volatile} and the per-segment state lives in concurrent collections. The engine-wide live-mode flag is an

@@ -38,11 +38,12 @@ import java.util.stream.Collectors;
  * The single home of segment routing and ownership for workflow instances: a segment owns the
  * workflow instances whose {@code workflowId.hashCode()} it matches: instance partitioning.
  * <p>
- * The same rule is applied by event sequencing (as a {@link SequencingPolicy},
- * {@link #sequenceIdentifierFor(EventMessage, ProcessingContext)} routes an event to the segment owning the affected
- * instance) and by the engine's handling, wake and start decisions ({@link #shouldHandle(String, Segment)} /
- * {@link NewWorkflowInstanceRouting#shouldStartNewInstance(String, Segment)}), so a given {@code workflowId} maps to the same segment everywhere, on
- * every node, forever ({@code String.hashCode()} is specified by the JLS and stable across JVMs and restarts).
+ * Two sides apply this rule. Event sequencing applies it as a {@link SequencingPolicy}:
+ * {@link #sequenceIdentifierFor(EventMessage, ProcessingContext)} routes an event to the segment that owns the
+ * affected instance. The engine applies it when deciding whether to handle, wake or start an instance
+ * ({@link #shouldHandle(String, Segment)} and {@link NewWorkflowInstanceRouting#shouldStartNewInstance(String, Segment)}).
+ * A given {@code workflowId} therefore maps to the same segment on every node and after every restart, because
+ * {@code String.hashCode()} is specified by the JLS and stable across JVMs.
  * Events that do not map to a single instance are sequenced by {@link SequencingPolicy#BROADCAST} and thus delivered
  * to every segment; each segment then acts only on the instances it owns.
  * <p>
@@ -109,15 +110,17 @@ public final class SegmentedWorkflowRouting implements SequencingPolicy<EventMes
 
     /**
      * Determines the identifier by which the given event must be sequenced so that the streaming processor delivers
-     * it to the segment owning the affected workflow instance.
-     * <p>
-     * Engine-emitted events (carrying {@code workflowId} metadata) are sequenced by the id's
-     * {@linkplain #segmentKey(String) segment key}. Business events
-     * are sequenced by the start-candidate workflow id when exactly one registered definition would start from the
-     * event, so new instances are created on the segment that owns them. All other events (no or multiple start
-     * candidates) may need to wake waiting instances resident in any segment; without a durable wait-association
-     * table the only correct routing is delivery to all segments, so they are sequenced by
-     * {@link SequencingPolicy#BROADCAST} — each segment then evaluates the wait conditions of the instances it owns.
+     * it to the segment owning the affected workflow instance. There are three routing cases:
+     * <ul>
+     *   <li>Engine-emitted events (carrying {@code workflowId} metadata) are sequenced by the id's
+     *   {@linkplain #segmentKey(String) segment key}.</li>
+     *   <li>Business events are sequenced by the start-candidate workflow id when exactly one registered definition
+     *   would start from the event, so new instances are created on the segment that owns them.</li>
+     *   <li>All other events (no or multiple start candidates) may need to wake waiting instances resident in any
+     *   segment; without a durable wait-association table the only correct routing is delivery to all segments, so
+     *   they are sequenced by {@link SequencingPolicy#BROADCAST}. Each segment then evaluates the wait conditions of
+     *   the instances it owns.</li>
+     * </ul>
      *
      * @param eventMessage      the event to sequence.
      * @param processingContext the processing context of the event.
@@ -141,7 +144,7 @@ public final class SegmentedWorkflowRouting implements SequencingPolicy<EventMes
      * business event): a segment only processes instances it owns. Engine events are sequenced by {@code workflowId}
      * (see {@link #sequenceIdentifierFor(EventMessage, ProcessingContext)}) and thus arrive at the owning segment;
      * broadcast business events (sequenced by {@link SequencingPolicy#BROADCAST}) arrive at every segment and this
-     * decision degrades them to a no-op everywhere except at the owner — keeping wakes exactly-once per instance.
+     * decision degrades them to a no-op everywhere except at the owner - keeping wakes exactly-once per instance.
      *
      * @param workflowId id of the workflow instance.
      * @param segment    the segment the event is processed under, or {@code null} when processed outside a segmented
@@ -150,7 +153,7 @@ public final class SegmentedWorkflowRouting implements SequencingPolicy<EventMes
      */
     public boolean shouldHandle(@Nonnull String workflowId, @Nullable Segment segment) {
         if (segment != null && !ownedBy(segment, workflowId)) {
-            logger.debug("Ignoring event for workflowId '{}' — instance is owned by another segment than {}.",
+            logger.debug("Ignoring event for workflowId '{}' - instance is owned by another segment than {}.",
                          workflowId, segment);
             return false;
         }
