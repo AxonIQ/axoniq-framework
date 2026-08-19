@@ -65,21 +65,6 @@ public class AggregateBasedAxonServerTenantEventStorageEngineFactory
      * @param connectionManager the connection manager providing each tenant's Axon Server connection
      * @param defaultConverter the converter used when no tenant-specific converter is configured
      * @param eventTypeResolver the resolver for the event types stored in each tenant's context
-     */
-    public AggregateBasedAxonServerTenantEventStorageEngineFactory(
-            AxonServerConnectionManager connectionManager,
-            EventConverter defaultConverter,
-            EventTypeResolver eventTypeResolver) {
-        this(connectionManager, defaultConverter, eventTypeResolver, null);
-    }
-
-    /**
-     * Constructs an {@code AggregateBasedAxonServerTenantEventStorageEngineFactory} building per-tenant aggregate
-     * storage engines from the given components.
-     *
-     * @param connectionManager the connection manager providing each tenant's Axon Server connection
-     * @param defaultConverter the converter used when no tenant-specific converter is configured
-     * @param eventTypeResolver the resolver for the event types stored in each tenant's context
      * @param tenantConverterProvider the optional provider of tenant-specific converters
      */
     public AggregateBasedAxonServerTenantEventStorageEngineFactory(
