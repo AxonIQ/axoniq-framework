@@ -65,7 +65,7 @@ import static org.mockito.Mockito.when;
 /**
  * The pass that removes terminal executions and starts the restored ones is scoped by {@link Segment}, at both of its
  * call sites: the claim of a segment, and a segment reaching the replay boundary. Each only concerns the executions
- * that segment owns, the way {@code releaseSegment} already does.
+ * that segment owns, the way {@code releaseWorkflowsFor} already does.
  * <p>
  * Without that scoping the predicates select over the whole execution repository, so one segment's claim or catch-up
  * starts the instances of every other segment the node holds: a second, concurrent run of a body that is already
@@ -124,14 +124,14 @@ class WorkflowEngineSegmentClaimStartScopeTest {
         registerRestorableWorkflow(restoredState);
 
         // 1. The node claims the owning segment. The instance is sourced, materialized and started: correct.
-        workflowEngine.claimSegment(owner, null, sourcingContext(), mock(ProcessingContext.class));
+        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext(), mock(ProcessingContext.class));
         assertThat(bodyStarts)
                 .as("claiming the owning segment %s starts its own instance", owner)
                 .containsExactly(RESIDENT_ID);
         bodyStarts.clear();
 
         // 2. The coordinator hands the same node a second, unrelated segment.
-        workflowEngine.claimSegment(other, null, sourcingContext(), mock(ProcessingContext.class));
+        workflowEngine.restoreWorkflowsFor(other, null, sourcingContext(), mock(ProcessingContext.class));
 
         // --- precondition evidence -------------------------------------------------------------------------------
         verify(workflowStore, times(1)).loadWorkflow(eq(RESIDENT_ID), any());
@@ -144,7 +144,7 @@ class WorkflowEngineSegmentClaimStartScopeTest {
                 .as("""
                     Workflow bodies started by the claim of segment %s: %s. Expected: none. Instance '%s' is owned by \
                     segment %s, which this claim does not concern, so claiming %s must start nothing (mirroring \
-                    releaseSegment, which is scoped by ownedBy(segment)). Starting it here gives '%s' a second, \
+                    releaseWorkflowsFor, which is scoped by ownedBy(segment)). Starting it here gives '%s' a second, \
                     concurrent run of a body that is already running.""",
                     other, bodyStarts, RESIDENT_ID, owner, other, RESIDENT_ID)
                 .isEmpty();
@@ -174,7 +174,7 @@ class WorkflowEngineSegmentClaimStartScopeTest {
 
         // 1. The owning segment is observed behind the startup latest token, then claimed: materialize, do not start.
         workflowEngine.handle(engineEvent(RESIDENT_ID), processingContext(owner, token(LAGGING_POSITION)));
-        workflowEngine.claimSegment(owner, token(LAGGING_POSITION), sourcingContext(), processingContext(owner, null));
+        workflowEngine.restoreWorkflowsFor(owner, token(LAGGING_POSITION), sourcingContext(), processingContext(owner, null));
         assertThat(replaySupport.isReplaying(owner, token(LAGGING_POSITION)))
                 .as("segment %s must still be replaying at position %s", owner, LAGGING_POSITION).isTrue();
         assertThat(workflowEngine.workflowExecutions())
@@ -227,7 +227,7 @@ class WorkflowEngineSegmentClaimStartScopeTest {
                 .as("segment %s must not already be live", owner).isFalse();
 
         // Claimed behind, and no handle(...) has ever run for this segment.
-        workflowEngine.claimSegment(owner, token(LAGGING_POSITION), sourcingContext(),
+        workflowEngine.restoreWorkflowsFor(owner, token(LAGGING_POSITION), sourcingContext(),
                                    processingContext(owner, null));
 
         // --- oracle ------------------------------------------------------------------------------------------

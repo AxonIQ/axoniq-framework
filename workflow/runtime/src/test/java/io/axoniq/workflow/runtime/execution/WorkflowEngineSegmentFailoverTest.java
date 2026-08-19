@@ -79,7 +79,7 @@ class WorkflowEngineSegmentFailoverTest {
 
         var owner = owningSegment(OWNED_ID);
         try {
-            workflowEngine.claimSegment(owner, null, sourcingContext, mock(ProcessingContext.class));
+            workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext, mock(ProcessingContext.class));
         } catch (RuntimeException expected) {
             // Sourcing the owned instance is driven far enough to prove it was selected; building a full execution
             // out of it is covered by WorkflowEngineReplayTest.
@@ -98,7 +98,7 @@ class WorkflowEngineSegmentFailoverTest {
         repository.save(OWNED_ID, () -> owned);
         repository.save(foreignId, () -> foreign);
 
-        workflowEngine.releaseSegment(owner);
+        workflowEngine.releaseWorkflowsFor(owner);
 
         verify(owned).interrupt();
         verify(foreign, never()).interrupt();

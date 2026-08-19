@@ -85,7 +85,7 @@ class SegmentClaimSourcedContextTest {
 
     @Test
     void restoredWorkflowCanAppendAfterTheSegmentClaimUnitOfWorkCommitted() {
-        var sourcedContext = claimSegmentAndSourceWorkflowState();
+        var sourcedContext = restoreSegmentWorkflowsAndSourceState();
 
         assertThat(sourcedContext.get().isCompleted())
                 .as("the claim's sourcing unit of work must be finished before the restored body appends")
@@ -102,7 +102,7 @@ class SegmentClaimSourcedContextTest {
 
     @Test
     void sourcingResourcesTravelToTheNextUnitOfWorkExceptTheTransactionItself() {
-        var sourcedContext = claimSegmentAndSourceWorkflowState().get();
+        var sourcedContext = restoreSegmentWorkflowsAndSourceState().get();
         sourcedContext.putResource(MARKER, "carried");
 
         assertThat(sourcedContext.resources().values())
@@ -129,7 +129,7 @@ class SegmentClaimSourcedContextTest {
      * Mirrors what the segment-claim callback does: a transactional unit of work sources the durable workflow state,
      * and the context it sourced with ends up in the restored state (per step).
      */
-    private AtomicReference<ProcessingContext> claimSegmentAndSourceWorkflowState() {
+    private AtomicReference<ProcessingContext> restoreSegmentWorkflowsAndSourceState() {
         var sourcingContext = new AtomicReference<ProcessingContext>();
         unitOfWorkFactory.create("SegmentClaim0")
                          .executeWithResult(context -> {

@@ -287,7 +287,7 @@ class WorkflowEngineReplayTest {
         workflowEngine.start(checkpointToken, false).join();
         ProcessingContext executionContext = processingContext(checkpointToken);
         // A single segment owns every instance, keeping this test about the two contexts rather than about ownership.
-        workflowEngine.claimSegment(new Segment(0, 0), checkpointToken, processingContext, executionContext);
+        workflowEngine.restoreWorkflowsFor(new Segment(0, 0), checkpointToken, processingContext, executionContext);
 
         verify(restoredExecution).initializeState(restoredState);
         verify(replaySupport).setCurrentTokenIfNull(checkpointToken);

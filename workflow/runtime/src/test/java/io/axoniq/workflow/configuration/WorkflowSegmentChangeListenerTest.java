@@ -55,7 +55,7 @@ class WorkflowSegmentChangeListenerTest {
 
         var sourcing = ArgumentCaptor.forClass(ProcessingContext.class);
         var execution = ArgumentCaptor.forClass(ProcessingContext.class);
-        verify(workflowEngine).claimSegment(eq(SEGMENT), eq(from), sourcing.capture(), execution.capture());
+        verify(workflowEngine).restoreWorkflowsFor(eq(SEGMENT), eq(from), sourcing.capture(), execution.capture());
         assertThat(execution.getValue())
                 .as("""
                     The execution context parents restored workflow bodies that outlive the claim callback, so it \
@@ -67,7 +67,7 @@ class WorkflowSegmentChangeListenerTest {
     void releaseDropsTheSegmentsInstances() {
         listener.onSegmentReleased(SEGMENT).join();
 
-        verify(workflowEngine).releaseSegment(SEGMENT);
+        verify(workflowEngine).releaseWorkflowsFor(SEGMENT);
     }
 
     private record StubApplicationContext() implements ApplicationContext {

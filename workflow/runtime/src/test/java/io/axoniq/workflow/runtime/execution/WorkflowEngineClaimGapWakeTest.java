@@ -70,7 +70,7 @@ import static org.mockito.Mockito.when;
  * drains the queue, rather than against the conditions it happened to hold on the delivering thread.
  * <p>
  * The rig reproduces the window deterministically: the workflow executor never runs the submitted body, which is
- * exactly the state {@code claimSegment} leaves behind when it returns, and the test then plays the two orderings by
+ * exactly the state {@code restoreWorkflowsFor} leaves behind when it returns, and the test then plays the two orderings by
  * hand.
  */
 class WorkflowEngineClaimGapWakeTest {
@@ -110,7 +110,7 @@ class WorkflowEngineClaimGapWakeTest {
     @Test
     void aResumeEventDeliveredBeforeARestoredBodyReRegistersItsWaitConditionStillWakesTheInstance() {
         var owner = owningSegment(RESIDENT_ID);
-        workflowEngine.claimSegment(owner, null, sourcingContext(), mock(ProcessingContext.class));
+        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext(), mock(ProcessingContext.class));
 
         // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(restored).as("the claim materialized the instance").isNotNull();
@@ -139,7 +139,7 @@ class WorkflowEngineClaimGapWakeTest {
     @Test
     void aResumeEventDeliveredAfterTheWaitConditionIsRegisteredStillWakesTheInstance() {
         var owner = owningSegment(RESIDENT_ID);
-        workflowEngine.claimSegment(owner, null, sourcingContext(), mock(ProcessingContext.class));
+        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext(), mock(ProcessingContext.class));
 
         var waitStep = registerWaitFor(WAIT_STEP);
 

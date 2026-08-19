@@ -117,14 +117,14 @@ class WorkflowEngineClaimDuringReplayTest {
 
         // 1. The node holds the segment and delivers one event on it, leaving it at position 7 of a stream whose
         //    startup latest token is 100.
-        workflowEngine.claimSegment(owner, token(0), sourcingContext(), executionContext());
+        workflowEngine.restoreWorkflowsFor(owner, token(0), sourcingContext(), executionContext());
         workflowEngine.handle(engineEvent(RESIDENT_ID),
                               deliveryContext(owner, token(SEGMENT_POSITION_BEFORE_RELEASE)));
         bodyStarts.clear();
 
         // 2. The segment is handed away and comes back, still at position 7.
-        workflowEngine.releaseSegment(owner);
-        workflowEngine.claimSegment(owner,
+        workflowEngine.releaseWorkflowsFor(owner);
+        workflowEngine.restoreWorkflowsFor(owner,
                                     token(SEGMENT_POSITION_BEFORE_RELEASE),
                                     sourcingContext(),
                                     executionContext());

@@ -39,7 +39,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * A claim runs in two nested units of work: a short-lived sourcing context that loads durable workflow state, and an
  * independent execution context that parents the restored workflow bodies, which outlive the claim callback. See
- * {@link WorkflowEngine#claimSegment(Segment, TrackingToken, ProcessingContext, ProcessingContext)} for why the
+ * {@link WorkflowEngine#restoreWorkflowsFor(Segment, TrackingToken, ProcessingContext, ProcessingContext)} for why the
  * sourcing context must not be reused for them.
  *
  * @author Stefan Dragisic
@@ -76,7 +76,7 @@ class WorkflowSegmentChangeListener implements SegmentChangeListener {
                     var executionUnitOfWork = new SimpleUnitOfWorkFactory(sourcingContext)
                             .create(moduleName + "SegmentExecutionContext" + segment.getSegmentId());
                     return executionUnitOfWork.executeWithResult(executionContext -> {
-                        workflowEngine.get().claimSegment(segment, from, sourcingContext, executionContext);
+                        workflowEngine.get().restoreWorkflowsFor(segment, from, sourcingContext, executionContext);
                         return CompletableFuture.<Void>completedFuture(null);
                     });
                 });
@@ -84,7 +84,7 @@ class WorkflowSegmentChangeListener implements SegmentChangeListener {
 
     @Override
     public CompletableFuture<Void> onSegmentReleased(Segment segment) {
-        workflowEngine.get().releaseSegment(segment);
+        workflowEngine.get().releaseWorkflowsFor(segment);
         return CompletableFuture.completedFuture(null);
     }
 }

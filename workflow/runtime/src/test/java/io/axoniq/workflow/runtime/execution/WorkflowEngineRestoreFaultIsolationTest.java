@@ -121,7 +121,7 @@ class WorkflowEngineRestoreFaultIsolationTest {
                 .as("the replay path can resolve it, through the closest registered sibling")
                 .isPresent();
 
-        workflowEngine.claimSegment(ONLY_SEGMENT, null, sourcingContext(), mock(ProcessingContext.class));
+        workflowEngine.restoreWorkflowsFor(ONLY_SEGMENT, null, sourcingContext(), mock(ProcessingContext.class));
 
         // --- oracle ----------------------------------------------------------------------------------------------
         assertThat(bodyStarts)
@@ -156,7 +156,7 @@ class WorkflowEngineRestoreFaultIsolationTest {
                 .isTrue();
 
         // --- oracle ----------------------------------------------------------------------------------------------
-        assertThatCode(() -> workflowEngine.claimSegment(ONLY_SEGMENT,
+        assertThatCode(() -> workflowEngine.restoreWorkflowsFor(ONLY_SEGMENT,
                                                          null,
                                                          sourcingContext(),
                                                          mock(ProcessingContext.class)))

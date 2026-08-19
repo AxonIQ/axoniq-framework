@@ -299,7 +299,7 @@ public class WorkflowEngine implements
      * Initializes replay tracking before processor replay resumes.
      * <p>
      * Workflow executions are not restored here: they are restored per segment by
-     * {@link #claimSegment(Segment, TrackingToken, ProcessingContext, ProcessingContext)} as this node claims them.
+     * {@link #restoreWorkflowsFor(Segment, TrackingToken, ProcessingContext, ProcessingContext)} as this node claims them.
      *
      * @param processorToken processor token at startup; initializes replay tracking when no processor token has been
      *                       observed yet
@@ -350,7 +350,7 @@ public class WorkflowEngine implements
      *                         required {@code PREPARE_COMMIT} handler, and the workflow cannot persist its resumed,
      *                         timed-out, or terminal state
      */
-    public void claimSegment(@Nonnull Segment segment,
+    public void restoreWorkflowsFor(@Nonnull Segment segment,
                              @Nullable TrackingToken claimedFrom,
                              @Nonnull ProcessingContext sourcingContext,
                              @Nonnull ProcessingContext executionContext) {
@@ -376,7 +376,7 @@ public class WorkflowEngine implements
      *
      * @param segment the segment that was released
      */
-    public void releaseSegment(@Nonnull Segment segment) {
+    public void releaseWorkflowsFor(@Nonnull Segment segment) {
         var released = workflowExecutionRepository.findAll(ownedBy(segment));
         if (released.isEmpty()) {
             return;
