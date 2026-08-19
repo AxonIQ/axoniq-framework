@@ -19,11 +19,56 @@
 
 package io.axoniq.framework.messaging.multitenancy.deadletter;
 
+import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
+import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
+import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.axonframework.messaging.eventhandling.AsyncInMemoryStreamableEventSource;
+import org.axonframework.messaging.eventhandling.SimpleEventHandlingComponent;
+import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
+import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class DeadLetterMultiTenancyConfigurationEnhancerTest {
+
+    @Test
+    void configuresTenantRoutingDeadLetterQueueFactoryWhenTheDeadLetterQueueModuleIsAvailable() {
+        // given
+        DeadLetterQueueConfiguration dlqConfig = new DeadLetterQueueConfiguration().enabled();
+        var component = SimpleEventHandlingComponent.create("handler");
+        component.subscribe(new QualifiedName(String.class), (event, context) -> MessageStream.empty());
+        var module = EventProcessorModule.pooledStreaming("processor")
+                                         .eventHandlingComponents(components -> components.declarative(
+                                                 "handler", config -> component
+                                         ))
+                                         .customized((config, processorConfig) -> processorConfig
+                                                 .eventSource(new AsyncInMemoryStreamableEventSource())
+                                                 .extend(DeadLetterQueueConfiguration.class, () -> dlqConfig));
+
+        // when
+        var configuration = MessagingConfigurer.create()
+                                              .componentRegistry(registry -> registry.registerComponent(
+                                                      TenantProvider.class, config -> new StubTenantProvider()
+                                              ))
+                                              .eventProcessing(eventProcessing -> eventProcessing.pooledStreaming(
+                                                      pooledStreaming -> pooledStreaming.processor(module)
+                                              ))
+                                              .build();
+
+        // then
+        var processorConfig = configuration.getModuleConfiguration("EventProcessor[processor]")
+                                           .flatMap(moduleConfig -> moduleConfig.getOptionalComponent(
+                                                   PooledStreamingEventProcessorConfiguration.class
+                                           ));
+        assertThat(processorConfig).isPresent();
+        assertThat(processorConfig.orElseThrow()
+                                  .extension(DeadLetterQueueConfiguration.class)
+                                  .factory()).isInstanceOf(TenantRoutingSequencedDeadLetterQueueFactory.class);
+    }
 
     @Test
     void detectsWhenTheDeadLetterQueueModuleIsUnavailable() {
@@ -33,5 +78,12 @@ class DeadLetterMultiTenancyConfigurationEnhancerTest {
         assertThat(DeadLetterMultiTenancyConfigurationEnhancer.isDeadLetterQueuePresent(
                 classLoaderWithoutDeadLetterQueue
         )).isFalse();
+    }
+
+    @Test
+    void detectsWhenTheDeadLetterQueueModuleIsAvailable() {
+        assertThat(DeadLetterMultiTenancyConfigurationEnhancer.isDeadLetterQueuePresent(
+                getClass().getClassLoader()
+        )).isTrue();
     }
 }
