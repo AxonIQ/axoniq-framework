@@ -425,7 +425,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         if (running) {
             // live mode
             eventWaitConditions.evaluateAndApply(eventMessage, processingContext, contextDelegate::eventReceived);
-            appendTask(i -> state().evolve(eventMessage, processingContext));
+            appendTask(i -> workflowState.evolve(eventMessage, processingContext));
         } else {
             // replay mode
             workflowState.evolve(eventMessage, processingContext, false);

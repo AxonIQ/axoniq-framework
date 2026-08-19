@@ -19,6 +19,7 @@
 package io.axoniq.workflow.history.inmemory;
 
 import io.axoniq.workflow.history.api.WorkflowHistory;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nonnull;
@@ -70,7 +71,7 @@ public class WorkflowHistoryProjector implements EventHandler {
         Optional<WorkflowHistory> optionalHistory = historyRepository.findById(workflowId);
         if (optionalHistory.isPresent()) {
             historyRepository.save(
-                    new WorkflowHistory(workflowId, optionalHistory.get().state().evolve(event, context))
+                    new WorkflowHistory(workflowId, evolveState(optionalHistory.get().state(), event, context))
             );
         } else {
             Optional<MessageType> optionalWorkflowDefinition = MetadataUtils.getWorkflowDefinitionId(event.metadata());
@@ -90,5 +91,10 @@ public class WorkflowHistoryProjector implements EventHandler {
             }
         }
         return MessageStream.empty();
+    }
+
+    private WorkflowState evolveState(WorkflowState workflowState, EventMessage event, ProcessingContext context) {
+        var eventSourcedState = EventSourcedWorkflowState.requireEventSourcedState(workflowState);
+        return eventSourcedState.evolve(event, context);
     }
 }
