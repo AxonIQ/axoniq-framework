@@ -79,7 +79,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
      * Default number of segments the workflow event processor is initialized with.
      * <p>
      * Multiple segments are safe since workflow instances are partitioned over segments by workflow id:
-     * engine events and unique spawn candidates are sequenced to the owning segment, and correlated business events
+     * engine events and unique start candidates are sequenced to the owning segment, and correlated business events
      * are sequenced by {@code SequencingPolicy#BROADCAST}, delivering them to every segment. Four balances
      * instance-level parallelism against the per-segment broadcast delivery cost; override via
      * {@link #WorkflowEventProcessingRegistrationEnhancer(String, String, String, boolean, int)} or the
@@ -208,7 +208,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                          : DEFAULT_MODULE_NAME + "ExecutionEventing",
                                  cfg -> {
                                      // The workflow routing overrides the component's default sequencing so engine
-                                     // events and unique spawn candidates reach the owning segment and all other
+                                     // events and unique start candidates reach the owning segment and all other
                                      // business events are broadcast to every segment.
                                      var workflowEngine = workflowEngine(cfg);
                                      var component = engineComponentName != null

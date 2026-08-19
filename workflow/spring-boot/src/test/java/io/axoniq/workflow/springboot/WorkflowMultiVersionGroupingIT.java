@@ -43,7 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * registered into a SINGLE module that shares one {@link WorkflowConfigurationRegistry} and
  * {@link WorkflowEngine}. This is the architectural prerequisite for cross-version routing: two
  * beans with the same {@code workflowName} but different {@code @Workflow(version=...)} need to be
- * visible to one another so the engine can pick the highest version on spawn and look up a sibling
+ * visible to one another so the engine can pick the highest version on start and look up a sibling
  * definition on replay.
  *
  * @author Stefan Dragisic

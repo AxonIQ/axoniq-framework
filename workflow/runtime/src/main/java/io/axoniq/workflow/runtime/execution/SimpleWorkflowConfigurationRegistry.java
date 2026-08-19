@@ -60,7 +60,7 @@ public class SimpleWorkflowConfigurationRegistry
         Objects.requireNonNull(workflowConfiguration, "The given workflow configuration cannot be null.");
         Objects.requireNonNull(eventCondition, "The given event condition cannot be null.");
 
-        // Fail fast: reject unparseable semver at registration rather than at spawn time.
+        // Fail fast: reject unparseable semver at registration rather than at start time.
         Version.validate(workflowConfiguration.workflowVersion());
 
         workflowsConfigurations.compute(eventCondition.qualifiedName(), (q, workflowConfigurations) -> {

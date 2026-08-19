@@ -239,7 +239,7 @@ class SimpleWorkflowConfigurationRegistryTest {
     @Test
     void findClosestRegisteredVersion_returnsEmptyWhenAllRegisteredAreAboveRequested() {
         // State recorded "0.5.0" but only v1.0.0 / v2.0.0 are registered. No registered version is
-        // <= 0.5.0 — return empty so the caller can fall back to its spawn-time configuration.
+        // <= 0.5.0 — return empty so the caller can fall back to its start-time configuration.
         QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
         registry.register(eventName, new VersionedStub("OrderWorkflow", "1.0.0"));
         registry.register(eventName, new VersionedStub("OrderWorkflow", "2.0.0"));

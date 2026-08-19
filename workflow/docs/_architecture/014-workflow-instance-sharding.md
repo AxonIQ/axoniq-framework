@@ -14,7 +14,7 @@ its own, duplicating the work.
 
 Axon's pooled streaming event processor already partitions a stream over segments and claims those segments through a
 token store. The engine needed a rule that maps a workflow instance to a segment, and a way to make every routing,
-spawn, wake, checkpoint and recovery decision follow that same rule.
+start, wake, checkpoint and recovery decision follow that same rule.
 
 ## Decision
 
@@ -32,7 +32,7 @@ The segment key of a workflow id is the part before the first `#`, so the cross-
 The same object is the processor's `SequencingPolicy`:
 
 - events carrying `workflowId` metadata are sequenced by that id's segment key
-- a business event with exactly one spawn candidate is sequenced by the candidate id, so a new instance is created on
+- a business event with exactly one start candidate is sequenced by the candidate id, so a new instance is created on
   the segment that will own it
 - every other event is sequenced by `SequencingPolicy.BROADCAST` and delivered to all segments
 
@@ -41,14 +41,14 @@ before the event reaches a handler, so the payload conversion a start condition 
 available; a failed derivation is treated as "no candidate" and broadcasts rather than failing the work package.
 
 Ownership guards turn broadcast delivery back into exactly-once work: `shouldHandle` decides whether a segment may
-handle or wake an instance, `shouldSpawn` decides whether it may create one. Every non-owning segment makes the
+handle or wake an instance, `shouldStartNewInstance` decides whether it may create one. Every non-owning segment makes the
 delivery a no-op.
 
 ```
 event arrives
   -> has workflowId metadata?
        yes -> sequence by that id's segment key -> owning segment only
-  -> exactly one definition would spawn from it?
+  -> exactly one definition would start from it?
        yes -> sequence by the candidate id      -> owning segment only
   -> otherwise
        BROADCAST -> delivered to all 4 segments
@@ -120,7 +120,7 @@ separate investigation; until then the pooled streaming processor is the only su
 ## Consequences
 
 - Instances are distributed over segments, so nodes divide work instead of duplicating it.
-- A workflow id maps to the same segment on every node and after every restart, so spawn placement, wake routing,
+- A workflow id maps to the same segment on every node and after every restart, so start placement, wake routing,
   checkpointing and recovery all agree without coordination.
 - Segments carry their instances between nodes. When a node dies, a surviving node claims its segments and resumes the
   owned instances without a restart.

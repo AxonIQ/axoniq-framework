@@ -40,15 +40,15 @@ import java.util.stream.Collectors;
  * <p>
  * The same rule is applied by event sequencing (as a {@link SequencingPolicy},
  * {@link #sequenceIdentifierFor(EventMessage, ProcessingContext)} routes an event to the segment owning the affected
- * instance) and by the engine's handling, wake and spawn decisions ({@link #shouldHandle(String, Segment)} /
- * {@link #shouldSpawn(String, Segment)}), so a given {@code workflowId} maps to the same segment everywhere, on
+ * instance) and by the engine's handling, wake and start decisions ({@link #shouldHandle(String, Segment)} /
+ * {@link NewWorkflowInstanceRouting#shouldStartNewInstance(String, Segment)}), so a given {@code workflowId} maps to the same segment everywhere, on
  * every node, forever ({@code String.hashCode()} is specified by the JLS and stable across JVMs and restarts).
  * Events that do not map to a single instance are sequenced by {@link SequencingPolicy#BROADCAST} and thus delivered
  * to every segment; each segment then acts only on the instances it owns.
  * <p>
  * The segment key of a workflow id is its base part, everything before the first {@code '#'}. Cross-version
- * disambiguated identifiers ({@code base#version}, see {@link WorkflowSpawnRouting}) therefore share the segment of
- * their base id: every version of one logical workflow is spawned, woken and recovered on the same segment.
+ * disambiguated identifiers ({@code base#version}, see {@link NewWorkflowInstanceRouting}) therefore share the segment of
+ * their base id: every version of one logical workflow is started, woken and recovered on the same segment.
  *
  * @author Stefan Dragisic
  * @since 0.3.0
@@ -63,7 +63,7 @@ public final class SegmentedWorkflowRouting implements SequencingPolicy<EventMes
     /**
      * Creates the routing for the workflow definitions held by the given registry.
      *
-     * @param workflowConfigurationRegistry registry consulted to derive spawn-candidate workflow ids from business
+     * @param workflowConfigurationRegistry registry consulted to derive start-candidate workflow ids from business
      *                                      events.
      */
     public SegmentedWorkflowRouting(@Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry) {
@@ -94,8 +94,8 @@ public final class SegmentedWorkflowRouting implements SequencingPolicy<EventMes
     }
 
     /**
-     * Returns the segment key of the given workflow id: the base part before the first {@code '#'}. Spawn placement
-     * decides on base ids (see {@code WorkflowEngine#checkAndCreateNewWorkflow}), while stored instances may carry a
+     * Returns the segment key of the given workflow id: the base part before the first {@code '#'}. Start placement
+     * decides on base ids (see {@code WorkflowEngine#checkAndCreateNewInstance}), while stored instances may carry a
      * cross-version disambiguated id ({@code base#version}); deriving the key from the base part keeps placement,
      * ownership and sequencing consistent for every form of the id.
      *
@@ -113,8 +113,8 @@ public final class SegmentedWorkflowRouting implements SequencingPolicy<EventMes
      * <p>
      * Engine-emitted events (carrying {@code workflowId} metadata) are sequenced by the id's
      * {@linkplain #segmentKey(String) segment key}. Business events
-     * are sequenced by the spawn-candidate workflow id when exactly one registered definition would spawn from the
-     * event, so new instances are created on the segment that owns them. All other events (no or multiple spawn
+     * are sequenced by the start-candidate workflow id when exactly one registered definition would start from the
+     * event, so new instances are created on the segment that owns them. All other events (no or multiple start
      * candidates) may need to wake waiting instances resident in any segment; without a durable wait-association
      * table the only correct routing is delivery to all segments, so they are sequenced by
      * {@link SequencingPolicy#BROADCAST} — each segment then evaluates the wait conditions of the instances it owns.
@@ -131,7 +131,7 @@ public final class SegmentedWorkflowRouting implements SequencingPolicy<EventMes
         if (MetadataUtils.hasWorkflowId().test(eventMessage.metadata())) {
             return Optional.of(segmentKey(MetadataUtils.getWorkflowId(eventMessage.metadata())));
         }
-        var candidates = spawnCandidateIds(eventMessage, processingContext);
+        var candidates = newInstanceCandidateIds(eventMessage, processingContext);
         return candidates.size() == 1 ? Optional.of(segmentKey(candidates.iterator().next()))
                                       : Optional.of(SequencingPolicy.BROADCAST);
     }
@@ -158,31 +158,11 @@ public final class SegmentedWorkflowRouting implements SequencingPolicy<EventMes
     }
 
     /**
-     * Decides whether a new workflow instance with the given base id may be spawned under the given segment: only
-     * the owning segment spawns. Unique spawn candidates are sequenced to their owning segment directly; broadcast
-     * business events reach every segment and this decision keeps the spawn exactly-once — every non-owning segment
-     * skips it.
-     *
-     * @param baseWorkflowId base id of the workflow instance about to spawn.
-     * @param segment        the segment the event is processed under, or {@code null} when processed outside a
-     *                       segmented processor.
-     * @return {@code true} when this segment owns the instance to spawn (or no segment is present).
-     */
-    public boolean shouldSpawn(@Nonnull String baseWorkflowId, @Nullable Segment segment) {
-        if (segment != null && !ownedBy(segment, baseWorkflowId)) {
-            logger.debug("Not spawning workflow '{}' — the instance is owned by another segment than {}.",
-                         baseWorkflowId, segment);
-            return false;
-        }
-        return true;
-    }
-
-    /**
-     * Base workflow ids of all definitions that would spawn a new instance from the given event: the highest
+     * Base workflow ids of all definitions that would start a new instance from the given event: the highest
      * registered version of each definition whose start condition matches. Mirrors the matching performed by the
-     * engine's spawn path.
+     * engine's start path.
      */
-    private Set<String> spawnCandidateIds(@Nonnull EventMessage eventMessage,
+    private Set<String> newInstanceCandidateIds(@Nonnull EventMessage eventMessage,
                                           @Nonnull ProcessingContext processingContext) {
         try {
             return workflowConfigurationRegistry
@@ -192,7 +172,7 @@ public final class SegmentedWorkflowRouting implements SequencingPolicy<EventMes
                     .map(configuration -> configuration.configuration().workflowIdProvider().apply(eventMessage))
                     // A provider that derives no id contributes no candidate. Dropping it explicitly keeps the
                     // candidates of its healthy siblings, which the collector's own rejection of nulls would discard
-                    // together with the whole stream. The spawn path reports and skips that definition.
+                    // together with the whole stream. The start path reports and skips that definition.
                     .filter(Objects::nonNull)
                     .collect(Collectors.toUnmodifiableSet());
         } catch (RuntimeException e) {
@@ -200,7 +180,7 @@ public final class SegmentedWorkflowRouting implements SequencingPolicy<EventMes
             // workflowIdProvider needs is not always available yet. Routing must not fail the work package for that:
             // reporting no candidate degrades this event to a broadcast, which every ownership guard then narrows
             // back to exactly-once. Costs one delivery per segment for such events, never correctness.
-            logger.debug("Could not derive spawn candidates for event {}; broadcasting it to every segment.",
+            logger.debug("Could not derive start candidates for event {}; broadcasting it to every segment.",
                          eventMessage.type(), e);
             return Set.of();
         }

@@ -57,7 +57,7 @@ import static org.mockito.Mockito.when;
  * Verifies that checkpoint holdback is scoped to the segment being advanced: a busy workflow only holds
  * back the token of the segment that owns it.
  * <p>
- * The busy instance is spawned through the engine's own handling path rather than pushed into the repository, because
+ * The busy instance is started through the engine's own handling path rather than pushed into the repository, because
  * that path is where the engine indexes an instance as a source of checkpoint work. Asking the index instead of
  * scanning the repository is what keeps the holdback decision cheap; scoping that question to the segment being
  * advanced is what keeps one busy instance from stalling every other segment's token.
@@ -84,8 +84,8 @@ class WorkflowEngineSegmentCheckpointTest {
         replaySupport = new WorkflowEngineReplaySupport(workflowEngine);
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
         workflowEngine.setEngineSupportComponents(replaySupport, checkpointingSupport);
-        registerSpawningConfiguration(configurationRegistry);
-        // Delivered on the segment that owns it, exactly as the routing sequences a unique spawn candidate.
+        registerStartConfiguration(configurationRegistry);
+        // Delivered on the segment that owns it, exactly as the routing sequences a unique start candidate.
         workflowEngine.handle(startEvent(), processingContext(owningSegment(BUSY_WORKFLOW_ID)));
     }
 
@@ -108,11 +108,11 @@ class WorkflowEngineSegmentCheckpointTest {
     }
 
     /**
-     * Registers a definition spawning {@link #BUSY_WORKFLOW_ID}. The spawned execution reports itself as a source of
+     * Registers a definition starting {@link #BUSY_WORKFLOW_ID}. The started execution reports itself as a source of
      * checkpoint work the moment the engine installs its listener, and keeps reporting unsafe when asked again.
      */
     @SuppressWarnings("unchecked")
-    private static void registerSpawningConfiguration(WorkflowConfigurationRegistry<?> configurationRegistry) {
+    private static void registerStartConfiguration(WorkflowConfigurationRegistry<?> configurationRegistry) {
         var busyExecution = mock(WorkflowExecution.class);
         when(busyExecution.workflowId()).thenReturn(BUSY_WORKFLOW_ID);
         when(busyExecution.hasUnsafeCheckpointWork()).thenReturn(true);

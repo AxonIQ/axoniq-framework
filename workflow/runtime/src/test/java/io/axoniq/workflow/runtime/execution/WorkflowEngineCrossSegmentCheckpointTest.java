@@ -155,7 +155,7 @@ class WorkflowEngineCrossSegmentCheckpointTest {
 
         var fastWorker = new SegmentWorker(fast, autoCheckpointing);
         var slowWorker = new SegmentWorker(slow, autoCheckpointing);
-        var straggler = registerSpawningConfiguration();
+        var straggler = registerStartConfiguration();
         replaySupport.setInitialEngineTokens(null, null);
         // Live mode is per segment: each segment this test drives is declared live on its own.
         replaySupport.switchToLiveMode(processingContext(fast, null));
@@ -356,12 +356,12 @@ class WorkflowEngineCrossSegmentCheckpointTest {
     }
 
     /**
-     * Registers a workflow definition that spawns {@link #STRAGGLER_ID} from {@link #START_EVENT} and captures the
+     * Registers a workflow definition that starts {@link #STRAGGLER_ID} from {@link #START_EVENT} and captures the
      * termination handler the engine installs, so the test can complete the workflow body asynchronously, after the
      * segment that handled its start event has moved on.
      */
     @SuppressWarnings("unchecked")
-    private WorkflowExecution registerSpawningConfiguration() {
+    private WorkflowExecution registerStartConfiguration() {
         var execution = mock(WorkflowExecution.class);
         var state = mock(WorkflowState.class);
         when(state.workflowStatus()).thenReturn(WorkflowStatus.COMPLETED);

@@ -161,8 +161,8 @@ public class WorkflowEngine implements
             executionOpt.get().onEvent(event, context);
         } else {
             // handle starting of new processes
-            checkAndCreateNewWorkflow(event, context);
-            // route external events to workflows waiting for them. Business events without a unique spawn candidate
+            checkAndCreateNewInstance(event, context);
+            // route external events to workflows waiting for them. Business events without a unique start candidate
             // are broadcast to every segment (sequenced by SequencingPolicy.BROADCAST); the ownership filter keeps
             // the wake exactly-once per instance - only the owning segment's delivery reaches an execution.
             // The filter is pushed into the repository so the returned set holds this segment's instances only:
@@ -178,21 +178,21 @@ public class WorkflowEngine implements
         return MessageStream.empty();
     }
 
-    private void checkAndCreateNewWorkflow(@Nonnull EventMessage eventMessage,
+    private void checkAndCreateNewInstance(@Nonnull EventMessage eventMessage,
                                            @Nonnull ProcessingContext processingContext) {
-        // For brand-new starts, only the highest-registered version spawns instances.
+        // For brand-new starts, only the highest-registered version starts instances.
         // Older registered versions stay available for replay routing (selected later in the execution path
         // based on state.workflowDefinitionVersion(), itself sourced from the workflow's started event metadata).
-        // Same-version duplicates spawn in parallel only if their workflowIdProviders produce distinct ids;
-        // otherwise the second spawn is rejected as a same-version duplicate in resolveWorkflowIdForNewSpawn.
+        // Same-version duplicates start in parallel only if their workflowIdProviders produce distinct ids;
+        // otherwise the second start is rejected as a same-version duplicate in resolveWorkflowIdForNewInstance.
         // The "multiple definitions at the same version" warning is emitted ONCE at engine startup (see
         // checkForSameVersionDuplicates) rather than per event.
         var configurations = workflowConfigurationRegistry.getHighestVersionConfigurations(
                 eventMessage.type().qualifiedName()
         );
-        // Spawn placement: each segment only spawns instances it owns. Unique spawn candidates
+        // Start placement: each segment only starts instances it owns. Unique start candidates
         // arrive at the owning segment directly; broadcast business events arrive everywhere and the ownership
-        // guard keeps the spawn exactly-once.
+        // guard keeps the start exactly-once.
         var segment = Segment.fromContext(processingContext).orElse(null);
 
         configurations.forEach(configuration -> {
@@ -204,13 +204,13 @@ public class WorkflowEngine implements
             var baseWorkflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
             // Must precede the ownership guard: that guard derives a segment key from the id, so an id the provider
             // could not derive would fail the work package there.
-            if (!WorkflowSpawnRouting.hasDerivedWorkflowId(baseWorkflowId, workflowConfiguration, eventMessage)) {
+            if (!NewWorkflowInstanceRouting.hasDerivedWorkflowId(baseWorkflowId, workflowConfiguration, eventMessage)) {
                 return;
             }
-            if (!segmentedRouting.shouldSpawn(baseWorkflowId, segment)) {
+            if (!NewWorkflowInstanceRouting.shouldStartNewInstance(baseWorkflowId, segment)) {
                 return;
             }
-            var workflowId = WorkflowSpawnRouting.resolveWorkflowIdForNewSpawn(
+            var workflowId = NewWorkflowInstanceRouting.resolveWorkflowIdForNewInstance(
                     workflowExecutionRepository, baseWorkflowId, workflowConfiguration.workflowVersion(), eventMessage
             );
 
@@ -561,7 +561,7 @@ public class WorkflowEngine implements
 
     /**
      * Returns the segment routing derived from this engine's workflow definitions, applied by the event handling
-     * component's sequencing and by this engine's handling and spawn decisions.
+     * component's sequencing and by this engine's handling and start decisions.
      *
      * @return the segment routing of this engine.
      */

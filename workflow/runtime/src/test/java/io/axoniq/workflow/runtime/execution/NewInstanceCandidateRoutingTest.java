@@ -68,31 +68,31 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * How many spawn candidates a business event has decides how it is routed, and only the one-candidate case is well
+ * How many start candidates a business event has decides how it is routed, and only the one-candidate case is well
  * covered elsewhere. This covers the other counts, and the ways deriving the count can go wrong:
  * <ul>
  *     <li><b>several distinct candidates</b> - no single owning segment exists, so the event is broadcast and each
- *     candidate is spawned by its owner alone;</li>
+ *     candidate is started by its owner alone;</li>
  *     <li><b>several definitions naming the same id</b> - the candidates are collected into a {@link java.util.Set},
  *     which dedups them back to one, so routing stays targeted. Asserted on the routing decision itself: an assertion
  *     that only counted instances would pass under broadcast too;</li>
- *     <li><b>no candidate</b> - nothing spawns, but an instance resident on any segment may be waiting for the event,
+ *     <li><b>no candidate</b> - nothing starts, but an instance resident on any segment may be waiting for the event,
  *     so it is broadcast;</li>
  *     <li><b>a derivation that throws</b> - degraded to a broadcast rather than allowed to fail the work package: a
  *     sequencing policy that throws stalls the segment, which is worse than an extra delivery;</li>
  *     <li><b>a {@code workflowIdProvider} deriving no id</b> - a misconfiguration, so that definition alone is
- *     dropped from the candidate set and skipped by the spawn path instead of stalling the segment, see
+ *     dropped from the candidate set and skipped by the start path instead of stalling the segment, see
  *     {@link #aDefinitionDerivingNoWorkflowIdIsSkippedInsteadOfFailingTheWorkPackage()};</li>
  *     <li><b>several registered versions</b> - only the highest contributes a candidate, so the count is per
  *     definition and not per registration.</li>
  * </ul>
- * Every segment is left in replay mode, which is the state a node claiming a segment starts in: the spawns below are
+ * Every segment is left in replay mode, which is the state a node claiming a segment starts in: the starts below are
  * therefore materialized without their bodies being started, and that is asserted too.
  * <p>
  * The registry is the real {@link SimpleWorkflowConfigurationRegistry} throughout, so the version filtering under test
  * is the one the engine runs rather than a stub of it.
  */
-class SpawnCandidateRoutingTest {
+class NewInstanceCandidateRoutingTest {
 
     private static final int SEGMENT_COUNT = 8;
     private static final List<Segment> SEGMENTS = IntStream.range(0, SEGMENT_COUNT)
@@ -111,10 +111,10 @@ class SpawnCandidateRoutingTest {
     private WorkflowEngineReplaySupport replaySupport;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
-    /** Workflow ids the engine created an instance for, one entry per spawn it actually performed. */
-    private final List<String> spawned = new ArrayList<>();
-    /** The executions those spawns produced, so it can be asserted that none of their bodies ran. */
-    private final List<WorkflowExecution> spawnedExecutions = new ArrayList<>();
+    /** Workflow ids the engine created an instance for, one entry per start it actually performed. */
+    private final List<String> started = new ArrayList<>();
+    /** The executions those starts produced, so it can be asserted that none of their bodies ran. */
+    private final List<WorkflowExecution> startedExecutions = new ArrayList<>();
     private final Map<WorkflowContext, String> idOfContext = new IdentityHashMap<>();
 
     @BeforeEach
@@ -137,7 +137,7 @@ class SpawnCandidateRoutingTest {
     // ---------------------------------------------------------------------------------------------------------
 
     @Test
-    void twoDefinitionsNamingTwoIdsAreBroadcastAndEachSpawnsOnItsOwnSegmentOnly() {
+    void twoDefinitionsNamingTwoIdsAreBroadcastAndEachStartsOnItsOwnSegmentOnly() {
         register("Alpha", "1.0.0", always(), event -> "alpha-1");
         register("Beta", "1.0.0", always(), event -> "beta-1");
         var alphaOwner = owningSegment("alpha-1");
@@ -150,11 +150,11 @@ class SpawnCandidateRoutingTest {
                 .as("two distinct candidates have no single owning segment, so the event must reach all of them")
                 .contains(SequencingPolicy.BROADCAST);
 
-        // The broadcast is offered to every segment; each is expected to spawn only what it owns.
+        // The broadcast is offered to every segment; each is expected to start only what it owns.
         SEGMENTS.forEach(segment -> engine.handle(startEvent(), context(segment)));
 
-        assertThat(spawned)
-                .as("each candidate must be spawned exactly once over all %d segments, by its owner alone",
+        assertThat(started)
+                .as("each candidate must be started exactly once over all %d segments, by its owner alone",
                     SEGMENT_COUNT)
                 .containsExactlyInAnyOrder("alpha-1", "beta-1");
         assertNoBodyStarted();
@@ -199,7 +199,7 @@ class SpawnCandidateRoutingTest {
 
         SEGMENTS.forEach(segment -> engine.handle(unregisteredEvent(), context(segment)));
 
-        assertThat(spawned).as("an event with no spawn candidate must not create an instance").isEmpty();
+        assertThat(started).as("an event with no start candidate must not create an instance").isEmpty();
         verify(waiting, times(1)).onEvent(any(), any());
     }
 
@@ -255,12 +255,12 @@ class SpawnCandidateRoutingTest {
     /**
      * An {@code idProperty} naming a field the event does not have makes {@code PayloadPropertyWorkflowIdProvider}
      * return {@code null}, on this event and on every later one of the same type. That is a misconfiguration, and the
-     * spawn path must not carry it into the ownership guard: the guard derives a segment key from the id, so the work
+     * start path must not carry it into the ownership guard: the guard derives a segment key from the id, so the work
      * package would fail and stall the segment, losing every instance that segment owns rather than only the one
      * misconfigured definition.
      * <p>
      * The provider is only known at runtime — an arbitrary function over the event, resolving property names against
-     * the converted payload — so registration cannot reject it. Instead the spawn path reports the definition and
+     * the converted payload — so registration cannot reject it. Instead the start path reports the definition and
      * skips it: no instance, no stall, and an attributable error.
      */
     @Test
@@ -283,10 +283,10 @@ class SpawnCandidateRoutingTest {
                 .as("""
                     A definition whose idProperty names a field the event lacks derives no workflow id. Handing that \
                     to the ownership guard would compute the segment key of nothing, fail the work package and stall \
-                    the segment for every instance it owns. The spawn path must reject the definition instead.""")
+                    the segment for every instance it owns. The start path must reject the definition instead.""")
                 .doesNotThrowAnyException();
 
-        assertThat(spawned).as("there is no id to spawn under, so no instance is created").isEmpty();
+        assertThat(started).as("there is no id to start under, so no instance is created").isEmpty();
     }
 
     @Test
@@ -305,8 +305,8 @@ class SpawnCandidateRoutingTest {
 
         SEGMENTS.forEach(candidate -> engine.handle(startEvent(), context(candidate)));
 
-        assertThat(spawned)
-                .as("the healthy definition still spawns exactly once, and the misconfigured one not at all")
+        assertThat(started)
+                .as("the healthy definition still starts exactly once, and the misconfigured one not at all")
                 .containsExactly("alpha-1");
         assertNoBodyStarted();
     }
@@ -315,15 +315,15 @@ class SpawnCandidateRoutingTest {
     void theOwnershipGuardRejectsAMissingWorkflowIdWithADiagnosticInsteadOfANullDereference() {
         String missingId = null;
 
-        assertThatThrownBy(() -> routing.shouldSpawn(missingId, SEGMENTS.getFirst()))
+        assertThatThrownBy(() -> NewWorkflowInstanceRouting.shouldStartNewInstance(missingId, SEGMENTS.getFirst()))
                 .as("""
-                    Defence in depth behind the spawn path's own rejection: no caller should reach the guard without \
+                    Defence in depth behind the start path's own rejection: no caller should reach the guard without \
                     an id, and one that does must be told what is wrong rather than dereference nothing while \
                     deriving the segment key.""")
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("without a workflow id")
                 .hasMessageContaining("idProperty");
-        assertThatCode(() -> routing.shouldSpawn(missingId, null))
+        assertThatCode(() -> NewWorkflowInstanceRouting.shouldStartNewInstance(missingId, null))
                 .as("unsegmented there is no ownership to decide, so the guard still short-circuits; the stall this "
                             + "protects against is segment-specific")
                 .doesNotThrowAnyException();
@@ -336,7 +336,7 @@ class SpawnCandidateRoutingTest {
 
     /**
      * The start condition and the {@code workflowIdProvider} of a definition are evaluated twice per event: once here
-     * while the event is sequenced, and again inside the engine's spawn path while it is handled. Nothing requires
+     * while the event is sequenced, and again inside the engine's start path while it is handled. Nothing requires
      * either to be a pure function of the event, and nothing compares the two answers.
      * <p>
      * A provider whose answer changes between the two therefore aims the event at the segment owning the first id and
@@ -369,13 +369,13 @@ class SpawnCandidateRoutingTest {
         assertThat(owningSegment(ids.getLast()).getSegmentId())
                 .as("precondition: the second answer is owned by another segment, which is the whole hazard")
                 .isNotEqualTo(deliveredTo.getSegmentId());
-        assertThat(spawned)
+        assertThat(started)
                 .as("""
-                    Instances created by the delivery: %s. The event was routed by '%s' to segment %d and the spawn \
+                    Instances created by the delivery: %s. The event was routed by '%s' to segment %d and the start \
                     path then asked for '%s', which segment %d does not own, so the ownership guard skipped it. No \
                     other segment is offered this event, so the start is lost outright - the outcome a purity \
                     requirement stated nowhere buys.""",
-                    spawned, ids.getFirst(), deliveredTo.getSegmentId(), ids.getLast(),
+                    started, ids.getFirst(), deliveredTo.getSegmentId(), ids.getLast(),
                     deliveredTo.getSegmentId())
                 .isEmpty();
     }
@@ -397,7 +397,7 @@ class SpawnCandidateRoutingTest {
 
         assertThat(evaluations).as("the start condition ran twice for one event: once to route it, once to act on it")
                                .hasValue(2);
-        assertThat(spawned).as("a start condition that narrows between the two evaluations loses the event, because "
+        assertThat(started).as("a start condition that narrows between the two evaluations loses the event, because "
                                        + "the routing has already narrowed the delivery to one segment")
                            .isEmpty();
     }
@@ -410,7 +410,7 @@ class SpawnCandidateRoutingTest {
      * <em>narrows</em> after sequencing loses work.
      */
     @Test
-    void aStartConditionThatOnlyStartsMatchingAfterSequencingStillSpawns() {
+    void aStartConditionThatOnlyStartsMatchingAfterSequencingStillStarts() {
         var evaluations = new AtomicInteger();
         register("Alpha", "1.0.0", (event, pc) -> evaluations.getAndIncrement() > 0, event -> "alpha-1");
 
@@ -420,7 +420,7 @@ class SpawnCandidateRoutingTest {
 
         SEGMENTS.forEach(segment -> engine.handle(startEvent(), context(segment)));
 
-        assertThat(spawned).as("the broadcast reaches the owner, which is why widening after sequencing is safe")
+        assertThat(started).as("the broadcast reaches the owner, which is why widening after sequencing is safe")
                            .containsExactly("alpha-1");
         assertNoBodyStarted();
     }
@@ -451,13 +451,13 @@ class SpawnCandidateRoutingTest {
 
         assertThat(routing.sequenceIdentifierFor(startEvent(), context(SEGMENTS.getFirst())))
                 .as("""
-                    Routing must see the single candidate the spawn path sees. Counting the superseded v1 as a second \
+                    Routing must see the single candidate the start path sees. Counting the superseded v1 as a second \
                     candidate would broadcast an event that has exactly one owner, on every event of this type.""")
                 .contains("alpha-v2");
     }
 
     @Test
-    void versionsBelowTheHighestNeitherRouteNorSpawn() {
+    void versionsBelowTheHighestNeitherRouteNorStart() {
         register("Alpha", "1.0.0", always(), event -> "alpha-v1");
         register("Beta", "1.0.0", always(), event -> "beta-v1");
         register("Alpha", "2.0.0", always(), event -> "alpha-v2");
@@ -469,8 +469,8 @@ class SpawnCandidateRoutingTest {
 
         SEGMENTS.forEach(segment -> engine.handle(startEvent(), context(segment)));
 
-        assertThat(spawned)
-                .as("only the highest version of each definition spawns, and each of those exactly once")
+        assertThat(started)
+                .as("only the highest version of each definition starts, and each of those exactly once")
                 .containsExactlyInAnyOrder("alpha-v2", "beta-v2");
         assertNoBodyStarted();
     }
@@ -480,11 +480,11 @@ class SpawnCandidateRoutingTest {
     // ---------------------------------------------------------------------------------------------------------
 
     private void assertNoBodyStarted() {
-        assertThat(spawnedExecutions)
-                .as("every segment is still behind the startup latest token, so the spawns must be materialized "
+        assertThat(startedExecutions)
+                .as("every segment is still behind the startup latest token, so the starts must be materialized "
                             + "without their bodies running")
                 .isNotEmpty();
-        spawnedExecutions.forEach(execution -> verify(execution, never()).execute(any()));
+        startedExecutions.forEach(execution -> verify(execution, never()).execute(any()));
     }
 
     private static BiPredicate<EventMessage, ProcessingContext> always() {
@@ -493,7 +493,7 @@ class SpawnCandidateRoutingTest {
 
     /**
      * Registers a workflow definition on {@link #START_EVENT}. Its body is never run: these scenarios end at the
-     * moment the instance is created, and creation is recorded in {@link #spawned}.
+     * moment the instance is created, and creation is recorded in {@link #started}.
      */
     @SuppressWarnings("unchecked")
     private void register(String workflowName,
@@ -508,18 +508,18 @@ class SpawnCandidateRoutingTest {
         when(configuration.workflowIdProvider()).thenReturn(idProvider::apply);
         when(configuration.workflowContextFactory()).thenReturn(contextFactory);
         when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
-        // The engine builds the context once per spawn it actually performs, and hands it the id it spawns under.
+        // The engine builds the context once per start it actually performs, and hands it the id it starts under.
         when(contextFactory.createContext(anyMap(), any(), any(), eq(configuration)))
                 .thenAnswer(invocation -> {
                     String workflowId = invocation.getArgument(1);
                     var workflowContext = workflowContext();
                     idOfContext.put(workflowContext, workflowId);
-                    spawned.add(workflowId);
+                    started.add(workflowId);
                     return workflowContext;
                 });
         when(executionFactory.create(any())).thenAnswer(invocation -> {
             var created = execution(idOfContext.get(invocation.<WorkflowContext>getArgument(0)));
-            spawnedExecutions.add(created);
+            startedExecutions.add(created);
             return created;
         });
 

@@ -53,13 +53,13 @@ import static org.awaitility.Awaitility.await;
  * Proves instance-partitioned segment ownership under MVP multi-node sharding with the workflow
  * event processor initialized with four segments:
  * <ul>
- *     <li>instances whose ids hash to different segments both spawn (unique spawn candidates route to their owning
+ *     <li>instances whose ids hash to different segments both start (unique start candidates route to their owning
  *     segment) and complete;</li>
- *     <li>their correlated resume events have no spawn candidate, so they are broadcast to every segment via
+ *     <li>their correlated resume events have no start candidate, so they are broadcast to every segment via
  *     {@code SequencingPolicy.BROADCAST} — each instance is woken by the delivery at its owning segment, regardless
  *     of where the event's natural sequencing hash lands (cross-segment wake);</li>
- *     <li>a start event matching several definitions (multiple spawn candidates, hence broadcast to all four
- *     segments) spawns each candidate exactly once — the ownership guard skips the spawn on every non-owning
+ *     <li>a start event matching several definitions (multiple start candidates, hence broadcast to all four
+ *     segments) starts each candidate exactly once — the ownership guard skips the start on every non-owning
  *     segment.</li>
  * </ul>
  *
@@ -96,9 +96,9 @@ class SegmentShardingDeclarativeTest {
     }
 
     @Test
-    void broadcastSpawnEventSpawnsEachCandidateExactlyOnce() {
+    void broadcastStartEventStartsEachCandidateExactlyOnce() {
         var bodyRuns = new ConcurrentHashMap<String, AtomicInteger>();
-        try (var app = startBroadcastSpawnApp(bodyRuns)) {
+        try (var app = startBroadcastStartApp(bodyRuns)) {
             app.publish(new StartShardedWorkflowEvent("multi-1"));
 
             await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
@@ -108,8 +108,8 @@ class SegmentShardingDeclarativeTest {
                 assertThat(app.runningWorkflowIds()).isEmpty();
             });
 
-            // The start event matches two definitions -> two spawn candidates -> broadcast to all four segments.
-            // Only the owning segment spawns each candidate: every workflow body ran exactly once.
+            // The start event matches two definitions -> two start candidates -> broadcast to all four segments.
+            // Only the owning segment starts each candidate: every workflow body ran exactly once.
             assertThat(bodyRuns.keySet()).containsExactlyInAnyOrder("primary-multi-1", "mirror-multi-1");
             assertThat(bodyRuns.values()).allMatch(runs -> runs.get() == 1);
         }
@@ -155,7 +155,7 @@ class SegmentShardingDeclarativeTest {
         return new ShardedWorkflowApp(configurer.start());
     }
 
-    private static ShardedWorkflowApp startBroadcastSpawnApp(ConcurrentHashMap<String, AtomicInteger> bodyRuns) {
+    private static ShardedWorkflowApp startBroadcastStartApp(ConcurrentHashMap<String, AtomicInteger> bodyRuns) {
         var configurer = EventSourcingConfigurer.create();
         configurer.componentRegistry(cr -> cr
                 .registerEnhancer(new WorkflowEventProcessingRegistrationEnhancer(
@@ -166,7 +166,7 @@ class SegmentShardingDeclarativeTest {
                         SEGMENT_COUNT
                 ))
                 .registerModule(
-                        WorkflowModule.defaults("segment-broadcast-spawn", SimpleWorkflowContext.class)
+                        WorkflowModule.defaults("segment-broadcast-start", SimpleWorkflowContext.class)
                                       .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
                                       .definition(d -> d
                                               .declarative(c -> ctx -> runCountingWorkflow(ctx, bodyRuns))

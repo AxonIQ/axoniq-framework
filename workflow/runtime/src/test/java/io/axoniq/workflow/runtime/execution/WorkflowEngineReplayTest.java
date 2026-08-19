@@ -341,7 +341,7 @@ class WorkflowEngineReplayTest {
 
         workflowEngine.handle(eventMessage, processingContext);
 
-        // A v2 spawn was saved under the disambiguated id.
+        // A v2 start was saved under the disambiguated id.
         verify(workflowExecutionRepository).save(eq(baseId + "#2.0.0"), any());
         // The base id was NOT reused — the v1 instance is untouched.
         verify(workflowExecutionRepository, never()).save(eq(baseId), any());
@@ -378,7 +378,7 @@ class WorkflowEngineReplayTest {
 
         workflowEngine.handle(eventMessage, processingContext(null));
 
-        // Same-version duplicate: nothing is spawned. The v1 (and this case v2) instance stays untouched.
+        // Same-version duplicate: nothing is started. The v1 (and this case v2) instance stays untouched.
         verify(workflowExecutionRepository, never()).save(anyString(), any());
     }
 
@@ -396,14 +396,14 @@ class WorkflowEngineReplayTest {
         clearInvocations(workflowExecutionRepository);
 
         // A configuration that matches the incoming event and resolves to the same id AT THE SAME VERSION.
-        // This is the "same-version duplicate" branch of resolveWorkflowIdForNewSpawn — should be rejected.
+        // This is the "same-version duplicate" branch of resolveWorkflowIdForNewInstance — should be rejected.
         WorkflowConfiguration<?> configuration = mock(WorkflowConfiguration.class);
         WorkflowIdProvider idProvider = event -> workflowId;
         when(configuration.workflowIdProvider()).thenReturn(idProvider);
         when(configuration.workflowVersion()).thenReturn("1.0.0");
 
         QualifiedName eventName = new QualifiedName("OrderPlaced");
-        // Stub the version-aware helper that checkAndCreateNewWorkflow actually invokes.
+        // Stub the version-aware helper that checkAndCreateNewInstance actually invokes.
         when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
 
@@ -673,7 +673,7 @@ class WorkflowEngineReplayTest {
         );
 
         workflowEngine.handle(startEvent(eventName, execution.workflowId()), processingContext(null));
-        // The same delivery also reaches the instance it just spawned, which queues the wait-condition match because
+        // The same delivery also reaches the instance it just started, which queues the wait-condition match because
         // its body has not started. Draining it here leaves a quiescent instance, so each test below controls exactly
         // what sits in the queue.
         drainAllTasks(execution);
@@ -800,7 +800,7 @@ class WorkflowEngineReplayTest {
 
         workflowEngine.handle(eventMessage, processingContext(null));
 
-        // Even the disambiguated id is taken — nothing new is spawned.
+        // Even the disambiguated id is taken — nothing new is started.
         verify(workflowExecutionRepository, never()).save(anyString(), any());
     }
 

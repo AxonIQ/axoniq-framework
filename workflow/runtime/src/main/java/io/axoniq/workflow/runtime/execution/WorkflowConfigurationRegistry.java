@@ -219,7 +219,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
     /**
      * Emits a single startup warning per qualified name when multiple workflow definitions are registered at the same
      * highest version. Same-version duplicates run in parallel only if their {@code workflowIdProvider}s produce
-     * distinct ids; otherwise the second spawn is rejected as a duplicate. Intended to be called once when the engine
+     * distinct ids; otherwise the second start is rejected as a duplicate. Intended to be called once when the engine
      * transitions to live mode.
      */
     default void warnAboutSameVersionDuplicates() {
@@ -229,7 +229,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
                 RoutingLog.LOGGER.warn(
                         "Multiple workflow definitions registered for '{}' at the same version '{}'. "
                                 + "They will run in parallel only if their workflowIdProviders produce "
-                                + "distinct ids; otherwise the second spawn is rejected as a same-version "
+                                + "distinct ids; otherwise the second start is rejected as a same-version "
                                 + "duplicate. Confirm this is intentional.",
                         qualifiedName,
                         configsAtHighest.get(0).configuration().workflowVersion());
@@ -266,17 +266,17 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * Resolves which {@link WorkflowConfiguration} should drive an in-flight workflow's body, picking the definition
      * that matches the version recorded in state. Five-pass routing:
      * <ol>
-     *   <li>{@code exact-match-spawn-config} — spawn config matches state version.</li>
+     *   <li>{@code exact-match-start-config} — start config matches state version.</li>
      *   <li>{@code exact-match-sibling} — registry has a sibling at the exact state version.</li>
      *   <li>{@code closest-sibling} — highest registered version ≤ state (covers mid-flight
      *       {@code ctx.migrateVersion()} bumps to a value not statically registered).</li>
      *   <li>{@code closest-higher-sibling} — lowest registered version &gt; state (covers the case
      *       where {@code @Workflow(workflowVersion=...)} has been bumped past the version recorded
      *       on the workflow's started event; in-flight instances still find a body to replay).</li>
-     *   <li>{@code no-match-fallback} — nothing registered for this workflow name. WARN + spawn
+     *   <li>{@code no-match-fallback} — nothing registered for this workflow name. WARN + start
      *       config; the drift safety net pauses if step names diverge.</li>
      * </ol>
-     * Unparseable state versions (legacy streams) short-circuit to the spawn config. Every dispatch
+     * Unparseable state versions (legacy streams) short-circuit to the start config. Every dispatch
      * decision is logged at INFO; the fallback path logs at WARN.
      */
     @Nonnull
@@ -284,23 +284,23 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
             @Nonnull String workflowName,
             @Nonnull String workflowId,
             @Nonnull String stateVersion,
-            @Nonnull WorkflowConfiguration<?> spawnConfig
+            @Nonnull WorkflowConfiguration<?> startConfig
     ) {
-        var configVersion = spawnConfig.workflowVersion();
+        var configVersion = startConfig.workflowVersion();
         var registered = registeredVersions(workflowName);
-        // Pass 1: exact-match spawn config.
+        // Pass 1: exact-match start config.
         try {
             if (Version.of(stateVersion).equals(Version.of(configVersion))) {
                 logRoutingDecision(workflowName, workflowId, stateVersion, registered, configVersion,
-                                   "exact-match-spawn-config",
-                                   "state version equals the spawn-time configuration's version");
-                return spawnConfig;
+                                   "exact-match-start-config",
+                                   "state version equals the start-time configuration's version");
+                return startConfig;
             }
         } catch (IllegalArgumentException ignored) {
             logRoutingDecision(workflowName, workflowId, stateVersion, registered, configVersion,
                                "legacy-fallback",
                                "state version is not a parseable semver string (legacy event stream)");
-            return spawnConfig;
+            return startConfig;
         }
         // Pass 2: exact-match sibling registered at the same version.
         var exact = findByWorkflowNameAndVersion(workflowName, stateVersion);
@@ -334,14 +334,14 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
                         + "(no version registered for this workflow name; drift safety net will pause if "
                         + "step names diverge)",
                 workflowName, workflowId, stateVersion, registered, configVersion);
-        return spawnConfig;
+        return startConfig;
     }
 
     /**
      * Convenience helper that resolves the {@link WorkflowConfiguration} for an in-flight workflow's body against the
      * registry available on the given {@link ProcessingContext}. When the registry is unavailable (e.g. tests that wire
      * the execution directly without a registry component), logs a {@code [registry-missing]} routing line and falls
-     * back to {@code spawnConfig}.
+     * back to {@code startConfig}.
      */
     @Nonnull
     static WorkflowConfiguration<?> resolveOrFallback(
@@ -349,17 +349,17 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
             @Nonnull String workflowName,
             @Nonnull String workflowId,
             @Nonnull String stateVersion,
-            @Nonnull WorkflowConfiguration<?> spawnConfig
+            @Nonnull WorkflowConfiguration<?> startConfig
     ) {
         WorkflowConfigurationRegistry<?> registry = ctx.component(WorkflowConfigurationRegistry.class);
         if (registry == null) {
             RoutingLog.LOGGER.warn(
                     "Workflow {} ({}) routing: state='{}' definitions=<registry unavailable> -> target='{}' "
-                            + "[registry-missing] (cannot look up siblings; falling back to spawn-time definition)",
-                    workflowName, workflowId, stateVersion, spawnConfig.workflowVersion());
-            return spawnConfig;
+                            + "[registry-missing] (cannot look up siblings; falling back to start-time definition)",
+                    workflowName, workflowId, stateVersion, startConfig.workflowVersion());
+            return startConfig;
         }
-        return registry.resolveDefinitionForReplay(workflowName, workflowId, stateVersion, spawnConfig);
+        return registry.resolveDefinitionForReplay(workflowName, workflowId, stateVersion, startConfig);
     }
 
     private static void logRoutingDecision(String workflowName,

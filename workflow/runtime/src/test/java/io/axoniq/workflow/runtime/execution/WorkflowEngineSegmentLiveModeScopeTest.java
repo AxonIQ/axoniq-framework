@@ -105,22 +105,22 @@ class WorkflowEngineSegmentLiveModeScopeTest {
 
     @Test
     void noWorkflowBodyRunsOnASegmentThatHasNotReachedTheStartupLatestToken() {
-        var spawnId = "sharded-0";
-        var lagging = owningSegment(spawnId);
+        var startId = "sharded-0";
+        var lagging = owningSegment(startId);
         var caughtUp = anotherSegmentThan(lagging);
         var caughtUpId = anyIdOn(caughtUp);
 
         // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(SEGMENT_COUNT).as("this oracle is meaningless with a single segment").isGreaterThan(1);
         assertThat(caughtUp.getSegmentId()).as("the two segments must differ").isNotEqualTo(lagging.getSegmentId());
-        assertThat(SegmentedWorkflowRouting.ownedBy(lagging, spawnId))
-                .as("the spawn '%s' must be owned by the lagging segment %s", spawnId, lagging).isTrue();
+        assertThat(SegmentedWorkflowRouting.ownedBy(lagging, startId))
+                .as("the start '%s' must be owned by the lagging segment %s", startId, lagging).isTrue();
         assertThat(token(LAGGING_SEGMENT_POSITION).covers(token(STARTUP_LATEST_POSITION)))
                 .as("the lagging segment at %s must NOT have reached the startup latest token %s",
                     LAGGING_SEGMENT_POSITION, STARTUP_LATEST_POSITION)
                 .isFalse();
 
-        registerSpawningConfiguration(spawnId);
+        registerStartConfiguration(startId);
         replaySupport.setInitialEngineTokens(token(0), token(STARTUP_LATEST_POSITION));
         assertThat(replaySupport.inLiveMode()).as("the engine starts in replay mode").isFalse();
 
@@ -129,25 +129,25 @@ class WorkflowEngineSegmentLiveModeScopeTest {
                               processingContext(caughtUp, token(CAUGHT_UP_SEGMENT_POSITION)));
 
         // 2. The lagging segment, still at position 7, handles a start event for an instance it owns.
-        workflowEngine.handle(startEvent(spawnId), processingContext(lagging, token(LAGGING_SEGMENT_POSITION)));
+        workflowEngine.handle(startEvent(startId), processingContext(lagging, token(LAGGING_SEGMENT_POSITION)));
 
         // --- oracle ----------------------------------------------------------------------------------------------
         assertThat(bodyStarts)
                 .as("""
                     Workflow bodies started while their own segment is still replaying: %s. Expected: none. Segment \
-                    %s is at position %s and the startup latest token is %s, so it is still replaying; the spawn of \
+                    %s is at position %s and the startup latest token is %s, so it is still replaying; the start of \
                     '%s' must be materialized without running its body until that segment catches up. Segment %s \
                     reaching %s switches only itself to live mode. A body started here would run against a partially \
                     replayed instance view and emit live side effects during replay.""",
-                    bodyStarts, lagging, LAGGING_SEGMENT_POSITION, STARTUP_LATEST_POSITION, spawnId,
+                    bodyStarts, lagging, LAGGING_SEGMENT_POSITION, STARTUP_LATEST_POSITION, startId,
                     caughtUp, CAUGHT_UP_SEGMENT_POSITION)
                 .isEmpty();
     }
 
     @Test
     void nodeStartingWithoutSegmentsStillDefersBodiesOnALaterClaimedLaggingSegment() {
-        var spawnId = "sharded-0";
-        var lagging = owningSegment(spawnId);
+        var startId = "sharded-0";
+        var lagging = owningSegment(startId);
 
         // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(token(LAGGING_SEGMENT_POSITION).covers(token(STARTUP_LATEST_POSITION)))
@@ -155,14 +155,14 @@ class WorkflowEngineSegmentLiveModeScopeTest {
                     LAGGING_SEGMENT_POSITION, STARTUP_LATEST_POSITION)
                 .isFalse();
 
-        registerSpawningConfiguration(spawnId);
+        registerStartConfiguration(startId);
         // A node that owns zero segments at startup: earliestSegmentToken() is null, so requiresReplay() is false
         // and WorkflowEngine#start switches to live mode with a context that carries no segment.
         replaySupport.setInitialEngineTokens(null, token(STARTUP_LATEST_POSITION));
         replaySupport.switchToLiveMode(contextWithoutSegment());
 
         // Later this node claims the lagging segment and its first delivery is an old event at position 7.
-        workflowEngine.handle(startEvent(spawnId), processingContext(lagging, token(LAGGING_SEGMENT_POSITION)));
+        workflowEngine.handle(startEvent(startId), processingContext(lagging, token(LAGGING_SEGMENT_POSITION)));
 
         // --- oracle ----------------------------------------------------------------------------------------------
         assertThat(replaySupport.isReplaying(lagging, token(LAGGING_SEGMENT_POSITION)))
@@ -230,7 +230,7 @@ class WorkflowEngineSegmentLiveModeScopeTest {
     // ---------------------------------------------------------------------------------------------------------
 
     @SuppressWarnings("unchecked")
-    private void registerSpawningConfiguration(String workflowId) {
+    private void registerStartConfiguration(String workflowId) {
         var execution = mock(WorkflowExecution.class);
         var state = mock(WorkflowState.class);
         when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);

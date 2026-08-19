@@ -262,7 +262,7 @@ class EventSourcedWorkflowStateTest {
 
     @Test
     void startedEventOverridesSeededVersion_onReplayOfOlderInstance() {
-        // For replays, the workflow may have been spawned with the latest config (e.g. "2.0.0") but the
+        // For replays, the workflow may have been started with the latest config (e.g. "2.0.0") but the
         // started event in history carries the original version it was launched under (e.g. "1.0.0").
         // evolve() must adopt the started event's MessageType.version() so resolveVersionedDefinition can
         // route to the matching sibling.

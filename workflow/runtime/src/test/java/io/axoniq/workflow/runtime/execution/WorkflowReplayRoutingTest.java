@@ -44,21 +44,21 @@ import static org.assertj.core.api.Assertions.assertThat;
  * per row in the routing table below, in the same order so a reader can pattern-match a routing
  * decision in production logs to the scenario that triggers it.
  *
- * <p>{@code spawn} is the engine's default pick before routing thinks about it (typically the
+ * <p>{@code start} is the engine's default pick before routing thinks about it (typically the
  * highest registered version for this workflow name). {@code target} is what routing chose instead
  * after looking at {@code state}.
  *
  * <pre>
- * | state          | registered          | spawn  | → target | tier
+ * | state          | registered          | start  | → target | tier
  * |----------------|---------------------|--------|----------|------------------------------------------------------------------
- * | 1.0.0          | [1.0.0]             | 1.0.0  | 1.0.0    | exact-match-spawn-config  — state == spawn, use it.
+ * | 1.0.0          | [1.0.0]             | 1.0.0  | 1.0.0    | exact-match-start-config  — state == start, use it.
  * | 1.0.0          | [1.0.0, 2.0.0]      | 2.0.0  | 1.0.0    | exact-match-sibling       — registry has a sibling exactly at state, use it.
  * | 1.0.1          | [1.0.0, 2.0.0]      | 2.0.0  | 1.0.0    | closest-sibling           — no exact match; pick the closest registered version below state.
  * | 0.0.1          | [0.0.2]             | 0.0.2  | 0.0.2    | closest-higher-sibling    — nothing registered ≤ state; pick the closest above.
  * | 0.0.1          | [0.0.2, 0.0.5]      | 0.0.5  | 0.0.2    | closest-higher-sibling    — pick the lowest above state, not the highest.
  * | 1.5.0          | [2.0.0]             | 2.0.0  | 2.0.0    | closest-higher-sibling    — closest above wins even across a major boundary.
  * | 0.0.5          | [0.0.1]             | 0.0.1  | 0.0.1    | closest-sibling           — one definition registered, state drifted past it via migrateVersion.
- * | not-a-semver   | [1.0.0]             | 1.0.0  | 1.0.0    | legacy-fallback           — state isn't parseable semver; fall back to spawn.
+ * | not-a-semver   | [1.0.0]             | 1.0.0  | 1.0.0    | legacy-fallback           — state isn't parseable semver; fall back to start.
  * </pre>
  *
  * @author Stefan Dragisic
@@ -78,12 +78,12 @@ class WorkflowReplayRoutingTest {
     // ----- Row 1 -------------------------------------------------------------------------------
 
     @Test
-    @DisplayName("exact-match-spawn-config — state == spawn, use it")
-    void row1_exactMatchSpawnConfig() {
-        var spawn = new TestConfig(WORKFLOW, "1.0.0");
-        registry.register(EVENT, spawn);
+    @DisplayName("exact-match-start-config — state == start, use it")
+    void row1_exactMatchStartConfig() {
+        var start = new TestConfig(WORKFLOW, "1.0.0");
+        registry.register(EVENT, start);
 
-        var picked = registry.resolveDefinitionForReplay(WORKFLOW, "wf-1", "1.0.0", spawn);
+        var picked = registry.resolveDefinitionForReplay(WORKFLOW, "wf-1", "1.0.0", start);
         assertThat(picked.workflowVersion()).isEqualTo("1.0.0");
     }
 
@@ -168,27 +168,27 @@ class WorkflowReplayRoutingTest {
     // ----- Row 8 -------------------------------------------------------------------------------
 
     @Test
-    @DisplayName("legacy-fallback — state isn't parseable semver; fall back to spawn")
+    @DisplayName("legacy-fallback — state isn't parseable semver; fall back to start")
     void row8_legacyFallback_whenStateIsUnparseable() {
-        var spawn = new TestConfig(WORKFLOW, "1.0.0");
-        registry.register(EVENT, spawn);
+        var start = new TestConfig(WORKFLOW, "1.0.0");
+        registry.register(EVENT, start);
 
-        var picked = registry.resolveDefinitionForReplay(WORKFLOW, "wf-1", "not-a-semver", spawn);
+        var picked = registry.resolveDefinitionForReplay(WORKFLOW, "wf-1", "not-a-semver", start);
         assertThat(picked.workflowVersion()).isEqualTo("1.0.0");
     }
 
     // ----- Additional safety-net coverage (not in the table) ----------------------------------
 
     @Test
-    @DisplayName("no-match-fallback — nothing registered for this workflow name; use spawn config + WARN")
+    @DisplayName("no-match-fallback — nothing registered for this workflow name; use start config + WARN")
     void noMatchFallback_whenNothingRegisteredForThisName() {
-        // Defensive: caller passes a spawn config not in the registry. In normal operation this
-        // does not happen (the spawn config is always one of the registered configs), but the
+        // Defensive: caller passes a start config not in the registry. In normal operation this
+        // does not happen (the start config is always one of the registered configs), but the
         // routing logic must still return something usable.
         registry.register(EVENT, new TestConfig("PaymentWorkflow", "1.0.0"));
 
-        var spawn = new TestConfig(WORKFLOW, "5.0.0");
-        var picked = registry.resolveDefinitionForReplay(WORKFLOW, "wf-1", "0.0.1", spawn);
+        var start = new TestConfig(WORKFLOW, "5.0.0");
+        var picked = registry.resolveDefinitionForReplay(WORKFLOW, "wf-1", "0.0.1", start);
         assertThat(picked.workflowVersion()).isEqualTo("5.0.0");
     }
 
