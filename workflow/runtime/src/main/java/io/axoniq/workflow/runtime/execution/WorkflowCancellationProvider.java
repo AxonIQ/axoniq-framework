@@ -24,8 +24,8 @@ import jakarta.annotation.Nonnull;
  * Provides the cancellation coordinator associated with a running workflow implementation.
  * <p>
  * This internal bridge keeps cancellation out of the {@code WorkflowExecution} contract while an execution repository
- * still stores executions directly. A future workflow-instance abstraction can replace this bridge with structural
- * ownership of both capabilities.
+ * still stores executions directly. A future user-facing {@code WorkflowManager} will own the external cancellation
+ * API; its final design will determine whether it replaces this bridge or exposes the capability through its own API.
  *
  * @author Simon Zambrovski
  * @since 0.3.0

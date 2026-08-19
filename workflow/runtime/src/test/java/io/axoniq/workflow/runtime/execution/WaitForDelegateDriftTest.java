@@ -57,7 +57,7 @@ class WaitForDelegateDriftTest {
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private WaitForDelegate delegate;
-    private final WorkflowStepProgress workflowStepProgress = new WorkflowStepProgress();
+    private final ReachedSteps reachedSteps = new ReachedSteps();
 
     @BeforeEach
     void setUp() {
@@ -71,19 +71,19 @@ class WaitForDelegateDriftTest {
 
         when(workflowExecution.workflowId()).thenReturn("wf-1");
         when(workflowExecution.state()).thenReturn(state);
-        // Break out of acceptAllPendingTasksForStep's spin loop.
+        // No queued task is available in this fixture.
         when(workflowExecution.isRunning()).thenReturn(true);
-        when(workflowExecution.hasTasks()).thenReturn(true);
+        when(workflowExecution.hasTasks()).thenReturn(false);
 
         delegate = new WaitForDelegate(
-                workflowContext, workflowExecution, new RunningSteps(), new EventWaitConditions(), workflowStepProgress, parent,
+                workflowContext, workflowExecution, new RunningSteps(), new EventWaitConditions(), reachedSteps, parent,
                 Clock.systemUTC(), unitOfWorkFactory, eventSink, executor, new DefaultWorkflowScheduler(Clock.systemUTC())
         );
     }
 
     @Test
     void waitFor_throwsDriftException_whenUnreferencedTerminalStepsInState() {
-        workflowStepProgress.record("A");
+        reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
@@ -100,8 +100,8 @@ class WaitForDelegateDriftTest {
 
     @Test
     void waitFor_guardPasses_whenAllTerminalStepsReferenced() {
-        workflowStepProgress.record("A");
-        workflowStepProgress.record("B");
+        reachedSteps.record("A");
+        reachedSteps.record("B");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));

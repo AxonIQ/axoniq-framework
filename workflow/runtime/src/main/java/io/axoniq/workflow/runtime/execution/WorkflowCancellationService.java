@@ -83,10 +83,10 @@ public final class WorkflowCancellationService implements DescribableComponent {
      * when the step was unknown or already terminal
      */
     @Nonnull
-    public CompletableFuture<Boolean> cancelStep(@Nonnull String workflowId,
-                                                 @Nonnull String stepName,
-                                                 @Nullable Throwable cause) {
-        return cancellationFor(workflowId).cancelStep(stepName, cause);
+    public CompletableFuture<Boolean> requestStepCancellation(@Nonnull String workflowId,
+                                                               @Nonnull String stepName,
+                                                               @Nullable Throwable cause) {
+        return cancellationFor(workflowId).requestStepCancellation(stepName, cause);
     }
 
     /**
@@ -97,8 +97,9 @@ public final class WorkflowCancellationService implements DescribableComponent {
      * @return a future completing with the number of steps for which terminal cancellation was recorded
      */
     @Nonnull
-    public CompletableFuture<Integer> cancelRunningSteps(@Nonnull String workflowId, @Nullable Throwable cause) {
-        return cancellationFor(workflowId).cancelRunningSteps(cause);
+    public CompletableFuture<Integer> requestRunningStepCancellations(@Nonnull String workflowId,
+                                                                       @Nullable Throwable cause) {
+        return cancellationFor(workflowId).requestRunningStepCancellations(cause);
     }
 
     /**
@@ -109,8 +110,8 @@ public final class WorkflowCancellationService implements DescribableComponent {
      * @return a future completing after the workflow cancellation event is durable and the workflow body was woken
      */
     @Nonnull
-    public CompletableFuture<Void> cancelWorkflow(@Nonnull String workflowId, @Nullable Throwable cause) {
-        return cancellationFor(workflowId).cancelWorkflow(cause);
+    public CompletableFuture<Void> requestWorkflowCancellation(@Nonnull String workflowId, @Nullable Throwable cause) {
+        return cancellationFor(workflowId).requestWorkflowCancellation(cause);
     }
 
     /**

@@ -61,14 +61,14 @@ class PayloadDelegateRerunTest {
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private PayloadDelegate delegate;
-    private WorkflowStepProgress workflowStepProgress;
+    private ReachedSteps reachedSteps;
 
     @BeforeEach
     void setUp() {
         workflowContext = mock(WorkflowContext.class);
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
-        workflowStepProgress = new WorkflowStepProgress();
+        reachedSteps = new ReachedSteps();
         ProcessingContext processingContext = mock(ProcessingContext.class);
         EventSink eventSink = mock(EventSink.class);
         UnitOfWorkFactory unitOfWorkFactory = mock(UnitOfWorkFactory.class);
@@ -81,7 +81,7 @@ class PayloadDelegateRerunTest {
         when(state.payload()).thenReturn(Map.of());
 
         delegate = new PayloadDelegate(
-                workflowContext, workflowExecution, new RunningSteps(), workflowStepProgress, parent,
+                workflowContext, workflowExecution, new RunningSteps(), reachedSteps, parent,
                 Clock.systemUTC(), unitOfWorkFactory, eventSink, executor
         );
     }

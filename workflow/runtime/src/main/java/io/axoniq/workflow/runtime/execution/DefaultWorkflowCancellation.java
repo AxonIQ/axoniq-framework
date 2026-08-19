@@ -26,6 +26,7 @@ import jakarta.annotation.Nullable;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -44,6 +45,7 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.External
     private final WorkflowContextDelegation workflowContext;
     private final RunningSteps runningSteps;
     private final AtomicReference<WorkflowCancellation.Request> pendingWorkflowCancellation = new AtomicReference<>();
+    private final AtomicBoolean workflowCancellationConsumed = new AtomicBoolean();
 
     /**
      * Creates a cancellation coordinator for one workflow execution.
@@ -62,7 +64,7 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.External
 
     @Nonnull
     @Override
-    public CompletableFuture<Boolean> cancelStep(@Nonnull String stepName, @Nullable Throwable cause) {
+    public CompletableFuture<Boolean> requestStepCancellation(@Nonnull String stepName, @Nullable Throwable cause) {
         if (!workflowExecution.state().containsStep(stepName)
                 || workflowExecution.state().getStep(stepName).status().isTerminal()) {
             return CompletableFuture.completedFuture(false);
@@ -82,7 +84,7 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.External
 
     @Nonnull
     @Override
-    public CompletableFuture<Integer> cancelRunningSteps(@Nullable Throwable cause) {
+    public CompletableFuture<Integer> requestRunningStepCancellations(@Nullable Throwable cause) {
         var stepNames = runningSteps.stepNames();
         if (stepNames.isEmpty()) {
             return CompletableFuture.completedFuture(0);
@@ -108,7 +110,7 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.External
 
     @Nonnull
     @Override
-    public CompletableFuture<Void> cancelWorkflow(@Nullable Throwable cause) {
+    public CompletableFuture<Void> requestWorkflowCancellation(@Nullable Throwable cause) {
         var cancellationCause = cancellationCause(cause);
         var request = new WorkflowCancellation.Request(cancellationCause, new CompletableFuture<>());
         if (pendingWorkflowCancellation.compareAndSet(null, request)) {
@@ -120,13 +122,16 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.External
 
     @Override
     public boolean hasPendingWorkflowCancellation() {
-        return pendingWorkflowCancellation.get() != null;
+        return pendingWorkflowCancellation.get() != null && !workflowCancellationConsumed.get();
     }
 
     @Nullable
     @Override
     public WorkflowCancellation.Request consumeWorkflowCancellation() {
-        return pendingWorkflowCancellation.getAndSet(null);
+        var cancellation = pendingWorkflowCancellation.get();
+        return cancellation != null && workflowCancellationConsumed.compareAndSet(false, true)
+                ? cancellation
+                : null;
     }
 
     @Nonnull

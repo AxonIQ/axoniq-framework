@@ -30,8 +30,8 @@ import io.axoniq.workflow.runtime.api.execution.status.StepStatus
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace
 import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
-import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository
 import io.axoniq.workflow.runtime.execution.WorkflowCancellationService
+import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher
 import org.assertj.core.api.Assertions.assertThat
@@ -89,7 +89,7 @@ class BlockSurfacesCancellationAndTimeoutTest : AbstractWorkflowTestBase<Workflo
         }
 
         configuration.getComponent(WorkflowCancellationService::class.java)
-            .cancelStep("block-1", "cancelledWait", StepCancellationException("cancelled externally"))
+            .requestStepCancellation("block-1", "cancelledWait", StepCancellationException("cancelled externally"))
             .join()
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted {

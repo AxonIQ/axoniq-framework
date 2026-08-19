@@ -57,7 +57,7 @@ public class VersionDelegate implements VersionPrimitive {
 
     private final WorkflowContext workflowContext;
     private final WorkflowExecution workflowExecution;
-    private final WorkflowStepProgress workflowStepProgress;
+    private final ReachedSteps reachedSteps;
     private final EventNameCustomizer parentEventNameCustomizer;
     private final Clock clock;
     private final UnitOfWorkFactory unitOfWorkFactory;
@@ -69,7 +69,7 @@ public class VersionDelegate implements VersionPrimitive {
      *
      * @param workflowContext           workflow context.
      * @param workflowExecution         workflow execution.
-     * @param workflowStepProgress      workflow step progress tracker
+     * @param reachedSteps      reached steps tracker
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory.
@@ -78,7 +78,7 @@ public class VersionDelegate implements VersionPrimitive {
      */
     public VersionDelegate(@Nonnull WorkflowContext workflowContext,
                            @Nonnull WorkflowExecution workflowExecution,
-                           @Nonnull WorkflowStepProgress workflowStepProgress,
+                           @Nonnull ReachedSteps reachedSteps,
                            @Nonnull EventNameCustomizer parentEventNameCustomizer,
                            @Nonnull Clock clock,
                            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -86,7 +86,7 @@ public class VersionDelegate implements VersionPrimitive {
                            @Nonnull Executor executor) {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow execution is mandatory");
-        this.workflowStepProgress = Objects.requireNonNull(workflowStepProgress, "Workflow step progress is mandatory");
+        this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
         this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,
                                                                 "Parent event name customizer is mandatory");
         this.clock = Objects.requireNonNull(clock, "Clock is mandatory");
@@ -101,7 +101,7 @@ public class VersionDelegate implements VersionPrimitive {
         var stepName = command.stepName();
         var requestedRaw = command.newVersion();
         var state = workflowExecution.state();
-        workflowStepProgress.record(stepName);
+        reachedSteps.record(stepName);
 
         // 1. Step already recorded for this stepName — return its value deterministically.
         if (state.hasVersionMigrationStep(stepName)) {
@@ -128,7 +128,7 @@ public class VersionDelegate implements VersionPrimitive {
         // 4. Downstream-steps guard: if state contains any terminal step that the current invocation has
         //    not yet referenced, the workflow has already executed past this point under old code, so we
         //    must stay on the legacy branch and emit nothing. See ADR 005 for the full rationale.
-        if (workflowStepProgress.hasUnreferencedTerminalStep(workflowExecution.state())) {
+        if (reachedSteps.hasUnreferencedTerminalStep(workflowExecution.state())) {
             logger.debug("ctx.migrateVersion(\"{}\", \"{}\") staying on legacy branch (workflow stays at \"{}\", "
                                  + "no migration step emitted) — workflow has already executed past this point "
                                  + "under old code (untouched terminal steps in state).",

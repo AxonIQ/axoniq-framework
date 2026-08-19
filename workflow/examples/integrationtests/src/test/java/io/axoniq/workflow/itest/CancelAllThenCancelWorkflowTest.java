@@ -50,8 +50,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Verifies that joining {@code cancelRunningSteps(workflowId, reason)} immediately followed by joining
- * {@code cancelWorkflow(workflowId, reason)}, called back to back on the same external thread, deterministically
+ * Verifies that joining {@code requestRunningStepCancellations(workflowId, reason)} immediately followed by joining
+ * {@code requestWorkflowCancellation(workflowId, reason)}, called back to back on the same external thread, deterministically
  * cancels the directly-awaited {@code awaitedStep} with a durable {@code CANCELLED} record, runs the body's
  * compensation, and drives the workflow to a terminal {@code CANCELLED} state.
  * <p>
@@ -62,7 +62,6 @@ import static org.awaitility.Awaitility.await;
  * {@code holdStep} (which never completes on its own) until the external workflow-cancellation request terminates it.
  *
  * @author Stefan Dragisic
- * @since 0.3.0
  */
 class CancelAllThenCancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 
@@ -92,10 +91,10 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
         delayedPublisher.start();
 
         awaitParked(id);
-        workflowCancellationService.cancelRunningSteps(
+        workflowCancellationService.requestRunningStepCancellations(
                 id, new StepCancellationException("cancel all running steps")
         ).orTimeout(10, TimeUnit.SECONDS).join();
-        workflowCancellationService.cancelWorkflow(id, new WorkflowCancelledException("cancel workflow"))
+        workflowCancellationService.requestWorkflowCancellation(id, new WorkflowCancelledException("cancel workflow"))
                                    .orTimeout(10, TimeUnit.SECONDS)
                                    .join();
 

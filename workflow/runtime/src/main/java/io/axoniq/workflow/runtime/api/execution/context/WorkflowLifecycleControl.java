@@ -22,13 +22,14 @@ import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 
 /**
- * Internal control contract for programmatically changing workflow and step lifecycle state.
+ * Lifecycle control contract for programmatically changing workflow and step lifecycle state.
  * <p>
  * Each intent is carried by its own typed command, so callers and implementations know which lifecycle transition is
- * requested from its type alone.
+ * requested from its type alone. DSL users normally use the corresponding convenience methods exposed by their DSL
+ * workflow context. Implementations apply these commands synchronously on the workflow control thread.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.2.0
  */
 public interface WorkflowLifecycleControl {
 

@@ -95,7 +95,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
      * @param workflowExecution workflow execution.
      * @param runningSteps      running step registry
      * @param eventWaitConditions event wait condition registry
-     * @param workflowStepProgress workflow step progress tracker
+     * @param reachedSteps reached steps tracker
      * @param terminalTransition owner of workflow terminal-transition execution mechanics
      * @param processingContext processing context.
      */
@@ -105,7 +105,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
             @Nonnull WorkflowExecution workflowExecution,
             @Nonnull RunningSteps runningSteps,
             @Nonnull EventWaitConditions eventWaitConditions,
-            @Nonnull WorkflowStepProgress workflowStepProgress,
+            @Nonnull ReachedSteps reachedSteps,
             @Nonnull WorkflowTerminalTransition terminalTransition,
             @Nonnull ProcessingContext processingContext
     ) {
@@ -142,7 +142,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
         var executeDelegate = new ExecuteDelegate(workflowContext,
                                                   workflowExecution,
                                                   runningSteps,
-                                                  workflowStepProgress,
+                                                  reachedSteps,
                                                   stepParent,
                                                   clock,
                                                   unitOfWorkFactory,
@@ -154,7 +154,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                                      workflowContext,
                                                                      workflowExecution,
                                                                      runningSteps,
-                                                                     workflowStepProgress,
+                                                                     reachedSteps,
                                                                      stepParent,
                                                                      clock,
                                                                      unitOfWorkFactory,
@@ -165,7 +165,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                    workflowExecution,
                                                    runningSteps,
                                                    eventWaitConditions,
-                                                   workflowStepProgress,
+                                                   reachedSteps,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,
@@ -175,7 +175,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
         this.lifecycleControlDelegate = new WorkflowLifecycleControlDelegate(workflowContext,
                                                                               workflowExecution,
                                                                               runningSteps,
-                                                                              workflowStepProgress,
+                                                                              reachedSteps,
                                                                               terminalTransition,
                                                                               unitOfWorkFactory,
                                                                               eventSink,
@@ -183,7 +183,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
         this.payloadDelegate = new PayloadDelegate(workflowContext,
                                                    workflowExecution,
                                                    runningSteps,
-                                                   workflowStepProgress,
+                                                   reachedSteps,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,
@@ -192,7 +192,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                    timeoutScheduler);
         this.versionDelegate = new VersionDelegate(workflowContext,
                                                    workflowExecution,
-                                                   workflowStepProgress,
+                                                   reachedSteps,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,

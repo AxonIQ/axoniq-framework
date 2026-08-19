@@ -21,6 +21,7 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import jakarta.annotation.Nonnull;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 
@@ -29,24 +30,21 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Tracks the workflow steps reached while a workflow body is invoked.
+ * Records steps reached by one workflow body invocation for replay-drift detection.
  * <p>
- * This tracker represents the invocation-local progress through the workflow definition. Before a workflow body is
- * invoked, its recorded step names are cleared. Each primitive records the step it reaches, allowing the engine to
- * compare the current definition's progress with the event-sourced {@link WorkflowState}. When terminal steps exist in
- * the state but were not reached by the current body invocation, the tracker detects replay drift before a new event is
- * emitted.
+ * Before a workflow body is invoked, the recorded step names are cleared. Each primitive records the step it reaches,
+ * allowing the engine to compare the current invocation with the event-sourced {@link WorkflowState}. When a terminal
+ * state step was not reached by the current invocation, this class detects replay drift before a new event is emitted.
  * <p>
- * This is deliberately separate from {@link RunningSteps}. {@code RunningSteps} tracks active asynchronous step
- * executions and supports their lifecycle operations, whereas this class records only which workflow steps the body has
- * reached. A reached step can be terminal, pending, or no longer running; conversely, determining replay progress must
- * not depend on whether a step currently has an active execution.
+ * This is separate from {@link RunningSteps}, which tracks active asynchronous executions. A reached step can be
+ * terminal, pending, or no longer running, so replay-drift detection must not depend on active execution state.
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
  * @since 0.3.0
  */
-final class WorkflowStepProgress implements DescribableComponent {
+@Internal
+public class ReachedSteps implements DescribableComponent {
 
     private final Set<String> referencedStepNames = ConcurrentHashMap.newKeySet();
 

@@ -53,12 +53,11 @@ import static org.awaitility.Awaitility.await;
  * must be able to compensate and complete.
  *
  * @author Stefan Dragisic
- * @since 0.3.0
  */
 class BackoffWindowCancellationWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 
     private static final String WORKFLOW_ID = "backoff-cancel-1";
-    private static final Duration BACKOFF = Duration.ofSeconds(30);
+    private static final Duration BACKOFF = Duration.ofMillis(500);
 
     private BackoffCancelWorkflow workflow;
 
@@ -86,7 +85,7 @@ class BackoffWindowCancellationWorkflowTest extends AbstractWorkflowTestBase<Sim
 
         var executionRepository = configuration.getComponent(WorkflowExecutionRepository.class);
 
-        // Wait until attempt 1 has failed and the step is parked RETRYING in its 30s backoff window.
+        // Wait until attempt 1 has failed and the step is parked RETRYING in its backoff window.
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var execution = executionRepository.findById(WORKFLOW_ID);
             assertThat(execution).isPresent();
@@ -96,12 +95,12 @@ class BackoffWindowCancellationWorkflowTest extends AbstractWorkflowTestBase<Sim
         assertThat(workflow.attempts()).isEqualTo(1);
 
         // Cancel the step while it is parked in the backoff window.
-        workflowCancellationService.cancelStep(
+        workflowCancellationService.requestStepCancellation(
                 WORKFLOW_ID, "flaky", new StepCancellationException("cancelled during backoff")
         ).join();
 
-        // The cancellation must be honored well within the 30s backoff window: step CANCELLED, body catches and
-        // compensates, workflow completes. No second attempt may ever run.
+        // The cancellation must be honored within the backoff window: step CANCELLED, body catches and compensates,
+        // workflow completes.
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var history = workflowHistoryRepository.findAll().stream().findFirst();
             assertThat(history).isPresent();
@@ -110,9 +109,12 @@ class BackoffWindowCancellationWorkflowTest extends AbstractWorkflowTestBase<Sim
             assertThat(state.getStep("compensate").status()).isEqualTo(StepStatus.COMPLETED);
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
         });
-        assertThat(workflow.attempts())
-                .as("the retry attempt of a cancelled step must never run")
-                .isEqualTo(1);
+        // Wait until after the original retry deadline to prove its timer cannot launch a second attempt.
+        await().pollDelay(BACKOFF.plusMillis(100)).atMost(BACKOFF.plusSeconds(2)).untilAsserted(() ->
+                assertThat(workflow.attempts())
+                        .as("the retry attempt of a cancelled step must never run")
+                        .isEqualTo(1)
+        );
     }
 
     public static class BackoffCancelWorkflow {

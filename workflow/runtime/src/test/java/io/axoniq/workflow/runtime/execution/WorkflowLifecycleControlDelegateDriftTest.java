@@ -54,7 +54,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private WorkflowLifecycleControlDelegate delegate;
-    private final WorkflowStepProgress workflowStepProgress = new WorkflowStepProgress();
+    private final ReachedSteps reachedSteps = new ReachedSteps();
 
     @BeforeEach
     void setUp() {
@@ -70,14 +70,14 @@ class WorkflowLifecycleControlDelegateDriftTest {
         when(workflowExecution.state()).thenReturn(state);
 
         delegate = new WorkflowLifecycleControlDelegate(
-                workflowContext, workflowExecution, new RunningSteps(), workflowStepProgress,
+                workflowContext, workflowExecution, new RunningSteps(), reachedSteps,
                 terminalEventPublication -> terminalEventPublication.run(), unitOfWorkFactory, eventSink, executor
         );
     }
 
     @Test
     void terminate_throwsDrift_forWorkflowFail_whenOrphansAhead() {
-        workflowStepProgress.record("A");
+        reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
@@ -96,7 +96,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
 
     @Test
     void terminate_throwsDrift_forWorkflowCancel_whenOrphansAhead() {
-        workflowStepProgress.record("A");
+        reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
@@ -110,7 +110,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
 
     @Test
     void terminate_throwsDrift_forStepCancellation_whenOrphansAhead() {
-        workflowStepProgress.record("A");
+        reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
@@ -129,8 +129,8 @@ class WorkflowLifecycleControlDelegateDriftTest {
 
     @Test
     void terminate_doesNotThrow_whenAllStepsReferenced() {
-        workflowStepProgress.record("A");
-        workflowStepProgress.record("B");
+        reachedSteps.record("A");
+        reachedSteps.record("B");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));

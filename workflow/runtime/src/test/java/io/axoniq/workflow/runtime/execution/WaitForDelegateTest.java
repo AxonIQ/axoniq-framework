@@ -94,7 +94,7 @@ class WaitForDelegateTest {
         when(workflowExecution.state()).thenReturn(state);
         when(workflowExecution.processingContext()).thenReturn(processingContext);
         when(workflowExecution.isRunning()).thenReturn(true);
-        when(workflowExecution.hasTasks()).thenReturn(true);
+        when(workflowExecution.hasTasks()).thenReturn(false);
         when(state.containsStep("awaitPayment")).thenAnswer(inv -> startedStep.get() != null);
         when(state.getStep("awaitPayment")).thenAnswer(inv -> startedStep.get());
 
@@ -113,7 +113,7 @@ class WaitForDelegateTest {
                 workflowExecution,
                 new RunningSteps(),
                 eventWaitConditions,
-                new WorkflowStepProgress(),
+                new ReachedSteps(),
                 customizer,
                 clock,
                 unitOfWorkFactory,

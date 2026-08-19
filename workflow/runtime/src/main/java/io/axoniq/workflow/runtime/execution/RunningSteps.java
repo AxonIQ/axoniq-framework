@@ -21,6 +21,7 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 
@@ -36,7 +37,8 @@ import java.util.function.Consumer;
  * @author Stefan Dragisic
  * @since 1.0.0
  */
-final class RunningSteps implements DescribableComponent {
+@Internal
+public class RunningSteps implements DescribableComponent {
 
     private final ConcurrentHashMap<String, CompletableFuture<?>> runningFutures = new ConcurrentHashMap<>();
 

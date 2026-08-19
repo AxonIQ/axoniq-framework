@@ -55,7 +55,7 @@ class PayloadDelegateDriftTest {
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private PayloadDelegate delegate;
-    private final WorkflowStepProgress workflowStepProgress = new WorkflowStepProgress();
+    private final ReachedSteps reachedSteps = new ReachedSteps();
 
     @BeforeEach
     void setUp() {
@@ -71,14 +71,14 @@ class PayloadDelegateDriftTest {
         when(workflowExecution.state()).thenReturn(state);
 
         delegate = new PayloadDelegate(
-                workflowContext, workflowExecution, new RunningSteps(), workflowStepProgress, parent,
+                workflowContext, workflowExecution, new RunningSteps(), reachedSteps, parent,
                 Clock.systemUTC(), unitOfWorkFactory, eventSink, executor
         );
     }
 
     @Test
     void modifyPayload_throwsDriftException_whenUnreferencedTerminalStepsInState() {
-        workflowStepProgress.record("A");
+        reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));

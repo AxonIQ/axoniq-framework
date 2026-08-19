@@ -101,7 +101,7 @@ class WorkflowLifecycleControlDelegateFailTest {
                 workflowContext,
                 workflowExecution,
                 new RunningSteps(),
-                new WorkflowStepProgress(),
+                new ReachedSteps(),
                 terminalTransition,
                 unitOfWorkFactory,
                 eventSink,

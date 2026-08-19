@@ -76,7 +76,7 @@ class TerminalStateGuardTest {
         TestableStepExecutor(WorkflowContext workflowContext, WorkflowExecution workflowExecution,
                              EventNameCustomizer parentEventNameCustomizer, Clock clock,
                              UnitOfWorkFactory unitOfWorkFactory, EventSink eventSink, Executor executor) {
-            super(workflowContext, workflowExecution, new RunningSteps(), new WorkflowStepProgress(), parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink,
+            super(workflowContext, workflowExecution, new RunningSteps(), new ReachedSteps(), parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink,
                   executor);
         }
 

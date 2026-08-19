@@ -105,7 +105,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
                 workflowContext,
                 workflowExecution,
                 runningSteps,
-                new WorkflowStepProgress(),
+                new ReachedSteps(),
                 terminalTransition,
                 unitOfWorkFactory,
                 eventSink,

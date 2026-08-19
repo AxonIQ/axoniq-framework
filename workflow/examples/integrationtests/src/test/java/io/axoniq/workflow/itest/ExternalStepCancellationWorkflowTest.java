@@ -58,7 +58,6 @@ import static org.awaitility.Awaitility.await;
  * compensation) to normal completion.
  *
  * @author Stefan Dragisic
- * @since 0.3.0
  */
 class ExternalStepCancellationWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 
@@ -98,7 +97,7 @@ class ExternalStepCancellationWorkflowTest extends AbstractWorkflowTestBase<Simp
         });
 
         // Cancel the running step from the test thread — NOT the workflow control thread.
-        workflowCancellationService.cancelStep(
+        workflowCancellationService.requestStepCancellation(
                 WORKFLOW_ID, "awaitApproval", new StepCancellationException("cancelled externally")
         ).join();
 

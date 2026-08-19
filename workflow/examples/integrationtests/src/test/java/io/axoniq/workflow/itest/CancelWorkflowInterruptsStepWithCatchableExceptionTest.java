@@ -53,7 +53,6 @@ import static org.awaitility.Awaitility.await;
  * no durable {@code <step>:CANCELLED} record is ever published for the interrupted step.
  *
  * @author Stefan Dragisic
- * @since 0.3.0
  */
 class CancelWorkflowInterruptsStepWithCatchableExceptionTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 
@@ -92,7 +91,7 @@ class CancelWorkflowInterruptsStepWithCatchableExceptionTest extends AbstractWor
 
         awaitParked(id);
 
-        workflowCancellationService.cancelWorkflow(
+        workflowCancellationService.requestWorkflowCancellation(
                 id, new WorkflowCancelledException("operator cancelled while step running")
         ).join();
 

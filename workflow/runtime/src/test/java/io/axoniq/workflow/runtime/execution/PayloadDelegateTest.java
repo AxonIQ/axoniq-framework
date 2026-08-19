@@ -101,7 +101,7 @@ class PayloadDelegateTest {
                 workflowContext,
                 workflowExecution,
                 new RunningSteps(),
-                new WorkflowStepProgress(),
+                new ReachedSteps(),
                 parentEventNameCustomizer,
                 clock,
                 unitOfWorkFactory,

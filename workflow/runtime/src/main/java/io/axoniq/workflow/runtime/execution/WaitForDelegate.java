@@ -61,7 +61,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
      * @param workflowExecution         workflow state.
      * @param runningSteps              running step registry
      * @param eventWaitConditions       event wait condition registry
-     * @param workflowStepProgress      workflow step progress tracker
+     * @param reachedSteps      reached steps tracker
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new process contexts.
@@ -75,7 +75,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             @Nonnull WorkflowExecution workflowExecution,
             @Nonnull RunningSteps runningSteps,
             @Nonnull EventWaitConditions eventWaitConditions,
-            @Nonnull WorkflowStepProgress workflowStepProgress,
+            @Nonnull ReachedSteps reachedSteps,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -84,7 +84,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             @Nonnull WorkflowScheduler timeoutScheduler
     ) {
         super(workflowContext,
-              workflowExecution, runningSteps, workflowStepProgress, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink, executor,
+              workflowExecution, runningSteps, reachedSteps, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink, executor,
               timeoutScheduler);
         this.eventWaitConditions = Objects.requireNonNull(eventWaitConditions, "Event wait conditions are mandatory");
     }
@@ -99,12 +99,12 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         var eventNameCustomizer = command.eventNameCustomizer();
         logger.trace("WaitFor {} called from thread {}", stepName, Thread.currentThread());
 
-        workflowStepProgress.record(stepName);
+        reachedSteps.record(stepName);
 
         acceptAllPendingTasksForStep(stepName);
 
         if (!workflowExecution.state().containsStep(stepName)) {
-            workflowStepProgress.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
+            reachedSteps.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
             workflowExecution.appendTask(i ->
                                                  startedWaitForEvent(stepName,
                                                                      startedPayload(eventCondition, clock.instant(), timeout),

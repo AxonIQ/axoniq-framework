@@ -31,6 +31,8 @@ import java.util.concurrent.CompletableFuture;
  * Cancellation is requested from arbitrary threads but executed by the workflow control thread. This preserves the
  * single-consumer ordering of workflow tasks and ensures that a completed future is followed by the appropriate
  * durable terminal event before the returned future completes.
+ * This differs from {@link io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl}, whose
+ * operations apply lifecycle commands synchronously on the workflow control thread.
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
@@ -48,7 +50,7 @@ public interface WorkflowCancellation {
      * when the step was unknown or already terminal
      */
     @Nonnull
-    CompletableFuture<Boolean> cancelStep(@Nonnull String stepName, @Nullable Throwable cause);
+    CompletableFuture<Boolean> requestStepCancellation(@Nonnull String stepName, @Nullable Throwable cause);
 
     /**
      * Requests cooperative cancellation of every currently-running workflow step without terminating the workflow.
@@ -57,7 +59,7 @@ public interface WorkflowCancellation {
      * @return a future completing with the number of steps for which terminal cancellation was recorded
      */
     @Nonnull
-    CompletableFuture<Integer> cancelRunningSteps(@Nullable Throwable cause);
+    CompletableFuture<Integer> requestRunningStepCancellations(@Nullable Throwable cause);
 
     /**
      * Requests cancellation of the workflow and its local execution.
@@ -66,7 +68,7 @@ public interface WorkflowCancellation {
      * @return a future completing after the workflow cancellation event is durable and the workflow body was woken
      */
     @Nonnull
-    CompletableFuture<Void> cancelWorkflow(@Nullable Throwable cause);
+    CompletableFuture<Void> requestWorkflowCancellation(@Nullable Throwable cause);
 
     /**
      * Provides the pending external workflow-cancellation request to the workflow driver.
@@ -84,7 +86,7 @@ public interface WorkflowCancellation {
         boolean hasPendingWorkflowCancellation();
 
         /**
-         * Removes and returns the pending external workflow cancellation.
+         * Returns and marks the pending external workflow cancellation as consumed.
          *
          * @return the pending cancellation request, or {@code null} when no request is pending
          */

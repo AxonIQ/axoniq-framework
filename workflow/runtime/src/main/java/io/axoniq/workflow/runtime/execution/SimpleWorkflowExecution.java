@@ -84,7 +84,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
     private final RunningSteps runningSteps = new RunningSteps();
-    private final WorkflowStepProgress workflowStepProgress = new WorkflowStepProgress();
+    private final ReachedSteps reachedSteps = new ReachedSteps();
     private final WorkflowTerminalTransition terminalTransition = this::transitionToTerminalState;
     private final WorkflowCancellation.External workflowCancellation;
     private final WorkflowExecutionCheckpointingSupport checkpointingSupport =
@@ -147,7 +147,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 this,
                 runningSteps,
                 eventWaitConditions,
-                workflowStepProgress,
+                reachedSteps,
                 terminalTransition,
                 processingContext
         );
@@ -246,7 +246,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                     currentThread());
 
         // Reset the runtime "book" — step-reference tracker for the drift guard.
-        this.workflowStepProgress.clear();
+        this.reachedSteps.clear();
 
         // Dispatch to the definition matching state.workflowDefinitionVersion().
         var definition = WorkflowConfigurationRegistry.resolveOrFallback(
@@ -433,6 +433,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
 
+    @Override
     public void stopForShutdown() {
         runningSteps.cancelAll(new StepInterruptedException("Workflow engine shutdown"), s -> {
         });
@@ -479,7 +480,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     @Override
     public boolean hasTasks() {
-        return this.taskQueue.isEmpty();
+        return !this.taskQueue.isEmpty();
     }
 
     @Override
@@ -563,6 +564,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         descriptor.describeProperty("state", state());
         eventWaitConditions.describeTo(descriptor);
         runningSteps.describeTo(descriptor);
-        workflowStepProgress.describeTo(descriptor);
+        reachedSteps.describeTo(descriptor);
     }
 }

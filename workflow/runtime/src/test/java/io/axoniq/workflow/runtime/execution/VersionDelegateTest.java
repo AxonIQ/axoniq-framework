@@ -74,7 +74,7 @@ class VersionDelegateTest {
     private EventNameCustomizer parentCustomizer;
     private VersionDelegate delegate;
 
-    private final WorkflowStepProgress workflowStepProgress = new WorkflowStepProgress();
+    private final ReachedSteps reachedSteps = new ReachedSteps();
 
     @SuppressWarnings("unchecked")
     @BeforeEach
@@ -111,7 +111,7 @@ class VersionDelegateTest {
         delegate = new VersionDelegate(
                 workflowContext,
                 workflowExecution,
-                workflowStepProgress,
+                reachedSteps,
                 parentCustomizer,
                 Clock.systemUTC(),
                 unitOfWorkFactory,
@@ -227,7 +227,7 @@ class VersionDelegateTest {
      */
     @Test
     void downstreamStepsGuard_blocksEmission_whenLaterStepsArePresentInState() {
-        workflowStepProgress.record("A");
+        reachedSteps.record("A");
         when(state.hasVersionMigrationStep("x")).thenReturn(false);
         when(state.workflowDefinitionVersion()).thenReturn("0.0.1");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B", "C"));
@@ -249,7 +249,7 @@ class VersionDelegateTest {
      */
     @Test
     void downstreamStepsGuard_allowsEmissionWhenAllStateStepsReferenced() throws InterruptedException {
-        workflowStepProgress.record("A");
+        reachedSteps.record("A");
         when(state.hasVersionMigrationStep("x")).thenReturn(false, true);
         when(state.currentWorkflowVersion("x")).thenReturn("0.0.2");
         when(state.workflowDefinitionVersion()).thenReturn("0.0.1");
@@ -285,7 +285,7 @@ class VersionDelegateTest {
      */
     @Test
     void downstreamStepsGuard_ignoresNonTerminalStepsAhead() throws InterruptedException {
-        workflowStepProgress.record("A");
+        reachedSteps.record("A");
         when(state.hasVersionMigrationStep("x")).thenReturn(false, true);
         when(state.currentWorkflowVersion("x")).thenReturn("0.0.2");
         when(state.workflowDefinitionVersion()).thenReturn("0.0.1");

@@ -64,7 +64,7 @@ public abstract class AbstractStepExecutor {
     protected final WorkflowContext workflowContext;
     protected final WorkflowExecution workflowExecution;
     protected final RunningSteps runningSteps;
-    protected final WorkflowStepProgress workflowStepProgress;
+    protected final ReachedSteps reachedSteps;
     protected final Clock clock;
     protected final EventNameCustomizer parentEventNameCustomizer;
     protected final UnitOfWorkFactory unitOfWorkFactory;
@@ -78,7 +78,7 @@ public abstract class AbstractStepExecutor {
      * @param workflowContext           workflow context.
      * @param workflowExecution         workflow execution.
      * @param runningSteps              running step registry
-     * @param workflowStepProgress      workflow step progress tracker
+     * @param reachedSteps      reached steps tracker
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
@@ -90,7 +90,7 @@ public abstract class AbstractStepExecutor {
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
             @Nonnull RunningSteps runningSteps,
-            @Nonnull WorkflowStepProgress workflowStepProgress,
+            @Nonnull ReachedSteps reachedSteps,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -100,7 +100,7 @@ public abstract class AbstractStepExecutor {
         this(workflowContext,
              workflowExecution,
              runningSteps,
-             workflowStepProgress,
+             reachedSteps,
              parentEventNameCustomizer,
              clock,
              unitOfWorkFactory,
@@ -115,7 +115,7 @@ public abstract class AbstractStepExecutor {
      * @param workflowContext           workflow context.
      * @param workflowExecution         workflow execution.
      * @param runningSteps              running step registry
-     * @param workflowStepProgress      workflow step progress tracker
+     * @param reachedSteps      reached steps tracker
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
@@ -128,7 +128,7 @@ public abstract class AbstractStepExecutor {
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
             @Nonnull RunningSteps runningSteps,
-            @Nonnull WorkflowStepProgress workflowStepProgress,
+            @Nonnull ReachedSteps reachedSteps,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -140,7 +140,7 @@ public abstract class AbstractStepExecutor {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
         this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
-        this.workflowStepProgress = Objects.requireNonNull(workflowStepProgress, "Workflow step progress is mandatory");
+        this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
         this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,
                                                                 "Event name customizer is mandatory");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UoW Factory state is mandatory");
@@ -150,7 +150,7 @@ public abstract class AbstractStepExecutor {
     }
 
     protected void acceptAllPendingTasksForStep(@Nonnull String stepName) {
-        while ((!workflowExecution.state().containsStep(stepName) && !workflowExecution.hasTasks())
+        while ((!workflowExecution.state().containsStep(stepName) && workflowExecution.hasTasks())
                 || !workflowExecution.isRunning()) {
             var poll = workflowExecution.getNextTask();
             if (poll != null) {

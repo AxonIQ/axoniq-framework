@@ -71,7 +71,7 @@ class DelegateInterruptedAwaitTest {
 
         when(workflowExecution.state()).thenReturn(state);
         when(workflowExecution.isRunning()).thenReturn(true);
-        when(workflowExecution.hasTasks()).thenReturn(true);
+        when(workflowExecution.hasTasks()).thenReturn(false);
         when(state.workflowStepNames()).thenReturn(List.of());
         doThrow(new InterruptedException("workflow interrupted"))
                 .when(workflowExecution)
@@ -82,7 +82,7 @@ class DelegateInterruptedAwaitTest {
                 workflowExecution,
                 new RunningSteps(),
                 new EventWaitConditions(),
-                new WorkflowStepProgress(),
+                new ReachedSteps(),
                 parentCustomizer,
                 Clock.systemUTC(),
                 unitOfWorkFactory,
@@ -94,7 +94,7 @@ class DelegateInterruptedAwaitTest {
                 workflowContext,
                 workflowExecution,
                 new RunningSteps(),
-                new WorkflowStepProgress(),
+                new ReachedSteps(),
                 parentCustomizer,
                 Clock.systemUTC(),
                 unitOfWorkFactory,
