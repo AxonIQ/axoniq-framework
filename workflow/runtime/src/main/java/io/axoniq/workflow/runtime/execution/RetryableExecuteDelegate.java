@@ -25,6 +25,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryContext;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
+import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
@@ -128,7 +129,12 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
                 handleAttemptFailure(command, name, error, false, enc, attempt);
 
         TimeoutHandler timeoutHandler = (name, enc) ->
-                handleAttemptFailure(command, name, null, true, enc, attempt);
+                handleAttemptFailure(command,
+                                     name,
+                                     new StepTimedOutException("Step '" + name + "' timed out"),
+                                     true,
+                                     enc,
+                                     attempt);
 
         return delegate.execute(command, failureHandler, timeoutHandler);
     }
@@ -137,7 +143,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
     private void handleAttemptFailure(
             @Nonnull ExecutePrimitive.ExecuteCommand command,
             @Nonnull String stepName,
-            @Nullable Throwable error,
+            @Nonnull Throwable error,
             boolean isTimeout,
             @Nonnull EventNameCustomizer eventNameCustomizer,
             int attempt
