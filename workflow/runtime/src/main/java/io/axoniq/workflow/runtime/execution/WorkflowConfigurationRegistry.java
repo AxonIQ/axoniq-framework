@@ -72,9 +72,25 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
     List<PredicatedWorkflowConfiguration> getWorkflowsConfigurations(@Nonnull QualifiedName qualifiedName);
 
     /**
+     * Returns the configurations registered for the given event {@code type} whose
+     * {@link WorkflowConfiguration#workflowVersion()} is the highest among all registrations (semver-ordered). Multiple
+     * configurations may be returned if duplicates exist at that version (run-in-parallel semantics).
+     * <p>
+     * The lookup is currently decided on {@link MessageType#qualifiedName()} alone; taking the full type keeps
+     * {@link MessageType#version()} available once it participates in the decision.
+     */
+    @Nonnull
+    default List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(@Nonnull MessageType type) {
+        return getHighestVersionConfigurations(type.qualifiedName());
+    }
+
+    /**
      * Returns the configurations registered for {@code qualifiedName} whose
      * {@link WorkflowConfiguration#workflowVersion()} is the highest among all registrations (semver-ordered). Multiple
      * configurations may be returned if duplicates exist at that version (run-in-parallel semantics).
+     * <p>
+     * Event-driven callers should use {@link #getHighestVersionConfigurations(MessageType)}; this variant serves
+     * registration-time recomputation, where only a {@link QualifiedName} exists.
      */
     @Nonnull
     default List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(

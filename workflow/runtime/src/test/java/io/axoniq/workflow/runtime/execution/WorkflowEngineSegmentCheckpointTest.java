@@ -137,7 +137,7 @@ class WorkflowEngineSegmentCheckpointTest {
         when(contextFactory.createContext(anyMap(), eq(BUSY_WORKFLOW_ID), any(), eq(configuration)))
                 .thenReturn(workflowContext);
         when(executionFactory.create(workflowContext)).thenReturn(busyExecution);
-        when(configurationRegistry.getHighestVersionConfigurations(START_EVENT))
+        when(configurationRegistry.getHighestVersionConfigurations(new MessageType(START_EVENT)))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
     }
 

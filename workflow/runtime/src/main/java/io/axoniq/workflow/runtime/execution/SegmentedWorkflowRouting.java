@@ -169,7 +169,7 @@ public final class SegmentedWorkflowRouting implements SequencingPolicy<EventMes
                                           @Nonnull ProcessingContext processingContext) {
         try {
             return workflowConfigurationRegistry
-                    .getHighestVersionConfigurations(eventMessage.type().qualifiedName())
+                    .getHighestVersionConfigurations(eventMessage.type())
                     .stream()
                     .filter(configuration -> configuration.predicate().test(eventMessage, processingContext))
                     .map(configuration -> configuration.configuration().workflowIdProvider().apply(eventMessage))

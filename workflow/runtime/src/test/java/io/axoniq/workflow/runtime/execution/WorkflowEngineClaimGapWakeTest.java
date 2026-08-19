@@ -103,7 +103,7 @@ class WorkflowEngineClaimGapWakeTest {
         replaySupport = new WorkflowEngineReplaySupport(workflowEngine);
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
         workflowEngine.setEngineSupportComponents(replaySupport, checkpointingSupport);
-        when(configurationRegistry.getHighestVersionConfigurations(RESUME_EVENT)).thenReturn(List.of());
+        when(configurationRegistry.getHighestVersionConfigurations(new MessageType(RESUME_EVENT))).thenReturn(List.of());
         registerRestorableWorkflow();
     }
 

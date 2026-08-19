@@ -391,7 +391,7 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         when(contextFactory.createContext(anyMap(), eq(STRAGGLER_ID), any(), eq(configuration)))
                 .thenReturn(workflowContext);
         when(executionFactory.create(workflowContext)).thenReturn(execution);
-        when(configurationRegistry.getHighestVersionConfigurations(START_EVENT))
+        when(configurationRegistry.getHighestVersionConfigurations(new MessageType(START_EVENT)))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
         return execution;
     }

@@ -187,9 +187,7 @@ public class WorkflowEngine implements
         // otherwise the second start is rejected as a same-version duplicate in resolveWorkflowIdForNewInstance.
         // The "multiple definitions at the same version" warning is emitted ONCE at engine startup (see
         // checkForSameVersionDuplicates) rather than per event.
-        var configurations = workflowConfigurationRegistry.getHighestVersionConfigurations(
-                eventMessage.type().qualifiedName()
-        );
+        var configurations = workflowConfigurationRegistry.getHighestVersionConfigurations(eventMessage.type());
         // Start placement: each segment only starts instances it owns. Unique start candidates
         // arrive at the owning segment directly; broadcast business events arrive everywhere and the ownership
         // guard keeps the start exactly-once.

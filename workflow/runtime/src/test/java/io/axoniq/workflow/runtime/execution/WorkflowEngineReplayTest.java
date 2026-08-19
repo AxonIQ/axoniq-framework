@@ -326,7 +326,7 @@ class WorkflowEngineReplayTest {
         when(v2.workflowExecutionFactory()).thenReturn(executionFactory);
 
         QualifiedName eventName = new QualifiedName("OrderPlaced");
-        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(new MessageType(eventName)))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, v2)));
 
         EventMessage eventMessage = mock(EventMessage.class);
@@ -366,7 +366,7 @@ class WorkflowEngineReplayTest {
         when(v2.workflowVersion()).thenReturn("2.0.0");
 
         QualifiedName eventName = new QualifiedName("OrderPlaced");
-        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(new MessageType(eventName)))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, v2)));
 
         EventMessage eventMessage = mock(EventMessage.class);
@@ -404,7 +404,7 @@ class WorkflowEngineReplayTest {
 
         QualifiedName eventName = new QualifiedName("OrderPlaced");
         // Stub the version-aware helper that checkAndCreateNewInstance actually invokes.
-        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(new MessageType(eventName)))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
 
         EventMessage eventMessage = mock(EventMessage.class);
@@ -447,7 +447,7 @@ class WorkflowEngineReplayTest {
                 }).get("orderId")));
         when(configuration.workflowContextFactory()).thenReturn(contextFactory);
         when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
-        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(new MessageType(eventName)))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
         when(contextFactory.createContext(anyMap(), anyString(), any(), eq(configuration))).thenAnswer(invocation -> {
             String workflowId = invocation.getArgument(1);
@@ -668,7 +668,7 @@ class WorkflowEngineReplayTest {
                 mock(WorkflowContext.class)
         );
         when(executionFactory.create(any())).thenReturn(execution);
-        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName)).thenReturn(
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(new MessageType(eventName))).thenReturn(
                 List.of(new PredicatedWorkflowConfiguration((event, context) -> true, configuration))
         );
 
@@ -788,7 +788,7 @@ class WorkflowEngineReplayTest {
         when(v2.workflowVersion()).thenReturn("2.0.0");
 
         QualifiedName eventName = new QualifiedName("OrderPlaced");
-        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(new MessageType(eventName)))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, v2)));
 
         EventMessage eventMessage = mock(EventMessage.class);
