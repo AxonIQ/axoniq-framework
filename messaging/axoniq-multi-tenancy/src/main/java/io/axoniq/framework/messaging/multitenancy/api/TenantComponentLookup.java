@@ -19,6 +19,8 @@
 
 package io.axoniq.framework.messaging.multitenancy.api;
 
+import java.util.function.Function;
+
 /**
  * Functional interface for looking up a component instance for a given tenant.
  *
@@ -27,7 +29,7 @@ package io.axoniq.framework.messaging.multitenancy.api;
  * @since 5.3.1
  */
 @FunctionalInterface
-public interface TenantComponentLookup<T> {
+public interface TenantComponentLookup<T> extends Function<TenantDescriptor, T> {
 
     /**
      * Returns the component instance for the given {@code tenant}.
@@ -37,4 +39,9 @@ public interface TenantComponentLookup<T> {
      * @throws TenantNotResolvedException if the given {@code tenant} cannot be resolved
      */
     T componentFor(TenantDescriptor tenant);
+
+    @Override
+    default T apply(TenantDescriptor tenantDescriptor) {
+        return componentFor(tenantDescriptor);
+    }
 }

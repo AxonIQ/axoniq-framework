@@ -19,8 +19,8 @@
 
 package io.axoniq.framework.messaging.multitenancy.axonserver.eventsourcing;
 
-import io.axoniq.framework.axonserver.connector.api.RecordingAxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.api.RecordingAxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
@@ -124,10 +124,8 @@ class AxonServerTenantSnapshotStoreFactoryTest {
     @Test
     void usesTheConfiguredConverterWhenNoTenantConverterProviderIsRegistered() {
         Configuration configuration = MessagingConfigurer.create()
-                                                       .componentRegistry(registry -> {
-                                                           registry.registerComponent(AxonServerConnectionManager.class,
-                                                                                      config -> connectionManager);
-                                                       })
+                                                       .componentRegistry(registry -> registry.registerComponent(AxonServerConnectionManager.class,
+                                                                                  config -> connectionManager))
                                                        .build();
         AxonServerTenantSnapshotStoreFactory factory = new AxonServerTenantSnapshotStoreFactory(configuration);
         factory.registerTenant(TENANT_A);

@@ -27,7 +27,6 @@ import org.axonframework.messaging.core.Message;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_REPLICATION_GROUP;
 import static io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor.tenantWithId;
 
@@ -83,4 +82,5 @@ public enum TestFixtures {
             return message.andMetadata(Map.of(TenantDescriptor.TENANT_ID_KEY, tenant.tenantId()));
         }
     }
+
 }
