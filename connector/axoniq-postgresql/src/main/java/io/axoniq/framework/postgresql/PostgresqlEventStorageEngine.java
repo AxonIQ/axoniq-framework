@@ -81,6 +81,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 import javax.sql.DataSource;
 
@@ -622,7 +623,13 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                     LOGGER.debug("appendEvents: failed");
                 }
 
-                throw AppendEventsTransactionRejectedException.conflictingEventsDetected(condition.consistencyMarker());  // allow executor to rollback correctly
+                Set<Tag> tags = condition.criteria()
+                    .flatten()
+                    .stream()
+                    .flatMap(criterion -> criterion.tags().stream())
+                    .collect(Collectors.toSet());
+
+                throw AppendEventsTransactionRejectedException.conflictingEventsDetected(condition.consistencyMarker(), tags);  // allow executor to rollback correctly
             }
 
             return appendTransaction;
