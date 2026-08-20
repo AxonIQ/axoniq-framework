@@ -110,7 +110,7 @@ class WorkflowEngineClaimGapWakeTest {
     @Test
     void aResumeEventDeliveredBeforeARestoredBodyReRegistersItsWaitConditionStillWakesTheInstance() {
         var owner = owningSegment(RESIDENT_ID);
-        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext(), mock(ProcessingContext.class));
+        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext(), mock(ProcessingContext.class)).join();
 
         // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(restored).as("the claim materialized the instance").isNotNull();
@@ -139,7 +139,7 @@ class WorkflowEngineClaimGapWakeTest {
     @Test
     void aResumeEventDeliveredAfterTheWaitConditionIsRegisteredStillWakesTheInstance() {
         var owner = owningSegment(RESIDENT_ID);
-        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext(), mock(ProcessingContext.class));
+        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext(), mock(ProcessingContext.class)).join();
 
         var waitStep = registerWaitFor(WAIT_STEP);
 

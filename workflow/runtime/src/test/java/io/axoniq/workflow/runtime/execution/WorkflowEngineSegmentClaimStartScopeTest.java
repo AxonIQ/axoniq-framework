@@ -124,14 +124,14 @@ class WorkflowEngineSegmentClaimStartScopeTest {
         registerRestorableWorkflow(restoredState);
 
         // 1. The node claims the owning segment. The instance is sourced, materialized and started: correct.
-        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext(), mock(ProcessingContext.class));
+        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext(), mock(ProcessingContext.class)).join();
         assertThat(bodyStarts)
                 .as("claiming the owning segment %s starts its own instance", owner)
                 .containsExactly(RESIDENT_ID);
         bodyStarts.clear();
 
         // 2. The coordinator hands the same node a second, unrelated segment.
-        workflowEngine.restoreWorkflowsFor(other, null, sourcingContext(), mock(ProcessingContext.class));
+        workflowEngine.restoreWorkflowsFor(other, null, sourcingContext(), mock(ProcessingContext.class)).join();
 
         // --- precondition evidence -------------------------------------------------------------------------------
         verify(workflowStore, times(1)).loadWorkflow(eq(RESIDENT_ID), any());
@@ -174,7 +174,11 @@ class WorkflowEngineSegmentClaimStartScopeTest {
 
         // 1. The owning segment is observed behind the startup latest token, then claimed: materialize, do not start.
         workflowEngine.handle(engineEvent(RESIDENT_ID), processingContext(owner, token(LAGGING_POSITION)));
-        workflowEngine.restoreWorkflowsFor(owner, token(LAGGING_POSITION), sourcingContext(), processingContext(owner, null));
+        workflowEngine.restoreWorkflowsFor(owner,
+                                           token(LAGGING_POSITION),
+                                           sourcingContext(),
+                                           processingContext(owner, null))
+                      .join();
         assertThat(replaySupport.isReplaying(owner, token(LAGGING_POSITION)))
                 .as("segment %s must still be replaying at position %s", owner, LAGGING_POSITION).isTrue();
         assertThat(workflowEngine.workflowExecutions())
@@ -227,8 +231,11 @@ class WorkflowEngineSegmentClaimStartScopeTest {
                 .as("segment %s must not already be live", owner).isFalse();
 
         // Claimed behind, and no handle(...) has ever run for this segment.
-        workflowEngine.restoreWorkflowsFor(owner, token(LAGGING_POSITION), sourcingContext(),
-                                   processingContext(owner, null));
+        workflowEngine.restoreWorkflowsFor(owner,
+                                           token(LAGGING_POSITION),
+                                           sourcingContext(),
+                                           processingContext(owner, null))
+                      .join();
 
         // --- oracle ------------------------------------------------------------------------------------------
         assertThat(replaySupport.isReplaying(owner, token(LAGGING_POSITION)))

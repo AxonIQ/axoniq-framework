@@ -86,6 +86,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
 
     // Runtime
     private boolean running = false;
+    /**
+     * Completed once nothing runs for this instance any more, either because its body unwound or because it never
+     * started one. {@link #interrupt()} hands it out, so a caller can await this instance going quiet.
+     */
+    private final CompletableFuture<Void> drained = new CompletableFuture<>();
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
     private final WorkflowExecutionCheckpointingSupport checkpointingSupport =
             new WorkflowExecutionCheckpointingSupport(
@@ -171,13 +176,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                         contextDelegate.executorService(),
                         this.processingContext(),
                         ctx -> {
-
                             if (this.state().workflowStatus().isTerminal()) {
-                                logger.trace(
-                                        "Workflow instance has reached terminal state {}, skipping execution.",
-                                        this.state().workflowStatus()
-                                );
-                                return CompletableFuture.completedFuture(this.contextDelegate);
+                                return skipTerminalInstance();
                             }
                             logger.trace("Thread: {}, ProcessingContext {}", currentThread(), ctx);
 
@@ -192,6 +192,21 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
                             return CompletableFuture.completedFuture(null);
                         }
                 );
+    }
+
+
+    /**
+     * Skips the body of an instance that is already terminal, and marks the instance quiet: no body ran, so an
+     * {@link #interrupt()} has nothing to wait on.
+     *
+     * @return the context of this instance, as the result of an execution that ran no body.
+     */
+    private CompletableFuture<WorkflowContextDelegation> skipTerminalInstance() {
+        logger.trace("Workflow instance has reached terminal state {}, skipping execution.",
+                     this.state().workflowStatus());
+        this.running = false;
+        drained.complete(null);
+        return CompletableFuture.completedFuture(this.contextDelegate);
     }
 
 
@@ -379,6 +394,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
         });
         checkpointingSupport.refreshCheckpointWorkState();
         terminationHandler.accept(this);
+        drained.complete(null);
     }
 
 
@@ -509,13 +525,20 @@ public final class SimpleWorkflowExecution implements WorkflowExecution {
     }
 
     @Override
-    public void interrupt() {
+    public CompletableFuture<Void> interrupt() {
+        if (!running) {
+            // No body to unwind: a restored instance waiting for its segment to catch up, or one already finished.
+            return CompletableFuture.completedFuture(null);
+        }
         runningSteps.cancelAll(new InterruptedException("Workflow engine shutdown"), s -> {
         });
         // Unblock the workflow driver thread parked on taskQueue.take() inside the current step's await() loop.
         // The task sets the driver thread's interrupt flag; the next taskQueue.take() observes it and throws
         // InterruptedException, propagating up so the driver thread exits cleanly.
         taskQueue.offer(i -> Thread.currentThread().interrupt());
+        // Copied, as a caller bounding the returned future with orTimeout would otherwise complete this instance's own
+        // drain state.
+        return drained.copy();
     }
 
     @Override

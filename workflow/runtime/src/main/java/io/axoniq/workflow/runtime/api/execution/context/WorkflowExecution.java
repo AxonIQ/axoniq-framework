@@ -214,8 +214,12 @@ public interface WorkflowExecution extends DescribableComponent {
      * is removed from bookkeeping and no {@code <Step>Cancelled} event is published. The workflow's state in the event
      * store is left at its most recent {@code <Step>Started} entry so the step can resume on the next app start. Safe
      * to call from any thread.
+     *
+     * @return a future that completes once the interrupted body has unwound, or immediately when this instance has no
+     *         body running. Callers handing the instance's segment to another node await it, so the next node resumes
+     *         the instance only after this one went quiet
      */
-    void interrupt();
+    CompletableFuture<Void> interrupt();
 
     /**
      * Cancel and remove a running step.

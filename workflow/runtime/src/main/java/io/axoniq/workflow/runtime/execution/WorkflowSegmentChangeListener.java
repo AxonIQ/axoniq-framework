@@ -76,16 +76,16 @@ public class WorkflowSegmentChangeListener implements SegmentChangeListener {
                 .executeWithResult(sourcingContext -> {
                     var executionUnitOfWork = new SimpleUnitOfWorkFactory(sourcingContext)
                             .create(moduleName + "SegmentExecutionContext" + segment.getSegmentId());
-                    return executionUnitOfWork.executeWithResult(executionContext -> {
-                        workflowEngine.get().restoreWorkflowsFor(segment, from, sourcingContext, executionContext);
-                        return CompletableFuture.<Void>completedFuture(null);
-                    });
+                    return executionUnitOfWork.executeWithResult(
+                            executionContext -> workflowEngine.get().restoreWorkflowsFor(
+                                    segment, from, sourcingContext, executionContext
+                            )
+                    );
                 });
     }
 
     @Override
     public CompletableFuture<Void> onSegmentReleased(Segment segment) {
-        workflowEngine.get().releaseWorkflowsFor(segment);
-        return CompletableFuture.completedFuture(null);
+        return workflowEngine.get().releaseWorkflowsFor(segment);
     }
 }

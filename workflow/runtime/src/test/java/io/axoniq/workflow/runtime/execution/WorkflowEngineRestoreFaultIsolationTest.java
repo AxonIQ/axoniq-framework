@@ -121,7 +121,7 @@ class WorkflowEngineRestoreFaultIsolationTest {
                 .as("the replay path can resolve it, through the closest registered sibling")
                 .isPresent();
 
-        workflowEngine.restoreWorkflowsFor(ONLY_SEGMENT, null, sourcingContext(), mock(ProcessingContext.class));
+        workflowEngine.restoreWorkflowsFor(ONLY_SEGMENT, null, sourcingContext(), mock(ProcessingContext.class)).join();
 
         // --- oracle ----------------------------------------------------------------------------------------------
         assertThat(bodyStarts)
@@ -157,9 +157,10 @@ class WorkflowEngineRestoreFaultIsolationTest {
 
         // --- oracle ----------------------------------------------------------------------------------------------
         assertThatCode(() -> workflowEngine.restoreWorkflowsFor(ONLY_SEGMENT,
-                                                         null,
-                                                         sourcingContext(),
-                                                         mock(ProcessingContext.class)))
+                                                               null,
+                                                               sourcingContext(),
+                                                               mock(ProcessingContext.class))
+                                           .join())
                 .as("""
                     The claim of segment %s must survive an instance it cannot restore. Letting it fail aborts the \
                     restore pass of the whole segment; the processor only logs that, so the node keeps the segment \

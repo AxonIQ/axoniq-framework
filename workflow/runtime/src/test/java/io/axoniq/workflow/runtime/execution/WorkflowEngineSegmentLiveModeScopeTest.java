@@ -212,7 +212,8 @@ class WorkflowEngineSegmentLiveModeScopeTest {
                                                 workflowStore,
                                                 mock(UnitOfWorkFactory.class));
         claimingEngine.setEngineSupportComponents(replaySupport, checkpointingSupport);
-        claimingEngine.restoreWorkflowsFor(lagging, token(LAGGING_SEGMENT_POSITION), sourcingContext, executionContext);
+        claimingEngine.restoreWorkflowsFor(lagging, token(LAGGING_SEGMENT_POSITION), sourcingContext, executionContext)
+                      .join();
 
         // --- oracle ----------------------------------------------------------------------------------------------
         var seeded = executionContext.resources().get(TrackingToken.RESOURCE_KEY);

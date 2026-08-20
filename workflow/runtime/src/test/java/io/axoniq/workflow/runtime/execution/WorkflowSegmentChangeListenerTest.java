@@ -26,10 +26,14 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Glob
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.util.concurrent.CompletableFuture;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * The segment change listener is how workflow executions follow their segment: a claim restores the segment's
@@ -49,6 +53,8 @@ class WorkflowSegmentChangeListenerTest {
     @Test
     void claimRestoresTheSegmentWithSeparateSourcingAndExecutionContexts() {
         var from = new GlobalSequenceTrackingToken(7);
+        when(workflowEngine.restoreWorkflowsFor(any(), any(), any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(null));
 
         listener.onSegmentClaimed(SEGMENT, from).join();
 

@@ -40,9 +40,11 @@ import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -69,6 +71,16 @@ public class WorkflowEngine implements
     private static final String AFTER_REPLAY_LOG = "after replay catch-up";
     private static final String BEFORE_REPLAY_LOG = "before replay catch-up";
 
+    /**
+     * Time {@link #restoreWorkflowsFor(Segment, TrackingToken, ProcessingContext, ProcessingContext)} is given to load
+     * a segment's durable state before it fails the claim.
+     * <p>
+     * The workflow store is remote, so the load can stall without failing. The processor logs a failing claim listener
+     * and carries on, so an unbounded load would leave the segment claimed here with none of its instances running.
+     * A release needs no such bound: the processor already caps it at its claim extension threshold.
+     */
+    static final Duration DEFAULT_RESTORE_TIMEOUT = Duration.ofSeconds(30);
+
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
     private final WorkflowStore workflowStore;
@@ -77,6 +89,8 @@ public class WorkflowEngine implements
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
     private final SegmentedWorkflowRouting segmentedRouting;
     private final UnsafeCheckpointWorkIndex checkpointWorkIndex = new UnsafeCheckpointWorkIndex();
+    // Package-private so a test can shrink it instead of waiting out the production timeout.
+    Duration restoreTimeout = DEFAULT_RESTORE_TIMEOUT;
 
     /**
      * Creates a new workflow engine. Be sure to follow-up construction of a {@code WorkflowEngine} with an invocation
@@ -353,23 +367,22 @@ public class WorkflowEngine implements
      *                         the sourcing unit of work has entered {@code COMMIT}, Axon can no longer register the
      *                         required {@code PREPARE_COMMIT} handler, and the workflow cannot persist its resumed,
      *                         timed-out, or terminal state
+     * @return a future that completes once the segment's executions are restored and, unless the segment is still
+     *         replaying, started. It completes exceptionally when loading durable state does not finish within
+     *         {@link #DEFAULT_RESTORE_TIMEOUT}, failing the claim rather than holding the segment
      */
-    public void restoreWorkflowsFor(@Nonnull Segment segment,
-                             @Nullable TrackingToken claimedFrom,
-                             @Nonnull ProcessingContext sourcingContext,
-                             @Nonnull ProcessingContext executionContext) {
+    public CompletableFuture<Void> restoreWorkflowsFor(@Nonnull Segment segment,
+                                                       @Nullable TrackingToken claimedFrom,
+                                                       @Nonnull ProcessingContext sourcingContext,
+                                                       @Nonnull ProcessingContext executionContext) {
         // Tags the restored executions with their segment, so that a completion arriving long after this callback
         // returned is attributed to the segment that owns the instance instead of being dropped without one. Only
         // safe because the start pass below is scoped to this segment: every body started here is owned by it.
         executionContext.putResource(Segment.RESOURCE_KEY, segment);
-        loadRunningWorkflows(segment, claimedFrom, sourcingContext, executionContext).join();
-        if (replaySupport.isReplaying(segment, claimedFrom)) {
-            logger.info("Segment {} is still replaying: restored workflow executions start once it catches up.",
-                        segment.getSegmentId());
-            return;
-        }
-        removeTerminalAndStartRestoredWorkflowExecutions(segment,
-                                                         "on claim of segment " + segment.getSegmentId());
+        return loadRunningWorkflows(segment, claimedFrom, sourcingContext, executionContext)
+                .orTimeout(restoreTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                .whenComplete((restored, failure) -> logFailedRestore(segment, failure))
+                .thenRun(() -> startRestoredWorkflowsUnlessReplaying(segment, claimedFrom));
     }
 
     /**
@@ -379,18 +392,39 @@ public class WorkflowEngine implements
      * are emitted, so the node claiming the segment next resumes each instance from its persisted state.
      *
      * @param segment the segment that was released
+     * @return a future that completes once the interrupted bodies of this segment have unwound, so the processor
+     *         reports the segment released only after this node went quiet on it. A body that never unwinds does not
+     *         hold the segment: the processor stops waiting at its claim extension threshold and releases regardless
      */
-    public void releaseWorkflowsFor(@Nonnull Segment segment) {
+    public CompletableFuture<Void> releaseWorkflowsFor(@Nonnull Segment segment) {
         var released = workflowExecutionRepository.findAll(ownedBy(segment));
         if (released.isEmpty()) {
-            return;
+            return CompletableFuture.completedFuture(null);
         }
         logger.info("Releasing segment {}: interrupting {} workflow execution(s).",
                     segment.getSegmentId(), released.size());
-        for (var execution : released) {
-            execution.interrupt();
-        }
+        var drained = released.stream()
+                              .map(WorkflowExecution::interrupt)
+                              .toArray(CompletableFuture[]::new);
         workflowExecutionRepository.removeAll(ownedBy(segment));
+        return CompletableFuture.allOf(drained);
+    }
+
+    private void startRestoredWorkflowsUnlessReplaying(@Nonnull Segment segment, @Nullable TrackingToken claimedFrom) {
+        if (replaySupport.isReplaying(segment, claimedFrom)) {
+            logger.info("Segment {} is still replaying: restored workflow executions start once it catches up.",
+                        segment.getSegmentId());
+            return;
+        }
+        removeTerminalAndStartRestoredWorkflowExecutions(segment, "on claim of segment " + segment.getSegmentId());
+    }
+
+    private void logFailedRestore(Segment segment, @Nullable Throwable failure) {
+        if (failure != null) {
+            logger.error("Restoring the workflow executions of segment {} did not complete within {}; failing the "
+                                 + "claim so the coordinator can hand the segment out again.",
+                         segment.getSegmentId(), restoreTimeout, failure);
+        }
     }
 
     private Predicate<WorkflowExecution> ownedBy(@Nullable Segment segment) {
