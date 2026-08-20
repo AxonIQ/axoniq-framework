@@ -19,14 +19,13 @@
 package io.axoniq.workflow.springboot;
 
 import io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Role;
 
-import static io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer.DEFAULT_INITIAL_SEGMENT_COUNT;
 import static io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME;
 
 /**
@@ -36,6 +35,7 @@ import static io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrati
  * @since 1.0.0
  */
 @AutoConfiguration
+@EnableConfigurationProperties(WorkflowProperties.class)
 public class WorkflowAutoConfiguration {
 
     /**
@@ -52,20 +52,16 @@ public class WorkflowAutoConfiguration {
     /**
      * Configures the event handling for the top-level workflow module.
      *
-     * @param initialSegmentCount number of segments to initialize the workflow event processor with; workflow
-     *                            instances are partitioned over segments by workflow id. Defaults
-     *                            to
-     *                            {@link WorkflowEventProcessingRegistrationEnhancer#DEFAULT_INITIAL_SEGMENT_COUNT}.
+     * @param workflowProperties the workflow properties of this application.
      * @return enhancer.
      */
     @Bean
     @ConditionalOnMissingBean
     public WorkflowEventProcessingRegistrationEnhancer workflowEventHandlersDefaults(
-            @Value("${axoniq.workflow.initial-segment-count:" + DEFAULT_INITIAL_SEGMENT_COUNT + "}")
-            int initialSegmentCount
+            WorkflowProperties workflowProperties
     ) {
         return new WorkflowEventProcessingRegistrationEnhancer(
-                DEFAULT_MODULE_NAME, null, null, true, initialSegmentCount
+                DEFAULT_MODULE_NAME, null, null, true, workflowProperties.getInitialSegmentCount()
         );
     }
 }
