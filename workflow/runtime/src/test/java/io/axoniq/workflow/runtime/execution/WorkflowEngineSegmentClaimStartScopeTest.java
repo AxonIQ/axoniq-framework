@@ -115,9 +115,9 @@ class WorkflowEngineSegmentClaimStartScopeTest {
         // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(SEGMENT_COUNT).as("this oracle is meaningless with a single segment").isGreaterThan(1);
         assertThat(other.getSegmentId()).as("the two segments must differ").isNotEqualTo(owner.getSegmentId());
-        assertThat(SegmentedWorkflowRouting.ownedBy(owner, RESIDENT_ID))
+        assertThat(WorkflowSegmentOwnership.ownedBy(owner, RESIDENT_ID))
                 .as("segment %s must own '%s'", owner, RESIDENT_ID).isTrue();
-        assertThat(SegmentedWorkflowRouting.ownedBy(other, RESIDENT_ID))
+        assertThat(WorkflowSegmentOwnership.ownedBy(other, RESIDENT_ID))
                 .as("segment %s must NOT own '%s'", other, RESIDENT_ID).isFalse();
 
         var restoredState = restoredState();
@@ -166,7 +166,7 @@ class WorkflowEngineSegmentClaimStartScopeTest {
 
         // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(other.getSegmentId()).as("the two segments must differ").isNotEqualTo(owner.getSegmentId());
-        assertThat(SegmentedWorkflowRouting.ownedBy(other, RESIDENT_ID))
+        assertThat(WorkflowSegmentOwnership.ownedBy(other, RESIDENT_ID))
                 .as("segment %s must NOT own '%s'", other, RESIDENT_ID).isFalse();
 
         registerRestorableWorkflow(restoredState());

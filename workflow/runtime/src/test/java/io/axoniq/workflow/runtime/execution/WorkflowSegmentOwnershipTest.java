@@ -29,14 +29,14 @@ import java.util.stream.IntStream;
 import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.FOUR_SEGMENTS;
 import static org.assertj.core.api.Assertions.assertThat;
 
-class SegmentedWorkflowRoutingTest {
+class WorkflowSegmentOwnershipTest {
 
 
     @Test
     void everyIdIsOwnedByExactlyOneSegment() {
         for (var workflowId : List.of("order-1", "order-1#2.0.0", "a#b", "")) {
             var owners = FOUR_SEGMENTS.stream()
-                                      .filter(segment -> SegmentedWorkflowRouting.ownedBy(segment, workflowId))
+                                      .filter(segment -> WorkflowSegmentOwnership.ownedBy(segment, workflowId))
                                       .count();
             assertThat(owners).as("owners of '%s'", workflowId).isEqualTo(1);
         }
@@ -48,9 +48,9 @@ class SegmentedWorkflowRoutingTest {
             var baseId = "order-" + i;
             var disambiguated = baseId + "#2.0.0";
             for (var segment : FOUR_SEGMENTS) {
-                assertThat(SegmentedWorkflowRouting.ownedBy(segment, disambiguated))
+                assertThat(WorkflowSegmentOwnership.ownedBy(segment, disambiguated))
                         .as("segment %s must own '%s' iff it owns '%s'", segment, disambiguated, baseId)
-                        .isEqualTo(SegmentedWorkflowRouting.ownedBy(segment, baseId));
+                        .isEqualTo(WorkflowSegmentOwnership.ownedBy(segment, baseId));
             }
         });
     }
@@ -89,7 +89,7 @@ class SegmentedWorkflowRoutingTest {
     @Test
     void anIdStartingWithTheSeparatorAlwaysLandsOnSegmentZero() {
         for (var workflowId : List.of("#123", "#", "#a#b")) {
-            assertThat(SegmentedWorkflowRouting.ownedBy(FOUR_SEGMENTS.getFirst(), workflowId))
+            assertThat(WorkflowSegmentOwnership.ownedBy(FOUR_SEGMENTS.getFirst(), workflowId))
                     .as("'%s' has the empty segment key, and hash 0 masks to segment 0 for every mask", workflowId)
                     .isTrue();
         }
@@ -99,7 +99,7 @@ class SegmentedWorkflowRoutingTest {
     private static Set<Integer> segmentsOf(List<String> workflowIds) {
         return workflowIds.stream()
                           .map(workflowId -> FOUR_SEGMENTS.stream()
-                                                          .filter(segment -> SegmentedWorkflowRouting.ownedBy(segment,
+                                                          .filter(segment -> WorkflowSegmentOwnership.ownedBy(segment,
                                                                                                              workflowId))
                                                           .findFirst()
                                                           .orElseThrow()

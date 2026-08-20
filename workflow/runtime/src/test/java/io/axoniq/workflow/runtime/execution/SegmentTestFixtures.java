@@ -27,7 +27,7 @@ import java.util.stream.IntStream;
 
 /**
  * Shared fixtures for tests partitioning workflow instances over segments: a four-segment layout, plus lookups that
- * derive segments and workflow ids from the production ownership rule in {@link SegmentedWorkflowRouting}, so a test
+ * derive segments and workflow ids from the production ownership rule in {@link WorkflowSegmentOwnership}, so a test
  * never hardcodes an id-to-segment assignment the hash could contradict.
  *
  * @author Stefan Dragisic
@@ -50,7 +50,7 @@ final class SegmentTestFixtures {
     /** The segment of {@link #FOUR_SEGMENTS} that owns the given workflow id. */
     static Segment owningSegment(String workflowId) {
         return FOUR_SEGMENTS.stream()
-                            .filter(segment -> SegmentedWorkflowRouting.ownedBy(segment, workflowId))
+                            .filter(segment -> WorkflowSegmentOwnership.ownedBy(segment, workflowId))
                             .findFirst()
                             .orElseThrow();
     }
@@ -67,7 +67,7 @@ final class SegmentTestFixtures {
     static String anyIdOn(Segment segment) {
         return IntStream.range(0, 512)
                         .mapToObj(i -> "sharded-" + i)
-                        .filter(candidate -> SegmentedWorkflowRouting.ownedBy(segment, candidate))
+                        .filter(candidate -> WorkflowSegmentOwnership.ownedBy(segment, candidate))
                         .findFirst()
                         .orElseThrow();
     }
@@ -77,7 +77,7 @@ final class SegmentTestFixtures {
         var owner = owningSegment(workflowId);
         return IntStream.range(1, 64)
                         .mapToObj(i -> "sharded-" + i)
-                        .filter(candidate -> !SegmentedWorkflowRouting.ownedBy(owner, candidate))
+                        .filter(candidate -> !WorkflowSegmentOwnership.ownedBy(owner, candidate))
                         .findFirst()
                         .orElseThrow();
     }

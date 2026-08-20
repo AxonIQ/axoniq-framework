@@ -23,7 +23,6 @@ import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,26 +40,6 @@ public final class NewWorkflowInstanceRouting {
     private static final Logger logger = LoggerFactory.getLogger(NewWorkflowInstanceRouting.class);
 
     private NewWorkflowInstanceRouting() {
-    }
-
-    /**
-     * Decides whether a new workflow instance with the given base id may start under the given segment: only
-     * the owning segment starts it. Unique start candidates are sequenced to their owning segment directly; broadcast
-     * business events reach every segment and this decision keeps the start exactly-once, as every non-owning segment
-     * skips it.
-     *
-     * @param baseWorkflowId base id of the workflow instance about to start.
-     * @param segment        the segment the event is processed under, or {@code null} when processed outside a
-     *                       segmented processor.
-     * @return {@code true} when this segment owns the instance to start (or no segment is present).
-     */
-    public static boolean shouldStartNewInstance(@Nonnull String baseWorkflowId, @Nullable Segment segment) {
-        if (segment != null && !SegmentedWorkflowRouting.ownedBy(segment, baseWorkflowId)) {
-            logger.debug("Not starting workflow '{}': the instance is owned by another segment than {}.",
-                         baseWorkflowId, segment);
-            return false;
-        }
-        return true;
     }
 
     /**

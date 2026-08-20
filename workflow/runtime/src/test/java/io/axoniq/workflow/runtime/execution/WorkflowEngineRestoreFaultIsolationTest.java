@@ -150,8 +150,8 @@ class WorkflowEngineRestoreFaultIsolationTest {
                 .as("'%s' has no registered definition below or at its version", RETIRED_WORKFLOW).isEmpty();
         assertThat(configurationRegistry.findClosestHigherRegisteredVersion(RETIRED_WORKFLOW, "1.0.0"))
                 .as("'%s' has no registered definition above its version either", RETIRED_WORKFLOW).isEmpty();
-        assertThat(SegmentedWorkflowRouting.ownedBy(ONLY_SEGMENT, HEALTHY_ID)
-                           && SegmentedWorkflowRouting.ownedBy(ONLY_SEGMENT, UNRESOLVABLE_ID))
+        assertThat(WorkflowSegmentOwnership.ownedBy(ONLY_SEGMENT, HEALTHY_ID)
+                           && WorkflowSegmentOwnership.ownedBy(ONLY_SEGMENT, UNRESOLVABLE_ID))
                 .as("both instances must be restored by the same segment claim for this oracle to mean anything")
                 .isTrue();
 

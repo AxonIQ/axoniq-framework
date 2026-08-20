@@ -106,7 +106,7 @@ class WorkflowEngineClaimDuringReplayTest {
         var owner = owningSegment(RESIDENT_ID);
 
         // --- precondition evidence -------------------------------------------------------------------------------
-        assertThat(SegmentedWorkflowRouting.ownedBy(owner, RESIDENT_ID))
+        assertThat(WorkflowSegmentOwnership.ownedBy(owner, RESIDENT_ID))
                 .as("segment %s must own '%s'", owner, RESIDENT_ID).isTrue();
         assertThat(token(SEGMENT_POSITION_BEFORE_RELEASE).covers(token(STARTUP_LATEST_POSITION)))
                 .as("the segment at %s must NOT have reached the startup latest token %s",

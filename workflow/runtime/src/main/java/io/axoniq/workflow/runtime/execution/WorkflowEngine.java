@@ -27,6 +27,7 @@ import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.sequencing.SequencingPolicy;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
@@ -144,7 +145,9 @@ public class WorkflowEngine implements
         if (MetadataUtils.hasWorkflowId().test(event.metadata())) {
             var workflowId = MetadataUtils.getWorkflowId(event.metadata());
             // Instance partitioning: a segment only processes instances it owns.
-            if (!segmentedRouting.shouldHandle(workflowId, segment)) {
+            if (!WorkflowSegmentOwnership.ownedBy(segment, workflowId)) {
+                logger.debug("Ignoring event [{}] for workflowId [{}] - instance is owned by another segment than {}.",
+                             event.type(), workflowId, segment);
                 checkpointingSupport.requestCheckpoint(segment, currentToken);
                 replaySupport.validateIfReplayFinished(currentToken, context);
                 return MessageStream.empty();
@@ -205,7 +208,9 @@ public class WorkflowEngine implements
             if (!NewWorkflowInstanceRouting.hasDerivedWorkflowId(baseWorkflowId, workflowConfiguration, eventMessage)) {
                 return;
             }
-            if (!NewWorkflowInstanceRouting.shouldStartNewInstance(baseWorkflowId, segment)) {
+            if (!WorkflowSegmentOwnership.ownedBy(segment, baseWorkflowId)) {
+                logger.debug("Not starting workflow '{}': the instance is owned by another segment than {}.",
+                             baseWorkflowId, segment);
                 return;
             }
             var workflowId = NewWorkflowInstanceRouting.resolveWorkflowIdForNewInstance(
@@ -389,7 +394,7 @@ public class WorkflowEngine implements
     }
 
     private Predicate<WorkflowExecution> ownedBy(@Nullable Segment segment) {
-        return execution -> segmentedRouting.shouldHandle(execution.workflowId(), segment);
+        return execution -> WorkflowSegmentOwnership.ownedBy(segment, execution.workflowId());
     }
 
     private CompletableFuture<Void> loadRunningWorkflows(@Nonnull Segment segment,
@@ -401,7 +406,7 @@ public class WorkflowEngine implements
                             .thenCompose(runningWorkflows -> {
                                 var ownedIds = runningWorkflows.workflowIds()
                                                                .stream()
-                                                               .filter(id -> segmentedRouting.shouldHandle(id, segment))
+                                                               .filter(id -> WorkflowSegmentOwnership.ownedBy(segment, id))
                                                                .toList();
                                 if (ownedIds.isEmpty()) {
                                     logger.debug("No running workflows to rehydrate for segment {}.",
@@ -555,17 +560,17 @@ public class WorkflowEngine implements
     private Stream<String> unsafeWorkflowIdsOf(@Nonnull Segment segment) {
         return checkpointWorkIndex.unsafeWorkflowIds()
                                   .stream()
-                                  .filter(workflowId -> segmentedRouting.shouldHandle(workflowId, segment));
+                                  .filter(workflowId -> WorkflowSegmentOwnership.ownedBy(segment, workflowId));
     }
 
     /**
-     * Returns the segment routing derived from this engine's workflow definitions, applied by the event handling
-     * component's sequencing and by this engine's handling and start decisions.
+     * Returns the sequencing policy derived from this engine's workflow definitions, which delivers each event to the
+     * segment owning the workflow instance it affects.
      *
-     * @return the segment routing of this engine.
+     * @return the sequencing policy of this engine.
      */
     @Nonnull
-    public SegmentedWorkflowRouting segmentedRouting() {
+    public SequencingPolicy<EventMessage> segmentedRouting() {
         return segmentedRouting;
     }
 }

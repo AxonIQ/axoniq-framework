@@ -147,9 +147,9 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(SEGMENT_COUNT).as("this oracle is meaningless with a single segment").isGreaterThan(1);
         assertThat(slow.getSegmentId()).as("the two segments must differ").isNotEqualTo(fast.getSegmentId());
-        assertThat(SegmentedWorkflowRouting.ownedBy(fast, STRAGGLER_ID)).isTrue();
-        assertThat(SegmentedWorkflowRouting.ownedBy(slow, STRAGGLER_ID)).isFalse();
-        assertThat(SegmentedWorkflowRouting.ownedBy(slow, lostId))
+        assertThat(WorkflowSegmentOwnership.ownedBy(fast, STRAGGLER_ID)).isTrue();
+        assertThat(WorkflowSegmentOwnership.ownedBy(slow, STRAGGLER_ID)).isFalse();
+        assertThat(WorkflowSegmentOwnership.ownedBy(slow, lostId))
                 .as("the event at position %s must be owned by the slow segment", SLOW_SEGMENT_UNHANDLED_POSITION)
                 .isTrue();
 
@@ -419,7 +419,7 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         return IntStream.range(1, 512)
                         .mapToObj(i -> "sharded-" + i)
                         .filter(candidate -> !candidate.equals(otherThan))
-                        .filter(candidate -> SegmentedWorkflowRouting.ownedBy(segment, candidate))
+                        .filter(candidate -> WorkflowSegmentOwnership.ownedBy(segment, candidate))
                         .findFirst()
                         .orElseThrow();
     }

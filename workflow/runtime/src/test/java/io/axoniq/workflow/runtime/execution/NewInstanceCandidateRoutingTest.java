@@ -315,7 +315,7 @@ class NewInstanceCandidateRoutingTest {
     void theOwnershipGuardRejectsAMissingWorkflowIdWithADiagnosticInsteadOfANullDereference() {
         String missingId = null;
 
-        assertThatThrownBy(() -> NewWorkflowInstanceRouting.shouldStartNewInstance(missingId, SEGMENTS.getFirst()))
+        assertThatThrownBy(() -> WorkflowSegmentOwnership.ownedBy(SEGMENTS.getFirst(), missingId))
                 .as("""
                     Defence in depth behind the start path's own rejection: no caller should reach the guard without \
                     an id, and one that does must be told what is wrong rather than dereference nothing while \
@@ -323,7 +323,7 @@ class NewInstanceCandidateRoutingTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("without a workflow id")
                 .hasMessageContaining("idProperty");
-        assertThatCode(() -> NewWorkflowInstanceRouting.shouldStartNewInstance(missingId, null))
+        assertThatCode(() -> WorkflowSegmentOwnership.ownedBy(null, missingId))
                 .as("unsegmented there is no ownership to decide, so the guard still short-circuits; the stall this "
                             + "protects against is segment-specific")
                 .doesNotThrowAnyException();
@@ -601,7 +601,7 @@ class NewInstanceCandidateRoutingTest {
 
     private static Segment owningSegment(String workflowId) {
         return SEGMENTS.stream()
-                       .filter(segment -> SegmentedWorkflowRouting.ownedBy(segment, workflowId))
+                       .filter(segment -> WorkflowSegmentOwnership.ownedBy(segment, workflowId))
                        .findFirst()
                        .orElseThrow();
     }

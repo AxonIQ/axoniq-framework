@@ -113,7 +113,7 @@ class WorkflowEngineSegmentLiveModeScopeTest {
         // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(SEGMENT_COUNT).as("this oracle is meaningless with a single segment").isGreaterThan(1);
         assertThat(caughtUp.getSegmentId()).as("the two segments must differ").isNotEqualTo(lagging.getSegmentId());
-        assertThat(SegmentedWorkflowRouting.ownedBy(lagging, startId))
+        assertThat(WorkflowSegmentOwnership.ownedBy(lagging, startId))
                 .as("the start '%s' must be owned by the lagging segment %s", startId, lagging).isTrue();
         assertThat(token(LAGGING_SEGMENT_POSITION).covers(token(STARTUP_LATEST_POSITION)))
                 .as("the lagging segment at %s must NOT have reached the startup latest token %s",
@@ -189,8 +189,8 @@ class WorkflowEngineSegmentLiveModeScopeTest {
 
         // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(caughtUp.getSegmentId()).as("the two segments must differ").isNotEqualTo(lagging.getSegmentId());
-        assertThat(SegmentedWorkflowRouting.ownedBy(lagging, laggingId)).isTrue();
-        assertThat(SegmentedWorkflowRouting.ownedBy(caughtUp, caughtUpId)).isTrue();
+        assertThat(WorkflowSegmentOwnership.ownedBy(lagging, laggingId)).isTrue();
+        assertThat(WorkflowSegmentOwnership.ownedBy(caughtUp, caughtUpId)).isTrue();
 
         replaySupport.setInitialEngineTokens(token(0), token(STARTUP_LATEST_POSITION));
 

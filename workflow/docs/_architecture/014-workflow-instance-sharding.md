@@ -22,14 +22,14 @@ A workflow instance belongs to exactly one segment, decided by its identifier.
 
 ### Ownership
 
-`SegmentedWorkflowRouting` is the single home of the rule: a segment owns the instances whose segment key it matches.
+`WorkflowSegmentOwnership` is the single home of the rule: a segment owns the instances whose segment key it matches.
 The segment key of a workflow id is the part before the first `#`, so the cross-version disambiguated form
 `base#version` shares the segment of its base id and every version of one logical workflow lands together.
 `String.hashCode()` is specified by the JLS, so the mapping is stable across JVMs and restarts.
 
 ### Routing
 
-The same object is the processor's `SequencingPolicy`:
+`SegmentedWorkflowRouting` applies that rule as the processor's `SequencingPolicy`:
 
 - events carrying `workflowId` metadata are sequenced by that id's segment key
 - a business event with exactly one start candidate is sequenced by the candidate id, so a new instance is created on
@@ -40,9 +40,8 @@ Broadcast is the only correct routing for an event that may wake an instance res
 before the event reaches a handler, so the payload conversion a start condition or id provider needs is not always
 available; a failed derivation is treated as "no candidate" and broadcasts rather than failing the work package.
 
-Ownership guards turn broadcast delivery back into exactly-once work: `shouldHandle` decides whether a segment may
-handle or wake an instance, `shouldStartNewInstance` decides whether it may create one. Every non-owning segment makes the
-delivery a no-op.
+Ownership guards turn broadcast delivery back into exactly-once work: the engine checks `ownedBy` before handling,
+waking or starting an instance, so every non-owning segment makes the delivery a no-op.
 
 ```
 event arrives
