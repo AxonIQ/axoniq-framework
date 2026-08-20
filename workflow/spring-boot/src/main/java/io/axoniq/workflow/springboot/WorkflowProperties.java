@@ -18,10 +18,8 @@
  */
 package io.axoniq.workflow.springboot;
 
-import io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
+import jakarta.annotation.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-
-import static io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer.DEFAULT_INITIAL_SEGMENT_COUNT;
 
 /**
  * The workflow properties exposed to Spring Boot applications under the {@code axoniq.workflow} prefix.
@@ -36,17 +34,18 @@ public class WorkflowProperties {
      * The number of segments to initialize the workflow event processor with. Workflow instances are partitioned over
      * segments by workflow id, so this decides how far the instances of one application can spread over its nodes.
      * <p>
-     * Defaults to {@link WorkflowEventProcessingRegistrationEnhancer#DEFAULT_INITIAL_SEGMENT_COUNT}. Only the initial
-     * count is set here: once the processor has stored its tokens, the segment count changes through splitting and
-     * merging them.
+     * Unset by default, leaving the count to the event processing configuration. Only the initial count is set here:
+     * once the processor has stored its tokens, the segment count changes through splitting and merging them.
      */
-    private int initialSegmentCount = DEFAULT_INITIAL_SEGMENT_COUNT;
+    @Nullable
+    private Integer initialSegmentCount;
 
-    public int getInitialSegmentCount() {
+    @Nullable
+    public Integer getInitialSegmentCount() {
         return initialSegmentCount;
     }
 
-    public void setInitialSegmentCount(int initialSegmentCount) {
+    public void setInitialSegmentCount(@Nullable Integer initialSegmentCount) {
         this.initialSegmentCount = initialSegmentCount;
     }
 }

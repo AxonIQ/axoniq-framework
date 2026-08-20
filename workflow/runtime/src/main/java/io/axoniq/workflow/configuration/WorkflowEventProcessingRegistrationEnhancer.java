@@ -76,30 +76,19 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
      */
     public static final String DEFAULT_MODULE_NAME = "Workflow";
 
-    /**
-     * Default number of segments the workflow event processor is initialized with.
-     * <p>
-     * Multiple segments are safe since workflow instances are partitioned over segments by workflow id:
-     * engine events and unique start candidates are sequenced to the owning segment, and correlated business events
-     * are sequenced by {@code SequencingPolicy#BROADCAST}, delivering them to every segment. Four balances
-     * instance-level parallelism against the per-segment broadcast delivery cost; override via
-     * {@link #WorkflowEventProcessingRegistrationEnhancer(String, String, String, boolean, int)} or the
-     * {@code axoniq.workflow.initial-segment-count} Spring property.
-     */
-    public static final int DEFAULT_INITIAL_SEGMENT_COUNT = 4;
-
     private final String moduleName;
     @Nullable
     private final String engineComponentName;
     @Nullable
     private final String projectorComponentName;
     private final boolean registerHistoryProjector;
-    private final int initialSegmentCount;
+    @Nullable
+    private final Integer initialSegmentCount;
 
     /**
-     * Creates a workflow event processing registration enhancer with the
-     * {@link #DEFAULT_INITIAL_SEGMENT_COUNT default segment count}, responsible for registering the workflow engine
-     * and history projector components to the event processing module.
+     * Creates a workflow event processing registration enhancer leaving the segment count to the event processing
+     * configuration, responsible for registering the workflow engine and history projector components to the event
+     * processing module.
      *
      * @param moduleName               name of the event processing module
      * @param engineComponentName      name of the workflow engine component
@@ -112,8 +101,7 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
             @Nullable String projectorComponentName,
             boolean registerHistoryProjector
     ) {
-        this(moduleName, engineComponentName, projectorComponentName, registerHistoryProjector,
-             DEFAULT_INITIAL_SEGMENT_COUNT);
+        this(moduleName, engineComponentName, projectorComponentName, registerHistoryProjector, null);
     }
 
     /**
@@ -124,15 +112,16 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
      * @param engineComponentName      name of the workflow engine component
      * @param projectorComponentName   name of the workflow history projector component
      * @param registerHistoryProjector flag indicating whether to register the history projector component
-     * @param initialSegmentCount      number of segments to initialize the event processor with; workflow instances
-     *                                 are partitioned over segments by workflow id
+     * @param initialSegmentCount      number of segments to initialize the event processor with, or {@code null} to
+     *                                 leave it to the event processing configuration. Workflow instances are
+     *                                 partitioned over segments by workflow id
      */
     public WorkflowEventProcessingRegistrationEnhancer(
             String moduleName,
             @Nullable String engineComponentName,
             @Nullable String projectorComponentName,
             boolean registerHistoryProjector,
-            int initialSegmentCount
+            @Nullable Integer initialSegmentCount
     ) {
         this.moduleName = moduleName;
         this.engineComponentName = engineComponentName;
@@ -162,31 +151,56 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     }
 
     /**
-     * Configures the workflow event processor: it streams any event, partitioned over
-     * {@link #initialSegmentCount} segments, with workflow instances distributed over segments by their workflow id.
+     * Configures the workflow event processor: it streams any event, partitioned over segments, with workflow
+     * instances distributed over segments by their workflow id.
      * <p>
-     * The processor uses the {@link TokenStore} registered as a component when present - a durable store makes
-     * segment claims visible across nodes, the precondition for multi-node sharding. Without one, an
+     * Everything set here is either the wiring the engine needs or the segment count. The segment change listener
+     * moves instances with their segment, and the event source, token store and unit of work factory are resolved from
+     * the components of this application. Every other processor setting is left to the standard event processing
+     * configuration.
+     * <p>
+     * The criteria narrow to the registered start events, and admit any event when the engine reports none. That empty
+     * case is the reason they are set at all: a processor narrowed to an empty set of types matches no event, while an
+     * engine that reports no start events still has to receive the events its running instances wait for.
+     * <p>
+     * The processor claims its segments in the unnamed {@link TokenStore} component of the application, as a durable
+     * store makes those claims visible across nodes, the precondition for multi-node sharding. Without one, an
      * {@link InMemoryTokenStore} is used and claims stay process-local (single-node operation).
+     * <p>
+     * Note that a batch size above 1 is not supported yet, see
+     * <a href="https://github.com/AxonIQ/AxonFramework/issues/4323">AxonFramework#4323</a>.
      */
     private BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
             PooledStreamingEventProcessorConfiguration> processorCustomization() {
-        return (cfg, processorConfiguration) -> processorConfiguration
+        return (cfg, processorConfiguration) -> withSegmentCount(processorConfiguration)
                 .eventCriteria(set -> set.isEmpty()
                         ? EventCriteria.havingAnyTag()
                         : EventCriteria.havingAnyTag().andBeingOneOfTypes(set))
                 .eventSource(cfg.getComponent(StreamableEventSource.class))
                 .tokenStore(cfg.getOptionalComponent(TokenStore.class).orElseGet(() -> {
-                    logger.warn("No TokenStore component configured for the workflow event processor - falling "
-                                        + "back to an in-memory token store. Segment claims are process-local: "
-                                        + "multi-node sharding and failover require a durable TokenStore.");
+                    logger.warn("No unnamed TokenStore component is configured, so the workflow event processor of "
+                                        + "module {} falls back to an in-memory token store. Segment claims are then "
+                                        + "process-local: multi-node sharding and failover require a durable "
+                                        + "TokenStore registered as an unnamed component.", moduleName);
                     return new InMemoryTokenStore();
                 }))
                 .unitOfWorkFactory(cfg.getComponent(UnitOfWorkFactory.class))
-                .initialSegmentCount(initialSegmentCount)
-                // FIXME -> should be configurable? currently only 1 is supported / working blocked by https://github.com/AxonIQ/AxonFramework/issues/4323
-                .batchSize(1)
                 .addSegmentChangeListener(segmentChangeListener(cfg));
+    }
+
+    /**
+     * Applies the configured segment count, and leaves the incoming configuration untouched when none was configured.
+     * <p>
+     * Only an explicitly configured count is applied. Without one the processor keeps the count it already carries,
+     * which is the default of the event processing configuration or whatever a customization of this application set,
+     * so this module does not hold a competing default of its own.
+     */
+    private PooledStreamingEventProcessorConfiguration withSegmentCount(
+            PooledStreamingEventProcessorConfiguration processorConfiguration
+    ) {
+        return initialSegmentCount == null
+                ? processorConfiguration
+                : processorConfiguration.initialSegmentCount(initialSegmentCount);
     }
 
     private SegmentChangeListener segmentChangeListener(Configuration cfg) {
@@ -276,7 +290,9 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
         StreamableEventSource eventSource = config.getComponent(StreamableEventSource.class);
         WorkflowEngineReplaySupport replaySupport = config.getComponent(WorkflowEngineReplaySupport.class);
         WorkflowEngine workflowEngine = workflowEngine(config);
-        return ensureSegmentsInitialized(tokenStore, eventSource).thenCompose(
+        int segmentCount = config.getComponent(PooledStreamingEventProcessorConfiguration.class)
+                                 .initialSegmentCount();
+        return ensureSegmentsInitialized(tokenStore, eventSource, segmentCount).thenCompose(
                 processorToken -> eventSource.latestToken(null).thenCompose(latestToken -> initializeWorkflowEngine(
                         workflowEngine,
                         replaySupport,
@@ -286,14 +302,24 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
         );
     }
 
+    /**
+     * Creates this processor's segment layout when its token store is still empty, and reads the position it resumes
+     * from either way.
+     *
+     * @param tokenStore   the token store this processor claims its segments in
+     * @param eventSource  the source the segments are initialized at the first token of
+     * @param segmentCount the segment count of the event processing configuration, the single place the count is
+     *                     decided
+     */
     CompletableFuture<TrackingToken> ensureSegmentsInitialized(
             TokenStore tokenStore,
-            StreamableEventSource eventSource
+            StreamableEventSource eventSource,
+            int segmentCount
     ) {
         return tokenStore.fetchSegments(moduleName, null)
                          .thenCompose(segments -> segments.isEmpty()
-                                 ? initializeSegments(tokenStore, eventSource)
-                                 : adoptExistingSegments(tokenStore, segments));
+                                 ? initializeSegments(tokenStore, eventSource, segmentCount)
+                                 : adoptExistingSegments(tokenStore, segments, segmentCount));
     }
 
     /**
@@ -306,13 +332,15 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
      * the count a node runs and the count it was configured with diverge invisibly, so a half-finished rolling deploy,
      * a value edited after the first start and a typo all look exactly like a working cluster.
      */
-    private CompletableFuture<TrackingToken> adoptExistingSegments(TokenStore tokenStore, List<Segment> segments) {
-        if (segments.size() != initialSegmentCount) {
+    private CompletableFuture<TrackingToken> adoptExistingSegments(TokenStore tokenStore,
+                                                                   List<Segment> segments,
+                                                                   int segmentCount) {
+        if (segments.size() != segmentCount) {
             logger.warn("Processor {} is configured for {} segment(s) but its token store already holds {}; running "
                                 + "with {}. The configured count only applies to an empty token store - the layout is"
                                 + " created once by the node that starts first and adopted by every node after it. To"
                                 + " change it, stop every node and delete the processor's tokens.",
-                        moduleName, initialSegmentCount, segments.size(), segments.size());
+                        moduleName, segmentCount, segments.size(), segments.size());
         }
         return earliestSegmentToken(tokenStore, segments);
     }
@@ -323,11 +351,12 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
      * The losers read back the segments the winner created instead of failing to start.
      */
     private CompletableFuture<TrackingToken> initializeSegments(TokenStore tokenStore,
-                                                                StreamableEventSource eventSource) {
+                                                                StreamableEventSource eventSource,
+                                                                int segmentCount) {
         return eventSource
                 .firstToken(null)
                 .thenCompose(firstToken -> tokenStore
-                        .initializeTokenSegments(moduleName, initialSegmentCount, firstToken, null)
+                        .initializeTokenSegments(moduleName, segmentCount, firstToken, null)
                         .thenApply(ignored -> firstToken)
                         .exceptionallyCompose(ex -> tokenStore
                                 .fetchSegments(moduleName, null)
@@ -365,12 +394,19 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     }
 
     /**
-     * Returns the name of the token store component for the given module used for workflow event processing.
+     * Returns the name under which a
+     * {@link org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorModule}
+     * publishes the {@link TokenStore} its processor ended up with, so the start handler reads back the very store the
+     * processor claims its segments in.
+     * <p>
+     * This names an output of the processor configuration, not an input. An application supplies its token store as an
+     * unnamed {@link TokenStore} component, which {@link #processorCustomization()} resolves; registering one under
+     * this name instead collides with the component the module already publishes.
      *
      * @param moduleName module name
      * @return name of the token store component
      */
-    public static String tokenStoreName(String moduleName) {
+    private static String tokenStoreName(String moduleName) {
         return "TokenStore[" + moduleName + "]";
     }
 }

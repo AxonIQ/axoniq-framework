@@ -50,17 +50,19 @@ event arrives
   -> exactly one definition would start from it?
        yes -> sequence by the candidate id      -> owning segment only
   -> otherwise
-       BROADCAST -> delivered to all 4 segments
+       BROADCAST -> delivered to every segment
                  -> each segment applies its ownership guard
                  -> only the owner acts, the rest no-op
 ```
 
 ### Segment count and claims
 
-The processor is initialized with a configurable segment count, defaulting to four, settable through the enhancer
-constructor or the `axoniq.workflow.initial-segment-count` property. It uses the `TokenStore` component registered by
-the application; without one it falls back to an in-memory store and logs a warning, because process-local claims mean
-single-node operation.
+The segment count is decided by the event processing configuration, so it defaults to the pooled streaming
+processor's own default. Setting the enhancer constructor argument or the `axoniq.workflow.initial-segment-count`
+property forwards a value into that configuration; leaving both unset keeps whatever it already holds. Every other
+processor setting is left to the standard event processing configuration too. The processor claims its segments in the
+unnamed `TokenStore` component registered by the application; without one it falls back to an in-memory store and logs
+a warning, because process-local claims mean single-node operation.
 
 Because segments start from independent tokens, the replay decision uses the earliest token across all of them: the
 segment furthest behind determines whether catch-up is still required.

@@ -347,11 +347,7 @@ class WorkflowReplayPreparedStateTest {
             configurer.componentRegistry(cr -> cr
                     .registerComponent(EventStorageEngine.class, cfg -> eventStorageEngine)
                     .registerComponent(MutableWorkflowHistoryRepository.class, cfg -> historyRepository)
-                    .registerComponent(TokenStore.class,
-                                       WorkflowEventProcessingRegistrationEnhancer.tokenStoreName(
-                                               WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME
-                                       ),
-                                       cfg -> processingTokenStore)
+                    .registerComponent(TokenStore.class, cfg -> processingTokenStore)
                     .registerModule(
                             WorkflowModule.defaults("replay-prepared-state", SimpleWorkflowContext.class)
                                           .workflowContextFactory(c -> new SimpleWorkflowContextFactory())

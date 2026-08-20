@@ -23,7 +23,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 
-import static io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer.DEFAULT_INITIAL_SEGMENT_COUNT;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -43,9 +42,12 @@ class WorkflowPropertiesTest {
     }
 
     @Test
-    void initialSegmentCountDefaultsToTheEnhancerDefault() {
+    void initialSegmentCountIsUnsetUnlessTheApplicationConfiguresIt() {
         contextRunner.run(context -> assertThat(context.getBean(WorkflowProperties.class).getInitialSegmentCount())
-                .isEqualTo(DEFAULT_INITIAL_SEGMENT_COUNT));
+                .as("""
+                    An unset property must stay unset, so the event processing configuration keeps deciding the \
+                    segment count. Defaulting it here would silently override whatever that configuration holds.""")
+                .isNull());
     }
 
     @Configuration
