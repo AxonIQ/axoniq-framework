@@ -56,7 +56,6 @@ class PostgresqlSchemaInitializerTest {
         config.setJdbcUrl(postgresContainer.getJdbcUrl());
         config.setUsername(postgresContainer.getUsername());
         config.setPassword(postgresContainer.getPassword());
-        config.setAutoCommit(false);
 
         dataSource = new HikariDataSource(config);
     }
@@ -78,6 +77,8 @@ class PostgresqlSchemaInitializerTest {
             Connection connection = dataSource.getConnection();
             Statement statement = connection.createStatement()
         ) {
+            connection.setAutoCommit(false);
+
             statement.execute(
                 """
                 DROP TRIGGER IF EXISTS axon_events_write_type_tag ON events;
@@ -143,7 +144,10 @@ class PostgresqlSchemaInitializerTest {
             Connection connection = dataSource.getConnection();
             Statement statement = connection.createStatement()
         ) {
+            connection.setAutoCommit(false);
+
             statement.execute("ALTER TABLE events DROP COLUMN type_version");
+
             connection.commit();
         }
     }
@@ -155,6 +159,8 @@ class PostgresqlSchemaInitializerTest {
                 "INSERT INTO events (global_index, timestamp, metadata, identifier, type, type_version) VALUES (?, now(), '{}', ?, ?, ?)"
             )
         ) {
+            connection.setAutoCommit(false);
+
             ps.setLong(1, globalIndex);
             ps.setString(2, "identifier-" + globalIndex);
             ps.setString(3, type);
@@ -177,6 +183,8 @@ class PostgresqlSchemaInitializerTest {
                 "INSERT INTO events (global_index, timestamp, metadata, identifier, type) VALUES (?, now(), '{}', ?, ?)"
             )
         ) {
+            connection.setAutoCommit(false);
+
             ps.setLong(1, globalIndex);
             ps.setString(2, "identifier-" + globalIndex);
             ps.setString(3, combinedType);
