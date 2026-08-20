@@ -20,7 +20,9 @@
 package io.axoniq.workflow.runtime.util;
 
 import org.axonframework.messaging.core.Context;
+import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.junit.jupiter.api.*;
@@ -93,6 +95,40 @@ class ProcessingContextUtilsTest {
         ProcessingContext result = ProcessingContextUtils.copyResources(parentContext, childContext);
         assertThat(result).isEqualTo(childContext);
         verify(childContext).putResourceIfAbsent(any(), eq("testValue"));
+    }
+
+    @Test
+    void testCopyResourcesKeepsTheResourceTheTargetAlreadyHolds() {
+        var key = Context.ResourceKey.<String>withLabel("connection");
+        var from = Context.with(key, "parentConnection");
+
+        new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE)
+                .create()
+                .executeWithResult(target -> {
+                    target.putResource(key, "targetConnection");
+
+                    ProcessingContextUtils.copyResources(from, target);
+
+                    assertThat(target.<String>getResource(key)).isEqualTo("targetConnection");
+                    return CompletableFuture.completedFuture(null);
+                })
+                .join();
+    }
+
+    @Test
+    void testCopyResourcesAddsTheResourcesTheTargetLacks() {
+        var key = Context.ResourceKey.<String>withLabel("connection");
+        var from = Context.with(key, "parentConnection");
+
+        new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE)
+                .create()
+                .executeWithResult(target -> {
+                    ProcessingContextUtils.copyResources(from, target);
+
+                    assertThat(target.<String>getResource(key)).isEqualTo("parentConnection");
+                    return CompletableFuture.completedFuture(null);
+                })
+                .join();
     }
 
     @Test

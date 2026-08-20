@@ -35,6 +35,8 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.eventsourcing.eventstore.EventStoreTransaction;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -155,9 +157,7 @@ class SimpleWorkflowExecutionTest {
     @Test
     void futureResolutionTimeoutStopsAndCleansUpRuntimeWithoutTerminatingWorkflow() throws Exception {
         var timeout = new FutureResolutionTimeoutException(new TimeoutException("publication timed out"));
-        var eventSink = mock(EventSink.class);
-        when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
-                .thenReturn(CompletableFuture.failedFuture(timeout));
+        var eventSink = failedPublicationSink(timeout);
         var execution = execution(eventSink, new DirectExecutorService());
         var terminationHandlerCalled = new CountDownLatch(1);
         var checkpointLatchReleased = new CountDownLatch(1);
@@ -262,7 +262,7 @@ class SimpleWorkflowExecutionTest {
     }
 
     private SimpleWorkflowExecution execution() {
-        return execution(new NoOpEventSink());
+        return execution(eventStore());
     }
 
     private SimpleWorkflowExecution execution(EventSink eventSink) {
@@ -299,15 +299,27 @@ class SimpleWorkflowExecutionTest {
         );
     }
 
-    private static EventSink failedPublicationSink(FutureResolutionTimeoutException timeout) {
+    private static EventStore failedPublicationSink(FutureResolutionTimeoutException timeout) {
         return failedPublicationSink((Throwable) timeout);
     }
 
-    private static EventSink failedPublicationSink(Throwable failure) {
-        var eventSink = mock(EventSink.class);
-        when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
+    private static EventStore failedPublicationSink(Throwable failure) {
+        var eventStore = eventStore();
+        when(eventStore.publish(any(ProcessingContext.class), any(EventMessage.class)))
                 .thenReturn(CompletableFuture.failedFuture(failure));
-        return eventSink;
+        return eventStore;
+    }
+
+    /**
+     * Returns an event store that accepts every append. Workflow events append under a condition, which only an event
+     * store transaction carries, so a plain event sink is refused before a single event is published.
+     */
+    private static EventStore eventStore() {
+        var eventStore = mock(EventStore.class);
+        when(eventStore.transaction(any(ProcessingContext.class))).thenReturn(mock(EventStoreTransaction.class));
+        when(eventStore.publish(any(ProcessingContext.class), any(EventMessage.class)))
+                .thenReturn(CompletableFuture.completedFuture(null));
+        return eventStore;
     }
 
     private static void markStarted(SimpleWorkflowExecution execution) {
@@ -403,16 +415,4 @@ class SimpleWorkflowExecutionTest {
         }
     }
 
-    private static final class NoOpEventSink implements EventSink {
-
-        @Override
-        public CompletableFuture<Void> publish(ProcessingContext context, List<? extends EventMessage> events) {
-            return CompletableFuture.completedFuture(null);
-        }
-
-        @Override
-        public void describeTo(ComponentDescriptor descriptor) {
-            // No-op
-        }
-    }
 }

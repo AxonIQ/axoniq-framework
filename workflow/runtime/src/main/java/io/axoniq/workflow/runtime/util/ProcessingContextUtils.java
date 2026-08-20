@@ -124,11 +124,16 @@ public class ProcessingContextUtils {
      * Copies resources from the given context to the target processing context.
      * <p>
      * An {@link EventStoreTransaction} is deliberately left behind. It stays bound to the unit of work that opened it,
-     * so appending through a copy registers the append on <em>that</em> unit of work and fails once it has committed. A
-     * workflow instance restored while a segment is claimed sources its state in the claim's short-lived unit of work
-     * and keeps that context on its steps; without this, every event the instance publishes afterward would be routed
-     * back into the finished claim, leaving it restored but unable to make progress. Skipping the transaction makes
-     * {@code to} open its own.
+     * so appending through a copy registers the append on <em>that</em> unit of work and fails once it has committed.
+     * A workflow instance restored while a segment is claimed sources its state in the claim's short-lived unit of
+     * work and keeps that context on its steps; without this, every event the instance publishes afterwards would be
+     * routed back into the finished claim, leaving it restored but unable to make progress. Skipping the transaction
+     * makes {@code to} open its own.
+     * <p>
+     * A resource {@code to} already holds wins over the one {@code from} carries under the same key. The target opens
+     * its own unit of work, and a transaction manager binds a connection to that one; overwriting it with the source's
+     * connection makes the target write on a connection it never commits, so on PostgreSQL its event stays
+     * uncommitted and the next append conflicts with it.
      *
      * @param from source containing resources.
      * @param to   target processing context.

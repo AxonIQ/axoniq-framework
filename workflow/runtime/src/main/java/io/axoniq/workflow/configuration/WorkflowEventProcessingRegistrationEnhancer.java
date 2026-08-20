@@ -30,7 +30,9 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
+import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.CompletePhase;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.RequiredComponentPhase;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
@@ -281,8 +283,35 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     }
 
     private CompletableFuture<Void> workflowEngineStartHandler(Configuration config) {
+        requireEventStore(config);
         WorkflowEngine workflowEngine = workflowEngine(config);
         return config.getComponent(StreamableEventSource.class).latestToken(null).thenCompose(workflowEngine::start);
+    }
+
+    /**
+     * Rejects a start with an event sink that is no {@link EventStore}.
+     * <p>
+     * Every workflow event is appended under an {@link org.axonframework.eventsourcing.eventstore.AppendCondition},
+     * which is what stops a second node from running an instance this node already runs. A condition can only be
+     * attached to an event store transaction, so a sink without one accepts every append and two writers of one
+     * instance both record their events, duplicating the instance's side effects. Starting is refused instead: the
+     * mistake is a configuration one, and it cannot be observed at runtime.
+     *
+     * @param config the configuration the sink is resolved from
+     * @throws IllegalStateException when the configured event sink is no event store
+     */
+    void requireEventStore(Configuration config) {
+        EventSink eventSink = config.getComponent(EventSink.class);
+        if (!(eventSink instanceof EventStore)) {
+            throw new IllegalStateException(
+                    "The workflow engine of module " + moduleName + " requires an event store, but the configured "
+                            + "event sink is a " + eventSink.getClass().getName() + ". Workflow events append under a "
+                            + "condition that only an event store transaction carries; without it two nodes can run "
+                            + "the same workflow instance and duplicate its side effects. Configure an event store, "
+                            + "such as one backed by Axon Server, PostgreSQL or, for tests, an in-memory storage "
+                            + "engine."
+            );
+        }
     }
 
     @Override

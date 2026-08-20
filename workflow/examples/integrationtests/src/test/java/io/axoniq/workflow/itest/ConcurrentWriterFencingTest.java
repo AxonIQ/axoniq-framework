@@ -75,7 +75,6 @@ import static org.awaitility.Awaitility.await;
  * apart.
  *
  * @author Stefan Dragisic
- * @since 0.3.0
  */
 class ConcurrentWriterFencingTest {
 

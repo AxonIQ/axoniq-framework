@@ -419,7 +419,14 @@ public class WorkflowEngine implements
         // instance sourced here and sits at the head of the stream when the claim started, so it is past all events
         // those instances had written. An event a previous owner writes after that point rejects their next append,
         // which is what should happen.
-        var eventStore = eventStoreOf(sourcingContext);
+        EventStore eventStore;
+        try {
+            eventStore = sourcingContext.component(EventSink.class) instanceof EventStore store ? store : null;
+        } catch (ComponentNotFoundException e) {
+            // A context without an event sink only occurs in tests: a start refuses a sink without an event store.
+            eventStore = null;
+        }
+        var restoredFrom = eventStore;
         return workflowStore.loadRunningWorkflows(sourcingContext)
                             .thenCompose(runningWorkflows -> {
                                 var ownedIds = runningWorkflows.workflowIds()
@@ -442,9 +449,9 @@ public class WorkflowEngine implements
                                                                            workflowId,
                                                                            state,
                                                                            executionContext,
-                                                                           eventStore == null
+                                                                           restoredFrom == null
                                                                                    ? null
-                                                                                   : eventStore
+                                                                                   : restoredFrom
                                                                                    .transaction(sourcingContext)
                                                                                    .appendPosition()
                                                                    ))
@@ -469,19 +476,6 @@ public class WorkflowEngine implements
                                                            .toArray(CompletableFuture[]::new);
                                 return CompletableFuture.allOf(rehydrations);
                             });
-    }
-
-    /**
-     * Returns the event store the given context publishes through, or {@code null} when it has none, in which case
-     * restored executions append without a seeded consistency marker, matching an append path without conditions.
-     */
-    @Nullable
-    private static EventStore eventStoreOf(ProcessingContext context) {
-        try {
-            return context.component(EventSink.class) instanceof EventStore eventStore ? eventStore : null;
-        } catch (ComponentNotFoundException e) {
-            return null;
-        }
     }
 
     private void restoreWorkflow(String workflowId,

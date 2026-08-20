@@ -75,8 +75,9 @@ public class WorkflowAppendConditions {
      * defined in one place. A rejection means another writer recorded events for this instance, which leaves this
      * execution nothing to continue from.
      * <p>
-     * The event is published without a condition when the execution carries no {@link WorkflowAppendCondition} or the
-     * sink is no {@link EventStore}, since a condition can only be attached to an event store transaction.
+     * The event is published without a condition when the execution carries no {@link WorkflowAppendCondition}, which
+     * is the case for a mocked execution. An execution that carries one and a sink that is no {@link EventStore} is a
+     * combination a start already refuses, since a condition can only be attached to an event store transaction.
      *
      * @param eventSink         the sink to publish through
      * @param unitOfWorkFactory the factory creating the unit of work the append runs in
@@ -94,11 +95,20 @@ public class WorkflowAppendConditions {
                                                  EventMessage eventMessage,
                                                  WorkflowExecution workflowExecution) {
         var appendCondition = workflowExecution.appendCondition();
-        if (appendCondition == null || !(eventSink instanceof EventStore eventStore)) {
-            logger.debug("Publishing {} without an append condition, the execution or the event sink carries none",
+        if (appendCondition == null) {
+            logger.debug("Publishing {} without an append condition, the execution carries none",
                          eventMessage.type());
             return publish(eventSink, unitOfWorkFactory, executor, parentContext, eventMessage,
                            workflowExecution.workflowId(), null);
+        }
+        if (!(eventSink instanceof EventStore eventStore)) {
+            // A start refuses a sink without an event store, so this is only reachable by publishing an engine event
+            // outside a started engine. Appending unconditionally would drop the fencing silently.
+            throw new IllegalStateException(
+                    "Cannot append " + eventMessage.type() + " of workflow '" + workflowExecution.workflowId()
+                            + "' under its append condition: the event sink is a " + eventSink.getClass().getName()
+                            + " instead of an event store."
+            );
         }
         var criteria = EventSourcedWorkflowState.criteriaBuilder(workflowExecution.workflowId());
         return appendCondition
