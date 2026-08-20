@@ -19,7 +19,6 @@
 package io.axoniq.workflow.itest;
 
 import io.axoniq.workflow.configuration.WorkflowConfigurer;
-import io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
 import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
@@ -80,7 +79,6 @@ import static org.awaitility.Awaitility.await;
  */
 class ConcurrentWriterFencingTest {
 
-    private static final String MODULE_NAME = WorkflowEventProcessingRegistrationEnhancer.DEFAULT_MODULE_NAME;
     private static final MessageType WORKFLOW_DEFINITION_ID =
             new MessageType(new QualifiedName("FencedWorkflow"), MessageType.DEFAULT_VERSION);
 
@@ -201,9 +199,7 @@ class ConcurrentWriterFencingTest {
                 .registerComponent(EventStorageEngine.class, cfg -> eventStorageEngine)
                 .registerComponent(MutableWorkflowHistoryRepository.class,
                                    cfg -> new InMemoryWorkflowHistoryRepository())
-                .registerComponent(TokenStore.class,
-                                   WorkflowEventProcessingRegistrationEnhancer.tokenStoreName(MODULE_NAME),
-                                   cfg -> new InMemoryTokenStore())
+                .registerComponent(TokenStore.class, cfg -> new InMemoryTokenStore())
                 .registerModule(
                         WorkflowModule.defaults("concurrent-writer-fencing", SimpleWorkflowContext.class)
                                       .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
