@@ -22,6 +22,7 @@ import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
+import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
@@ -415,18 +416,6 @@ public class WorkflowEngine implements
                                                          @Nullable TrackingToken claimedFrom,
                                                          ProcessingContext sourcingContext,
                                                          ProcessingContext executionContext) {
-        // Restored executions condition their appends from this claim's sourcing position. It is shared by every
-        // instance sourced here and sits at the head of the stream when the claim started, so it is past all events
-        // those instances had written. An event a previous owner writes after that point rejects their next append,
-        // which is what should happen.
-        EventStore eventStore;
-        try {
-            eventStore = sourcingContext.component(EventSink.class) instanceof EventStore store ? store : null;
-        } catch (ComponentNotFoundException e) {
-            // A context without an event sink only occurs in tests: a start refuses a sink without an event store.
-            eventStore = null;
-        }
-        var restoredFrom = eventStore;
         return workflowStore.loadRunningWorkflows(sourcingContext)
                             .thenCompose(runningWorkflows -> {
                                 var ownedIds = runningWorkflows.workflowIds()
@@ -443,18 +432,9 @@ public class WorkflowEngine implements
                                 logger.debug("Rehydrating {} running workflow execution(s) of segment {}.",
                                              ownedIds.size(), segment.getSegmentId());
                                 var rehydrations = ownedIds.stream()
-                                                           .map(workflowId -> workflowStore
-                                                                   .loadWorkflow(workflowId, sourcingContext)
-                                                                   .thenAccept(state -> restoreWorkflow(
-                                                                           workflowId,
-                                                                           state,
-                                                                           executionContext,
-                                                                           restoredFrom == null
-                                                                                   ? null
-                                                                                   : restoredFrom
-                                                                                   .transaction(sourcingContext)
-                                                                                   .appendPosition()
-                                                                   ))
+                                                           .map(workflowId -> restoreWorkflow(workflowId,
+                                                                                              sourcingContext,
+                                                                                              executionContext)
                                                                    // Per instance, so one unrestorable workflow cannot
                                                                    // abort the whole restore pass. Aborting it would
                                                                    // fail the segment claim callback, which the
@@ -476,6 +456,56 @@ public class WorkflowEngine implements
                                                            .toArray(CompletableFuture[]::new);
                                 return CompletableFuture.allOf(rehydrations);
                             });
+    }
+
+    /**
+     * Sources one instance in a unit of work of its own and restores it at the position that read ended at.
+     * <p>
+     * The position has to be the instance's own: a transaction shared by every instance of the claim ends at the
+     * lowest of its reads, and a previous owner appending while the claim is still reading leaves that position before
+     * an event the claim itself sourced. The restored execution would then be rejected by its own history and stop,
+     * even though its state is current. Reading one instance per transaction leaves each position at or after that
+     * instance's last event, so only a write that lands after this read rejects the execution, which is a foreign
+     * writer and exactly what should stop it.
+     *
+     * @param workflowId       id of the instance to restore
+     * @param executionContext the context the restored execution runs on
+     * @return a future completing once the instance is restored
+     */
+    private CompletableFuture<Void> restoreWorkflow(String workflowId,
+                                                    ProcessingContext claimContext,
+                                                    ProcessingContext executionContext) {
+        return unitOfWorkFactory
+                .create("restore-" + workflowId)
+                .executeWithResult(sourcingContext -> {
+                    // Everything the claim reads with, except its event store transaction: that is what makes this
+                    // read, and the position it ends at, this instance's own.
+                    ProcessingContextUtils.copyResources(claimContext, sourcingContext);
+                    return workflowStore
+                            .loadWorkflow(workflowId, sourcingContext)
+                            .thenAccept(state -> restoreWorkflow(workflowId,
+                                                                 state,
+                                                                 executionContext,
+                                                                 sourcedAt(sourcingContext)));
+                })
+                .thenApply(ignored -> null);
+    }
+
+    /**
+     * Returns the position the given context's sourcing ended at, or {@code null} when it publishes through no event
+     * store, in which case the restored execution appends without a seeded position, matching an append path without
+     * conditions.
+     */
+    @Nullable
+    private static ConsistencyMarker sourcedAt(ProcessingContext sourcingContext) {
+        try {
+            return sourcingContext.component(EventSink.class) instanceof EventStore eventStore
+                    ? eventStore.transaction(sourcingContext).appendPosition()
+                    : null;
+        } catch (ComponentNotFoundException e) {
+            // A context without an event sink only occurs in tests: a start refuses a sink without an event store.
+            return null;
+        }
     }
 
     private void restoreWorkflow(String workflowId,

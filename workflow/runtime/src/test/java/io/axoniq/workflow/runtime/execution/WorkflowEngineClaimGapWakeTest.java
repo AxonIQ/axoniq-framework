@@ -33,6 +33,9 @@ import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.common.configuration.ComponentNotFoundException;
+import org.axonframework.messaging.core.ApplicationContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -97,7 +100,7 @@ class WorkflowEngineClaimGapWakeTest {
                 new InMemoryWorkflowExecutionRepository(),
                 mock(WorkflowCancellationService.class),
                 workflowStore,
-                mock(UnitOfWorkFactory.class)
+                restoreUnitOfWorkFactory()
         );
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
         workflowEngine.setCheckpointingSupport(checkpointingSupport);
@@ -218,7 +221,7 @@ class WorkflowEngineClaimGapWakeTest {
     private static ProcessingContext bodyContext() {
         var context = mock(ProcessingContext.class);
         when(context.resources()).thenReturn(Map.of());
-        when(context.component(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
+        when(context.component(UnitOfWorkFactory.class)).thenReturn(restoreUnitOfWorkFactory());
         when(context.component(Clock.class)).thenReturn(Clock.systemUTC());
         when(context.component(ExecutorService.class, WORKFLOW_ENGINE_EXECUTOR))
                 .thenReturn(mock(ExecutorService.class));
@@ -251,5 +254,18 @@ class WorkflowEngineClaimGapWakeTest {
         when(eventMessage.type()).thenReturn(new MessageType(RESUME_EVENT));
         when(eventMessage.payloadAs(any(TypeReference.class))).thenReturn(Map.of("orderId", RESIDENT_ID));
         return eventMessage;
+    }
+
+    /**
+     * Returns a real unit of work factory: the engine sources every restored instance in a unit of
+     * work of its own, so a mock would hand it none.
+     */
+    private static UnitOfWorkFactory restoreUnitOfWorkFactory() {
+        return new SimpleUnitOfWorkFactory(new ApplicationContext() {
+            @Override
+            public <C> C component(Class<C> type, String name) {
+                throw new ComponentNotFoundException(type, name);
+            }
+        });
     }
 }
