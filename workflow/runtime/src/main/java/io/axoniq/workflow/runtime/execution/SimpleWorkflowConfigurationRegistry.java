@@ -24,6 +24,7 @@ import io.axoniq.workflow.runtime.api.execution.context.Version;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 
 import java.util.List;
@@ -77,6 +78,19 @@ public class SimpleWorkflowConfigurationRegistry
         );
 
         return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * The memoized lookup is keyed by {@link MessageType#qualifiedName()}, as the event's version does not select a
+     * configuration yet. Taking the whole type here keeps {@link MessageType#version()} in reach of the lookup for
+     * when it does.
+     */
+    @Nonnull
+    @Override
+    public List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(@Nonnull MessageType type) {
+        return getHighestVersionConfigurations(type.qualifiedName());
     }
 
     @Nonnull

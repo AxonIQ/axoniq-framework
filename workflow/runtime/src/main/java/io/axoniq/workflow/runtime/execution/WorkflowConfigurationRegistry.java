@@ -76,8 +76,9 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * {@link WorkflowConfiguration#workflowVersion()} is the highest among all registrations (semver-ordered). Multiple
      * configurations may be returned if duplicates exist at that version (run-in-parallel semantics).
      * <p>
-     * The lookup is currently decided on {@link MessageType#qualifiedName()} alone; taking the full type keeps
-     * {@link MessageType#version()} available once it participates in the decision.
+     * This is the lookup event-driven callers use, so the event's type reaches the registry whole. It is currently
+     * decided on {@link MessageType#qualifiedName()} alone, and taking the full type keeps
+     * {@link MessageType#version()} in reach for when it participates in the decision.
      */
     @Nonnull
     default List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(@Nonnull MessageType type) {
