@@ -76,9 +76,9 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
     private final TaggedEventConverter converter;
 
     /**
-     * Constructs an {@code AxonServerEventStorageEngine} with the given {@code connection} and {@code converter},
-     * using {@link EventTypeResolver#DEFAULT} to resolve {@link org.axonframework.messaging.core.MessageType
-     * MessageTypes} when reading events back from Axon Server.
+     * Constructs an {@code AxonServerEventStorageEngine} with the given {@code connection} and {@code converter}, using
+     * {@link EventTypeResolver#DEFAULT} to resolve {@link org.axonframework.messaging.core.MessageType MessageTypes}
+     * when reading events back from Axon Server.
      *
      * @param connection the context-specific backing connection to Axon Server
      * @param converter  the converter to use to serialize {@link EventMessage#payload() payloads} and complex
@@ -96,9 +96,9 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
      * @param connection        the context-specific backing connection to Axon Server
      * @param converter         the converter to use to serialize {@link EventMessage#payload() payloads} and complex
      *                          {@link Metadata} values into bytes
-     * @param eventTypeResolver the resolver used to construct a {@link org.axonframework.messaging.core.MessageType
-     *                          MessageType} from the event name and version stored in Axon Server, handling missing or
-     *                          empty versions for legacy events
+     * @param eventTypeResolver the resolver used to construct a
+     *                          {@link org.axonframework.messaging.core.MessageType MessageType} from the event name and
+     *                          version stored in Axon Server, handling missing or empty versions for legacy events
      */
     public AxonServerEventStorageEngine(AxonServerConnection connection,
                                         EventConverter converter,
@@ -236,13 +236,13 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
         }
 
         private static CompletableFuture<AppendEventsResponse> mapCommitFailure(Throwable failure,
-                                                                                 AppendCondition condition) {
+                                                                                AppendCondition condition) {
             if (isConsistencyConditionFailure(failure)) {
                 Set<Tag> tags = condition.criteria()
-                    .flatten()
-                    .stream()
-                    .flatMap(criterion -> criterion.tags().stream())
-                    .collect(Collectors.toSet());
+                                         .flatten()
+                                         .stream()
+                                         .flatMap(criterion -> criterion.tags().stream())
+                                         .collect(Collectors.toSet());
 
                 AppendEventsTransactionRejectedException rejection =
                         new AppendEventsTransactionRejectedException(failure.getMessage(), tags);
