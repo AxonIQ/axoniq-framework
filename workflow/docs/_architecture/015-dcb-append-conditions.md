@@ -25,29 +25,35 @@ Every workflow event appends under an `AppendCondition` with criteria `workflowI
 criteria, anchored at a consistency marker carried per instance. Read filter and write conflict definition are the
 same, exactly the DCB source-decide-append loop.
 
-### The append guard
+### The append condition
 
-Each execution owns a `WorkflowExecution.AppendGuard`: a volatile `ConsistencyMarker` plus a single-permit semaphore.
-`WorkflowExecution.appendGuard()` defaults to `null`, so mocked executions and non-DCB sinks publish unconditionally.
+Each execution owns a `WorkflowAppendCondition`, implemented by `ConsistencyMarkerSupport`: the position that instance
+last wrote at, plus the queue that keeps its appends in line. `WorkflowExecution.appendCondition()` defaults to
+`null`, so a mocked execution publishes unconditionally.
 
-| moment | marker |
+| moment | position |
 |---|---|
 | spawn | none. First append (`WorkflowStarted`) anchors at `ORIGIN`: the instance must not exist at all. Once per instance lifetime, the create-without-load idiom. |
-| restore on segment claim | the claim's shared sourcing context `appendPosition()`, the head of the stream at claim start. Past every owned instance's own events, before anything a lingering previous owner writes after the claim. |
+| restore on segment claim | the position that instance's own sourcing read ended at. Each instance is read in a unit of work of its own, so the position is at or after its own last event, and before anything written after that read. |
 | after each append | advanced to the transaction's `appendPosition()`, read after the unit of work completed (it is written in a nested after-commit handler). Never advanced on rejection. |
+
+A position shared by every instance of one claim does not work, which is why each instance reads in its own unit of
+work. A transaction ends at the lowest of its reads, so a previous owner appending while the claim is still reading
+leaves an instance anchored before an event that same claim sourced. Its first append is then rejected by its own
+history and the instance runs nowhere.
 
 ### Serialization
 
-Appends of one instance are serialized on the guard's permit. Parallel steps commit one after another, each
-conditioning on the marker its sibling just advanced, so siblings never conflict with each other and no sourcing per
-append is needed. A rejection therefore always means a foreign writer: a rejection carries no authorship, so retrying
-past one could double-record under a genuine second writer.
+Appends of one instance are chained: each one starts once the previous one has finished, so it is handed the position
+that one wrote at. Parallel steps therefore commit one after another, siblings never conflict with each other, and no
+sourcing per append is needed. A rejection therefore always means a foreign writer: a rejection carries no authorship,
+so retrying past one could double-record under a genuine second writer.
 
 ### Rejection
 
 `WorkflowAppendConditions.append` is the only append path. On rejection it logs a warning and interrupts the
-execution, reusing the path `releaseSegment` already uses. It never retries, never publishes a compensating event, and
-never fails the workflow, since a failure would publish the terminal event the condition exists to prevent.
+execution, reusing the path `releaseWorkflowsFor` already uses. It never retries, never publishes a compensating
+event, and never fails the workflow, since a failure would publish the terminal event the condition exists to prevent.
 
 ## Consequences
 
@@ -74,5 +80,9 @@ claim restores it. Safety over liveness.
 A user-published event tagged `workflowId=X` by a custom tag resolver would falsely conflict with instance `X`'s
 appends. Engine events are the only ones tagged this way by the engine's own resolver.
 
-The engine requires a DCB event store: in-memory, Axon Server or PostgreSQL. A store that ignores `AppendCondition`
-accepts every append and the guard is lost with nothing detecting it.
+The engine requires a DCB event store: in-memory, Axon Server or PostgreSQL. A sink that is no `EventStore` carries no
+transaction to attach a condition to, so it accepts every append and nothing detects that the check is gone. A start
+refuses such a sink instead of running without the check.
+
+Restoring a segment costs one unit of work per instance rather than one per claim, since that is what makes each
+instance's read, and the position it ends at, its own.

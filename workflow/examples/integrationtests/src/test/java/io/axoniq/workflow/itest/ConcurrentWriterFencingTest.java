@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.itest;
 
-import io.axoniq.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
@@ -27,11 +26,10 @@ import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
+import io.axoniq.workflow.runtime.test.fixture.WorkflowTestDriver;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
@@ -41,12 +39,9 @@ import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
@@ -88,8 +83,10 @@ class ConcurrentWriterFencingTest {
 
     @Test
     void twoEnginesRunningOneInstanceRecordEachFactOnce() {
-        try (var nodeA = startNode(); var nodeB = startNode()) {
-            nodeA.publish(new StartFencedWorkflow("order-1"));
+        var nodeA = startNode();
+        var nodeB = startNode();
+        try {
+            nodeA.publishEvent(new StartFencedWorkflow("order-1"));
 
             // Both nodes spawn the instance; whichever loses a race is stopped, so neither keeps it running.
             await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
@@ -97,10 +94,10 @@ class ConcurrentWriterFencingTest {
                 assertThat(eventsNamed("order-1", "FencedWorkflowCompleted")).hasSize(1);
             });
             await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
-                    assertThat(nodeA.runningWorkflowIds()).isEmpty()
+                    assertThat(runningWorkflowIds(nodeA)).isEmpty()
             );
             await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
-                    assertThat(nodeB.runningWorkflowIds()).isEmpty()
+                    assertThat(runningWorkflowIds(nodeB)).isEmpty()
             );
 
             // One started event, every fact of the instance recorded exactly once, and the step action ran once even
@@ -110,6 +107,9 @@ class ConcurrentWriterFencingTest {
                     .extracting(event -> event.type().qualifiedName().toString())
                     .doesNotHaveDuplicates();
             assertThat(stepActionRuns).hasValue(1);
+        } finally {
+            nodeA.shutdown();
+            nodeB.shutdown();
         }
     }
 
@@ -117,17 +117,20 @@ class ConcurrentWriterFencingTest {
     void startingAnInstanceWhoseIdentifierWasAlreadyUsedIsRejected() {
         seedTerminatedWorkflow("order-2");
 
-        try (var node = startNode()) {
-            node.publish(new StartFencedWorkflow("order-2"));
+        var node = startNode();
+        try {
+            node.publishEvent(new StartFencedWorkflow("order-2"));
 
             await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
-                    assertThat(node.runningWorkflowIds()).isEmpty()
+                    assertThat(runningWorkflowIds(node)).isEmpty()
             );
 
             // The seeded history is untouched, and the rejected start means the body never ran.
             assertThat(eventsWithTags(workflowTag("order-2"), lifecycleTag())).hasSize(2);
             assertThat(bodyRuns).isEmpty();
             assertThat(stepActionRuns).hasValue(0);
+        } finally {
+            node.shutdown();
         }
     }
 
@@ -190,54 +193,30 @@ class ConcurrentWriterFencingTest {
      * Starts an engine sharing the event store with every other node of this test, but claiming segments through a
      * token store of its own, so it never learns that another node runs the same instances.
      */
-    private Node startNode() {
-        var configurer = WorkflowConfigurer.create();
+    private WorkflowTestDriver startNode() {
         var workflow = new FencedWorkflow(bodyRuns, stepActionRuns);
+        var module = WorkflowModule.defaults("concurrent-writer-fencing", SimpleWorkflowContext.class)
+                                   .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+                                   .definition(d -> d.autodetected(c -> workflow));
 
-        configurer.componentRegistry(cr -> cr
+        return WorkflowTestDriver.live(module, configurer -> configurer.componentRegistry(cr -> cr
                 .registerComponent(EventStorageEngine.class, cfg -> eventStorageEngine)
                 .registerComponent(MutableWorkflowHistoryRepository.class,
                                    cfg -> new InMemoryWorkflowHistoryRepository())
-                .registerComponent(TokenStore.class, cfg -> new InMemoryTokenStore())
-                .registerModule(
-                        WorkflowModule.defaults("concurrent-writer-fencing", SimpleWorkflowContext.class)
-                                      .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
-                                      .definition(d -> d.autodetected(c -> workflow))
-                ));
-
-        return new Node(configurer.start());
+                .registerComponent(TokenStore.class, cfg -> new InMemoryTokenStore())));
     }
 
-    private static final class Node implements AutoCloseable {
-
-        private final AxonConfiguration configuration;
-        private final WorkflowEngine workflowEngine;
-
-        private Node(AxonConfiguration configuration) {
-            this.configuration = configuration;
-            this.workflowEngine = configuration.getComponent(WorkflowEngine.class);
-        }
-
-        private void publish(Object event) {
-            var resolver = configuration.getComponent(MessageTypeResolver.class);
-            var converter = configuration.getComponent(EventConverter.class);
-            configuration.getComponent(EventSink.class)
-                         .publish(null, new GenericEventMessage(resolver.resolveOrThrow(event), event)
-                                 .withConverter(converter));
-        }
-
-        private List<String> runningWorkflowIds() {
-            return workflowEngine.workflowExecutions().stream()
-                                 .map(WorkflowExecution::workflowId)
-                                 .sorted()
-                                 .toList();
-        }
-
-        @Override
-        public void close() {
-            workflowEngine.shutdown();
-            configuration.shutdown();
-        }
+    /**
+     * Returns the ids of the instances the given node is running.
+     */
+    private static List<String> runningWorkflowIds(WorkflowTestDriver node) {
+        return node.workflowTestServices()
+                   .workflowEngine()
+                   .workflowExecutions()
+                   .stream()
+                   .map(WorkflowExecution::workflowId)
+                   .sorted()
+                   .toList();
     }
 
     public record StartFencedWorkflow(String id) {
