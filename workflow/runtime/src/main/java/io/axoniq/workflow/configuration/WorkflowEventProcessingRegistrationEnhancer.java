@@ -288,28 +288,18 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
         return config.getComponent(StreamableEventSource.class).latestToken(null).thenCompose(workflowEngine::start);
     }
 
-    /**
-     * Rejects a start with an event sink that is no {@link EventStore}.
-     * <p>
-     * Every workflow event is appended under an {@link org.axonframework.eventsourcing.eventstore.AppendCondition},
-     * which is what stops a second node from running an instance this node already runs. A condition can only be
-     * attached to an event store transaction, so a sink without one accepts every append and two writers of one
-     * instance both record their events, duplicating the instance's side effects. Starting is refused instead: the
-     * mistake is a configuration one, and it cannot be observed at runtime.
-     *
-     * @param config the configuration the sink is resolved from
-     * @throws IllegalStateException when the configured event sink is no event store
-     */
     void requireEventStore(Configuration config) {
         EventSink eventSink = config.getComponent(EventSink.class);
         if (!(eventSink instanceof EventStore)) {
             throw new IllegalStateException(
-                    "The workflow engine of module " + moduleName + " requires an event store, but the configured "
-                            + "event sink is a " + eventSink.getClass().getName() + ". Workflow events append under a "
-                            + "condition that only an event store transaction carries; without it two nodes can run "
-                            + "the same workflow instance and duplicate its side effects. Configure an event store, "
-                            + "such as one backed by Axon Server, PostgreSQL or, for tests, an in-memory storage "
-                            + "engine."
+                    "The workflow engine of module " + moduleName + " cannot start: its event sink is a "
+                            + eventSink.getClass().getName() + " instead of an EventStore. A WorkflowConfigurer "
+                            + "configures one through the EventSourcingConfigurer, so reaching this means the sink "
+                            + "was replaced. The engine appends every workflow event under an AppendCondition, and "
+                            + "only an event store transaction carries one; a sink without it accepts every append, "
+                            + "which lets two nodes run one workflow instance and duplicate its side effects with "
+                            + "nothing detecting it. This check is defensive: it fails the start rather than let that "
+                            + "go unnoticed at runtime."
             );
         }
     }

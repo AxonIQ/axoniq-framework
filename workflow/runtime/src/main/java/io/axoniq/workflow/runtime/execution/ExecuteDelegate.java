@@ -244,12 +244,12 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
      * event stream. The store accepting this execution's own append is therefore the only proof that this execution
      * took the step.
      *
-     * @param stepName            name of the step to start.
-     * @param local               local payload to record on the {@code STARTED} event.
-     * @param eventNameCustomizer event name customizer.
+     * @param stepName            name of the step to start
+     * @param local               local payload to record on the {@code STARTED} event
+     * @param eventNameCustomizer event name customizer
      * @return {@code true} when the store accepted this execution's append, so this execution owns the step and may
      * run its action. {@code false} when the append was rejected, when the step turned STARTED before this execution's
-     * append ran, or when the wait was interrupted (the interrupt flag is restored).
+     * append ran, or when the wait was interrupted (the interrupt flag is restored)
      */
     private boolean tryStartStep(String stepName, Map<String, Object> local, EventNameCustomizer eventNameCustomizer) {
         var ownStarted = new AtomicReference<CompletableFuture<Void>>();

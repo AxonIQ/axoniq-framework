@@ -42,7 +42,7 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
 
         assertThatThrownBy(() -> enhancer.requireEventStore(config))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("requires an event store");
+                .hasMessageContaining("instead of an EventStore");
     }
 
     @Test
