@@ -628,8 +628,10 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                     .stream()
                     .flatMap(criterion -> criterion.tags().stream())
                     .collect(Collectors.toSet());
-
-                throw AppendEventsTransactionRejectedException.conflictingEventsDetected(condition.consistencyMarker(), tags);  // allow executor to rollback correctly
+                // allow executor to rollback correctly
+                throw AppendEventsTransactionRejectedException.conflictingEventsDetected(
+                        condition.consistencyMarker(), tags
+                );
             }
 
             return appendTransaction;
