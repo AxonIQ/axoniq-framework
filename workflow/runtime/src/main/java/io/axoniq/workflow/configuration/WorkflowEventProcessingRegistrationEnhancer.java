@@ -23,7 +23,6 @@ import io.axoniq.workflow.runtime.execution.EventHandlingComponentHandlingAny;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineReplaySupport;
-import io.axoniq.workflow.runtime.execution.WorkflowSegmentChangeListener;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;

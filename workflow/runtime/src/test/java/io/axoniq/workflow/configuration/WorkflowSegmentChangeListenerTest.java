@@ -16,8 +16,9 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.workflow.runtime.execution;
+package io.axoniq.workflow.configuration;
 
+import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import org.axonframework.messaging.core.ApplicationContext;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;

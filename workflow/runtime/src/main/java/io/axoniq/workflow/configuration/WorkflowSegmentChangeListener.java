@@ -16,10 +16,10 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.workflow.runtime.execution;
+package io.axoniq.workflow.configuration;
 
+import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import jakarta.annotation.Nullable;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -47,8 +47,7 @@ import static java.util.Objects.requireNonNull;
  * @author Steven van Beelen
  * @since 0.3.0
  */
-@Internal
-public class WorkflowSegmentChangeListener implements SegmentChangeListener {
+class WorkflowSegmentChangeListener implements SegmentChangeListener {
 
     private final String moduleName;
     private final UnitOfWorkFactory unitOfWorkFactory;
@@ -61,7 +60,7 @@ public class WorkflowSegmentChangeListener implements SegmentChangeListener {
      * @param unitOfWorkFactory factory for the unit of work a claim sources durable workflow state in
      * @param workflowEngine    supplies the engine whose executions follow the segments
      */
-    public WorkflowSegmentChangeListener(String moduleName,
+    WorkflowSegmentChangeListener(String moduleName,
                                          UnitOfWorkFactory unitOfWorkFactory,
                                          Supplier<WorkflowEngine> workflowEngine) {
         this.moduleName = requireNonNull(moduleName, "The module name must not be null.");
