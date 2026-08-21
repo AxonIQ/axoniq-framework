@@ -112,7 +112,6 @@ class WorkflowEngineClaimGapWakeTest {
         var owner = owningSegment(RESIDENT_ID);
         workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext(), mock(ProcessingContext.class)).join();
 
-        // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(restored).as("the claim materialized the instance").isNotNull();
         assertThat(restored.isRunning())
                 .as("the claim marks the instance running the moment it submits the body").isTrue();
@@ -125,7 +124,6 @@ class WorkflowEngineClaimGapWakeTest {
 
         drainOneTask();
 
-        // --- oracle ----------------------------------------------------------------------------------------------
         assertThat(waitStep.isCancelled())
                 .as("""
                     The resume event was delivered to segment %s while '%s' was running but had not yet re-registered \
@@ -151,10 +149,6 @@ class WorkflowEngineClaimGapWakeTest {
                 .as("the ordinary live ordering - condition first, event second - must keep waking the instance")
                 .isTrue();
     }
-
-    // ---------------------------------------------------------------------------------------------------------
-    // rig
-    // ---------------------------------------------------------------------------------------------------------
 
     /** Stands in for the restored body arriving back at its {@code awaitEvent} call. */
     private CompletableFuture<Void> registerWaitFor(String stepName) {

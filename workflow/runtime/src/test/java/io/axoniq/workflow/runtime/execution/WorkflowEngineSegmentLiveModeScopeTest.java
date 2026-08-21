@@ -110,7 +110,6 @@ class WorkflowEngineSegmentLiveModeScopeTest {
         var caughtUp = anotherSegmentThan(lagging);
         var caughtUpId = anyIdOn(caughtUp);
 
-        // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(SEGMENT_COUNT).as("this oracle is meaningless with a single segment").isGreaterThan(1);
         assertThat(caughtUp.getSegmentId()).as("the two segments must differ").isNotEqualTo(lagging.getSegmentId());
         assertThat(WorkflowSegmentOwnership.ownedBy(lagging, startId))
@@ -131,7 +130,6 @@ class WorkflowEngineSegmentLiveModeScopeTest {
         // 2. The lagging segment, still at position 7, handles a start event for an instance it owns.
         workflowEngine.handle(startEvent(startId), processingContext(lagging, token(LAGGING_SEGMENT_POSITION)));
 
-        // --- oracle ----------------------------------------------------------------------------------------------
         assertThat(bodyStarts)
                 .as("""
                     Workflow bodies started while their own segment is still replaying: %s. Expected: none. Segment \
@@ -149,7 +147,6 @@ class WorkflowEngineSegmentLiveModeScopeTest {
         var startId = "sharded-0";
         var lagging = owningSegment(startId);
 
-        // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(token(LAGGING_SEGMENT_POSITION).covers(token(STARTUP_LATEST_POSITION)))
                 .as("the lagging segment at %s must NOT have reached the startup latest token %s",
                     LAGGING_SEGMENT_POSITION, STARTUP_LATEST_POSITION)
@@ -164,7 +161,6 @@ class WorkflowEngineSegmentLiveModeScopeTest {
         // Later this node claims the lagging segment and its first delivery is an old event at position 7.
         workflowEngine.handle(startEvent(startId), processingContext(lagging, token(LAGGING_SEGMENT_POSITION)));
 
-        // --- oracle ----------------------------------------------------------------------------------------------
         assertThat(replaySupport.isReplaying(lagging, token(LAGGING_SEGMENT_POSITION)))
                 .as("""
                     Segment %s was observed at position %s, behind the startup latest token %s, so it is replaying. \
@@ -187,7 +183,6 @@ class WorkflowEngineSegmentLiveModeScopeTest {
         var laggingId = anyIdOn(lagging);
         var caughtUpId = anyIdOn(caughtUp);
 
-        // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(caughtUp.getSegmentId()).as("the two segments must differ").isNotEqualTo(lagging.getSegmentId());
         assertThat(WorkflowSegmentOwnership.ownedBy(lagging, laggingId)).isTrue();
         assertThat(WorkflowSegmentOwnership.ownedBy(caughtUp, caughtUpId)).isTrue();
@@ -215,7 +210,6 @@ class WorkflowEngineSegmentLiveModeScopeTest {
         claimingEngine.restoreWorkflowsFor(lagging, token(LAGGING_SEGMENT_POSITION), sourcingContext, executionContext)
                       .join();
 
-        // --- oracle ----------------------------------------------------------------------------------------------
         var seeded = executionContext.resources().get(TrackingToken.RESOURCE_KEY);
         assertThat(seeded)
                 .as("""
@@ -225,10 +219,6 @@ class WorkflowEngineSegmentLiveModeScopeTest {
                     lagging, seeded, token(LAGGING_SEGMENT_POSITION), token(CAUGHT_UP_SEGMENT_POSITION), caughtUp)
                 .isEqualTo(token(LAGGING_SEGMENT_POSITION));
     }
-
-    // ---------------------------------------------------------------------------------------------------------
-    // rig
-    // ---------------------------------------------------------------------------------------------------------
 
     @SuppressWarnings("unchecked")
     private void registerStartConfiguration(String workflowId) {

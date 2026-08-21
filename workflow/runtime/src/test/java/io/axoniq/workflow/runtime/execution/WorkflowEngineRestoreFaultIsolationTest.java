@@ -113,7 +113,6 @@ class WorkflowEngineRestoreFaultIsolationTest {
         registerDefinition(MIGRATING_WORKFLOW, "2.0.0");
         var state = restorable(MIGRATED_ID, MIGRATING_WORKFLOW, "2.2.0");
 
-        // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(configurationRegistry.getWorkflowConfiguration(state.workflowDefinitionId()))
                 .as("no definition is registered at the recorded version 2.2.0, so an exact lookup cannot restore it")
                 .isEmpty();
@@ -123,7 +122,6 @@ class WorkflowEngineRestoreFaultIsolationTest {
 
         workflowEngine.restoreWorkflowsFor(ONLY_SEGMENT, null, sourcingContext(), mock(ProcessingContext.class)).join();
 
-        // --- oracle ----------------------------------------------------------------------------------------------
         assertThat(bodyStarts)
                 .as("""
                     Instance '%s' recorded version 2.2.0 after two ctx.migrateVersion bumps, and only 2.0.0 is \
@@ -145,7 +143,6 @@ class WorkflowEngineRestoreFaultIsolationTest {
         restorable(HEALTHY_ID, HEALTHY_WORKFLOW, "1.0.0");
         restorable(UNRESOLVABLE_ID, RETIRED_WORKFLOW, "1.0.0");
 
-        // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(configurationRegistry.findClosestRegisteredVersion(RETIRED_WORKFLOW, "1.0.0"))
                 .as("'%s' has no registered definition below or at its version", RETIRED_WORKFLOW).isEmpty();
         assertThat(configurationRegistry.findClosestHigherRegisteredVersion(RETIRED_WORKFLOW, "1.0.0"))
@@ -155,7 +152,6 @@ class WorkflowEngineRestoreFaultIsolationTest {
                 .as("both instances must be restored by the same segment claim for this oracle to mean anything")
                 .isTrue();
 
-        // --- oracle ----------------------------------------------------------------------------------------------
         assertThatCode(() -> workflowEngine.restoreWorkflowsFor(ONLY_SEGMENT,
                                                                null,
                                                                sourcingContext(),
@@ -177,10 +173,6 @@ class WorkflowEngineRestoreFaultIsolationTest {
                 .as("the skipped instance is not materialized; it keeps its durable state for a later claim")
                 .hasSize(1);
     }
-
-    // ---------------------------------------------------------------------------------------------------------
-    // rig
-    // ---------------------------------------------------------------------------------------------------------
 
     /** Registers a definition whose restored execution records its own body start. */
     @SuppressWarnings("unchecked")

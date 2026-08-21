@@ -107,12 +107,10 @@ class WorkflowConfigurationDefaultsTest {
 
         subject.registerWorkflowEngine(registry);
 
-        // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(registry.componentDefinition).as("the engine must be registered").isNotNull();
         var shutdownPhases = registry.capturedShutdownPhases();
         assertThat(shutdownPhases).as("the engine registers exactly one shutdown handler").hasSize(1);
 
-        // --- oracle ----------------------------------------------------------------------------------------------
         assertThat(shutdownPhases.getFirst())
                 .as("""
                     The engine's shutdown phase is %s and the PooledStreamingEventProcessor shuts down at %s. \

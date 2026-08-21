@@ -62,8 +62,8 @@ public class WorkflowSegmentChangeListener implements SegmentChangeListener {
      * @param workflowEngine    supplies the engine whose executions follow the segments
      */
     public WorkflowSegmentChangeListener(String moduleName,
-                                  UnitOfWorkFactory unitOfWorkFactory,
-                                  Supplier<WorkflowEngine> workflowEngine) {
+                                         UnitOfWorkFactory unitOfWorkFactory,
+                                         Supplier<WorkflowEngine> workflowEngine) {
         this.moduleName = requireNonNull(moduleName, "The module name must not be null.");
         this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
         this.workflowEngine = requireNonNull(workflowEngine, "The WorkflowEngine supplier must not be null.");

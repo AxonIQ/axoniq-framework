@@ -55,7 +55,7 @@ final class SegmentedWorkflowRouting implements SequencingPolicy<EventMessage> {
      * Creates the routing for the workflow definitions held by the given registry.
      *
      * @param workflowConfigurationRegistry registry consulted to derive start-candidate workflow ids from business
-     *                                      events.
+     *                                      events
      */
     SegmentedWorkflowRouting(@Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry) {
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
@@ -75,17 +75,18 @@ final class SegmentedWorkflowRouting implements SequencingPolicy<EventMessage> {
      *   the instances it owns.</li>
      * </ul>
      *
-     * @param eventMessage      the event to sequence.
-     * @param processingContext the processing context of the event.
+     * @param eventMessage      the event to sequence
+     * @param processingContext the processing context of the event
      * @return the workflow-aware sequence identifier, or {@link SequencingPolicy#BROADCAST} when the event does not
-     *         map to a single workflow instance.
+     *         map to a single workflow instance
      */
     @Override
     @Nonnull
     public Optional<Object> sequenceIdentifierFor(@Nonnull EventMessage eventMessage,
                                                   @Nonnull ProcessingContext processingContext) {
-        if (MetadataUtils.hasWorkflowId().test(eventMessage.metadata())) {
-            return Optional.of(WorkflowSegmentOwnership.segmentKey(MetadataUtils.getWorkflowId(eventMessage.metadata())));
+        var metadata = eventMessage.metadata();
+        if (MetadataUtils.hasWorkflowId().test(metadata)) {
+            return Optional.of(WorkflowSegmentOwnership.segmentKey(MetadataUtils.getWorkflowId(metadata)));
         }
         var candidates = newInstanceCandidateIds(eventMessage, processingContext);
         return candidates.size() == 1
@@ -99,7 +100,7 @@ final class SegmentedWorkflowRouting implements SequencingPolicy<EventMessage> {
      * engine's start path.
      */
     private Set<String> newInstanceCandidateIds(@Nonnull EventMessage eventMessage,
-                                          @Nonnull ProcessingContext processingContext) {
+                                                @Nonnull ProcessingContext processingContext) {
         try {
             return workflowConfigurationRegistry
                     .getHighestVersionConfigurations(eventMessage.type())

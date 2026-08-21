@@ -78,12 +78,9 @@ class WorkflowEngineSegmentFailoverTest {
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("sourced")));
 
         var owner = owningSegment(OWNED_ID);
-        try {
-            workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext, mock(ProcessingContext.class)).join();
-        } catch (RuntimeException expected) {
-            // Sourcing the owned instance is driven far enough to prove it was selected; building a full execution
-            // out of it is covered by WorkflowEngineReplayTest.
-        }
+        // The claim survives the failed sourcing of a single instance, which WorkflowEngineRestoreFaultIsolationTest
+        // pins. What this case asserts is which instances were sourced at all.
+        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext, mock(ProcessingContext.class)).join();
 
         verify(workflowStore).loadWorkflow(eq(OWNED_ID), any());
         verify(workflowStore, never()).loadWorkflow(eq(foreignId), any());

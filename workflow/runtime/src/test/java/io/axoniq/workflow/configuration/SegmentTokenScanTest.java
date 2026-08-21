@@ -132,10 +132,6 @@ class SegmentTokenScanTest {
         order.verify(tokenStore).releaseClaim(eq(PROCESSOR), eq(3), any());
     }
 
-    // ---------------------------------------------------------------------------------------------------------
-    // rig
-    // ---------------------------------------------------------------------------------------------------------
-
     private TrackingToken scan() {
         return SegmentTokenScan.earliestSegmentToken(tokenStore, PROCESSOR, FOUR_SEGMENTS).join();
     }

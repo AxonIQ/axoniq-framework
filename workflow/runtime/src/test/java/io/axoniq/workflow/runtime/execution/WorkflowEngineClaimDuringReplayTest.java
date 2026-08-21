@@ -105,7 +105,6 @@ class WorkflowEngineClaimDuringReplayTest {
     void reclaimingASegmentThatIsStillReplayingDoesNotRunTheRestoredBodyAtHeadState() {
         var owner = owningSegment(RESIDENT_ID);
 
-        // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(WorkflowSegmentOwnership.ownedBy(owner, RESIDENT_ID))
                 .as("segment %s must own '%s'", owner, RESIDENT_ID).isTrue();
         assertThat(token(SEGMENT_POSITION_BEFORE_RELEASE).covers(token(STARTUP_LATEST_POSITION)))
@@ -130,12 +129,10 @@ class WorkflowEngineClaimDuringReplayTest {
                                            executionContext())
                       .join();
 
-        // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(workflowEngine.workflowExecutions())
                 .as("the re-claim must still materialize the instance, it only defers running its body")
                 .hasSize(1);
 
-        // --- oracle ----------------------------------------------------------------------------------------------
         assertThat(bodyStarts)
                 .as("""
                     Workflow bodies started by the re-claim of segment %s: %s. Expected: none. The claim sourced \
@@ -153,10 +150,6 @@ class WorkflowEngineClaimDuringReplayTest {
                 .as("reaching the startup latest token must start the instances the claim deferred")
                 .containsExactly(RESIDENT_ID);
     }
-
-    // ---------------------------------------------------------------------------------------------------------
-    // rig
-    // ---------------------------------------------------------------------------------------------------------
 
     /**
      * Wires the store and the registry so {@link #RESIDENT_ID} can be rehydrated, and gives the resulting execution the

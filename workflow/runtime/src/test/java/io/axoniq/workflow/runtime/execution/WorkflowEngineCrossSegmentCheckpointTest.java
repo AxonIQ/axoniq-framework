@@ -144,7 +144,6 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         var slow = owningSegment(slowSegmentId);
         var lostId = anotherIdOn(slow, slowSegmentId);
 
-        // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(SEGMENT_COUNT).as("this oracle is meaningless with a single segment").isGreaterThan(1);
         assertThat(slow.getSegmentId()).as("the two segments must differ").isNotEqualTo(fast.getSegmentId());
         assertThat(WorkflowSegmentOwnership.ownedBy(fast, STRAGGLER_ID)).isTrue();
@@ -181,7 +180,6 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         slowWorker.handle(engineEvent(slowSegmentId), SLOW_SEGMENT_HANDLED_POSITION);
         slowWorker.commit();
 
-        // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(slowWorker.lastConsumedToken())
                 .as("the slow segment really only ever consumed up to position %s", SLOW_SEGMENT_HANDLED_POSITION)
                 .isEqualTo(token(SLOW_SEGMENT_HANDLED_POSITION));
@@ -189,7 +187,6 @@ class WorkflowEngineCrossSegmentCheckpointTest {
                 .as("the slow segment never handled the event at position %s", SLOW_SEGMENT_UNHANDLED_POSITION)
                 .doesNotContain(SLOW_SEGMENT_UNHANDLED_POSITION);
 
-        // --- oracle ----------------------------------------------------------------------------------------------
         var slowStored = storedToken(slow);
         assertThat(slowStored)
                 .as("""
@@ -258,10 +255,6 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         checkpointingSupport.requestCheckpoint(released, token(SLOW_SEGMENT_UNHANDLED_POSITION));
         verifyNoInteractions(releasedTrigger);
     }
-
-    // ---------------------------------------------------------------------------------------------------------
-    // rig
-    // ---------------------------------------------------------------------------------------------------------
 
     /**
      * Stand-in for one segment's work package: owns the real framework {@link CheckpointingProgressStrategy} and the

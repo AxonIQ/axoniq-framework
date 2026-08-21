@@ -19,6 +19,7 @@
 package io.axoniq.workflow.configuration;
 
 import jakarta.annotation.Nullable;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
@@ -85,7 +86,7 @@ final class SegmentTokenScan {
      */
     @Nullable
     private static Void skipSegmentOwnedByAnotherNode(Throwable ex, String processorName, int segmentId) {
-        var cause = ex instanceof CompletionException && ex.getCause() != null ? ex.getCause() : ex;
+        var cause = FutureUtils.unwrap(ex);
         if (!(cause instanceof UnableToClaimTokenException)) {
             throw cause instanceof RuntimeException runtime ? runtime : new CompletionException(cause);
         }

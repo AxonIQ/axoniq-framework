@@ -47,12 +47,12 @@ final class WorkflowSegmentOwnership {
      * workflow resolve to the same segment. Without a segment there is no partitioning to respect, which is the case
      * outside a segmented processor, and every instance is in scope.
      *
-     * @param segment    the segment to test against, or {@code null} when acting outside a segmented processor.
-     * @param workflowId id of the workflow instance.
-     * @return {@code true} when the segment matches the id's segment key, or no segment is given.
+     * @param segment    the segment to test against, or {@code null} when acting outside a segmented processor
+     * @param workflowId id of the workflow instance
+     * @return {@code true} when the segment matches the id's segment key, or no segment is given
      * @throws IllegalArgumentException when no workflow id is given: an id is required to name a segment, and a
      *                                  diagnosable rejection beats the {@link NullPointerException} deriving the
-     *                                  segment key would raise.
+     *                                  segment key would raise
      */
     static boolean ownedBy(@Nullable Segment segment, @Nonnull String workflowId) {
         if (segment == null) {
@@ -74,8 +74,8 @@ final class WorkflowSegmentOwnership {
      * cross-version disambiguated id ({@code base#version}); deriving the key from the base part keeps placement,
      * ownership and sequencing consistent for every form of the id.
      *
-     * @param workflowId id of the workflow instance, disambiguated or not.
-     * @return the segment key the id hashes with.
+     * @param workflowId id of the workflow instance, disambiguated or not
+     * @return the segment key the id hashes with
      */
     static String segmentKey(@Nonnull String workflowId) {
         var separator = workflowId.indexOf('#');

@@ -31,7 +31,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class WorkflowSegmentOwnershipTest {
 
-
     @Test
     void everyIdIsOwnedByExactlyOneSegment() {
         for (var workflowId : List.of("order-1", "order-1#2.0.0", "a#b", "")) {

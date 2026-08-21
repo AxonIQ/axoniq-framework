@@ -31,7 +31,6 @@ import java.util.stream.IntStream;
  * never hardcodes an id-to-segment assignment the hash could contradict.
  *
  * @author Stefan Dragisic
- * @since 0.3.0
  */
 final class SegmentTestFixtures {
 

@@ -329,7 +329,6 @@ class NewInstanceCandidateRoutingTest {
                 .doesNotThrowAnyException();
     }
 
-
     // ---------------------------------------------------------------------------------------------------------
     // a derivation that does not agree with itself
     // ---------------------------------------------------------------------------------------------------------
@@ -474,10 +473,6 @@ class NewInstanceCandidateRoutingTest {
                 .containsExactlyInAnyOrder("alpha-v2", "beta-v2");
         assertNoBodyStarted();
     }
-
-    // ---------------------------------------------------------------------------------------------------------
-    // rig
-    // ---------------------------------------------------------------------------------------------------------
 
     private void assertNoBodyStarted() {
         assertThat(startedExecutions)

@@ -112,7 +112,6 @@ class WorkflowEngineSegmentClaimStartScopeTest {
         var owner = owningSegment(RESIDENT_ID);
         var other = anotherSegmentThan(owner);
 
-        // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(SEGMENT_COUNT).as("this oracle is meaningless with a single segment").isGreaterThan(1);
         assertThat(other.getSegmentId()).as("the two segments must differ").isNotEqualTo(owner.getSegmentId());
         assertThat(WorkflowSegmentOwnership.ownedBy(owner, RESIDENT_ID))
@@ -133,13 +132,11 @@ class WorkflowEngineSegmentClaimStartScopeTest {
         // 2. The coordinator hands the same node a second, unrelated segment.
         workflowEngine.restoreWorkflowsFor(other, null, sourcingContext(), mock(ProcessingContext.class)).join();
 
-        // --- precondition evidence -------------------------------------------------------------------------------
         verify(workflowStore, times(1)).loadWorkflow(eq(RESIDENT_ID), any());
         assertThat(workflowEngine.workflowExecutions())
                 .as("the instance was resident, and was not re-sourced by the second claim")
                 .hasSize(1);
 
-        // --- oracle ----------------------------------------------------------------------------------------------
         assertThat(bodyStarts)
                 .as("""
                     Workflow bodies started by the claim of segment %s: %s. Expected: none. Instance '%s' is owned by \
@@ -164,7 +161,6 @@ class WorkflowEngineSegmentClaimStartScopeTest {
         var owner = owningSegment(RESIDENT_ID);
         var other = anotherSegmentThan(owner);
 
-        // --- precondition evidence -------------------------------------------------------------------------------
         assertThat(other.getSegmentId()).as("the two segments must differ").isNotEqualTo(owner.getSegmentId());
         assertThat(WorkflowSegmentOwnership.ownedBy(other, RESIDENT_ID))
                 .as("segment %s must NOT own '%s'", other, RESIDENT_ID).isFalse();
@@ -188,7 +184,6 @@ class WorkflowEngineSegmentClaimStartScopeTest {
         // 2. The unrelated segment reaches the startup latest token and switches itself to live mode.
         workflowEngine.handle(engineEvent(anyIdOn(other)), processingContext(other, token(STARTUP_LATEST_POSITION)));
 
-        // --- oracle ----------------------------------------------------------------------------------------------
         assertThat(replaySupport.inLiveMode(other)).as("segment %s must have gone live", other).isTrue();
         assertThat(bodyStarts)
                 .as("""
@@ -222,7 +217,6 @@ class WorkflowEngineSegmentClaimStartScopeTest {
         registerRestorableWorkflow(restoredState());
         replaySupport.setInitialEngineTokens(token(0), token(STARTUP_LATEST_POSITION));
 
-        // --- precondition evidence ---------------------------------------------------------------------------
         assertThat(token(LAGGING_POSITION).covers(token(STARTUP_LATEST_POSITION)))
                 .as("the claim position %s must be behind the startup latest token %s",
                     LAGGING_POSITION, STARTUP_LATEST_POSITION)
@@ -237,7 +231,6 @@ class WorkflowEngineSegmentClaimStartScopeTest {
                                            processingContext(owner, null))
                       .join();
 
-        // --- oracle ------------------------------------------------------------------------------------------
         assertThat(replaySupport.isReplaying(owner, token(LAGGING_POSITION)))
                 .as("Segment %s is claimed at %s, behind the startup latest token %s, but no delivery has been "
                             + "observed on it. Reporting it as replaying defers '%s' with nothing able to lift "
@@ -249,10 +242,6 @@ class WorkflowEngineSegmentClaimStartScopeTest {
                 .as("'%s' must be started by the claim, not parked until a delivery that never comes", RESIDENT_ID)
                 .containsExactly(RESIDENT_ID);
     }
-
-    // ---------------------------------------------------------------------------------------------------------
-    // rig
-    // ---------------------------------------------------------------------------------------------------------
 
     /**
      * Wires the store and the registry so that {@link RESIDENT_ID} can be rehydrated, and gives the resulting

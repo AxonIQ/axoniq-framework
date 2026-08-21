@@ -53,10 +53,10 @@ public final class NewWorkflowInstanceRouting {
      * here keeps it attributable. The provider is an arbitrary function over the event that resolves property names
      * against the converted payload, so registration cannot reject it up front.
      *
-     * @param baseWorkflowId        the id the provider derived, or {@code null} when it derived none.
-     * @param workflowConfiguration configuration whose provider was asked.
-     * @param eventMessage          event the id was to be derived from.
-     * @return {@code true} when an id was derived and the new instance may start.
+     * @param baseWorkflowId        the id the provider derived, or {@code null} when it derived none
+     * @param workflowConfiguration configuration whose provider was asked
+     * @param eventMessage          event the id was to be derived from
+     * @return {@code true} when an id was derived and the new instance may start
      */
     public static boolean hasDerivedWorkflowId(
             @Nullable String baseWorkflowId,
