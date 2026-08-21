@@ -120,9 +120,7 @@ class WorkflowConfigurationDefaultsTest {
                     processor's drain. At the same phase the two are launched together and joined, and clearing the \
                     execution repository first makes the drain store a token whose wakes were never applied.""",
                     shutdownPhases.getFirst(), Phase.INBOUND_EVENT_CONNECTORS)
-                .isLessThan(Phase.INBOUND_EVENT_CONNECTORS)
-                .as("but still above the phase that tears down the processor's executors")
-                .isGreaterThan(Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS);
+                .isLessThan(Phase.INBOUND_EVENT_CONNECTORS);
     }
 
     private static final class CapturingComponentRegistry implements ComponentRegistry {

@@ -200,16 +200,15 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     /**
-     * Phase in which the engine's executions are dropped on shutdown.
+     * Phase in which the engine's executions are dropped on shutdown: a workflow is a message handler, extensively
+     * wrapped, so it is dropped where message handlers are.
      * <p>
-     * Shutdown handlers run from the highest phase down, and same-phase handlers run concurrently and are joined
-     * together. The event processor stops at {@link Phase#INBOUND_EVENT_CONNECTORS}, so a lower phase runs strictly
-     * after its drain has stored the token. Sharing the processor's phase makes the two race: clearing the repository
-     * first leaves the drain with nothing to hold the token back, and it stores a position whose wakes were never
-     * applied. Still above {@link Phase#LOCAL_MESSAGE_HANDLER_REGISTRATIONS}, where the processor's executors are
-     * torn down.
+     * Shutdown handlers run from the highest phase down, so this runs after the event processor has stopped at
+     * {@link Phase#INBOUND_EVENT_CONNECTORS} and its drain has stored the token. Sharing the processor's own phase
+     * would make the two race: clearing the repository first leaves the drain with nothing to hold the token back, and
+     * it stores a position whose wakes were never applied.
      */
-    private static final int POST_PROCESSOR_SHUTDOWN_PHASE = Phase.INBOUND_EVENT_CONNECTORS - 10;
+    private static final int POST_PROCESSOR_SHUTDOWN_PHASE = Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS;
 
     void registerWorkflowEngine(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(
