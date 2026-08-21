@@ -134,12 +134,11 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
                                               .registerCommandHandler(this::handleCommand,
                                                                       loadFactor,
                                                                       commandName.name());
-        subscriptions.compute(commandName, (name, previous) -> {
-            if (previous != null) {
-                previous.cancel();
-            }
-            return registration;
-        });
+        Registration previous = subscriptions.put(commandName, registration);
+        if (previous != null) {
+            previous.cancel();
+        }
+
         CompletableFuture<Void> completion = new CompletableFuture<>();
         registration.onAck(() -> completion.complete(null));
         return completion;
