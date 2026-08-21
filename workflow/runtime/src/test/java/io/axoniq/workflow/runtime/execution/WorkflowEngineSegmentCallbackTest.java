@@ -22,6 +22,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
@@ -72,8 +73,8 @@ class WorkflowEngineSegmentCallbackTest {
 
         var claim = engine.restoreWorkflowsFor(SEGMENT,
                                                null,
-                                               mock(ProcessingContext.class),
-                                               mock(ProcessingContext.class));
+                                               new StubProcessingContext(),
+                                               new StubProcessingContext());
 
         assertThatThrownBy(claim::join)
                 .as("""
@@ -172,16 +173,17 @@ class WorkflowEngineSegmentCallbackTest {
 
     /** The context a restored body would run under; its executor never runs anything in this test. */
     private static ProcessingContext bodyContext() {
-        var context = mock(ProcessingContext.class);
-        when(context.resources()).thenReturn(Map.of());
-        when(context.component(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
-        when(context.component(Clock.class)).thenReturn(Clock.systemUTC());
-        when(context.component(ExecutorService.class, WORKFLOW_ENGINE_EXECUTOR))
-                .thenReturn(mock(ExecutorService.class));
-        when(context.component(EventSink.class)).thenReturn(mock(EventSink.class));
-        when(context.component(WorkflowScheduler.class)).thenReturn(mock(WorkflowScheduler.class));
-        when(context.component(ExecuteStepActionResolver.class)).thenReturn(mock(ExecuteStepActionResolver.class));
-        return context;
+        return StubProcessingContext.withComponents(
+                registry -> registry
+                        .registerComponent(UnitOfWorkFactory.class, configuration -> mock(UnitOfWorkFactory.class))
+                        .registerComponent(Clock.class, configuration -> Clock.systemUTC())
+                        .registerComponent(ExecutorService.class,
+                                           WORKFLOW_ENGINE_EXECUTOR,
+                                           configuration -> mock(ExecutorService.class))
+                        .registerComponent(EventSink.class, configuration -> mock(EventSink.class))
+                        .registerComponent(WorkflowScheduler.class, configuration -> mock(WorkflowScheduler.class))
+                        .registerComponent(ExecuteStepActionResolver.class,
+                                           configuration -> mock(ExecuteStepActionResolver.class)));
     }
 
     /** An instance whose interrupt never reports back, which is what a body that does not unwind looks like. */

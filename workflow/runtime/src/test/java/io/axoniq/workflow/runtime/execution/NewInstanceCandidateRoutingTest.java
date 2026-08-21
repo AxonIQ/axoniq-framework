@@ -27,12 +27,12 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.common.TypeReference;
-import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.sequencing.SequencingPolicy;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
@@ -43,7 +43,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -558,19 +557,9 @@ class NewInstanceCandidateRoutingTest {
     }
 
     private ProcessingContext context(Segment segment) {
-        Map<Context.ResourceKey<?>, Object> resources = new HashMap<>();
-        resources.put(Segment.RESOURCE_KEY, segment);
-        resources.put(TrackingToken.RESOURCE_KEY, token(1));
-        var context = mock(ProcessingContext.class);
-        when(context.resources()).thenReturn(resources);
-        doAnswer(invocation -> resources.get(invocation.<Context.ResourceKey<?>>getArgument(0)))
-                .when(context).getResource(any());
-        doAnswer(invocation -> {
-            resources.put(invocation.getArgument(0), invocation.getArgument(1));
-            return context;
-        }).when(context).putResource(any(), any());
-        when(context.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
-        when(context.component(WorkflowEngineCheckpointingSupport.class)).thenReturn(checkpointingSupport);
+        var context = new StubProcessingContext();
+        context.putResource(Segment.RESOURCE_KEY, segment);
+        context.putResource(TrackingToken.RESOURCE_KEY, token(1));
         return context;
     }
 

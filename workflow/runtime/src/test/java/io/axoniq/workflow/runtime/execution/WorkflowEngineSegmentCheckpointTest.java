@@ -27,11 +27,11 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
 import org.axonframework.common.TypeReference;
-import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
@@ -150,13 +150,7 @@ class WorkflowEngineSegmentCheckpointTest {
     }
 
     private ProcessingContext processingContext(Segment segment) {
-        Map<Context.ResourceKey<?>, Object> resources = Map.of(Segment.RESOURCE_KEY, segment);
-        var context = mock(ProcessingContext.class);
-        when(context.resources()).thenReturn(resources);
-        doAnswer(invocation -> resources.get(invocation.<Context.ResourceKey<?>>getArgument(0)))
-                .when(context).getResource(any());
-        when(context.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
-        when(context.component(WorkflowEngineCheckpointingSupport.class)).thenReturn(checkpointingSupport);
+        var context = new StubProcessingContext();
         return context;
     }
 }

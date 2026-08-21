@@ -21,7 +21,7 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -70,9 +70,6 @@ class WorkflowEngineSegmentFailoverTest {
         var running = new EventSourcedRunningWorkflows();
         running.evolve(MetadataUtils.create(OWNED_ID, WorkflowStatus.STARTED));
         running.evolve(MetadataUtils.create(foreignId, WorkflowStatus.STARTED));
-        var sourcingContext = mock(ProcessingContext.class);
-        when(sourcingContext.component(WorkflowEngineReplaySupport.class))
-                .thenReturn(new WorkflowEngineReplaySupport(workflowEngine));
         when(workflowStore.loadRunningWorkflows(any())).thenReturn(CompletableFuture.completedFuture(running));
         when(workflowStore.loadWorkflow(eq(OWNED_ID), any()))
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("sourced")));
@@ -80,7 +77,8 @@ class WorkflowEngineSegmentFailoverTest {
         var owner = owningSegment(OWNED_ID);
         // The claim survives the failed sourcing of a single instance, which WorkflowEngineRestoreFaultIsolationTest
         // pins. What this case asserts is which instances were sourced at all.
-        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext, mock(ProcessingContext.class)).join();
+        workflowEngine.restoreWorkflowsFor(owner, null, new StubProcessingContext(), new StubProcessingContext())
+                      .join();
 
         verify(workflowStore).loadWorkflow(eq(OWNED_ID), any());
         verify(workflowStore, never()).loadWorkflow(eq(foreignId), any());

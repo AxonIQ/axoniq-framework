@@ -29,6 +29,7 @@ import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.BeforeEach;
@@ -120,7 +121,8 @@ class WorkflowEngineRestoreFaultIsolationTest {
                 .as("the replay path can resolve it, through the closest registered sibling")
                 .isPresent();
 
-        workflowEngine.restoreWorkflowsFor(ONLY_SEGMENT, null, sourcingContext(), mock(ProcessingContext.class)).join();
+        workflowEngine.restoreWorkflowsFor(ONLY_SEGMENT, null, sourcingContext(), new StubProcessingContext())
+                      .join();
 
         assertThat(bodyStarts)
                 .as("""
@@ -155,7 +157,7 @@ class WorkflowEngineRestoreFaultIsolationTest {
         assertThatCode(() -> workflowEngine.restoreWorkflowsFor(ONLY_SEGMENT,
                                                                null,
                                                                sourcingContext(),
-                                                               mock(ProcessingContext.class))
+                                                               new StubProcessingContext())
                                            .join())
                 .as("""
                     The claim of segment %s must survive an instance it cannot restore. Letting it fail aborts the \
@@ -226,8 +228,6 @@ class WorkflowEngineRestoreFaultIsolationTest {
     }
 
     private ProcessingContext sourcingContext() {
-        var context = mock(ProcessingContext.class);
-        when(context.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
-        return context;
+        return new StubProcessingContext();
     }
 }

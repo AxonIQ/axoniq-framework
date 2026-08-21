@@ -28,11 +28,11 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.TypeReference;
-import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -41,7 +41,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -56,7 +55,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -110,7 +108,7 @@ class WorkflowEngineClaimGapWakeTest {
     @Test
     void aResumeEventDeliveredBeforeARestoredBodyReRegistersItsWaitConditionStillWakesTheInstance() {
         var owner = owningSegment(RESIDENT_ID);
-        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext(), mock(ProcessingContext.class)).join();
+        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext(), new StubProcessingContext()).join();
 
         assertThat(restored).as("the claim materialized the instance").isNotNull();
         assertThat(restored.isRunning())
@@ -137,7 +135,7 @@ class WorkflowEngineClaimGapWakeTest {
     @Test
     void aResumeEventDeliveredAfterTheWaitConditionIsRegisteredStillWakesTheInstance() {
         var owner = owningSegment(RESIDENT_ID);
-        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext(), mock(ProcessingContext.class)).join();
+        workflowEngine.restoreWorkflowsFor(owner, null, sourcingContext(), new StubProcessingContext()).join();
 
         var waitStep = registerWaitFor(WAIT_STEP);
 
@@ -229,21 +227,13 @@ class WorkflowEngineClaimGapWakeTest {
 
     /** A processor batch context carrying the segment the event is delivered under. */
     private ProcessingContext deliveryContext(Segment segment) {
-        Map<Context.ResourceKey<?>, Object> resources = new HashMap<>();
-        resources.put(Segment.RESOURCE_KEY, segment);
-        var context = mock(ProcessingContext.class);
-        when(context.resources()).thenReturn(resources);
-        doAnswer(invocation -> resources.get(invocation.<Context.ResourceKey<?>>getArgument(0)))
-                .when(context).getResource(any());
-        when(context.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
-        when(context.component(WorkflowEngineCheckpointingSupport.class)).thenReturn(checkpointingSupport);
+        var context = new StubProcessingContext();
+        context.putResource(Segment.RESOURCE_KEY, segment);
         return context;
     }
 
     private ProcessingContext sourcingContext() {
-        var context = mock(ProcessingContext.class);
-        when(context.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
-        return context;
+        return new StubProcessingContext();
     }
 
     private static EventMessage resumeEvent() {

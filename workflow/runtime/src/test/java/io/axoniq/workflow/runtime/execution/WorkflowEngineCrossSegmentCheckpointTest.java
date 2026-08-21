@@ -31,11 +31,11 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.TypeReference;
-import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.progress.SegmentProgressContext;
@@ -48,7 +48,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -330,21 +329,11 @@ class WorkflowEngineCrossSegmentCheckpointTest {
     }
 
     private ProcessingContext processingContext(Segment segment, @Nullable TrackingToken trackingToken) {
-        Map<Context.ResourceKey<?>, Object> resources = new HashMap<>();
-        resources.put(Segment.RESOURCE_KEY, segment);
+        var context = new StubProcessingContext();
+        context.putResource(Segment.RESOURCE_KEY, segment);
         if (trackingToken != null) {
-            resources.put(TrackingToken.RESOURCE_KEY, trackingToken);
+            context.putResource(TrackingToken.RESOURCE_KEY, trackingToken);
         }
-        var context = mock(ProcessingContext.class);
-        when(context.resources()).thenReturn(resources);
-        doAnswer(invocation -> resources.get(invocation.<Context.ResourceKey<?>>getArgument(0)))
-                .when(context).getResource(any());
-        doAnswer(invocation -> {
-            resources.put(invocation.getArgument(0), invocation.getArgument(1));
-            return context;
-        }).when(context).putResource(any(), any());
-        when(context.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
-        when(context.component(WorkflowEngineCheckpointingSupport.class)).thenReturn(checkpointingSupport);
         return context;
     }
 

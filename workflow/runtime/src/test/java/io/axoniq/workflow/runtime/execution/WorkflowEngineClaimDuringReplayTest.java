@@ -27,11 +27,11 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import jakarta.annotation.Nullable;
-import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
@@ -40,7 +40,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -200,32 +199,20 @@ class WorkflowEngineClaimDuringReplayTest {
     }
 
     private ProcessingContext sourcingContext() {
-        var context = mock(ProcessingContext.class);
-        when(context.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
-        return context;
+        return new StubProcessingContext();
     }
 
     private ProcessingContext executionContext() {
-        var context = mock(ProcessingContext.class);
-        when(context.resources()).thenReturn(new HashMap<>());
-        when(context.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
-        when(context.component(WorkflowEngineCheckpointingSupport.class)).thenReturn(checkpointingSupport);
-        return context;
+        return new StubProcessingContext();
     }
 
     /** A processor batch context carrying the segment the event is delivered under, and its position. */
     private ProcessingContext deliveryContext(Segment segment, @Nullable TrackingToken trackingToken) {
-        Map<Context.ResourceKey<?>, Object> resources = new HashMap<>();
-        resources.put(Segment.RESOURCE_KEY, segment);
+        var context = new StubProcessingContext();
+        context.putResource(Segment.RESOURCE_KEY, segment);
         if (trackingToken != null) {
-            resources.put(TrackingToken.RESOURCE_KEY, trackingToken);
+            context.putResource(TrackingToken.RESOURCE_KEY, trackingToken);
         }
-        var context = mock(ProcessingContext.class);
-        when(context.resources()).thenReturn(resources);
-        doAnswer(invocation -> resources.get(invocation.<Context.ResourceKey<?>>getArgument(0)))
-                .when(context).getResource(any());
-        when(context.component(WorkflowEngineReplaySupport.class)).thenReturn(replaySupport);
-        when(context.component(WorkflowEngineCheckpointingSupport.class)).thenReturn(checkpointingSupport);
         return context;
     }
 
