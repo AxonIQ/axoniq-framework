@@ -156,7 +156,7 @@ final class TenantDataProtectionFixture {
 
     String rawStoredPayload(String tenantId) {
         AxonServerConnectionManager connectionManager = application.getComponent(AxonServerConnectionManager.class);
-        try (EventStream stream = connectionManager.getConnection(tenantId).eventChannel().openStream(0, 1)) {
+        try (EventStream stream = connectionManager.getConnection(tenantId).eventChannel().openStream(-1, 1)) {
             EventWithToken event = stream.nextIfAvailable(10, TimeUnit.SECONDS);
             return event.getEvent().getPayload().getData().toStringUtf8();
         } catch (InterruptedException e) {
