@@ -113,6 +113,11 @@ public class AxonServerAutoConfiguration implements ApplicationContextAware {
      * {@link AxonServerConfiguration#getCommandThreads()} property.
      * <p>
      * This enhancer is only constructed when {@code axon.axonserver.enabled} is set to {@code true}.
+     * <p>
+     * This enhancer must run before the framework's {@link AxonServerConfigurationEnhancer}. That enhancer's
+     * {@code registerIfNotPresent} for {@link AxonServerConfiguration} triggers a Spring bean lookup that eagerly
+     * resolves (and thus permanently caches) the {@code AxonServerConfiguration} bean. If this enhancer's
+     * component-name decorator was not registered by that time, it never gets the chance to apply.
      *
      * @return A {@link ConfigurationEnhancer} that decorates the {@link AxonServerConfiguration} and
      * {@link DistributedCommandBusConfiguration}.
@@ -120,38 +125,48 @@ public class AxonServerAutoConfiguration implements ApplicationContextAware {
     @Bean
     @ConditionalOnProperty(name = "axon.axonserver.enabled", matchIfMissing = true)
     public ConfigurationEnhancer axonServerConfigurationEnhancer() {
-        return registry -> registry.registerDecorator(
-                                           AxonServerConfiguration.class,
-                                           AXON_SERVER_CONFIGURATION_ENHANCEMENT_ORDER,
-                                           (config, name, axonServerConfig) -> {
-                                               axonServerConfig.setComponentName(clientName(applicationContext.getId()));
-                                               return axonServerConfig;
-                                           }
-                                   )
-                                   .registerDecorator(
-                                           DistributedCommandBusConfiguration.class,
-                                           AXON_SERVER_CONFIGURATION_ENHANCEMENT_ORDER,
-                                           (config, name, distributedCommandBusConfig) -> {
-                                               AxonServerConfiguration serverConfig =
-                                                       config.getComponent(AxonServerConfiguration.class);
-                                               int commandThreads = serverConfig.getCommandThreads();
-                                               return distributedCommandBusConfig.commandThreads(commandThreads);
-                                           }
-                                   )
-                                   .registerDecorator(
-                                           DistributedQueryBusConfiguration.class,
-                                           AXON_SERVER_CONFIGURATION_ENHANCEMENT_ORDER,
-                                           (config, name, distributedQueryBusConfig) -> {
-                                               AxonServerConfiguration serverConfig =
-                                                       config.getComponent(AxonServerConfiguration.class);
-                                               Integer queryThreads = serverConfig.getQueryThreads();
-                                               if (queryThreads != null && queryThreads > 0) {
-                                                   return distributedQueryBusConfig
-                                                           .queryThreads(queryThreads);
-                                               }
-                                               return distributedQueryBusConfig;
-                                           }
-                                   );
+        return new ConfigurationEnhancer() {
+            @Override
+            public void enhance(ComponentRegistry registry) {
+                registry.registerDecorator(
+                                AxonServerConfiguration.class,
+                                AXON_SERVER_CONFIGURATION_ENHANCEMENT_ORDER,
+                                (config, name, axonServerConfig) -> {
+                                    axonServerConfig.setComponentName(clientName(applicationContext.getId()));
+                                    return axonServerConfig;
+                                }
+                        )
+                        .registerDecorator(
+                                DistributedCommandBusConfiguration.class,
+                                AXON_SERVER_CONFIGURATION_ENHANCEMENT_ORDER,
+                                (config, name, distributedCommandBusConfig) -> {
+                                    AxonServerConfiguration serverConfig =
+                                            config.getComponent(AxonServerConfiguration.class);
+                                    int commandThreads = serverConfig.getCommandThreads();
+                                    return distributedCommandBusConfig.commandThreads(commandThreads);
+                                }
+                        )
+                        .registerDecorator(
+                                DistributedQueryBusConfiguration.class,
+                                AXON_SERVER_CONFIGURATION_ENHANCEMENT_ORDER,
+                                (config, name, distributedQueryBusConfig) -> {
+                                    AxonServerConfiguration serverConfig =
+                                            config.getComponent(AxonServerConfiguration.class);
+                                    Integer queryThreads = serverConfig.getQueryThreads();
+                                    if (queryThreads != null && queryThreads > 0) {
+                                        return distributedQueryBusConfig
+                                                .queryThreads(queryThreads);
+                                    }
+                                    return distributedQueryBusConfig;
+                                }
+                        );
+            }
+
+            @Override
+            public int order() {
+                return AxonServerConfigurationEnhancer.ENHANCER_ORDER - 5;
+            }
+        };
     }
 
     private static String clientName(@Nullable String id) {
