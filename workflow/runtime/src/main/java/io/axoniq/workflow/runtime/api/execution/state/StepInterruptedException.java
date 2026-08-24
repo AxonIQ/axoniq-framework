@@ -53,7 +53,7 @@ public class StepInterruptedException extends StepFailedException {
      * @param message the detail message describing why the wait was interrupted
      * @param cause   the underlying cause of the interruption
      */
-    public StepInterruptedException(@Nonnull String message, Throwable cause) {
+    public StepInterruptedException(@Nonnull String message, @Nonnull Throwable cause) {
         super(message, cause);
     }
 

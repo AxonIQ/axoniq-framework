@@ -33,18 +33,13 @@ import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.Executor;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.doCallRealMethod;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests for the replay-drift guard in {@link WorkflowLifecycleControlDelegate}. Drift detection must fire on
- * workflow-level fail/cancel AND per-step cancellation, since both publish events that would
- * corrupt an in-flight workflow if old code ran past this point.
+ * workflow-level fail/cancel AND per-step cancellation, since both publish events that would corrupt an in-flight
+ * workflow if old code ran past this point.
  *
  * @author Stefan Dragisic
  */
@@ -76,7 +71,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
     }
 
     @Test
-    void terminate_throwsDrift_forWorkflowFail_whenOrphansAhead() {
+    void failWorkflow_throwsDrift_whenOrphansAhead() {
         reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
@@ -95,7 +90,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
     }
 
     @Test
-    void terminate_throwsDrift_forWorkflowCancel_whenOrphansAhead() {
+    void cancelWorkflow_throwsDrift_whenOrphansAhead() {
         reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
@@ -109,7 +104,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
     }
 
     @Test
-    void terminate_throwsDrift_forStepCancellation_whenOrphansAhead() {
+    void cancelStep_throwsDrift_whenOrphansAhead() {
         reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
@@ -128,7 +123,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
     }
 
     @Test
-    void terminate_doesNotThrow_whenAllStepsReferenced() {
+    void failWorkflow_doesNotThrow_whenAllStepsReferenced() {
         reachedSteps.record("A");
         reachedSteps.record("B");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));

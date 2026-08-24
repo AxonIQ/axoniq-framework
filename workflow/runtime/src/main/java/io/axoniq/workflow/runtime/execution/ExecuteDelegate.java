@@ -30,6 +30,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
+import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -63,9 +64,9 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
      * Constructs the delegate.
      *
      * @param context                   workflow context.
-     * @param workflowExecution         workflow state.
+     * @param workflowExecution          workflow state.
      * @param runningSteps              running step registry
-     * @param reachedSteps      reached steps tracker
+     * @param reachedSteps              reached steps tracker
      * @param parentEventNameCustomizer event name customizer.
      * @param clock                     clock for time calculations.
      * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
@@ -104,10 +105,10 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     @Override
     public WorkflowStepResult execute(@Nonnull ExecutePrimitive.ExecuteCommand command) {
         return execute(command,
-                       // default failure handler — publish FAILED
+                // default failure handler — publish FAILED
                        (name, error, enc) ->
                                workflowExecution.appendTask(i -> failed(name, error, enc)),
-                       // default timeout handler — publish TIMED_OUT
+                // default timeout handler — publish TIMED_OUT
                        (name, enc) ->
                                workflowExecution.appendTask(i -> timedOut(name, clock.instant(), enc))
         );
@@ -134,8 +135,9 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         // flow via the passed-in failure handler (no retry policy -> step FAILED with StepIndeterminateException; retry
         // policy -> RETRYING + next attempt). Live retry attempts reach this method with status RETRYING, never STARTED,
         // so they are unaffected and still execute.
-        boolean resumedInFlight = workflowExecution.state().containsStep(stepName)
-                && workflowExecution.state().getStep(stepName).status() == StepStatus.STARTED;
+        boolean resumedInFlight = WorkflowStateUtils.isStepStatus(
+                workflowExecution.state(), stepName, StepStatus.STARTED
+        );
 
         reachedSteps.record(stepName);
 
@@ -152,8 +154,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                                  started(stepName, sanitize(local), eventNameCustomizer)
             );
             try {
-                workflowExecution.awaitStateChange(s -> s.containsStep(stepName)
-                        && s.getStep(stepName).status() == StepStatus.STARTED);
+                workflowExecution.awaitStateChange(WorkflowStateUtils.stepStatus(stepName, StepStatus.STARTED));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return WorkflowStepResults.canceled(stepName);
@@ -173,8 +174,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                             customize -> customize.workScheduler(executor)) // FIXME -> define a new thread pool for execution customer code
                     .executeWithResult(processingContext -> {
                         var procContext = ProcessingContextUtils.copyResources(workflowExecution.state()
-                                                                                .getStep(stepName)
-                                                                                .context(),
+                                                                                                .getStep(stepName)
+                                                                                                .context(),
                                                                                processingContext);
                         var payload = parameterPayloadReducer.apply(workflowContext.workflowPayload(), local);
                         try {
@@ -208,35 +209,35 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                         }
                 );
                 result.whenComplete((r, e) -> {
-                            timeoutTask.cancel();
-                            runningSteps.remove(stepName);
-                            if (e == null) {
-                                // Normal completion — a null action result sanitizes to an empty map in completed(),
-                                // so a null-returning action COMPLETES rather than wedging on a null-e dereference.
-                                workflowExecution.appendTask(i -> {
-                                    // FIXME - This is where we should publish using an append condition
-                                    completed(stepName, r, resultPayloadReducer.name(), eventNameCustomizer);
-                                });
-                            } else {
-                                if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {
-                                    // FIXME - This is where we should publish using an append condition
-                                    workflowExecution.appendTask(
-                                            i -> timeoutHandler.onTimeout(stepName, eventNameCustomizer));
-                                } else if (isCancellation(e)) {
-                                    var terminationCause = unwrapCancellation(e);
-                                    // FIXME - This is where we should publish using an append condition
-                                    workflowExecution.appendTask(i -> {
-                                        cancelled(stepName, terminationCause, eventNameCustomizer);
-                                    });
-                                } else {
-                                    // FIXME - This is where we should publish using an append condition
-                                    Throwable failure = e instanceof CompletionException && e.getCause() != null
-                                            ? e.getCause() : e;
-                                    workflowExecution.appendTask(
-                                            i -> failureHandler.onFailure(stepName, failure, eventNameCustomizer));
-                                }
-                            }
+                    timeoutTask.cancel();
+                    runningSteps.remove(stepName);
+                    if (e == null) {
+                        // Normal completion — a null action result sanitizes to an empty map in completed(),
+                        // so a null-returning action COMPLETES rather than wedging on a null-e dereference.
+                        workflowExecution.appendTask(i -> {
+                            // FIXME - This is where we should publish using an append condition
+                            completed(stepName, r, resultPayloadReducer.name(), eventNameCustomizer);
                         });
+                    } else {
+                        if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {
+                            // FIXME - This is where we should publish using an append condition
+                            workflowExecution.appendTask(
+                                    i -> timeoutHandler.onTimeout(stepName, eventNameCustomizer));
+                        } else if (isCancellation(e)) {
+                            var terminationCause = unwrapCancellation(e);
+                            // FIXME - This is where we should publish using an append condition
+                            workflowExecution.appendTask(i -> {
+                                cancelled(stepName, terminationCause, eventNameCustomizer);
+                            });
+                        } else {
+                            // FIXME - This is where we should publish using an append condition
+                            Throwable failure = e instanceof CompletionException && e.getCause() != null
+                                    ? e.getCause() : e;
+                            workflowExecution.appendTask(
+                                    i -> failureHandler.onFailure(stepName, failure, eventNameCustomizer));
+                        }
+                    }
+                });
             }
         }
 

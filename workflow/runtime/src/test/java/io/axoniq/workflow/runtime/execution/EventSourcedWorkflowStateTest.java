@@ -37,6 +37,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
@@ -329,6 +330,53 @@ class EventSourcedWorkflowStateTest {
 
         assertThat(state.currentWorkflowVersion("change-a")).isEqualTo("0.0.2");
         assertThat(state.currentWorkflowVersion("change-b")).isEqualTo("0.0.5");
+    }
+
+    @Test
+    void isStepTerminal_returnsFalse_whenStepNotContained() {
+        assertThat(state.isStepTerminal("nonExistent")).isFalse();
+        assertThat(state.isStepActive("nonExistent")).isFalse();
+    }
+
+    @Test
+    void isStepTerminal_returnsFalse_whenStepIsStartedOrRetrying() {
+        String startedStep = "startedStep";
+        EventMessage started = mock(EventMessage.class);
+        when(started.metadata()).thenReturn(MetadataUtils.create("wf-1", startedStep, StepStatus.STARTED));
+        when(started.timestamp()).thenReturn(Instant.now());
+        when(started.payloadAs(Object.class)).thenReturn(Map.of());
+        state.evolve(started, processingContext);
+
+        assertThat(state.isStepTerminal(startedStep)).isFalse();
+        assertThat(state.isStepActive(startedStep)).isTrue();
+
+        String retryingStep = "retryingStep";
+        EventMessage retrying = mock(EventMessage.class);
+        when(retrying.metadata()).thenReturn(MetadataUtils.create("wf-1", retryingStep, StepStatus.RETRYING));
+        when(retrying.timestamp()).thenReturn(Instant.now());
+        when(retrying.payloadAs(StepRetryInfo.class)).thenReturn(new StepRetryInfo(1, 100, WorkflowError.from(new RuntimeException("retry"))));
+        state.evolve(retrying, processingContext);
+
+        assertThat(state.isStepTerminal(retryingStep)).isFalse();
+        assertThat(state.isStepActive(retryingStep)).isTrue();
+    }
+
+    @Test
+    void isStepTerminal_returnsTrue_whenStepIsTerminal() {
+        for (StepStatus terminalStatus : List.of(StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.TIMED_OUT, StepStatus.CANCELLED)) {
+            String stepName = "step-" + terminalStatus;
+            EventMessage eventMessage = mock(EventMessage.class);
+            when(eventMessage.metadata()).thenReturn(MetadataUtils.create("wf-1", stepName, terminalStatus));
+            when(eventMessage.timestamp()).thenReturn(Instant.now());
+            when(eventMessage.payloadAs(Object.class)).thenReturn(Map.of());
+            if (terminalStatus == StepStatus.FAILED) {
+                when(eventMessage.payloadAs(WorkflowError.class)).thenReturn(WorkflowError.from(new RuntimeException("err")));
+            }
+            state.evolve(eventMessage, processingContext);
+
+            assertThat(state.isStepTerminal(stepName)).isTrue();
+            assertThat(state.isStepActive(stepName)).isFalse();
+        }
     }
 
     private EventMessage mockMigrationStepEvent(Metadata metadata) {

@@ -288,7 +288,6 @@ final class WorkflowExecutionCheckpointingSupport {
         }
     }
 
-
     /**
      * Indicates whether the given queued task is a checkpoint barrier owned by this support instance.
      *
@@ -314,7 +313,6 @@ final class WorkflowExecutionCheckpointingSupport {
         }
         callback.run();
     }
-
 
     /**
      * Task queue containing <b>any</b> {@link WorkflowExecution} task, as well as

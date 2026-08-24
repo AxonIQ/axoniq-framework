@@ -19,13 +19,13 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.execution.context.Version;
 import io.axoniq.workflow.runtime.api.execution.context.VersionPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
-import io.axoniq.workflow.runtime.api.execution.context.Version;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -42,10 +42,9 @@ import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Bu
 /**
  * Implements the {@link VersionPrimitive}.
  * <p>
- * The delegate is intentionally tiny: there is no user-supplied action to run, no async lifecycle to
- * manage, and at most a single event is published per invocation. Correctness hinges on the
- * "downstream-steps guard" — see the algorithm in {@link #version(VersionPrimitive.VersionCommand)} for
- * details.
+ * The delegate is intentionally tiny: there is no user-supplied action to run, no async lifecycle to manage, and at
+ * most a single event is published per invocation. Correctness hinges on the "downstream-steps guard" — see the
+ * algorithm in {@link #version(VersionPrimitive.VersionCommand)} for details.
  *
  * @author Stefan Dragisic
  * @since 0.2.0
@@ -67,14 +66,14 @@ public class VersionDelegate implements VersionPrimitive {
     /**
      * Constructs the delegate.
      *
-     * @param workflowContext           workflow context.
-     * @param workflowExecution         workflow execution.
-     * @param reachedSteps      reached steps tracker
-     * @param parentEventNameCustomizer parent event name customizer.
-     * @param clock                     clock for time calculations.
-     * @param unitOfWorkFactory         unit of work factory.
-     * @param eventSink                 event sink.
-     * @param executor                  executor for event publication.
+     * @param workflowContext            workflow context
+     * @param workflowExecution          workflow execution
+     * @param reachedSteps              reached steps tracker
+     * @param parentEventNameCustomizer parent event name customizer
+     * @param clock                     clock for time calculations
+     * @param unitOfWorkFactory         unit of work factory
+     * @param eventSink                 event sink
+     * @param executor                  executor for event publication
      */
     public VersionDelegate(@Nonnull WorkflowContext workflowContext,
                            @Nonnull WorkflowExecution workflowExecution,
@@ -140,7 +139,10 @@ public class VersionDelegate implements VersionPrimitive {
         //    returning so a subsequent ctx.migrateVersion() call later in the same invocation sees the
         //    recorded value.
         var eventNameCustomizer = merge(parentEventNameCustomizer, command.eventNameCustomizer());
-        var event = EventMessageUtils.versionMigrationStep(workflowContext, stepName, requestedRaw, eventNameCustomizer);
+        var event = EventMessageUtils.versionMigrationStep(workflowContext,
+                                                           stepName,
+                                                           requestedRaw,
+                                                           eventNameCustomizer);
 
         workflowExecution.appendTask(e -> ProcessingContextUtils.executeWithResult(
                 workflowExecution.workflowId(),

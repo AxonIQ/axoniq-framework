@@ -19,15 +19,16 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
-import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
+import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.TypeReference;
@@ -75,15 +76,15 @@ public abstract class AbstractStepExecutor {
     /**
      * Constructs the abstract step executor.
      *
-     * @param workflowContext           workflow context.
-     * @param workflowExecution         workflow execution.
+     * @param workflowContext            workflow context
+     * @param workflowExecution          workflow execution
      * @param runningSteps              running step registry
-     * @param reachedSteps      reached steps tracker
-     * @param parentEventNameCustomizer parent event name customizer.
-     * @param clock                     clock for time calculations.
-     * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
-     * @param eventSink                 event sink for event publications.
-     * @param executor                  executor to offload execution tasks from workflow thread.
+     * @param reachedSteps              reached steps tracker
+     * @param parentEventNameCustomizer parent event name customizer
+     * @param clock                     clock for time calculations
+     * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts
+     * @param eventSink                 event sink for event publications
+     * @param executor                  executor to offload execution tasks from the workflow thread
      */
     @Internal
     public AbstractStepExecutor(
@@ -112,16 +113,16 @@ public abstract class AbstractStepExecutor {
     /**
      * Constructs the abstract step executor.
      *
-     * @param workflowContext           workflow context.
-     * @param workflowExecution         workflow execution.
+     * @param workflowContext            workflow context
+     * @param workflowExecution          workflow execution
      * @param runningSteps              running step registry
-     * @param reachedSteps      reached steps tracker
-     * @param parentEventNameCustomizer parent event name customizer.
-     * @param clock                     clock for time calculations.
-     * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
-     * @param eventSink                 event sink for event publications.
-     * @param executor                  executor to offload execution tasks from workflow thread.
-     * @param timeoutScheduler          timeout scheduler.
+     * @param reachedSteps              reached steps tracker
+     * @param parentEventNameCustomizer parent event name customizer
+     * @param clock                     clock for time calculations
+     * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts
+     * @param eventSink                 event sink for event publications
+     * @param executor                  executor to offload execution tasks from workflow thread
+     * @param timeoutScheduler          timeout scheduler
      */
     @Internal
     public AbstractStepExecutor(
@@ -253,7 +254,7 @@ public abstract class AbstractStepExecutor {
                 var terminationCause = unwrapCancellation(e);
                 workflowExecution.appendTask(i -> {
                     // FIXME - This is where we should publish using an append condition
-                    if (!i.state().getStep(stepName).status().isTerminal()) {
+                    if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)) {
                         cancelled(stepName, terminationCause, eventNameCustomizer);
                     }
                 });
@@ -330,8 +331,7 @@ public abstract class AbstractStepExecutor {
                     "Workflow is in terminal state " + workflowContext.workflowStatus()
                             + ", cannot publish step event " + eventMessage.type()));
         }
-        if (workflowExecution.state().containsStep(stepName) && workflowExecution.state().getStep(stepName).status()
-                                                                                 .isTerminal()) {
+        if (WorkflowStateUtils.isStepTerminal(workflowExecution.state(), stepName)) {
             logger.debug("Skipping step event {} — step '{}' is already in terminal state {}", eventMessage.type(),
                          stepName, workflowExecution.state().getStep(stepName).status());
             return CompletableFuture.failedFuture(new IllegalStateException(
@@ -399,5 +399,4 @@ public abstract class AbstractStepExecutor {
                 stepName, cause, eventNameCustomizer
         )), workflowExecution);
     }
-
 }

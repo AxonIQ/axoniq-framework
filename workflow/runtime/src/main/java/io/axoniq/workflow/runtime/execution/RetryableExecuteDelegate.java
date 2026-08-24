@@ -28,6 +28,7 @@ import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -153,11 +154,12 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             workflowExecution.appendTask(i -> retrying(stepName, retryInfo, eventNameCustomizer));
             try {
                 workflowExecution.awaitStateChange(s -> {
-                    var st = s.getStep(stepName);
-                    if (st.status().isTerminal()) {
+                    if (WorkflowStateUtils.isStepTerminal(s, stepName)) {
                         return true;
                     }
-                    return st.status() == StepStatus.RETRYING
+                    var st = s.getStep(stepName);
+                    return st != null
+                            && st.status() == StepStatus.RETRYING
                             && st.result() instanceof StepRetryInfo r
                             && r.attempt() == attempt;
                 });
@@ -165,7 +167,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
                 Thread.currentThread().interrupt();
                 return;
             }
-            if (workflowExecution.state().getStep(stepName).status().isTerminal()) {
+            if (WorkflowStateUtils.isStepTerminal(workflowExecution.state(), stepName)) {
                 return;
             }
 
@@ -210,12 +212,13 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             // workflow not being terminal (a cheap defensive guard).
             var gapFuture = new CompletableFuture<Void>();
             gapFuture.thenRun(() -> workflowExecution.appendTask(i -> {
-                if (!i.state().getStep(stepName).status().isTerminal()
+                if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)
                         && !i.state().workflowStatus().isTerminal()) {
                     launchWithRetry(command, nextAttempt);
                 }
             }));
             registerParkedStep(stepName, gapFuture, command.eventNameCustomizer(), () -> {
+                // nothing to clean up here
             });
             workflowExecution.appendTask(i -> gapFuture.complete(null));
         } else {
@@ -240,12 +243,13 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
                 }
             });
             backoffFuture.thenRun(() -> workflowExecution.appendTask(i -> {
-                if (!i.state().getStep(stepName).status().isTerminal()
+                if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)
                         && !i.state().workflowStatus().isTerminal()) {
                     launchWithRetry(command, nextAttempt);
                 }
             }));
             registerParkedStep(stepName, backoffFuture, command.eventNameCustomizer(), () -> {
+                // nothing to clean up here
             });
         }
     }

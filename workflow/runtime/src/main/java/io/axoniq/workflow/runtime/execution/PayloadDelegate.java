@@ -25,6 +25,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
+import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -50,10 +51,10 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
     /**
      * Constructs the primitive implementation.
      *
-     * @param workflowContext           workflow context
-     * @param workflowExecution         workflow execution
+     * @param workflowContext            workflow context
+     * @param workflowExecution          workflow execution
      * @param runningSteps              running step registry
-     * @param reachedSteps      reached steps tracker
+     * @param reachedSteps              reached steps tracker
      * @param parentEventNameCustomizer parent event name customizer
      * @param clock                     clock for time calculations
      * @param unitOfWorkFactory         unit of work factory for processing contexts
@@ -87,10 +88,10 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
     /**
      * Constructs the primitive implementation.
      *
-     * @param workflowContext           workflow context
-     * @param workflowExecution         workflow execution
+     * @param workflowContext            workflow context
+     * @param workflowExecution          workflow execution
      * @param runningSteps              running step registry
-     * @param reachedSteps      reached steps tracker
+     * @param reachedSteps              reached steps tracker
      * @param parentEventNameCustomizer parent event name customizer
      * @param clock                     clock for time calculations
      * @param unitOfWorkFactory         unit of work factory for processing contexts
@@ -141,7 +142,7 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
                                              var payloadEvent = completedStep(workflowContext,
                                                                               stepName,
                                                                               sanitize(newPayload),
-                                               NAME, // replace later the entire payload
+                                                                              NAME, // replace later the entire payload
                                                                               merge(parentEventNameCustomizer, eventNameCustomizer));
                                              ProcessingContextUtils.executeWithResult(
                                                      workflowExecution.workflowId(),
@@ -154,8 +155,7 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
             );
         }
         try {
-            workflowExecution.awaitStateChange(s -> s.containsStep(stepName)
-                    && s.getStep(stepName).status() == StepStatus.COMPLETED);
+            workflowExecution.awaitStateChange(WorkflowStateUtils.stepStatus(stepName, StepStatus.COMPLETED));
             return WorkflowStepResults.completed(stepName,
                                                  workflowExecution.state().payload(),
                                                  workflowExecution.processingContext().component(EventConverter.class));

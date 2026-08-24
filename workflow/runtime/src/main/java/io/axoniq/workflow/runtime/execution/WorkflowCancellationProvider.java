@@ -27,6 +27,8 @@ import jakarta.annotation.Nonnull;
  * still stores executions directly. A future user-facing {@code WorkflowManager} will own the external cancellation
  * API; its final design will determine whether it replaces this bridge or exposes the capability through its own API.
  *
+ * FIXME: https://github.com/AxonIQ/extension-workflow/issues/195 should either integrate this or provide own abstraction
+ *
  * @author Simon Zambrovski
  * @since 0.3.0
  */

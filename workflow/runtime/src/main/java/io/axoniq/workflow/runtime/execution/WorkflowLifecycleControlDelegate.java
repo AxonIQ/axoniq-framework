@@ -25,6 +25,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
+import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -149,8 +150,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
 
         // Guard on the single-consumer control thread: only a present, non-terminal step can be cancelled. The check
         // and the future completion below are atomic with respect to other queue tasks.
-        if (!workflowExecution.state().containsStep(stepName)
-                || workflowExecution.state().getStep(stepName).status().isTerminal()) {
+        if (!WorkflowStateUtils.isStepActive(workflowExecution.state(), stepName)) {
             return false;
         }
 
@@ -179,8 +179,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         // followed by a whole-workflow terminal would otherwise discard the still-
         // queued CANCELLED publish. The await makes the record durable before this call returns.
         try {
-            workflowExecution.awaitStateChange(s -> s.containsStep(stepName)
-                    && s.getStep(stepName).status().isTerminal());
+            workflowExecution.awaitStateChange(WorkflowStateUtils.stepTerminal(stepName));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
