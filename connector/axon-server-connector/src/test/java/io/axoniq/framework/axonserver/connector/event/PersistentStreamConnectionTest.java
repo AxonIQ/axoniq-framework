@@ -58,6 +58,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -754,6 +755,35 @@ class PersistentStreamConnectionTest {
         mockPersistentStream.closeSegment(0);
     }
 
+    @Test
+    void batchDequeuedJustBeforeSegmentCloseIsStillProcessedAndAcknowledged() {
+        // given — the segment closes itself in the exact window between readBatch's dequeue and processBatch's
+        //         handling of the resulting batch (e.g. dequeuing the segment's last buffered event flips its
+        //         closed state as a direct consequence of that very dequeue)
+        List<EventMessage> received = new LinkedList<>();
+        testSubject.open((events, ctx) -> {
+            received.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+        MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+        // when
+        mockPersistentStream.publishClosingSegmentAfterRead(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+
+        // then — the event is still delivered to the consumer...
+        await().atMost(Duration.ofSeconds(2)).until(() -> received.size() == 1);
+        // ...its real token is acknowledged (not silently dropped because the segment is now closed), followed by
+        //    the pending-work-done marker since the segment is now fully drained and closed — asserted as an
+        //    ordered sequence rather than a single "last acknowledged" snapshot, since both acks can follow the
+        //    consumer invocation in such quick succession that a synchronous read after the await above could
+        //    already observe the marker
+        await().atMost(Duration.ofSeconds(2))
+               .until(() -> mockPersistentStream.segments.get(0).acknowledgedTokens.contains(
+                       PersistentStreamSegment.PENDING_WORK_DONE_MARKER));
+        assertThat(mockPersistentStream.segments.get(0).acknowledgedTokens)
+                .containsExactly(0L, PersistentStreamSegment.PENDING_WORK_DONE_MARKER);
+    }
+
     @Nested
     class EventTypeResolution {
 
@@ -1239,6 +1269,25 @@ class PersistentStreamConnectionTest {
             segment.onAvailable.run();
         }
 
+        /**
+         * Creates the segment (if absent), enqueues {@code event}, arms the segment to close itself
+         * immediately after that event is dequeued by {@code nextIfAvailable()}, and fires the availability
+         * notification. Emulates the segment closing (e.g. reassignment) in the exact window between
+         * {@code readBatch} dequeuing the event and {@code processBatch} handling the resulting batch.
+         */
+        private void publishClosingSegmentAfterRead(int segmentNumber, EventWithToken event) {
+            @SuppressWarnings("resource")
+            MockPersistentStreamSegment segment = segments.computeIfAbsent(segmentNumber, i -> {
+                MockPersistentStreamSegment mockSegment = new MockPersistentStreamSegment(i);
+                callbacks.onSegmentOpened().accept(mockSegment);
+                mockSegment.onAvailable(() -> callbacks.onAvailable().accept(mockSegment));
+                return mockSegment;
+            });
+            segment.entries.add(PersistentStreamEvent.newBuilder().setEvent(event).build());
+            segment.closeSegmentAfterNextRead();
+            segment.onAvailable.run();
+        }
+
         private void closeWithError(Throwable throwable) {
             callbacks.onClosed().accept(throwable);
         }
@@ -1279,15 +1328,23 @@ class PersistentStreamConnectionTest {
         private Runnable onAvailable = () -> {
         };
         final AtomicLong lastAcknowledged = new AtomicLong(-1);
+        // every acknowledged token, in order — used where a single "last" value would race with a fast-following ack
+        final CopyOnWriteArrayList<Long> acknowledgedTokens = new CopyOnWriteArrayList<>();
         // exception to throw on the next nextIfAvailable() call (cleared after use)
         private final AtomicReference<RuntimeException> scheduledFailure = new AtomicReference<>();
         // when true, nextIfAvailable(long, TimeUnit) throws InterruptedException once
         final AtomicBoolean throwInterruptedOnTimeoutNext = new AtomicBoolean(false);
         final AtomicBoolean errorWasReported = new AtomicBoolean(false);
         final AtomicReference<@Nullable String> lastReportedError = new AtomicReference<>();
+        // when true, close the segment immediately after the next successful dequeue (cleared after use)
+        private final AtomicBoolean closeAfterNextRead = new AtomicBoolean(false);
 
         public void failNextWith(RuntimeException ex) {
             scheduledFailure.set(ex);
+        }
+
+        public void closeSegmentAfterNextRead() {
+            closeAfterNextRead.set(true);
         }
 
         private MockPersistentStreamSegment(int segment) {
@@ -1305,7 +1362,11 @@ class PersistentStreamConnectionTest {
             if (ex != null) {
                 throw ex;
             }
-            return entries.isEmpty() ? null : entries.removeFirst();
+            PersistentStreamEvent event = entries.isEmpty() ? null : entries.removeFirst();
+            if (event != null && closeAfterNextRead.compareAndSet(true, false)) {
+                closed.set(true);
+            }
+            return event;
         }
 
         @Override
@@ -1360,6 +1421,7 @@ class PersistentStreamConnectionTest {
         @Override
         public void acknowledge(long token) {
             lastAcknowledged.set(token);
+            acknowledgedTokens.add(token);
         }
 
         @Override
