@@ -27,10 +27,10 @@ import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
-import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,14 +74,14 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     /**
      * Constructs a lifecycle-control delegate.
      *
-     * @param workflowContext      workflow context.
-     * @param workflowExecution    workflow execution.
-     * @param runningSteps         running step registry
-     * @param reachedSteps reached steps tracker
-     * @param terminalTransition   owner of workflow terminal-transition execution mechanics
-     * @param unitOfWorkFactory    unit of work factory for creation of new processing contexts.
-     * @param eventSink            event sink for event publications.
-     * @param executor             executor to offload execution tasks from workflow thread.
+     * @param workflowContext    workflow context
+     * @param workflowExecution  workflow execution
+     * @param runningSteps       running step registry
+     * @param reachedSteps       reached steps tracker
+     * @param terminalTransition owner of workflow terminal-transition execution mechanics
+     * @param unitOfWorkFactory  unit of work factory for creation of new processing contexts
+     * @param eventSink          event sink for event publications.
+     * @param executor           executor to offload execution tasks from workflow thread
      */
     @Internal
     public WorkflowLifecycleControlDelegate(
@@ -95,7 +95,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
             @Nonnull Executor executor
     ) {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
-        this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
+        this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow execution is mandatory");
         this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
         this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
         this.terminalTransition = Objects.requireNonNull(terminalTransition, "Terminal transition is mandatory");
@@ -110,9 +110,11 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         Objects.requireNonNull(command, "Command must not be null");
         // Drift guard: adding ctx.cancel() mid-body would force a terminal event onto a
         // workflow whose old code already ran past this point. Throws non-terminally.
-        reachedSteps.guardAgainstReplayDrift(workflowExecution.workflowId(),
-                                                     workflowExecution.state(),
-                                                     "<terminate>");
+        reachedSteps.guardAgainstReplayDrift(
+                workflowExecution.workflowId(),
+                workflowExecution.state(),
+                "<terminate>"
+        );
 
         terminalTransition.transition(() -> publishCancelled(command, workflowName));
 
@@ -128,9 +130,11 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         Objects.requireNonNull(command, "Command must not be null");
         // Drift guard: adding ctx.fail() mid-body would force a terminal event onto a
         // workflow whose old code already ran past this point. Throws non-terminally.
-        reachedSteps.guardAgainstReplayDrift(workflowExecution.workflowId(),
-                                                     workflowExecution.state(),
-                                                     "<terminate>");
+        reachedSteps.guardAgainstReplayDrift(
+                workflowExecution.workflowId(),
+                workflowExecution.state(),
+                "<terminate>"
+        );
 
         terminalTransition.transition(() -> publishFailed(command, workflowName));
 
@@ -144,9 +148,11 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         Objects.requireNonNull(command, "Command must not be null");
         var stepName = command.stepName();
         reachedSteps.record(stepName);
-        reachedSteps.guardAgainstReplayDrift(workflowExecution.workflowId(),
-                                                     workflowExecution.state(),
-                                                     stepName);
+        reachedSteps.guardAgainstReplayDrift(
+                workflowExecution.workflowId(),
+                workflowExecution.state(),
+                stepName
+        );
 
         // Guard on the single-consumer control thread: only a present, non-terminal step can be cancelled. The check
         // and the future completion below are atomic with respect to other queue tasks.
@@ -223,8 +229,8 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         ).join(); // FIXME join with a timeout #280
     }
 
-    @NonNull
-    private static Exception getException(Throwable cause) {
+    @Nonnull
+    private static Exception getException(@Nullable Throwable cause) {
         return cause instanceof Exception
                 ? (Exception) cause
                 : cause != null ? new RuntimeException(cause) : new RuntimeException("Workflow failed");
