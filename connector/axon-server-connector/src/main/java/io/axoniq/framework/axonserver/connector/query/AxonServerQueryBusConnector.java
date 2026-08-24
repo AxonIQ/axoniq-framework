@@ -67,6 +67,10 @@ import static java.util.Objects.requireNonNull;
  * <p/>
  * This class facilitates interaction with AxonServer, handles incoming query requests, manages active subscriptions,
  * and oversees lifecycle phases related to query dispatching and receiving.
+ * <p/>
+ * Queries are served by a single handler: every {@link QualifiedName name} this connector subscribes is registered to
+ * the same handler, and each name is registered exactly once. Serving one query with several handlers is a concern of
+ * the application subscribing to this connector, not of the connector itself.
  *
  * @author Steven van Beelen, Allard Buijze, Jan Galinski
  * @since 5.0.0
@@ -130,12 +134,16 @@ public class AxonServerQueryBusConnector implements QueryBusConnector, Connector
     public CompletableFuture<Void> subscribe(QualifiedName name) {
         logger.debug("Subscribing to query handler [{}].",
                      name);
-        QueryDefinition definition = new QueryDefinition(name.fullName(), "");
-        Registration registration = connection.queryChannel()
-                                              .registerQueryHandler(localSegmentAdapter, definition);
-
-        this.subscriptions.put(name, registration);
-
+        // Subscribing a name this connector already subscribed to reuses the existing registration, as this connector
+        // registers a single query handler for all names it subscribes to. Registering that handler for the same name
+        // twice makes the two registrations indistinguishable to the query channel, leaving the query deregistered
+        // entirely once either of them is cancelled.
+        Registration registration = this.subscriptions.computeIfAbsent(
+                name,
+                queryName -> connection.queryChannel()
+                                       .registerQueryHandler(localSegmentAdapter,
+                                                             new QueryDefinition(queryName.fullName(), ""))
+        );
         CompletableFuture<Void> completion = new CompletableFuture<>();
         registration.onAck(() -> completion.complete(null));
         return completion;
