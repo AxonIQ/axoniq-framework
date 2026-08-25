@@ -28,6 +28,7 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CancellationException;
 
 /**
  * Internal entry point for requesting cancellation of running workflows by identifier.
@@ -63,13 +64,16 @@ public final class WorkflowCancellationService implements DescribableComponent {
      * @param workflowId identifier of the workflow that is no longer live
      */
     void unregister(@Nonnull String workflowId) {
-        cancellations.remove(Objects.requireNonNull(workflowId, "Workflow id is mandatory"));
+        var cancellation = cancellations.remove(Objects.requireNonNull(workflowId, "Workflow id is mandatory"));
+        abortPendingWorkflowCancellation(cancellation, "Workflow execution completed before cancellation was performed");
     }
 
     /**
      * Removes every registered workflow cancellation coordinator.
      */
     void clear() {
+        cancellations.values().forEach(cancellation -> abortPendingWorkflowCancellation(
+                cancellation, "Workflow engine shut down before cancellation was performed"));
         cancellations.clear();
     }
 
@@ -131,5 +135,12 @@ public final class WorkflowCancellationService implements DescribableComponent {
             throw new NoSuchElementException("No running workflow found with id '" + workflowId + "'");
         }
         return cancellation;
+    }
+
+    private static void abortPendingWorkflowCancellation(@Nullable WorkflowCancellation cancellation,
+                                                         @Nonnull String reason) {
+        if (cancellation instanceof WorkflowCancellation.Request request) {
+            request.abortPendingWorkflowCancellation(new CancellationException(reason));
+        }
     }
 }

@@ -25,15 +25,18 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
+import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
-import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.cancelledWorkflow;
@@ -73,14 +76,14 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     /**
      * Constructs a lifecycle-control delegate.
      *
-     * @param workflowContext      workflow context.
-     * @param workflowExecution    workflow execution.
-     * @param runningSteps         running step registry
-     * @param reachedSteps reached steps tracker
-     * @param terminalTransition   owner of workflow terminal-transition execution mechanics
-     * @param unitOfWorkFactory    unit of work factory for creation of new processing contexts.
-     * @param eventSink            event sink for event publications.
-     * @param executor             executor to offload execution tasks from workflow thread.
+     * @param workflowContext    workflow context
+     * @param workflowExecution  workflow execution
+     * @param runningSteps       running step registry
+     * @param reachedSteps       reached steps tracker
+     * @param terminalTransition owner of workflow terminal-transition execution mechanics
+     * @param unitOfWorkFactory  unit of work factory for creation of new processing contexts
+     * @param eventSink          event sink for event publications.
+     * @param executor           executor to offload execution tasks from workflow thread
      */
     @Internal
     public WorkflowLifecycleControlDelegate(
@@ -94,7 +97,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
             @Nonnull Executor executor
     ) {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
-        this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
+        this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow execution is mandatory");
         this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
         this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
         this.terminalTransition = Objects.requireNonNull(terminalTransition, "Terminal transition is mandatory");
@@ -109,9 +112,11 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         Objects.requireNonNull(command, "Command must not be null");
         // Drift guard: adding ctx.cancel() mid-body would force a terminal event onto a
         // workflow whose old code already ran past this point. Throws non-terminally.
-        reachedSteps.guardAgainstReplayDrift(workflowExecution.workflowId(),
-                                                     workflowExecution.state(),
-                                                     "<terminate>");
+        reachedSteps.guardAgainstReplayDrift(
+                workflowExecution.workflowId(),
+                workflowExecution.state(),
+                "<terminate>"
+        );
 
         terminalTransition.transition(() -> publishCancelled(command, workflowName));
 
@@ -127,9 +132,11 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         Objects.requireNonNull(command, "Command must not be null");
         // Drift guard: adding ctx.fail() mid-body would force a terminal event onto a
         // workflow whose old code already ran past this point. Throws non-terminally.
-        reachedSteps.guardAgainstReplayDrift(workflowExecution.workflowId(),
-                                                     workflowExecution.state(),
-                                                     "<terminate>");
+        reachedSteps.guardAgainstReplayDrift(
+                workflowExecution.workflowId(),
+                workflowExecution.state(),
+                "<terminate>"
+        );
 
         terminalTransition.transition(() -> publishFailed(command, workflowName));
 
@@ -143,14 +150,15 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         Objects.requireNonNull(command, "Command must not be null");
         var stepName = command.stepName();
         reachedSteps.record(stepName);
-        reachedSteps.guardAgainstReplayDrift(workflowExecution.workflowId(),
-                                                     workflowExecution.state(),
-                                                     stepName);
+        reachedSteps.guardAgainstReplayDrift(
+                workflowExecution.workflowId(),
+                workflowExecution.state(),
+                stepName
+        );
 
         // Guard on the single-consumer control thread: only a present, non-terminal step can be cancelled. The check
         // and the future completion below are atomic with respect to other queue tasks.
-        if (!workflowExecution.state().containsStep(stepName)
-                || workflowExecution.state().getStep(stepName).status().isTerminal()) {
+        if (!WorkflowStateUtils.isStepActive(workflowExecution.state(), stepName)) {
             return false;
         }
 
@@ -179,8 +187,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         // followed by a whole-workflow terminal would otherwise discard the still-
         // queued CANCELLED publish. The await makes the record durable before this call returns.
         try {
-            workflowExecution.awaitStateChange(s -> s.containsStep(stepName)
-                    && s.getStep(stepName).status().isTerminal());
+            workflowExecution.awaitStateChange(WorkflowStateUtils.stepTerminal(stepName));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -196,15 +203,14 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
 
         logger.error("Workflow '{}' failed", workflowExecution.workflowId(), exception);
 
-        ProcessingContextUtils.executeWithResult(
+        awaitTerminalEventPublication(ProcessingContextUtils.executeWithResult(
                 workflowExecution.workflowId(),
                 unitOfWorkFactory,
                 executor,
                 workflowContext.processingContext(),
                 ctx -> eventSink.publish(ctx,
                                          failedWorkflow(workflowContext, effectiveName, exception, workflowDefinitionId,
-                                                        eventNameCustomizer))
-        ).join(); // FIXME join with a timeout #280
+                                                        eventNameCustomizer))), "FAILED");
     }
 
     private void publishCancelled(@Nonnull WorkflowLifecycleControl.CancelWorkflowCommand command,
@@ -213,19 +219,38 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         var eventNameCustomizer = command.eventNameCustomizer();
         var workflowDefinitionId = workflowExecution.state().workflowDefinitionId();
 
-        ProcessingContextUtils.executeWithResult(
+        awaitTerminalEventPublication(ProcessingContextUtils.executeWithResult(
                 workflowExecution.workflowId(),
                 unitOfWorkFactory,
                 executor,
                 workflowContext.processingContext(),
                 ctx -> eventSink.publish(ctx,
                                          cancelledWorkflow(workflowContext, effectiveName, cause, workflowDefinitionId,
-                                                           eventNameCustomizer))
-        ).join(); // FIXME join with a timeout #280
+                                                           eventNameCustomizer))), "CANCELLED");
     }
 
-    @NonNull
-    private static Exception getException(Throwable cause) {
+    /**
+     * Awaits durable publication of a workflow terminal event.
+     * <p>
+     * Terminal transitions must not proceed before their event is durable. Timeout policy intentionally remains
+     * centralized here until issue #280 defines a configurable publication deadline and its recovery semantics.
+     *
+     * @param publication asynchronous terminal-event publication
+     * @param terminalStatus terminal status represented by the event
+     */
+    private void awaitTerminalEventPublication(@Nonnull CompletableFuture<Void> publication,
+                                               @Nonnull String terminalStatus) {
+        try {
+            publication.join(); // FIXME: add a user-defined timeout through configuration as part of #280
+        } catch (CompletionException exception) {
+            logger.error("Failed to publish {} terminal event for workflow '{}'", terminalStatus,
+                         workflowExecution.workflowId(), exception);
+            throw exception;
+        }
+    }
+
+    @Nonnull
+    private static Exception getException(@Nullable Throwable cause) {
         return cause instanceof Exception
                 ? (Exception) cause
                 : cause != null ? new RuntimeException(cause) : new RuntimeException("Workflow failed");

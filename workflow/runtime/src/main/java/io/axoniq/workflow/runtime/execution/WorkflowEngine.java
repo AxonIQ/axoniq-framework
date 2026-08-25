@@ -91,6 +91,7 @@ public class WorkflowEngine implements
      * @param unitOfWorkFactory             a unit of work factory dedicated to construct a unit of work during
      *                                      {@link #start(TrackingToken, boolean)} of this engine
      */
+    @Internal
     public WorkflowEngine(
             @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
             @Nonnull WorkflowExecutionRepository workflowExecutionRepository,
@@ -116,9 +117,9 @@ public class WorkflowEngine implements
      * Sets {@code WorkflowEngine} support components which are <b>required</b> for the engine to work.
      * <p>
      * Both {@code replaySupport} and {@code checkpointingSupport} are set outside the
-     * {@link #WorkflowEngine(WorkflowConfigurationRegistry, WorkflowExecutionRepository, WorkflowStore,
-     * UnitOfWorkFactory)}, because they require <b>this</b> {@code WorkflowEngine} itself to function. Hence, a cyclic
-     * dependency would exist upon start-up if done otherwise.
+     * {@link #WorkflowEngine(WorkflowConfigurationRegistry, WorkflowExecutionRepository, WorkflowCancellationService
+     * WorkflowStore, UnitOfWorkFactory)}, because they require <b>this</b> {@code WorkflowEngine} itself to function.
+     * Hence, a cyclic dependency would exist upon start-up if completion otherwise.
      *
      * @param replaySupport        provides replayability support to this {@code WorkflowEngine}
      * @param checkpointingSupport provides checkpointing support to this {@code WorkflowEngine}
@@ -409,6 +410,10 @@ public class WorkflowEngine implements
     private void registerCancellation(@Nonnull WorkflowExecution execution) {
         if (execution instanceof WorkflowCancellationProvider provider) {
             workflowCancellationService.register(execution.workflowId(), provider.workflowCancellation());
+        } else {
+            throw new IllegalStateException(
+                    "Provided workflow execution {} does not implement WorkflowCancellationProvider, but the cancellation was registered.".formatted(
+                            execution.workflowId()));
         }
     }
 

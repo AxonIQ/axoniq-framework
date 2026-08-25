@@ -25,9 +25,9 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -39,8 +39,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands.failWorkflow;
+import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -48,7 +48,6 @@ import static org.mockito.Mockito.eq;
 
 /**
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class WorkflowLifecycleControlDelegateFailTest {
 
@@ -110,7 +109,7 @@ class WorkflowLifecycleControlDelegateFailTest {
     }
 
     @Test
-    void terminateFailInterruptsRunningStepsWithoutPerStepEvent() {
+    void failWorkflow_interruptsRunningStepsWithoutPerStepEvent() {
         assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(new RuntimeException("boom"), eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
@@ -119,7 +118,7 @@ class WorkflowLifecycleControlDelegateFailTest {
     }
 
     @Test
-    void terminateFailWithNullCauseInterruptsRunningSteps() {
+    void failWorkflow_withNullCauseInterruptsRunningSteps() {
         assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
@@ -127,7 +126,7 @@ class WorkflowLifecycleControlDelegateFailTest {
     }
 
     @Test
-    void terminateFailPublishesFailedWorkflowEvent() {
+    void failWorkflow_publishesFailedWorkflowEvent() {
         assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(new RuntimeException("boom"), eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
@@ -135,7 +134,7 @@ class WorkflowLifecycleControlDelegateFailTest {
     }
 
     @Test
-    void terminateFailThrowsWorkflowFailedExceptionWithCause() {
+    void failWorkflow_throwsWorkflowFailedExceptionWithCause() {
         var cause = new RuntimeException("boom");
 
         assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(cause, eventNameCustomizer)))
@@ -144,14 +143,14 @@ class WorkflowLifecycleControlDelegateFailTest {
     }
 
     @Test
-    void terminateFailWithNullCauseThrowsWorkflowFailedExceptionWithMessage() {
+    void failWorkflow_withNullCauseThrowsWorkflowFailedExceptionWithMessage() {
         assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class)
                 .hasRootCauseMessage("Workflow failed");
     }
 
     @Test
-    void terminateFailExecutesStepsInOrder() {
+    void failWorkflow_executesStepsInOrder() {
         var cause = new RuntimeException("boom");
         var order = inOrder(terminalTransition, eventSink);
 
@@ -164,7 +163,7 @@ class WorkflowLifecycleControlDelegateFailTest {
 
     @SuppressWarnings("unchecked")
     @Test
-    void terminateFailInvokesFailedStatusChangeListener() throws InterruptedException {
+    void failWorkflow_invokesFailedStatusChangeListener() throws InterruptedException {
         var listener = mock(WorkflowStatusChangeListener.class);
         EventSourcedWorkflowState state = workflowState(Map.of(WorkflowStatus.FAILED, listener));
         when(workflowExecution.state()).thenReturn(state);
@@ -174,14 +173,20 @@ class WorkflowLifecycleControlDelegateFailTest {
                 failWorkflow(cause, eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        state.evolve(EventMessageUtils.failedWorkflow(workflowContext, "test-workflow", cause, state.workflowDefinitionId(),
+        state.evolve(EventMessageUtils.failedWorkflow(workflowContext,
+                                                      "test-workflow",
+                                                      cause,
+                                                      state.workflowDefinitionId(),
                                                       eventNameCustomizer), processingContext);
 
         verify(listener).onWorkflowStatus(eq(WorkflowStatus.FAILED), eq(workflowContext));
     }
 
     private EventSourcedWorkflowState workflowState(Map<WorkflowStatus, WorkflowStatusChangeListener> listeners) {
-        return new EventSourcedWorkflowState("wf-1", Map.of(), new MessageType(new QualifiedName("test-workflow"), "0.0.1"),
-                                             workflowContext, listeners);
+        return new EventSourcedWorkflowState("wf-1",
+                                             Map.of(),
+                                             new MessageType(new QualifiedName("test-workflow"), "0.0.1"),
+                                             workflowContext,
+                                             listeners);
     }
 }

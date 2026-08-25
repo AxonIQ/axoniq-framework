@@ -88,7 +88,7 @@ class ExecuteDelegateDriftTest {
                 unitOfWorkFactory,
                 eventSink,
                 executor,
-                new DefaultWorkflowScheduler(Clock.systemUTC()),
+                new ControllableWorkflowScheduler(),
                 new DefaultExecuteStepActionResolver()
         );
     }

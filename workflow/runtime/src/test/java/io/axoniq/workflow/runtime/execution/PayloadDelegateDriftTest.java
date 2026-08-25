@@ -72,7 +72,7 @@ class PayloadDelegateDriftTest {
 
         delegate = new PayloadDelegate(
                 workflowContext, workflowExecution, new RunningSteps(), reachedSteps, parent,
-                Clock.systemUTC(), unitOfWorkFactory, eventSink, executor
+                Clock.systemUTC(), unitOfWorkFactory, eventSink, executor, new ControllableWorkflowScheduler()
         );
     }
 

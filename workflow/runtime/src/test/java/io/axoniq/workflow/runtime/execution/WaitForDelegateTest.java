@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
@@ -64,7 +65,8 @@ class WaitForDelegateTest {
     private WaitForDelegate delegate;
     private EventWaitConditions eventWaitConditions;
     private AtomicReference<WorkflowStep> startedStep;
-    private WorkflowScheduler workflowScheduler;
+    private ControllableWorkflowScheduler workflowScheduler;
+    private RunningSteps runningSteps;
 
     @BeforeEach
     void setUp() {
@@ -75,11 +77,8 @@ class WaitForDelegateTest {
         eventSink = mock(EventSink.class);
         processingContext = mock(ProcessingContext.class);
         startedStep = new AtomicReference<>();
-        workflowScheduler = mock(WorkflowScheduler.class);
+        workflowScheduler = new ControllableWorkflowScheduler();
         eventWaitConditions = spy(new EventWaitConditions());
-        var scheduledTask = mock(WorkflowScheduler.ScheduledTask.class);
-        when(scheduledTask.completion()).thenReturn(new CompletableFuture<>());
-        when(workflowScheduler.schedule(any(), any())).thenReturn(scheduledTask);
         Executor executor = Runnable::run;
         EventNameCustomizer customizer = DefaultEventNameCustomizer.Builder.defaults();
 
@@ -111,7 +110,7 @@ class WaitForDelegateTest {
         delegate = new WaitForDelegate(
                 workflowContext,
                 workflowExecution,
-                new RunningSteps(),
+                runningSteps = new RunningSteps(),
                 eventWaitConditions,
                 new ReachedSteps(),
                 customizer,
@@ -149,6 +148,59 @@ class WaitForDelegateTest {
         verify(eventWaitConditions).add(anyString(), any(EventCondition.class), any(), any());
     }
 
+    @Test
+    void cancellingAParkedWaitCancelsItsTimer() {
+        var condition = mock(EventCondition.class);
+        when(condition.qualifiedName()).thenReturn(new QualifiedName("io.acme.PaymentConfirmed"));
+        when(condition.associations()).thenReturn(Set.of());
+
+        delegate.waitForEvent(new PrimitiveCommands.WorkflowStepResultWaitForCommand(
+                "awaitPayment", condition, GlobalOnlyPayloadReducer.INSTANCE, Duration.ofMinutes(15),
+                DefaultEventNameCustomizer.Builder.defaults()
+        ));
+
+        assertThat(runningSteps.cancelWithCause("awaitPayment", new StepCancellationException("cancelled"))).isTrue();
+
+        assertThat(workflowScheduler.pendingTaskCount()).isZero();
+    }
+
+    @Test
+    void receivingTheAwaitedEventCancelsItsTimer() {
+        var condition = mock(EventCondition.class);
+        when(condition.qualifiedName()).thenReturn(new QualifiedName("io.acme.PaymentConfirmed"));
+        when(condition.associations()).thenReturn(Set.of());
+        var event = mock(EventMessage.class);
+        when(event.payloadAs(any(org.axonframework.common.TypeReference.class))).thenReturn(Map.of());
+
+        delegate.waitForEvent(new PrimitiveCommands.WorkflowStepResultWaitForCommand(
+                "awaitPayment", condition, GlobalOnlyPayloadReducer.INSTANCE, Duration.ofMinutes(15),
+                DefaultEventNameCustomizer.Builder.defaults()
+        ));
+
+        delegate.eventReceived(new EventWaitConditions.Awaited(
+                event, processingContext, "awaitPayment", GlobalOnlyPayloadReducer.INSTANCE,
+                DefaultEventNameCustomizer.Builder.defaults()
+        ));
+
+        assertThat(workflowScheduler.pendingTaskCount()).isZero();
+    }
+
+    @Test
+    void anAlreadyCompletedTimerIsNotLeftRegisteredAsRunning() {
+        workflowScheduler.fireDuringSchedule();
+        var condition = mock(EventCondition.class);
+        when(condition.qualifiedName()).thenReturn(new QualifiedName("io.acme.PaymentConfirmed"));
+        when(condition.associations()).thenReturn(Set.of());
+
+        delegate.waitForEvent(new PrimitiveCommands.WorkflowStepResultWaitForCommand(
+                "awaitPayment", condition, GlobalOnlyPayloadReducer.INSTANCE, Duration.ofMinutes(15),
+                DefaultEventNameCustomizer.Builder.defaults()
+        ));
+
+        assertThat(runningSteps.stepNames()).isEmpty();
+        assertThat(workflowScheduler.pendingTaskCount()).isZero();
+    }
+
     private void stubUnitOfWorkFactory() {
         UnitOfWork unitOfWork = mock(UnitOfWork.class);
         when(unitOfWorkFactory.create(anyString(), any(Function.class))).thenReturn(unitOfWork);
@@ -163,14 +215,16 @@ class WaitForDelegateTest {
     private void stubEventPublishing() {
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class))).thenAnswer(invocation -> {
             EventMessage message = invocation.getArgument(1);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> payload = (Map<String, Object>) message.payload();
-            startedStep.set(WorkflowStep.started(
-                    "awaitPayment",
-                    payload,
-                    (Instant) payload.get("startTime"),
-                    processingContext
-            ));
+            if (message.payload() instanceof Map<?, ?> payload) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> startPayload = (Map<String, Object>) payload;
+                startedStep.set(WorkflowStep.started(
+                        "awaitPayment",
+                        startPayload,
+                        (Instant) startPayload.get("startTime"),
+                        processingContext
+                ));
+            }
             return CompletableFuture.completedFuture(null);
         });
     }

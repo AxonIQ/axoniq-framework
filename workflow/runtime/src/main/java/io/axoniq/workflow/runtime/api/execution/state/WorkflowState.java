@@ -83,6 +83,28 @@ public interface WorkflowState extends DescribableComponent {
     boolean containsStep(@Nonnull String stepName);
 
     /**
+     * Checks if a step with the given name exists and has reached a terminal status.
+     *
+     * @param stepName name of the step
+     * @return true if the step exists and is terminal, false otherwise
+     */
+    default boolean isStepTerminal(@Nonnull String stepName) {
+        var step = getStep(stepName);
+        return step != null && step.status().isTerminal();
+    }
+
+    /**
+     * Checks if a step with the given name exists and has not reached a terminal status.
+     *
+     * @param stepName name of the step
+     * @return true if the step exists and is not terminal, false otherwise
+     */
+    default boolean isStepActive(@Nonnull String stepName) {
+        var step = getStep(stepName);
+        return step != null && !step.status().isTerminal();
+    }
+
+    /**
      * Returns the status of the workflow execution.
      *
      * @return workflow status
@@ -152,7 +174,7 @@ public interface WorkflowState extends DescribableComponent {
     @Nonnull
     default Optional<String> firstCompletedAmong(@Nonnull Set<String> stepNames) {
         return stepNames.stream()
-                        .filter(name -> containsStep(name) && getStep(name).status().isTerminal())
+                        .filter(this::isStepTerminal)
                         .min(Comparator.comparing(name -> getStep(name).timestamp()));
     }
 
@@ -166,7 +188,7 @@ public interface WorkflowState extends DescribableComponent {
     @Nonnull
     default List<String> sortedCompletedAmong(@Nonnull Set<String> stepNames) {
         return stepNames.stream()
-                        .filter(name -> containsStep(name) && getStep(name).status().isTerminal())
+                        .filter(this::isStepTerminal)
                         .sorted(Comparator.comparing(name -> getStep(name).timestamp()))
                         .toList();
     }

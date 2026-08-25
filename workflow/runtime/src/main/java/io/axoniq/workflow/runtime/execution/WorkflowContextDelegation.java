@@ -21,13 +21,13 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.workflow.runtime.api.execution.context.VersionPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
@@ -90,14 +90,14 @@ public class WorkflowContextDelegation implements WorkflowContext {
     /**
      * Creates the context delegation.
      *
-     * @param workflowConfiguration workflow configuration
-     * @param workflowContext   workflow context created by the factory.
-     * @param workflowExecution workflow execution.
-     * @param runningSteps      running step registry
-     * @param eventWaitConditions event wait condition registry
-     * @param reachedSteps reached steps tracker
-     * @param terminalTransition owner of workflow terminal-transition execution mechanics
-     * @param processingContext processing context.
+     * @param workflowConfiguration   workflow configuration
+     * @param workflowContext        workflow context created by the factory
+     * @param workflowExecution      workflow execution
+     * @param runningSteps          running step registry
+     * @param eventWaitConditions   event wait condition registry
+     * @param reachedSteps          reached steps tracker
+     * @param terminalTransition    owner of workflow terminal-transition execution mechanics
+     * @param processingContext     processing context
      */
     public WorkflowContextDelegation(
             @Nonnull WorkflowConfiguration<?> workflowConfiguration,
@@ -173,13 +173,13 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                    executorService,
                                                    timeoutScheduler);
         this.lifecycleControlDelegate = new WorkflowLifecycleControlDelegate(workflowContext,
-                                                                              workflowExecution,
-                                                                              runningSteps,
-                                                                              reachedSteps,
-                                                                              terminalTransition,
-                                                                              unitOfWorkFactory,
-                                                                              eventSink,
-                                                                              executorService);
+                                                                             workflowExecution,
+                                                                             runningSteps,
+                                                                             reachedSteps,
+                                                                             terminalTransition,
+                                                                             unitOfWorkFactory,
+                                                                             eventSink,
+                                                                             executorService);
         this.payloadDelegate = new PayloadDelegate(workflowContext,
                                                    workflowExecution,
                                                    runningSteps,
@@ -334,11 +334,11 @@ public class WorkflowContextDelegation implements WorkflowContext {
     /**
      * Factory for the unit of work wrapping a workflow instance's body execution.
      * <p>
-     * The body-wrapper unit of work stays open for the workflow instance's entire lifetime, including any time the
-     * body spends parked at {@code awaitEvent}, {@code sleep}, or retry backoff. It is therefore non-transactional,
-     * as a transaction bound to it would hold its resources per in-flight instance for as long as the instance
-     * lives. Workflow and step events are published in short-lived child units of work created from the
-     * transactional {@link #unitOfWorkFactory()} instead.
+     * The body-wrapper unit of work stays open for the workflow instance's entire lifetime, including any time the body
+     * spends parked at {@code awaitEvent}, {@code sleep}, or retry backoff. It is therefore non-transactional, as a
+     * transaction bound to it would hold its resources per in-flight instance for as long as the instance lives.
+     * Workflow and step events are published in short-lived child units of work created from the transactional
+     * {@link #unitOfWorkFactory()} instead.
      *
      * @return the non-transactional unit of work factory used for the workflow-body wrapper.
      */

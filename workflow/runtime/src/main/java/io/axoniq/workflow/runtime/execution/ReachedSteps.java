@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -95,10 +96,7 @@ public class ReachedSteps implements DescribableComponent {
     private List<String> unreferencedTerminalSteps(@Nonnull WorkflowState state) {
         return state.workflowStepNames().stream()
                     .filter(name -> !referencedStepNames.contains(name))
-                    .filter(name -> {
-                        var step = state.getStep(name);
-                        return step != null && step.status().isTerminal();
-                    })
+                    .filter(name -> WorkflowStateUtils.isStepTerminal(state, name))
                     .toList();
     }
 

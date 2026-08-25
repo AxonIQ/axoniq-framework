@@ -23,7 +23,9 @@ import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CancellationException;
 
 /**
  * Coordinates cancellation requests for one running workflow instance.
@@ -71,37 +73,48 @@ public interface WorkflowCancellation {
     CompletableFuture<Void> requestWorkflowCancellation(@Nullable Throwable cause);
 
     /**
-     * Provides the pending external workflow-cancellation request to the workflow driver.
+     * Provides pending workflow-cancellation requests to the workflow driver.
      * <p>
      * The cancellation coordinator owns this state. The workflow driver only consumes it after being woken so that it
      * can publish the terminal event on its single control thread.
      */
-    interface External extends WorkflowCancellation {
+    interface Request extends WorkflowCancellation {
 
         /**
-         * Returns whether an external workflow cancellation is waiting for the workflow driver.
+         * Returns whether a workflow cancellation request is waiting for the workflow driver.
          *
          * @return {@code true} when a cancellation request is pending, otherwise {@code false}
          */
         boolean hasPendingWorkflowCancellation();
 
         /**
-         * Returns and marks the pending external workflow cancellation as consumed.
+         * Returns and marks the pending workflow cancellation request as consumed.
          *
          * @return the pending cancellation request, or {@code null} when no request is pending
          */
         @Nullable
-        Request consumeWorkflowCancellation();
+        PendingRequest consumeWorkflowCancellation();
+
+        /**
+         * Aborts an unconsumed workflow cancellation request because its workflow execution is no longer live.
+         *
+         * @param reason reason the cancellation can no longer be performed
+         */
+        void abortPendingWorkflowCancellation(@Nonnull CancellationException reason);
     }
 
     /**
-     * Represents one external workflow-cancellation request owned by the cancellation coordinator.
+     * Represents one pending workflow-cancellation request owned by the cancellation coordinator.
      *
      * @param cause cancellation cause to record durably
-     * @param done future completed after the workflow driver performs the terminal transition
+     * @param completion future completed after the workflow driver performs the terminal transition
      */
-    record Request(@Nonnull WorkflowCancelledException cause,
-                   @Nonnull CompletableFuture<Void> done) {
+    record PendingRequest(@Nonnull WorkflowCancelledException cause,
+                          @Nonnull CompletableFuture<Void> completion) {
+        public PendingRequest {
+            Objects.requireNonNull(cause, "Cancellation cause must not be null");
+            Objects.requireNonNull(completion, "Completion future must not be null");
+        }
 
     }
 }

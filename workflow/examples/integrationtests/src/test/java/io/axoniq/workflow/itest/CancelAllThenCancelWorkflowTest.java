@@ -33,6 +33,9 @@ import io.axoniq.workflow.runtime.test.utils.SleepUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.RepetitionInfo;
 import org.slf4j.Logger;
@@ -84,9 +87,26 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
         COMPENSATION_RAN.set(false);
     }
 
+    @Test
+    void cancelAllRunningStepsThenCancel_backToBack_cancelsAwaitedStepAndCompensates() {
+        assertCancellationSequence("cancel-all-then-cancel");
+    }
+
+    /**
+     * Runs the probabilistic scheduling stress check outside the normal build.
+     *
+     * Enable with {@code -Dworkflow.stress-tests=true}.
+     *
+     * @param repetitionInfo information about the current stress-test repetition
+     */
+    @Tag("stress")
+    @EnabledIfSystemProperty(named = "workflow.stress-tests", matches = "true")
     @RepeatedTest(20)
-    void cancelAllRunningStepsThenCancel_backToBack_cancelsAwaitedStepAndCompensates(RepetitionInfo repetitionInfo) {
-        var id = "cancel-all-then-cancel-" + repetitionInfo.getCurrentRepetition();
+    void cancelAllRunningStepsThenCancel_stressTest(RepetitionInfo repetitionInfo) {
+        assertCancellationSequence("cancel-all-then-cancel-" + repetitionInfo.getCurrentRepetition());
+    }
+
+    private void assertCancellationSequence(@Nonnull String id) {
         delayedPublisher.addSchedules(List.of(ofMillis(100, new StartTwoRunningStepsEvent(id))));
         delayedPublisher.start();
 
@@ -111,7 +131,7 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
                 .as("the body must observe awaitedStep's StepCancellationException and compensate")
                 .isTrue();
 
-        logger.info("repetition {}: compensation ran, workflow CANCELLED", repetitionInfo.getCurrentRepetition());
+        logger.info("compensation ran, workflow {} CANCELLED", id);
     }
 
     private void awaitParked(@Nonnull String workflowId) {
