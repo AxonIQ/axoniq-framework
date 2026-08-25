@@ -48,10 +48,6 @@ public class DefaultWorkflowScheduler implements WorkflowScheduler {
             }
     );
 
-    static {
-        TIMER_EXECUTOR.setRemoveOnCancelPolicy(true);
-    }
-
     private final Clock clock;
     private final ScheduledThreadPoolExecutor timerExecutor;
 
