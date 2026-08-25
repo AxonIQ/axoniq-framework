@@ -222,33 +222,17 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             });
             workflowExecution.appendTask(i -> gapFuture.complete(null));
         } else {
-            // The scheduled task is a pure timer tick; the backoff window itself is the step's parked phase. The
-            // timer firing completes the future normally and launches the next attempt, gated on neither the step nor
-            // the workflow being terminal. Anything that ends the parked phase exceptionally (a step cancellation, an
-            // engine shutdown interrupt, a whole-workflow terminal interrupt) makes the later tick a no-op, so a
-            // doomed attempt can never launch.
-            var scheduledRetry = timeoutScheduler.schedule(retryReadyAt, () -> {
-            });
-            var backoffFuture = new CompletableFuture<Void>();
-            scheduledRetry.completion().whenComplete((result, error) -> {
-                if (error == null) {
-                    backoffFuture.complete(null);
-                } else {
-                    backoffFuture.completeExceptionally(error);
-                }
-            });
-            backoffFuture.whenComplete((result, error) -> {
-                if (error != null && isCancellation(error)) {
-                    scheduledRetry.cancel();
-                }
-            });
-            backoffFuture.thenRun(() -> workflowExecution.appendTask(i -> {
+            // The scheduler only delivers the deadline. The completion future itself represents the parked backoff
+            // phase, so cancellation makes the later deadline notification a no-op.
+            var scheduledRetry = timeoutScheduler.schedule(retryReadyAt);
+            scheduledRetry.completion().thenRun(() -> workflowExecution.appendTask(i -> {
                 if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)
                         && !i.state().workflowStatus().isTerminal()) {
                     launchWithRetry(command, nextAttempt);
                 }
             }));
-            registerParkedStep(stepName, backoffFuture, command.eventNameCustomizer(), () -> {
+            registerParkedStep(stepName, scheduledRetry.completion(), scheduledRetry::cancel,
+                               command.eventNameCustomizer(), () -> {
                 // nothing to clean up here
             });
         }

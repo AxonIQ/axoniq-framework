@@ -67,6 +67,7 @@ class ExecuteDelegateTerminalInterruptionTest {
         var unitOfWork = mock(UnitOfWork.class);
         var scheduler = mock(WorkflowScheduler.class);
         var timeoutTask = mock(WorkflowScheduler.ScheduledTask.class);
+        var timeoutCompletion = new CompletableFuture<Void>();
 
         when(workflowExecution.workflowId()).thenReturn("wf-1");
         when(workflowExecution.state()).thenReturn(workflowState);
@@ -75,7 +76,8 @@ class ExecuteDelegateTerminalInterruptionTest {
         when(workflowState.getStep(STEP_NAME)).thenReturn(retryingStep());
         when(unitOfWorkFactory.create(anyString(), any())).thenReturn(unitOfWork);
         when(unitOfWork.executeWithResult(any())).thenReturn(pendingAction);
-        when(scheduler.schedule(any(), any())).thenReturn(timeoutTask);
+        when(scheduler.schedule(any())).thenReturn(timeoutTask);
+        when(timeoutTask.completion()).thenReturn(timeoutCompletion);
         doAnswer(invocation -> {
             queuedTasks.add(invocation.getArgument(0));
             return null;

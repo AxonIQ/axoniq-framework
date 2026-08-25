@@ -142,21 +142,16 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             } else {
                 // Register wait condition
                 eventWaitConditions.add(stepName, eventCondition, resultPayloadReducer, eventNameCustomizer);
-                var timeoutTask = timeoutScheduler.schedule(
-                        timeoutDeadline,
-                        () -> {
+                var timeoutTask = timeoutScheduler.schedule(timeoutDeadline);
+                timeoutTask.completion().thenRun(() -> workflowExecution.appendTask(i -> {
                             eventWaitConditions.remove(stepName);
                             runningSteps.remove(stepName);
-                            workflowExecution.appendTask(i -> {
-                                                             if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)) {
-                                                                 // only timeout if we are not completed yet
-                                                                 timedOutWaitForEvent(stepName, eventNameCustomizer);
-                                                             }
-                                                         }
-                            );
-                        }
-                );
-                registerParkedStep(stepName, timeoutTask.completion(), eventNameCustomizer,
+                            if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)) {
+                                // Only timeout if the event has not already completed the step.
+                                timedOutWaitForEvent(stepName, eventNameCustomizer);
+                            }
+                        }));
+                registerParkedStep(stepName, timeoutTask.completion(), timeoutTask::cancel, eventNameCustomizer,
                                    () -> eventWaitConditions.remove(stepName));
             }
         }

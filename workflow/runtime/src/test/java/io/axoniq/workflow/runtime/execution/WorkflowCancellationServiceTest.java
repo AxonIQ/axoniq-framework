@@ -22,12 +22,14 @@ import org.junit.jupiter.api.Test;
 
 import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CancellationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 
 /**
  * @author Simon Zambrovski
@@ -79,6 +81,21 @@ class WorkflowCancellationServiceTest {
         service.clear();
 
         assertNoRunningWorkflow(service, "second");
+    }
+
+    @Test
+    void unregisterAndClearAbortUnconsumedWorkflowCancellationRequests() {
+        var service = new WorkflowCancellationService();
+        var firstCancellation = mock(WorkflowCancellation.Request.class);
+        var secondCancellation = mock(WorkflowCancellation.Request.class);
+        service.register("first", firstCancellation);
+        service.register("second", secondCancellation);
+
+        service.unregister("first");
+        service.clear();
+
+        verify(firstCancellation).abortPendingWorkflowCancellation(any(CancellationException.class));
+        verify(secondCancellation).abortPendingWorkflowCancellation(any(CancellationException.class));
     }
 
     @Test

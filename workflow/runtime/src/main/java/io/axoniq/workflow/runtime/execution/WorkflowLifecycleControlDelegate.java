@@ -35,6 +35,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.cancelledWorkflow;
@@ -201,15 +203,14 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
 
         logger.error("Workflow '{}' failed", workflowExecution.workflowId(), exception);
 
-        ProcessingContextUtils.executeWithResult(
+        awaitTerminalEventPublication(ProcessingContextUtils.executeWithResult(
                 workflowExecution.workflowId(),
                 unitOfWorkFactory,
                 executor,
                 workflowContext.processingContext(),
                 ctx -> eventSink.publish(ctx,
                                          failedWorkflow(workflowContext, effectiveName, exception, workflowDefinitionId,
-                                                        eventNameCustomizer))
-        ).join(); // FIXME join with a timeout #280
+                                                        eventNameCustomizer))), "FAILED");
     }
 
     private void publishCancelled(@Nonnull WorkflowLifecycleControl.CancelWorkflowCommand command,
@@ -218,15 +219,34 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         var eventNameCustomizer = command.eventNameCustomizer();
         var workflowDefinitionId = workflowExecution.state().workflowDefinitionId();
 
-        ProcessingContextUtils.executeWithResult(
+        awaitTerminalEventPublication(ProcessingContextUtils.executeWithResult(
                 workflowExecution.workflowId(),
                 unitOfWorkFactory,
                 executor,
                 workflowContext.processingContext(),
                 ctx -> eventSink.publish(ctx,
                                          cancelledWorkflow(workflowContext, effectiveName, cause, workflowDefinitionId,
-                                                           eventNameCustomizer))
-        ).join(); // FIXME join with a timeout #280
+                                                           eventNameCustomizer))), "CANCELLED");
+    }
+
+    /**
+     * Awaits durable publication of a workflow terminal event.
+     * <p>
+     * Terminal transitions must not proceed before their event is durable. Timeout policy intentionally remains
+     * centralized here until issue #280 defines a configurable publication deadline and its recovery semantics.
+     *
+     * @param publication asynchronous terminal-event publication
+     * @param terminalStatus terminal status represented by the event
+     */
+    private void awaitTerminalEventPublication(@Nonnull CompletableFuture<Void> publication,
+                                               @Nonnull String terminalStatus) {
+        try {
+            publication.join(); // FIXME: add a user-defined timeout through configuration as part of #280
+        } catch (CompletionException exception) {
+            logger.error("Failed to publish {} terminal event for workflow '{}'", terminalStatus,
+                         workflowExecution.workflowId(), exception);
+            throw exception;
+        }
     }
 
     @Nonnull

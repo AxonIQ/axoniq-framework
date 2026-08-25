@@ -42,7 +42,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
 
@@ -200,15 +199,13 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                     timeoutHandler.onTimeout(stepName, eventNameCustomizer);
                 });
             } else {
-                var timeoutTask = timeoutScheduler.schedule(
-                        timeoutDeadline,
-                        () -> {
+                var timeoutTask = timeoutScheduler.schedule(timeoutDeadline);
+                timeoutTask.completion().thenRun(() -> {
                             if (!result.isDone()) {
                                 result.completeExceptionally(new TimeoutException(
                                         "Step '" + stepName + "' timed out"));
                             }
-                        }
-                );
+                        });
                 result.whenComplete((r, e) -> {
                     timeoutTask.cancel();
                     runningSteps.remove(stepName);
@@ -231,16 +228,14 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                 cancelled(stepName, terminationCause, eventNameCustomizer);
                             });
                         } else {
-                            var cause = e instanceof CompletionException && e.getCause() != null ? e.getCause() : e;
+                            var cause = unwrapCompletionException(e);
                             if (cause instanceof StepInterruptedException) {
                                 // A whole-workflow terminal transition interrupts a running step only to unblock the
                                 // workflow body. It has no corresponding durable step-terminal event.
                             } else {
                                 // FIXME - This is where we should publish using an append condition
-                                Throwable failure = e instanceof CompletionException && e.getCause() != null
-                                        ? e.getCause() : e;
                                 workflowExecution.appendTask(
-                                        i -> failureHandler.onFailure(stepName, failure, eventNameCustomizer));
+                                        i -> failureHandler.onFailure(stepName, cause, eventNameCustomizer));
                             }
                         }
                     }

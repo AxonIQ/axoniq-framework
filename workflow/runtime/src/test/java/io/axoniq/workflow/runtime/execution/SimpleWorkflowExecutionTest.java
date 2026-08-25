@@ -150,7 +150,7 @@ class SimpleWorkflowExecutionTest {
         when(processingContext.component(UnitOfWorkFactory.class)).thenReturn(new SimpleUnitOfWorkFactory(processingContext));
         when(processingContext.component(Clock.class)).thenReturn(Clock.systemUTC());
         when(processingContext.component(EventSink.class)).thenReturn(new NoOpEventSink());
-        when(processingContext.component(WorkflowScheduler.class)).thenReturn(new DefaultWorkflowScheduler(Clock.systemUTC()));
+        when(processingContext.component(WorkflowScheduler.class)).thenReturn(new ControllableWorkflowScheduler());
         when(processingContext.component(ExecuteStepActionResolver.class)).thenReturn(new DefaultExecuteStepActionResolver());
 
         var executor = Executors.newSingleThreadExecutor();

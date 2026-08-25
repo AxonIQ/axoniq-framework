@@ -32,7 +32,6 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 
-import java.lang.reflect.Field;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,15 +42,12 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -87,52 +83,19 @@ class DefaultWorkflowCancellationTest {
     }
 
     @Test
-    void requestWorkflowCancellation_returnsFirstRequestFuture_whenDriverConsumesRequestAfterSecondCallersFailedCas()
-            throws Exception {
+    void unregisteringWorkflowWithPendingCancellation_completesTheRequestExceptionally() {
         var cancellation = requestForRealExecution();
-        var pendingRequest = pendingRequestReference();
-        replacePendingRequest(cancellation, pendingRequest);
+        var service = new WorkflowCancellationService();
+        service.register("workflow-id", cancellation);
+        var request = service.requestWorkflowCancellation("workflow-id", null);
 
-        var storedRequest = new AtomicReference<WorkflowCancellation.PendingRequest>();
-        var secondCallerThread = new AtomicReference<Thread>();
-        var compareAndSetCalls = new AtomicInteger();
-        var secondCallerFailedCas = new CountDownLatch(1);
-        var allowSecondCallerToReadPendingRequest = new CountDownLatch(1);
-        doAnswer(invocation -> {
-            var request = invocation.getArgument(1, WorkflowCancellation.PendingRequest.class);
-            if (compareAndSetCalls.incrementAndGet() == 1) {
-                storedRequest.set(request);
-                return true;
-            }
-            secondCallerFailedCas.countDown();
-            return false;
-        }).when(pendingRequest).compareAndSet(isNull(), any());
-        doAnswer(invocation -> storedRequest.getAndSet(null)).when(pendingRequest).getAndSet(isNull());
-        doAnswer(invocation -> {
-            if (Thread.currentThread() == secondCallerThread.get()) {
-                assertThat(allowSecondCallerToReadPendingRequest.await(5, TimeUnit.SECONDS)).isTrue();
-            }
-            return storedRequest.get();
-        }).when(pendingRequest).get();
+        service.unregister("workflow-id");
 
-        var firstRequest = cancellation.requestWorkflowCancellation(null);
-        try (var callers = Executors.newSingleThreadExecutor()) {
-            var secondRequest = callers.submit(() -> {
-                secondCallerThread.set(Thread.currentThread());
-                return cancellation.requestWorkflowCancellation(null);
-            });
-
-            assertThat(secondCallerFailedCas.await(5, TimeUnit.SECONDS)).isTrue();
-            assertThat(cancellation.consumeWorkflowCancellation()).isNotNull();
-            allowSecondCallerToReadPendingRequest.countDown();
-
-            assertThat(secondRequest.get(5, TimeUnit.SECONDS)).isSameAs(firstRequest);
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static AtomicReference<WorkflowCancellation.PendingRequest> pendingRequestReference() {
-        return mock(AtomicReference.class);
+        assertThat(request).isCompletedExceptionally();
+        assertThatThrownBy(request::join)
+                .isInstanceOf(java.util.concurrent.CancellationException.class)
+                .hasMessage("Workflow execution completed before cancellation was performed");
+        assertThat(cancellation.hasPendingWorkflowCancellation()).isFalse();
     }
 
     private static CompletableFuture<Void> requestWhenBothCallersAreReady(
@@ -145,20 +108,12 @@ class DefaultWorkflowCancellationTest {
         return cancellation.requestWorkflowCancellation(null);
     }
 
-    private static void replacePendingRequest(DefaultWorkflowCancellation cancellation,
-                                              AtomicReference<WorkflowCancellation.PendingRequest> pendingRequest)
-            throws ReflectiveOperationException {
-        Field field = DefaultWorkflowCancellation.class.getDeclaredField("pendingWorkflowCancellation");
-        field.setAccessible(true);
-        field.set(cancellation, pendingRequest);
-    }
-
     private DefaultWorkflowCancellation requestForRealExecution() {
         var processingContext = mock(ProcessingContext.class);
         when(processingContext.component(UnitOfWorkFactory.class)).thenReturn(new SimpleUnitOfWorkFactory(processingContext));
         when(processingContext.component(Clock.class)).thenReturn(Clock.systemUTC());
         when(processingContext.component(EventSink.class)).thenReturn(new NoOpEventSink());
-        when(processingContext.component(WorkflowScheduler.class)).thenReturn(new DefaultWorkflowScheduler(Clock.systemUTC()));
+        when(processingContext.component(WorkflowScheduler.class)).thenReturn(new ControllableWorkflowScheduler());
         when(processingContext.component(ExecuteStepActionResolver.class)).thenReturn(new DefaultExecuteStepActionResolver());
 
         var executor = Executors.newSingleThreadExecutor();

@@ -39,36 +39,25 @@ import java.util.concurrent.TimeUnit;
 @Internal
 public class DefaultWorkflowScheduler implements WorkflowScheduler {
 
-    private static final ScheduledThreadPoolExecutor TIMER_EXECUTOR = new ScheduledThreadPoolExecutor(
-            1,
-            runnable -> {
-                var thread = new Thread(runnable, "axon-workflow-timer");
-                thread.setDaemon(true);
-                return thread;
-            }
-    );
-
     private final Clock clock;
     private final ScheduledThreadPoolExecutor timerExecutor;
 
     /**
-     * Creates a scheduler.
+     * Creates a scheduler backed by the provided timer executor.
      *
-     * @param clock workflow clock.
+     * @param clock workflow clock
+     * @param timerExecutor executor used only for deadline delivery
      */
-    public DefaultWorkflowScheduler(@Nonnull Clock clock) {
-        this(clock, TIMER_EXECUTOR);
-    }
-
-    DefaultWorkflowScheduler(@Nonnull Clock clock, @Nonnull ScheduledThreadPoolExecutor timerExecutor) {
+    public DefaultWorkflowScheduler(@Nonnull Clock clock, @Nonnull ScheduledThreadPoolExecutor timerExecutor) {
         this.clock = Objects.requireNonNull(clock, "Clock must not be null");
         this.timerExecutor = Objects.requireNonNull(timerExecutor, "Timer executor must not be null");
         this.timerExecutor.setRemoveOnCancelPolicy(true);
+        this.timerExecutor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
     }
 
     @Nonnull
     @Override
-    public ScheduledTask schedule(@Nonnull Instant deadline, @Nonnull Runnable task) {
+    public ScheduledTask schedule(@Nonnull Instant deadline) {
         var completion = new CompletableFuture<Void>();
         var delay = Duration.between(clock.instant(), deadline);
         var delayMillis = Math.max(0, delay.toMillis());
@@ -77,12 +66,7 @@ public class DefaultWorkflowScheduler implements WorkflowScheduler {
                     if (completion.isDone()) {
                         return;
                     }
-                    try {
-                        task.run();
-                        completion.complete(null);
-                    } catch (Throwable t) {
-                        completion.completeExceptionally(t);
-                    }
+                    completion.complete(null);
                 },
                 delayMillis,
                 TimeUnit.MILLISECONDS
@@ -101,5 +85,12 @@ public class DefaultWorkflowScheduler implements WorkflowScheduler {
                 }
             }
         };
+    }
+
+    /**
+     * Stops deadline delivery and cancels pending timer tasks.
+     */
+    public void shutdown() {
+        timerExecutor.shutdownNow();
     }
 }

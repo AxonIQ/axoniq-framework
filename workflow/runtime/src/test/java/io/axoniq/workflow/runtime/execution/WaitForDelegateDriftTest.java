@@ -77,7 +77,7 @@ class WaitForDelegateDriftTest {
 
         delegate = new WaitForDelegate(
                 workflowContext, workflowExecution, new RunningSteps(), new EventWaitConditions(), reachedSteps, parent,
-                Clock.systemUTC(), unitOfWorkFactory, eventSink, executor, new DefaultWorkflowScheduler(Clock.systemUTC())
+                Clock.systemUTC(), unitOfWorkFactory, eventSink, executor, new ControllableWorkflowScheduler()
         );
     }
 

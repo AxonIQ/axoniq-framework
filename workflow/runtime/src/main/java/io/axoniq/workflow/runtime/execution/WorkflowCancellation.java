@@ -25,6 +25,7 @@ import org.axonframework.common.annotation.Internal;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CancellationException;
 
 /**
  * Coordinates cancellation requests for one running workflow instance.
@@ -93,6 +94,13 @@ public interface WorkflowCancellation {
          */
         @Nullable
         PendingRequest consumeWorkflowCancellation();
+
+        /**
+         * Aborts an unconsumed workflow cancellation request because its workflow execution is no longer live.
+         *
+         * @param reason reason the cancellation can no longer be performed
+         */
+        void abortPendingWorkflowCancellation(@Nonnull CancellationException reason);
     }
 
     /**

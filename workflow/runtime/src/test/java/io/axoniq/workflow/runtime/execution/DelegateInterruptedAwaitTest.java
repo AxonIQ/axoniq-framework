@@ -88,7 +88,7 @@ class DelegateInterruptedAwaitTest {
                 unitOfWorkFactory,
                 eventSink,
                 executor,
-                new DefaultWorkflowScheduler(Clock.systemUTC())
+                new ControllableWorkflowScheduler()
         );
         executeDelegate = new ExecuteDelegate(
                 workflowContext,
@@ -100,7 +100,7 @@ class DelegateInterruptedAwaitTest {
                 unitOfWorkFactory,
                 eventSink,
                 executor,
-                new DefaultWorkflowScheduler(Clock.systemUTC()),
+                new ControllableWorkflowScheduler(),
                 new DefaultExecuteStepActionResolver()
         );
     }
