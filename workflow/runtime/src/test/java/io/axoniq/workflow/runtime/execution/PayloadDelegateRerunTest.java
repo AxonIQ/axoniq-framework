@@ -92,7 +92,7 @@ class PayloadDelegateRerunTest {
      * step record would be produced. With the gate, exactly zero new tasks are appended on the re-run.
      */
     @Test
-    void modifyPayload_doesNotRepublish_whenStepAlreadyInStateOnRerun() {
+    void modifyPayloadDoesNotRepublishWhenStepAlreadyInStateOnRerun() {
         String stepName = "payloadStep";
         // Replay/re-run: the COMPLETED terminal step is already projected into the event-sourced state.
         when(state.containsStep(stepName)).thenReturn(true);
@@ -114,7 +114,7 @@ class PayloadDelegateRerunTest {
      * be repeated.
      */
     @Test
-    void modifyPayload_publishesOnce_onFirstLiveRun() {
+    void modifyPayloadPublishesOnceOnFirstLiveRun() {
         String stepName = "payloadStep";
         when(state.containsStep(stepName)).thenReturn(false);
 

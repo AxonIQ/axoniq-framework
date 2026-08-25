@@ -120,7 +120,7 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      *                       {@link
      *                       org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor}
      *                       backing the {@link WorkflowEngine}
-     * @param latestToken    the latest known token at startup, used to detect replay completion
+     * @param latestToken    the latest known token at startup, used to detect replay callback
      */
     public void setInitialEngineTokens(@Nullable TrackingToken processorToken,
                                        @Nullable TrackingToken latestToken) {

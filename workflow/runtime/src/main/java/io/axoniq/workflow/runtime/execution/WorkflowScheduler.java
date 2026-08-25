@@ -48,7 +48,7 @@ public interface WorkflowScheduler {
         /**
          * Future completed when the deadline is reached, or cancelled when the deadline is cancelled.
          *
-         * @return completion future
+         * @return callback future
          */
         @Nonnull
         CompletableFuture<Void> completion();

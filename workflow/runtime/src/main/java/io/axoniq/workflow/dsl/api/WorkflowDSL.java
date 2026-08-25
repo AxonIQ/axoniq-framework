@@ -49,7 +49,7 @@ public interface WorkflowDSL {
      * </p>
      * <p>
      * The returned {@link WorkflowStepResult} is the durable handle for the started step. Callers may inspect the state
-     * asynchronously, wait for completion explicitly, compose it with combinators, or pass it into typed resolution
+     * asynchronously, wait for callback explicitly, compose it with combinators, or pass it into typed resolution
      * methods built on top of the same handle.
      * </p>
      *
@@ -111,7 +111,7 @@ public interface WorkflowDSL {
      * Applies a payload modification asynchronously from a DSL step definition.
      * <p>
      * This method bridges {@link PayloadStepDefinition} to the runtime payload modification primitive. The returned
-     * {@link WorkflowStepResult} represents the durable completion handle for the modification step.
+     * {@link WorkflowStepResult} represents the durable callback handle for the modification step.
      * </p>
      *
      * @param stepDefinition author-facing payload step definition containing step metadata and payload modification

@@ -41,7 +41,7 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * F-25 happy-path complement to {@code CancelledSleepSurfacesTest}: a {@code sleep}/{@code awaitSleep} that simply
- * times out is the sleep's <b>normal</b> completion and must return without throwing, so the body sails past it and
+ * times out is the sleep's <b>normal</b> callback and must return without throwing, so the body sails past it and
  * runs the following step. Only cancellation surfaces; a timed-out sleep does not.
  *
  * @author Stefan Dragisic

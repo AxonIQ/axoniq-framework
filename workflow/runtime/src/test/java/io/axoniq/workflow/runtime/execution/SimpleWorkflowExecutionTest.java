@@ -66,7 +66,7 @@ class SimpleWorkflowExecutionTest {
     }
 
     @Test
-    void hasTasks_reflectsWhetherTheTaskQueueContainsTasks() {
+    void hasTasksReflectsWhetherTheTaskQueueContainsTasks() {
         var execution = execution();
 
         assertThat(execution.hasTasks()).isFalse();
@@ -78,7 +78,7 @@ class SimpleWorkflowExecutionTest {
     }
 
     @Test
-    void workflowCancellation_exposesPendingRequestToWorkflowDriver() {
+    void workflowCancellationExposesPendingRequestToWorkflowDriver() {
         var execution = execution();
         var cancellation = (WorkflowCancellation.Request) execution.workflowCancellation();
         var cause = new IllegalStateException("operator requested cancellation");
@@ -92,13 +92,13 @@ class SimpleWorkflowExecutionTest {
         assertThat(pendingRequest.cause()).isInstanceOf(WorkflowCancelledException.class).hasCause(cause);
         assertThat(cancellation.hasPendingWorkflowCancellation()).isFalse();
 
-        pendingRequest.completion().complete(null);
+        pendingRequest.callback().complete(null);
 
         assertThat(completion).isCompleted();
     }
 
     @Test
-    void interruptWorkflowDriver_interruptsAssignedWorkflowDriver() throws Exception {
+    void interruptWorkflowDriverInterruptsAssignedWorkflowDriver() throws Exception {
         var execution = execution();
         var driverReady = new CountDownLatch(1);
         var interrupted = new CompletableFuture<Boolean>();
@@ -121,7 +121,7 @@ class SimpleWorkflowExecutionTest {
     }
 
     @Test
-    void stopForShutdown_queuesAnInterruptForWorkflowDriver() throws Exception {
+    void stopForShutdownQueuesAnInterruptForWorkflowDriver() throws Exception {
         var execution = execution();
 
         execution.stopForShutdown();

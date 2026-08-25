@@ -112,7 +112,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         Objects.requireNonNull(command, "Command must not be null");
         // Drift guard: adding ctx.cancel() mid-body would force a terminal event onto a
         // workflow whose old code already ran past this point. Throws non-terminally.
-        reachedSteps.guardAgainstReplayDrift(
+        reachedSteps.assertNoReplayDrift(
                 workflowExecution.workflowId(),
                 workflowExecution.state(),
                 "<terminate>"
@@ -132,7 +132,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         Objects.requireNonNull(command, "Command must not be null");
         // Drift guard: adding ctx.fail() mid-body would force a terminal event onto a
         // workflow whose old code already ran past this point. Throws non-terminally.
-        reachedSteps.guardAgainstReplayDrift(
+        reachedSteps.assertNoReplayDrift(
                 workflowExecution.workflowId(),
                 workflowExecution.state(),
                 "<terminate>"
@@ -150,14 +150,14 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         Objects.requireNonNull(command, "Command must not be null");
         var stepName = command.stepName();
         reachedSteps.record(stepName);
-        reachedSteps.guardAgainstReplayDrift(
+        reachedSteps.assertNoReplayDrift(
                 workflowExecution.workflowId(),
                 workflowExecution.state(),
                 stepName
         );
 
         // Guard on the single-consumer control thread: only a present, non-terminal step can be cancelled. The check
-        // and the future completion below are atomic with respect to other queue tasks.
+        // and the future callback below are atomic with respect to other queue tasks.
         if (!WorkflowStateUtils.isStepActive(workflowExecution.state(), stepName)) {
             return false;
         }
@@ -173,7 +173,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         }
 
         // Do NOT author <step>:CANCELLED here and do NOT touch the event sink. Complete the step's registered future
-        // exceptionally; the owning step executor's completion handler then publishes <step>:CANCELLED through its
+        // exceptionally; the owning step executor's callback handler then publishes <step>:CANCELLED through its
         // guarded, queue-appended sendStepEvent path (both the step-terminal and workflow-terminal guards) and runs its
         // own cleanup — exactly like every other primitive. A running execute action is not force-interrupted;
         // first-writer-wins via the terminal guard.

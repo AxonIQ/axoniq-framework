@@ -156,7 +156,7 @@ class SimpleWorkflowConfigurationRegistryTest {
     }
 
     @Test
-    void findClosestRegisteredVersion_returnsExactMatchWhenPresent() {
+    void findClosestRegisteredVersionReturnsExactMatchWhenPresent() {
         QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
         registry.register(eventName, new VersionedStub("OrderWorkflow", "1.0.0"));
         registry.register(eventName, new VersionedStub("OrderWorkflow", "2.0.0"));
@@ -167,7 +167,7 @@ class SimpleWorkflowConfigurationRegistryTest {
     }
 
     @Test
-    void findClosestRegisteredVersion_picksHighestBelowOrEqualToRequested() {
+    void findClosestRegisteredVersionPicksHighestBelowOrEqualToRequested() {
         // v1 = 1.0.0, v2 = 2.0.0 registered. State recorded "1.0.1" (after a ctx.migrateVersion bump that
         // no exact sibling matches). Closest match should be v1.0.0, NOT v2.0.0 — semantically a v1
         // workflow that bumped to 1.0.1 is closer to v1.0.0 than to v2.0.0.
@@ -183,7 +183,7 @@ class SimpleWorkflowConfigurationRegistryTest {
     }
 
     @Test
-    void findClosestRegisteredVersion_picksHighestWhenRequestedIsAboveAllRegistered() {
+    void findClosestRegisteredVersionPicksHighestWhenRequestedIsAboveAllRegistered() {
         QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
         registry.register(eventName, new VersionedStub("OrderWorkflow", "1.0.0"));
         registry.register(eventName, new VersionedStub("OrderWorkflow", "2.0.0"));
@@ -195,7 +195,7 @@ class SimpleWorkflowConfigurationRegistryTest {
     }
 
     @Test
-    void findClosestRegisteredVersion_returnsEmptyWhenAllRegisteredAreAboveRequested() {
+    void findClosestRegisteredVersionReturnsEmptyWhenAllRegisteredAreAboveRequested() {
         // State recorded "0.5.0" but only v1.0.0 / v2.0.0 are registered. No registered version is
         // <= 0.5.0 — return empty so the caller can fall back to its spawn-time configuration.
         QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
@@ -207,7 +207,7 @@ class SimpleWorkflowConfigurationRegistryTest {
     }
 
     @Test
-    void findClosestRegisteredVersion_filtersOutOtherWorkflowNames() {
+    void findClosestRegisteredVersionFiltersOutOtherWorkflowNames() {
         QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
         registry.register(eventName, new VersionedStub("OrderWorkflow", "1.0.0"));
         registry.register(eventName, new VersionedStub("PaymentWorkflow", "2.0.0"));
@@ -219,7 +219,7 @@ class SimpleWorkflowConfigurationRegistryTest {
     }
 
     @Test
-    void findClosestHigherRegisteredVersion_picksLowestAboveRequested() {
+    void findClosestHigherRegisteredVersionPicksLowestAboveRequested() {
         // Annotation bumped scenario: only newer versions registered, state recorded under the older
         // (now-unregistered) annotation. Pick the lowest registered version strictly greater than state.
         QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
@@ -232,7 +232,7 @@ class SimpleWorkflowConfigurationRegistryTest {
     }
 
     @Test
-    void findClosestHigherRegisteredVersion_returnsEmptyWhenNothingIsAboveRequested() {
+    void findClosestHigherRegisteredVersionReturnsEmptyWhenNothingIsAboveRequested() {
         // All registered versions <= state — closest-higher has nothing to offer (caller falls back
         // to closest-down or the WARN fallback).
         QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");

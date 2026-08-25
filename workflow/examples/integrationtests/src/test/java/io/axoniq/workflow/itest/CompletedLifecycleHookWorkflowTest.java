@@ -47,7 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Regression test for issue #218: on the happy completion path the COMPLETED lifecycle hook must fire.
+ * Regression test for issue #218: on the happy callback path the COMPLETED lifecycle hook must fire.
  * <p>
  * Before the fix, {@code SimpleWorkflowExecution.executeWorkflow(...)} awaited only the COMPLETED event commit and then
  * returned, letting {@code finishWorkflow} run {@code taskQueue.clear()} — which could discard the still-queued live
@@ -105,11 +105,11 @@ class CompletedLifecycleHookWorkflowTest extends AbstractWorkflowTestBase<Simple
         testDriver.historyMatches(h -> h.state().workflowStatus() == WorkflowStatus.COMPLETED);
 
         // Regression assertion: the COMPLETED lifecycle hook must have fired exactly once by the time the
-        // workflow reached its terminal state. Without the await on the happy completion path the queued
+        // workflow reached its terminal state. Without the await on the happy callback path the queued
         // evolution that flips the status to COMPLETED (and thus the listener notification) is cleared by
         // finishWorkflow before it runs, dropping this hook.
         assertThat(completedHookInvocations.get())
-                .as("COMPLETED lifecycle hook should fire exactly once on the happy completion path")
+                .as("COMPLETED lifecycle hook should fire exactly once on the happy callback path")
                 .isEqualTo(1);
         assertThat(observedStatus.get()).isEqualTo(WorkflowStatus.COMPLETED);
     }

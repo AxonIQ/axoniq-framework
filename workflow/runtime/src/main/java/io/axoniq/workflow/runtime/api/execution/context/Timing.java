@@ -25,7 +25,7 @@ import java.time.Duration;
 /**
  * Reusable timing configuration shared by primitive specs.
  *
- * @param timeout timeout for primitive completion
+ * @param timeout timeout for primitive callback
  * @author Simon Zambrovski
  * @since 1.0.0
  */
@@ -34,7 +34,7 @@ public record Timing(@Nonnull Duration timeout) {
     /**
      * Returns a copy of this timing specification with the provided timeout.
      *
-     * @param timeout timeout for primitive completion
+     * @param timeout timeout for primitive callback
      * @return copied timing specification with updated timeout
      */
     public Timing timeout(@Nonnull Duration timeout) {

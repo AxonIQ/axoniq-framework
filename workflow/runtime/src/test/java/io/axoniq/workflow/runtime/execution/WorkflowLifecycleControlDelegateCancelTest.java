@@ -23,6 +23,9 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledExcepti
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
+import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import org.axonframework.messaging.core.MessageType;
@@ -42,6 +45,7 @@ import java.util.function.Function;
 import static io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands.cancelStep;
 import static io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands.cancelWorkflow;
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -111,7 +115,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
     }
 
     @Test
-    void cancelWorkflow_interruptsRunningStepsWithoutPerStepEvent() {
+    void cancelWorkflowInterruptsRunningStepsWithoutPerStepEvent() {
         assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
@@ -120,7 +124,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
     }
 
     @Test
-    void cancelWorkflow_withCauseInterruptsRunningSteps() {
+    void cancelWorkflowWithCauseInterruptsRunningSteps() {
         var cause = new RuntimeException("user requested cancellation");
 
         assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(cause, eventNameCustomizer)))
@@ -130,7 +134,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
     }
 
     @Test
-    void cancelWorkflow_publishesCancelledWorkflowEvent() {
+    void cancelWorkflowPublishesCancelledWorkflowEvent() {
         assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
@@ -138,14 +142,14 @@ class WorkflowLifecycleControlDelegateCancelTest {
     }
 
     @Test
-    void cancelWorkflow_withNullCauseThrowsWorkflowCancelledExceptionWithMessage() {
+    void cancelWorkflowWithNullCauseThrowsWorkflowCancelledExceptionWithMessage() {
         assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class)
                 .hasMessage("Workflow cancelled");
     }
 
     @Test
-    void cancelWorkflow_withCauseThrowsWorkflowCancelledExceptionWithCause() {
+    void cancelWorkflowWithCauseThrowsWorkflowCancelledExceptionWithCause() {
         var cause = new RuntimeException("user requested cancellation");
 
         assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(cause, eventNameCustomizer)))
@@ -154,7 +158,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
     }
 
     @Test
-    void cancelWorkflow_executesStepsInOrder() {
+    void cancelWorkflowExecutesStepsInOrder() {
         var order = inOrder(terminalTransition, eventSink);
 
         assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer)))
@@ -166,7 +170,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
 
     @SuppressWarnings("unchecked")
     @Test
-    void cancelWorkflow_invokesCancelledStatusChangeListener() throws InterruptedException {
+    void cancelWorkflowInvokesCancelledStatusChangeListener() throws InterruptedException {
         var listener = mock(WorkflowStatusChangeListener.class);
         EventSourcedWorkflowState state = workflowState(Map.of(WorkflowStatus.CANCELLED, listener));
         when(workflowExecution.state()).thenReturn(state);
@@ -185,13 +189,13 @@ class WorkflowLifecycleControlDelegateCancelTest {
     }
 
     @Test
-    void cancelStep_completesFutureAndAwaitsTerminalWithoutDirectPublish() throws InterruptedException {
+    void cancelStepCompletesFutureAndAwaitsTerminalWithoutDirectPublish() throws InterruptedException {
         // Single-step cancel does NOT author <step>:CANCELLED itself and never touches the event sink: it completes the
         // step's registered future exceptionally, then awaits the durable terminal record that the owning executor's
-        // completion handler publishes through its guarded path.
-        var state = mock(io.axoniq.workflow.runtime.api.execution.state.WorkflowState.class);
-        var step = new io.axoniq.workflow.runtime.api.execution.state.WorkflowStep(
-                "step-a", io.axoniq.workflow.runtime.api.execution.status.StepStatus.STARTED,
+        // callback handler publishes through its guarded path.
+        var state = mock(WorkflowState.class);
+        var step = new WorkflowStep(
+                "step-a", StepStatus.STARTED,
                 null, null, java.time.Instant.now(), null);
         when(state.containsStep("step-a")).thenReturn(true);
         when(state.getStep("step-a")).thenReturn(step);
@@ -201,33 +205,33 @@ class WorkflowLifecycleControlDelegateCancelTest {
 
         boolean result = delegate.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
 
-        org.assertj.core.api.Assertions.assertThat(result).isTrue();
-        org.assertj.core.api.Assertions.assertThat(runningFuture).isCompletedExceptionally();
+        assertThat(result).isTrue();
+        assertThat(runningFuture).isCompletedExceptionally();
         verify(workflowExecution).awaitStateChange(any());
         verify(eventSink, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
     }
 
     @Test
-    void cancelStep_returnsFalseWhenNoRunningFuture() {
+    void cancelStepReturnsFalseWhenNoRunningFuture() {
         // Non-terminal step but nothing running to complete: no cancellation is driven and nothing is published.
-        var state = mock(io.axoniq.workflow.runtime.api.execution.state.WorkflowState.class);
-        var step = new io.axoniq.workflow.runtime.api.execution.state.WorkflowStep(
-                "step-a", io.axoniq.workflow.runtime.api.execution.status.StepStatus.STARTED,
+        var state = mock(WorkflowState.class);
+        var step = new WorkflowStep(
+                "step-a", StepStatus.STARTED,
                 null, null, java.time.Instant.now(), null);
         when(state.containsStep("step-a")).thenReturn(true);
         when(state.getStep("step-a")).thenReturn(step);
         when(workflowExecution.state()).thenReturn(state);
         boolean result = delegate.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
 
-        org.assertj.core.api.Assertions.assertThat(result).isFalse();
+        assertThat(result).isFalse();
         verify(eventSink, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
     }
 
     @Test
-    void cancelStep_returnsFalseWhenStepAlreadyTerminal() {
-        var state = mock(io.axoniq.workflow.runtime.api.execution.state.WorkflowState.class);
-        var step = new io.axoniq.workflow.runtime.api.execution.state.WorkflowStep(
-                "step-a", io.axoniq.workflow.runtime.api.execution.status.StepStatus.COMPLETED,
+    void cancelStepReturnsFalseWhenStepAlreadyTerminal() {
+        var state = mock(WorkflowState.class);
+        var step = new WorkflowStep(
+                "step-a", StepStatus.COMPLETED,
                 null, null, java.time.Instant.now(), null);
         when(state.containsStep("step-a")).thenReturn(true);
         when(state.getStep("step-a")).thenReturn(step);
@@ -235,7 +239,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
 
         boolean result = delegate.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
 
-        org.assertj.core.api.Assertions.assertThat(result).isFalse();
+        assertThat(result).isFalse();
         verify(eventSink, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
     }
 

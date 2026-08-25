@@ -76,16 +76,16 @@ public class ReachedSteps implements DescribableComponent {
     }
 
     /**
-     * Rejects event emission when the current invocation no longer reaches terminal steps in the event-sourced state.
+     * Asserts that the current invocation has reached every terminal step in the recorded state.
      *
      * @param workflowId identifier of the workflow being invoked
-     * @param state event-sourced state to compare with this invocation's progress
-     * @param aboutToExecute description of the operation that would emit a new event
+     * @param state recorded state to compare with this invocation's progress
+     * @param aboutToExecute description of the operation being attempted
      * @throws WorkflowReplayDriftException when terminal state steps were not reached by the current invocation
      */
-    void guardAgainstReplayDrift(@Nonnull String workflowId,
-                                 @Nonnull WorkflowState state,
-                                 @Nonnull String aboutToExecute) {
+    void assertNoReplayDrift(@Nonnull String workflowId,
+                             @Nonnull WorkflowState state,
+                             @Nonnull String aboutToExecute) {
         List<String> unreferenced = unreferencedTerminalSteps(state);
         if (!unreferenced.isEmpty()) {
             throw new WorkflowReplayDriftException(workflowId, aboutToExecute, unreferenced);

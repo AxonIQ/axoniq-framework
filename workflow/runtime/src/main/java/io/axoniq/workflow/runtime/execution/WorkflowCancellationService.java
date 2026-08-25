@@ -26,15 +26,15 @@ import org.axonframework.common.infra.DescribableComponent;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CancellationException;
 
 /**
  * Internal entry point for requesting cancellation of running workflows by identifier.
  * <p>
- * The service associates each live workflow id with its per-execution {@link WorkflowCancellation} coordinator. It
- * does not implement cancellation policy itself; it locates the coordinator that schedules cancellation safely on the
+ * The service associates each live workflow id with its per-execution {@link WorkflowCancellation} coordinator. It does
+ * not implement cancellation policy itself; it locates the coordinator that schedules cancellation safely on the
  * workflow control thread. A future user-facing workflow manager can delegate to this service without exposing the
  * execution implementation.
  *
@@ -50,7 +50,7 @@ public final class WorkflowCancellationService implements DescribableComponent {
     /**
      * Registers the cancellation coordinator for a live workflow.
      *
-     * @param workflowId identifier of the live workflow
+     * @param workflowId   identifier of the live workflow
      * @param cancellation cancellation coordinator to register
      */
     void register(@Nonnull String workflowId, @Nonnull WorkflowCancellation cancellation) {
@@ -65,7 +65,8 @@ public final class WorkflowCancellationService implements DescribableComponent {
      */
     void unregister(@Nonnull String workflowId) {
         var cancellation = cancellations.remove(Objects.requireNonNull(workflowId, "Workflow id is mandatory"));
-        abortPendingWorkflowCancellation(cancellation, "Workflow execution completed before cancellation was performed");
+        abortPendingWorkflowCancellation(cancellation,
+                                         "Workflow execution completed before cancellation was performed");
     }
 
     /**
@@ -81,15 +82,15 @@ public final class WorkflowCancellationService implements DescribableComponent {
      * Requests cooperative cancellation of one workflow step.
      *
      * @param workflowId identifier of the workflow containing the step
-     * @param stepName name of the step to cancel
-     * @param cause optional reason for the cancellation
+     * @param stepName   name of the step to cancel
+     * @param cause      optional reason for the cancellation
      * @return a future completing with {@code true} when a terminal step cancellation was recorded, or {@code false}
      * when the step was unknown or already terminal
      */
     @Nonnull
     public CompletableFuture<Boolean> requestStepCancellation(@Nonnull String workflowId,
-                                                               @Nonnull String stepName,
-                                                               @Nullable Throwable cause) {
+                                                              @Nonnull String stepName,
+                                                              @Nullable Throwable cause) {
         return cancellationFor(workflowId).requestStepCancellation(stepName, cause);
     }
 
@@ -97,20 +98,20 @@ public final class WorkflowCancellationService implements DescribableComponent {
      * Requests cooperative cancellation of every currently-running step without terminating the workflow.
      *
      * @param workflowId identifier of the workflow whose steps to cancel
-     * @param cause optional reason for the cancellation
+     * @param cause      optional reason for the cancellation
      * @return a future completing with the number of steps for which terminal cancellation was recorded
      */
     @Nonnull
-    public CompletableFuture<Integer> requestRunningStepCancellations(@Nonnull String workflowId,
-                                                                       @Nullable Throwable cause) {
-        return cancellationFor(workflowId).requestRunningStepCancellations(cause);
+    public CompletableFuture<Integer> requestCancellationOfAllSteps(@Nonnull String workflowId,
+                                                                    @Nullable Throwable cause) {
+        return cancellationFor(workflowId).requestCancellationOfAllSteps(cause);
     }
 
     /**
      * Requests cancellation of a workflow.
      *
      * @param workflowId identifier of the workflow to cancel
-     * @param cause optional reason for the cancellation
+     * @param cause      optional reason for the cancellation
      * @return a future completing after the workflow cancellation event is durable and the workflow body was woken
      */
     @Nonnull

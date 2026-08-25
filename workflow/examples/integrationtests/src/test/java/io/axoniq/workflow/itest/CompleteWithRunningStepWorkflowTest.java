@@ -44,7 +44,7 @@ import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.of
  * Issue #224: when a workflow reaches any terminal state while an async step is still running, the engine publishes
  * only the workflow-level terminal event and <b>interrupts</b> the running step (no per-step terminal event); the step
  * is left in its last recorded {@code STARTED} state. Covers all four paths in {@code SimpleWorkflowExecution}: normal
- * completion, {@code ctx.fail(...)}, and {@code ctx.cancel(...)}. (Single-step cancel is the way to get a step
+ * callback, {@code ctx.fail(...)}, and {@code ctx.cancel(...)}. (Single-step cancel is the way to get a step
  * terminal + compensation — see {@code CancelStepWorkflowTest}.)
  *
  * @author Stefan Dragisic

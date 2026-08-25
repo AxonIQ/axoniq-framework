@@ -63,15 +63,15 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     /**
      * Constructs the delegate.
      *
-     * @param context                   workflow context.
-     * @param workflowExecution          workflow state.
+     * @param context                   workflow context
+     * @param workflowExecution         workflow state
      * @param runningSteps              running step registry
      * @param reachedSteps              reached steps tracker
-     * @param parentEventNameCustomizer event name customizer.
-     * @param clock                     clock for time calculations.
-     * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
-     * @param eventSink                 event sink for event publications.
-     * @param executor                  executor to offload execution tasks from workflow thread.
+     * @param parentEventNameCustomizer event name customizer
+     * @param clock                     clock for time calculations
+     * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts
+     * @param eventSink                 event sink for event publications
+     * @param executor                  executor to offload execution tasks from workflow thread
      * @param timeoutScheduler          scheduler for workflow step timeouts
      * @param actionResolver            resolver for execute step actions
      */
@@ -149,7 +149,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         }
 
         if (!workflowExecution.state().containsStep(stepName)) {
-            reachedSteps.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
+            reachedSteps.assertNoReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
             workflowExecution.appendTask(i ->
                                                  started(stepName, sanitize(local), eventNameCustomizer)
             );
@@ -201,16 +201,16 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
             } else {
                 var timeoutTask = timeoutScheduler.schedule(timeoutDeadline);
                 timeoutTask.completion().thenRun(() -> {
-                            if (!result.isDone()) {
-                                result.completeExceptionally(new TimeoutException(
-                                        "Step '" + stepName + "' timed out"));
-                            }
-                        });
+                    if (!result.isDone()) {
+                        result.completeExceptionally(new TimeoutException(
+                                "Step '" + stepName + "' timed out"));
+                    }
+                });
                 result.whenComplete((r, e) -> {
                     timeoutTask.cancel();
                     runningSteps.remove(stepName);
                     if (e == null) {
-                        // Normal completion — a null action result sanitizes to an empty map in completed(),
+                        // Normal callback — a null action result sanitizes to an empty map in completed(),
                         // so a null-returning action COMPLETES rather than wedging on a null-e dereference.
                         workflowExecution.appendTask(i -> {
                             // FIXME - This is where we should publish using an append condition

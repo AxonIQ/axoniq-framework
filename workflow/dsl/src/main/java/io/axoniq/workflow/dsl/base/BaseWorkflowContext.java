@@ -336,7 +336,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
         if (result.canceled()) {
             throw new StepCancellationException("Step '" + stepName + "' was cancelled before completing");
         }
-        // A timed-out sleep is the normal, expected completion of a sleep — return without throwing.
+        // A timed-out sleep is the normal, expected callback of a sleep — return without throwing.
         if (result.failure() && result.error().isPresent()) {
             throw result.error().get();
         }

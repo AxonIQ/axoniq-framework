@@ -112,7 +112,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         acceptAllPendingTasksForStep(stepName);
 
         if (!workflowExecution.state().containsStep(stepName)) {
-            reachedSteps.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
+            reachedSteps.assertNoReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
             workflowExecution.appendTask(i ->
                                                  startedWaitForEvent(stepName,
                                                                      startedPayload(eventCondition,
@@ -146,7 +146,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                 timeoutTask.completion().thenRun(() -> workflowExecution.appendTask(i -> {
                             eventWaitConditions.remove(stepName);
                             runningSteps.remove(stepName);
-                            if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)) {
+                            if (WorkflowStateUtils.isStepActive(i.state(), stepName)) {
                                 // Only timeout if the event has not already completed the step.
                                 timedOutWaitForEvent(stepName, eventNameCustomizer);
                             }

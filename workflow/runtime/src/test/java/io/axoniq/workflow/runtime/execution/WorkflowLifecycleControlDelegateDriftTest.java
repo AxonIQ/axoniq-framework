@@ -71,7 +71,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
     }
 
     @Test
-    void failWorkflow_throwsDrift_whenOrphansAhead() {
+    void failWorkflowThrowsDriftWhenOrphansAhead() {
         reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
@@ -90,7 +90,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
     }
 
     @Test
-    void cancelWorkflow_throwsDrift_whenOrphansAhead() {
+    void cancelWorkflowThrowsDriftWhenOrphansAhead() {
         reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
@@ -104,7 +104,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
     }
 
     @Test
-    void cancelStep_throwsDrift_whenOrphansAhead() {
+    void cancelStepThrowsDriftWhenOrphansAhead() {
         reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
@@ -123,7 +123,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
     }
 
     @Test
-    void failWorkflow_doesNotThrow_whenAllStepsReferenced() {
+    void failWorkflowDoesNotThrowWhenAllStepsReferenced() {
         reachedSteps.record("A");
         reachedSteps.record("B");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));

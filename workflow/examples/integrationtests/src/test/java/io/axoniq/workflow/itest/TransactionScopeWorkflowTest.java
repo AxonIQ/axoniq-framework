@@ -114,7 +114,7 @@ class TransactionScopeWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkfl
         });
         await().atMost(5, TimeUnit.SECONDS).untilAsserted(() ->
                 assertThat(countingTm.open.get())
-                        .as("no transaction leaked after completion")
+                        .as("no transaction leaked after callback")
                         .isZero());
     }
 

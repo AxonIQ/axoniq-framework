@@ -208,11 +208,11 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             // No backoff or already elapsed (crash recovery). Park the (near-instant) retry gap on a cancellable
             // future, exactly like the delayed branch below, so a step cancellation or a whole-workflow terminal
             // interrupt completes it exceptionally (the parked-step registration deregisters it) instead of launching
-            // the next attempt. The launch is fired by the future's normal completion and is additionally gated on the
-            // workflow not being terminal (a cheap defensive guard).
+            // the next attempt. The launch is fired by the future's normal callback and is additionally gated on an
+            // active step and a non-terminal workflow (cheap defensive guards).
             var gapFuture = new CompletableFuture<Void>();
             gapFuture.thenRun(() -> workflowExecution.appendTask(i -> {
-                if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)
+                if (WorkflowStateUtils.isStepActive(i.state(), stepName)
                         && !i.state().workflowStatus().isTerminal()) {
                     launchWithRetry(command, nextAttempt);
                 }
@@ -222,11 +222,11 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             });
             workflowExecution.appendTask(i -> gapFuture.complete(null));
         } else {
-            // The scheduler only delivers the deadline. The completion future itself represents the parked backoff
+            // The scheduler only delivers the deadline. The callback future itself represents the parked backoff
             // phase, so cancellation makes the later deadline notification a no-op.
             var scheduledRetry = timeoutScheduler.schedule(retryReadyAt);
             scheduledRetry.completion().thenRun(() -> workflowExecution.appendTask(i -> {
-                if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)
+                if (WorkflowStateUtils.isStepActive(i.state(), stepName)
                         && !i.state().workflowStatus().isTerminal()) {
                     launchWithRetry(command, nextAttempt);
                 }

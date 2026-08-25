@@ -152,7 +152,7 @@ class DelegateInterruptedAwaitTest {
     }
 
     private PrimitiveCommands.WorkflowStepResultExecuteCommand executeCommand(String stepName) {
-        PayloadProcessor action = (ctx, payload) -> Map.of("result", "completion");
+        PayloadProcessor action = (ctx, payload) -> Map.of("result", "callback");
         return new PrimitiveCommands.WorkflowStepResultExecuteCommand(
                 stepName,
                 Map.of(),

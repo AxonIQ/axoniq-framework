@@ -347,7 +347,7 @@ class WorkflowEngineReplayTest {
     }
 
     @Test
-    void sameVersionDuplicateStart_isRejected() {
+    void sameVersionDuplicateStartIsRejected() {
         String workflowId = "order-1";
 
         // Pre-register a running v2.0.0 workflow under "order-1".
@@ -746,7 +746,7 @@ class WorkflowEngineReplayTest {
     }
 
     @Test
-    void crossVersionStart_disambiguatedIdAlsoTaken_isRejected() {
+    void crossVersionStartDisambiguatedIdAlsoTakenIsRejected() {
         // Both the base id and the disambiguated id are already occupied.
         String baseId = "order-1";
         String disambiguatedId = baseId + "#2.0.0";
