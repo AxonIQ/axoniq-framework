@@ -94,7 +94,9 @@ class DefaultWorkflowCancellationTest {
         assertThat(request).isCompletedExceptionally();
         assertThatThrownBy(request::join)
                 .isInstanceOf(java.util.concurrent.CancellationException.class)
-                .hasMessage("Workflow execution completed before cancellation was performed");
+                .satisfies(error -> assertThat(error.getCause() == null ? error : error.getCause())
+                        .isInstanceOf(java.util.concurrent.CancellationException.class)
+                        .hasMessage("Workflow execution completed before cancellation was performed"));
         assertThat(cancellation.hasPendingWorkflowCancellation()).isFalse();
     }
 
