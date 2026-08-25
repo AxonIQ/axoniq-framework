@@ -26,6 +26,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepIndeterminateException;
+import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
@@ -230,11 +231,17 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                 cancelled(stepName, terminationCause, eventNameCustomizer);
                             });
                         } else {
-                            // FIXME - This is where we should publish using an append condition
-                            Throwable failure = e instanceof CompletionException && e.getCause() != null
-                                    ? e.getCause() : e;
-                            workflowExecution.appendTask(
-                                    i -> failureHandler.onFailure(stepName, failure, eventNameCustomizer));
+                            var cause = e instanceof CompletionException && e.getCause() != null ? e.getCause() : e;
+                            if (cause instanceof StepInterruptedException) {
+                                // A whole-workflow terminal transition interrupts a running step only to unblock the
+                                // workflow body. It has no corresponding durable step-terminal event.
+                            } else {
+                                // FIXME - This is where we should publish using an append condition
+                                Throwable failure = e instanceof CompletionException && e.getCause() != null
+                                        ? e.getCause() : e;
+                                workflowExecution.appendTask(
+                                        i -> failureHandler.onFailure(stepName, failure, eventNameCustomizer));
+                            }
                         }
                     }
                 });
