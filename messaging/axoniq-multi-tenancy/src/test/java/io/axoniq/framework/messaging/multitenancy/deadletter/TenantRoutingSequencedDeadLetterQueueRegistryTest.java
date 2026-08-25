@@ -20,7 +20,6 @@
 package io.axoniq.framework.messaging.multitenancy.deadletter;
 
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
-import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
 import org.axonframework.common.Registration;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -49,10 +48,10 @@ class TenantRoutingSequencedDeadLetterQueueRegistryTest {
         @Test
         void createsAQueueForATenantRegisteredBeforeTheQueueCacheExists() {
             // given
-            SequencedDeadLetterQueueFactory factory = mock(SequencedDeadLetterQueueFactory.class);
+            TenantAwareSequencedDeadLetterQueueFactory factory = mock(TenantAwareSequencedDeadLetterQueueFactory.class);
             SequencedDeadLetterQueue<EventMessage> tenantQueue = queue();
             testSubject.registerTenant(TENANT_A);
-            when(factory.create("first", configuration)).thenReturn(tenantQueue);
+            when(factory.create(TENANT_A, "first", configuration)).thenReturn(tenantQueue);
 
             // when
             SequencedDeadLetterQueue<EventMessage> firstLookup = testSubject.queueFor(
@@ -65,20 +64,20 @@ class TenantRoutingSequencedDeadLetterQueueRegistryTest {
             // then
             assertThat(firstLookup).isSameAs(tenantQueue);
             assertThat(secondLookup).isSameAs(tenantQueue);
-            verify(factory).create("first", configuration);
+            verify(factory).create(TENANT_A, "first", configuration);
         }
 
         @Test
         void createsFreshQueuesForEveryProcessingGroupAfterTenantRemoval() {
             // given
-            SequencedDeadLetterQueueFactory firstFactory = mock(SequencedDeadLetterQueueFactory.class);
-            SequencedDeadLetterQueueFactory secondFactory = mock(SequencedDeadLetterQueueFactory.class);
+            TenantAwareSequencedDeadLetterQueueFactory firstFactory = mock(TenantAwareSequencedDeadLetterQueueFactory.class);
+            TenantAwareSequencedDeadLetterQueueFactory secondFactory = mock(TenantAwareSequencedDeadLetterQueueFactory.class);
             SequencedDeadLetterQueue<EventMessage> firstQueue = queue();
             SequencedDeadLetterQueue<EventMessage> firstQueueAfterReAdding = queue();
             SequencedDeadLetterQueue<EventMessage> secondQueue = queue();
             SequencedDeadLetterQueue<EventMessage> secondQueueAfterReAdding = queue();
-            when(firstFactory.create("first", configuration)).thenReturn(firstQueue, firstQueueAfterReAdding);
-            when(secondFactory.create("second", configuration)).thenReturn(secondQueue, secondQueueAfterReAdding);
+            when(firstFactory.create(TENANT_A, "first", configuration)).thenReturn(firstQueue, firstQueueAfterReAdding);
+            when(secondFactory.create(TENANT_A, "second", configuration)).thenReturn(secondQueue, secondQueueAfterReAdding);
             Registration registration = testSubject.registerTenant(TENANT_A);
             testSubject.queueFor("first", configuration, firstFactory, TENANT_A);
             testSubject.queueFor("second", configuration, secondFactory, TENANT_A);

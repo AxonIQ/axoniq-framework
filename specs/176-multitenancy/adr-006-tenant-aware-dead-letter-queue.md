@@ -43,15 +43,43 @@ queues:
    tenant is removed.
 4. `TenantRoutingSequencedDeadLetterQueue` remains a thin adapter: it resolves the tenant from the processing context
    and asks the registry for that tenant's DLQ. It neither owns a cache nor subscribes itself.
-5. `TenantRoutingSequencedDeadLetterQueueFactory` passes the registry to each routing queue it creates.
+5. `TenantRoutingSequencedDeadLetterQueueFactory` adapts the tenant-aware factory to the event processor's regular
+   factory contract and passes it, with the registry, to each routing queue it creates.
 
-The registry keys its lazily created `TenantScopedCache` instances by processing group, configuration, and delegate
-factory. It registers every known tenant with a new cache before using it, and cancels the tenant's registrations in
-every cache when that tenant is removed. Re-adding a tenant consequently creates fresh tenant queues.
+The registry keys its lazily created `TenantScopedCache` instances by processing group. It registers every known tenant
+with a new cache before using it, and cancels the tenant's registrations in every cache when that tenant is removed.
+Re-adding a tenant consequently creates fresh tenant queues.
 
 This reuses the established subscription lifecycle: a configuration-owned component receives tenant registration and
 removal events, and its subscription is explicitly cancelled at application shutdown. It prevents dynamically created
 queues from subscribing in their constructors and leaving a subscription with no owner.
+
+### Registry and queue lifecycle
+
+```mermaid
+flowchart TD
+    provider[TenantProvider] -->|register tenant| registry[DLQ registry]
+    registry -->|record tenant registration| tenants[(known tenants)]
+    registry -->|register tenant in each existing cache| caches[(TenantScopedCache per queue key)]
+
+    operation[DLQ operation with tenant ProcessingContext] --> routing[Tenant-routing queue]
+    routing -->|resolve tenant| lookup[registry queueFor]
+    lookup --> cacheExists{Cache for processing group, configuration, and factory exists?}
+    cacheExists -->|no| createCache[Create TenantScopedCache]
+    createCache -->|register every known tenant| tenants
+    createCache --> cacheLookup[Lookup queue for tenant]
+    cacheExists -->|yes| cacheLookup
+    cacheLookup --> queueExists{Queue cached for tenant?}
+    queueExists -->|no| createQueue[Create queue with configured factory]
+    createQueue --> store[Cache queue for tenant]
+    store --> tenantQueue[Return tenant queue]
+    queueExists -->|yes| tenantQueue
+
+    remove[Cancel tenant registration] --> unregister[Remove tenant from registry]
+    unregister --> evict[Cancel tenant registration in every cache]
+    evict --> removed[Evict cached queues for tenant]
+    removed --> readd[Later registration creates fresh queues]
+```
 
 Alternatives considered and rejected for now:
 
@@ -65,6 +93,26 @@ Alternatives considered and rejected for now:
 
 Queue resolution belongs to the asynchronous DLQ API. An unresolved tenant must complete the returned
 `CompletableFuture` exceptionally instead of throwing before a future is returned.
+
+## Related streaming-processor lifecycle
+
+The DLQ registry does not start, stop, or reconfigure event processors. That is handled separately by the
+configuration-owned `MultiTenantStreamingProcessorRestarter`, which is registered whenever multi-tenancy is enabled.
+
+A streaming processor opens a stream over the tenant set that exists at that time. Consequently, after a tenant is
+added or removed, a running processor must reopen its stream to begin consuming the added tenant or to stop consuming
+the removed one. The restarter follows the `MultiTenantEventStorageEngine`, rather than the `TenantProvider` directly:
+the routing engine announces a tenant change only after it can itself resolve that tenant's event-storage resources.
+
+Tenant changes are coalesced onto one restart worker. Each restart briefly pauses every running streaming processor,
+then shuts it down and starts it again. This applies to all streaming processors, including ones configured with a
+different event source; reopening such a source is harmless, while distinguishing processor source types is not part
+of the processor API. The shutdown-and-start operation has a 30-second default safety-net timeout, configurable through
+`MultiTenantStreamingProcessorRestartConfiguration`. It bounds a stalled restart; it is not a deliberate delay before
+processing resumes.
+
+This lifecycle is independent of DLQ routing: once a processor has delivered an event with a tenant in its
+`ProcessingContext`, the tenant-routing DLQ resolves and caches that tenant's queue as described above.
 
 ## Implementation status
 

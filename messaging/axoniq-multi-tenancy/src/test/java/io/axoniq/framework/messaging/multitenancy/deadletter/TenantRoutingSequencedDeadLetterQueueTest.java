@@ -21,7 +21,6 @@ package io.axoniq.framework.messaging.multitenancy.deadletter;
 
 import io.axoniq.framework.messaging.deadletter.DeadLetter;
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
-import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
@@ -52,7 +51,7 @@ class TenantRoutingSequencedDeadLetterQueueTest {
         SequencedDeadLetterQueue<EventMessage> tenantQueue = mock(SequencedDeadLetterQueue.class);
         @SuppressWarnings("unchecked")
         DeadLetter<EventMessage> letter = mock(DeadLetter.class);
-        SequencedDeadLetterQueueFactory factory = (processingGroup, ignored) -> tenantQueue;
+        TenantAwareSequencedDeadLetterQueueFactory factory = (tenant, processingGroup, ignored) -> tenantQueue;
         when(context.getResource(TenantDescriptor.RESOURCE_KEY)).thenReturn(TENANT_A);
         when(tenantQueue.enqueue(any(), any(), any())).thenReturn(CompletableFuture.completedFuture(null));
         TenantRoutingSequencedDeadLetterQueueRegistry registry = new TenantRoutingSequencedDeadLetterQueueRegistry();
@@ -70,7 +69,7 @@ class TenantRoutingSequencedDeadLetterQueueTest {
     @Test
     void rejectsProcessingWithoutATenantCarryingContext() {
         TenantRoutingSequencedDeadLetterQueue testSubject = new TenantRoutingSequencedDeadLetterQueue(
-                "DeadLetterQueue[projection]", mock(Configuration.class), (processingGroup, configuration) -> null,
+                "DeadLetterQueue[projection]", mock(Configuration.class), (tenant, processingGroup, configuration) -> null,
                 new TenantRoutingSequencedDeadLetterQueueRegistry()
         );
 
@@ -94,7 +93,7 @@ class TenantRoutingSequencedDeadLetterQueueTest {
         @SuppressWarnings("unchecked")
         SequencedDeadLetterQueue<EventMessage> reAddedTenantQueue = mock(SequencedDeadLetterQueue.class);
         AtomicInteger creations = new AtomicInteger();
-        SequencedDeadLetterQueueFactory factory = (processingGroup, ignored) ->
+        TenantAwareSequencedDeadLetterQueueFactory factory = (tenant, processingGroup, ignored) ->
                 creations.getAndIncrement() == 0 ? firstQueue : reAddedTenantQueue;
         when(context.getResource(TenantDescriptor.RESOURCE_KEY)).thenReturn(TENANT_A);
         when(firstQueue.size(context)).thenReturn(CompletableFuture.completedFuture(1L));

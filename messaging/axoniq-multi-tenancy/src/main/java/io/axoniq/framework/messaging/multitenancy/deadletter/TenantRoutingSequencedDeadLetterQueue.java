@@ -22,7 +22,6 @@ package io.axoniq.framework.messaging.multitenancy.deadletter;
 import io.axoniq.framework.messaging.deadletter.DeadLetter;
 import io.axoniq.framework.messaging.deadletter.EnqueueDecision;
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
-import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import org.axonframework.common.annotation.Internal;
@@ -52,12 +51,12 @@ public class TenantRoutingSequencedDeadLetterQueue implements SequencedDeadLette
 
     private final String processingGroup;
     private final Configuration configuration;
-    private final SequencedDeadLetterQueueFactory factory;
+    private final TenantAwareSequencedDeadLetterQueueFactory factory;
     private final TenantRoutingSequencedDeadLetterQueueRegistry registry;
 
     TenantRoutingSequencedDeadLetterQueue(String processingGroup,
                                           Configuration configuration,
-                                          SequencedDeadLetterQueueFactory factory,
+                                          TenantAwareSequencedDeadLetterQueueFactory factory,
                                           TenantRoutingSequencedDeadLetterQueueRegistry registry) {
         this.processingGroup = requireNonNull(processingGroup, "The processing group must not be null");
         this.configuration = requireNonNull(configuration, "The configuration must not be null");

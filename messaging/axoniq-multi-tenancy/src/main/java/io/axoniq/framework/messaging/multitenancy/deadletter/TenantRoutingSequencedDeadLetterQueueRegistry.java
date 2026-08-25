@@ -20,7 +20,6 @@
 package io.axoniq.framework.messaging.multitenancy.deadletter;
 
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
-import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantScopedCache;
@@ -32,6 +31,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.Objects.requireNonNull;
 
@@ -44,8 +44,8 @@ import static java.util.Objects.requireNonNull;
 @Internal
 public class TenantRoutingSequencedDeadLetterQueueRegistry implements MultiTenantAwareComponent {
 
-    private final Map<QueueKey, TenantScopedCache<SequencedDeadLetterQueue<EventMessage>>> queues = new HashMap<>();
-    private final Map<TenantDescriptor, TenantRegistration> tenants = new HashMap<>();
+    private final Map<String, TenantScopedCache<SequencedDeadLetterQueue<EventMessage>>> queues = new ConcurrentHashMap<>();
+    private final Map<TenantDescriptor, TenantRegistration> tenants = new ConcurrentHashMap<>();
 
     /**
      * Returns the queue of the given tenant for the dead-letter queue identified by the supplied processing group,
@@ -63,13 +63,12 @@ public class TenantRoutingSequencedDeadLetterQueueRegistry implements MultiTenan
      */
     public synchronized SequencedDeadLetterQueue<EventMessage> queueFor(String processingGroup,
                                                                           Configuration configuration,
-                                                                          SequencedDeadLetterQueueFactory factory,
+                                                                          TenantAwareSequencedDeadLetterQueueFactory factory,
                                                                           TenantDescriptor tenant) {
-        QueueKey key = new QueueKey(processingGroup, configuration, factory);
         TenantScopedCache<SequencedDeadLetterQueue<EventMessage>> queueCache = queues.computeIfAbsent(
-                key,
+                processingGroup,
                 ignored -> registerKnownTenants(new TenantScopedCache<>(
-                        descriptor -> factory.create(processingGroup, configuration),
+                        descriptor -> factory.create(descriptor, processingGroup, configuration),
                         "the tenant-routing dead-letter queue [" + processingGroup + "]"
                 ))
         );
@@ -94,7 +93,7 @@ public class TenantRoutingSequencedDeadLetterQueueRegistry implements MultiTenan
     }
 
     @Override
-    public synchronized void describeTo(ComponentDescriptor descriptor) {
+    public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("tenants", tenants.keySet());
     }
 
@@ -135,8 +134,4 @@ public class TenantRoutingSequencedDeadLetterQueueRegistry implements MultiTenan
         }
     }
 
-    private record QueueKey(String processingGroup,
-                            Configuration configuration,
-                            SequencedDeadLetterQueueFactory factory) {
-    }
 }

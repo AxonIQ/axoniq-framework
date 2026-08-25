@@ -19,6 +19,8 @@
 
 package io.axoniq.framework.messaging.multitenancy.deadletter;
 
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.api.RecordingAxonServerConnectionManager;
 import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
@@ -51,8 +53,14 @@ class DeadLetterMultiTenancyConfigurationEnhancerTest {
 
         // when
         var configuration = MessagingConfigurer.create()
+                                              .componentRegistry(registry -> registry
+                                                      .registerComponent(AxonServerConnectionManager.class,
+                                                                         config -> new RecordingAxonServerConnectionManager())
+                                                      .registerComponent(TenantProvider.class,
+                                                                         config -> new StubTenantProvider()))
                                               .componentRegistry(registry -> registry.registerComponent(
-                                                      TenantProvider.class, config -> new StubTenantProvider()
+                                                      TenantAwareSequencedDeadLetterQueueFactory.class,
+                                                      config -> (tenant, processingGroup, ignored) -> null
                                               ))
                                               .eventProcessing(eventProcessing -> eventProcessing.pooledStreaming(
                                                       pooledStreaming -> pooledStreaming.processor(module)
@@ -69,6 +77,7 @@ class DeadLetterMultiTenancyConfigurationEnhancerTest {
         assertThat(processorConfig.orElseThrow()
                                   .extension(DeadLetterQueueConfiguration.class)
                                   .factory()).isInstanceOf(TenantRoutingSequencedDeadLetterQueueFactory.class);
+        assertThat(dlqConfig.factory()).isInstanceOf(TenantRoutingSequencedDeadLetterQueueFactory.class);
     }
 
     @Test

@@ -19,6 +19,8 @@
 
 package io.axoniq.framework.messaging.multitenancy;
 
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.api.RecordingAxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.axoniq.framework.messaging.multitenancy.annotation.TenantComponentParameterResolverFactoryConfigurationEnhancer;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
@@ -104,7 +106,13 @@ class MultiTenancyUtilsTest {
         void disablingLeavesNoMultiTenancyComponentsInTheConfiguration() {
             // when a configuration opts out, with the enhancers reaching it through the ServiceLoader as at runtime
             AxonConfiguration configuration = MessagingConfigurer.create()
-                                                                .componentRegistry(MultiTenancyUtils::disable)
+                                                                .componentRegistry(registry -> {
+                                                                    registry.registerComponent(
+                                                                            AxonServerConnectionManager.class,
+                                                                            config -> new RecordingAxonServerConnectionManager()
+                                                                    );
+                                                                    MultiTenancyUtils.disable(registry);
+                                                                })
                                                                 .build();
 
             // then neither the generic nor the Axon Server-backed defaults ran. That the parameter-resolver

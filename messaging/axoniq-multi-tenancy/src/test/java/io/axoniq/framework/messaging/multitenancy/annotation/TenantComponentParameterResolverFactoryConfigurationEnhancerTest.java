@@ -19,6 +19,8 @@
 
 package io.axoniq.framework.messaging.multitenancy.annotation;
 
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.api.RecordingAxonServerConnectionManager;
 import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
@@ -53,9 +55,11 @@ class TenantComponentParameterResolverFactoryConfigurationEnhancerTest {
         @BeforeEach
         void buildConfiguration() {
             configuration = MessagingConfigurer.create()
-                                               .componentRegistry(registry -> registry.registerComponent(
-                                                       TenantComponentProvider.class,
-                                                       config -> componentProvider))
+                                               .componentRegistry(registry -> registry
+                                                       .registerComponent(AxonServerConnectionManager.class,
+                                                                          config -> new RecordingAxonServerConnectionManager())
+                                                       .registerComponent(TenantComponentProvider.class,
+                                                                          config -> componentProvider))
                                                .build();
         }
 
@@ -80,7 +84,11 @@ class TenantComponentParameterResolverFactoryConfigurationEnhancerTest {
         // given a configuration that opted out of multi-tenancy
         AxonConfiguration configuration =
                 MessagingConfigurer.create()
-                                   .componentRegistry(MultiTenancyUtils::disable)
+                                   .componentRegistry(registry -> {
+                                       registry.registerComponent(AxonServerConnectionManager.class,
+                                                                  config -> new RecordingAxonServerConnectionManager());
+                                       MultiTenancyUtils.disable(registry);
+                                   })
                                    .componentRegistry(registry -> registry.registerComponent(
                                            TenantComponentProvider.class,
                                            config -> componentProvider))

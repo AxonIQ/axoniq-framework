@@ -25,12 +25,19 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
-import java.util.Objects;
-
 import static java.util.Objects.requireNonNull;
 
 /**
- * Adapts a regular dead-letter queue factory into one that creates a tenant-routing queue for each handling component.
+ * Framework-internal adapter from {@link TenantAwareSequencedDeadLetterQueueFactory} to the regular
+ * {@link SequencedDeadLetterQueueFactory} required by event processing.
+ * <p>
+ * An event processor creates one dead-letter queue for a processing group through the regular factory contract. That
+ * contract has no tenant argument, so it cannot create a tenant-specific queue directly. This adapter creates a
+ * {@link TenantRoutingSequencedDeadLetterQueue} instead. For every operation, that queue resolves the tenant from the
+ * processing context and asks the registry for the concrete queue created by the tenant-aware factory.
+ * <p>
+ * Applications register {@link TenantAwareSequencedDeadLetterQueueFactory}; the multi-tenancy configuration enhancer
+ * creates this adapter automatically.
  *
  * @author Jan Galinski
  * @since 5.4.0
@@ -38,17 +45,17 @@ import static java.util.Objects.requireNonNull;
 @Internal
 public class TenantRoutingSequencedDeadLetterQueueFactory implements SequencedDeadLetterQueueFactory {
 
-    private final SequencedDeadLetterQueueFactory delegate;
+    private final TenantAwareSequencedDeadLetterQueueFactory delegate;
     private final TenantRoutingSequencedDeadLetterQueueRegistry registry;
 
     /**
-     * Creates a factory that routes each queue operation to the queue of the tenant in its processing context.
+     * Creates the adapter used by the multi-tenancy configuration enhancer.
      *
-     * @param delegate       the factory creating the underlying queues
-     * @param registry       the registry-owning tenant lifecycle and tenant-specific queues
+     * @param delegate the factory creating the underlying tenant-specific queues
+     * @param registry the registry owning tenant lifecycle and tenant-specific queues
      */
-    public TenantRoutingSequencedDeadLetterQueueFactory(SequencedDeadLetterQueueFactory delegate,
-                                                         TenantRoutingSequencedDeadLetterQueueRegistry registry) {
+    public TenantRoutingSequencedDeadLetterQueueFactory(TenantAwareSequencedDeadLetterQueueFactory delegate,
+                                                        TenantRoutingSequencedDeadLetterQueueRegistry registry) {
         this.delegate = requireNonNull(delegate, "The delegate must not be null");
         this.registry = requireNonNull(registry, "The registry must not be null");
     }

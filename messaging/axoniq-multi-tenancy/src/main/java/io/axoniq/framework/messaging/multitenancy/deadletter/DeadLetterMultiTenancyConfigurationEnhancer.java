@@ -31,6 +31,7 @@ import static org.axonframework.common.configuration.DecoratorDefinition.forType
 
 /**
  * Makes an enabled dead-letter queue configuration tenant-aware by routing its configured queue factory per tenant.
+ * This enhancer has no-op if the optional dependency for dead-letter queue support is not present on the classpath.
  *
  * @author Jan Galinski
  * @since 5.4.0
@@ -60,7 +61,9 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
                                                                         DeadLetterQueueConfiguration.class);
                                                         if (dlqConfig != null && dlqConfig.isEnabled()) {
                                                             dlqConfig.factory(new TenantRoutingSequencedDeadLetterQueueFactory(
-                                                                    dlqConfig.factory(),
+                                                                    configuration.getComponent(
+                                                                            TenantAwareSequencedDeadLetterQueueFactory.class
+                                                                    ),
                                                                     configuration.getComponent(
                                                                             TenantRoutingSequencedDeadLetterQueueRegistry.class
                                                                     )
