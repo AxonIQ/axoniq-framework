@@ -174,9 +174,10 @@ public class EventHandlingComponentHandlingAny implements EventHandlingComponent
 
     @Override
     public void onSegmentClaimed(@NonNull Segment segment,
+                                 @Nullable TrackingToken from,
                                  @NonNull CheckpointTrigger trigger) {
         if (checkpointingHandler != null) {
-            checkpointingHandler.onSegmentClaimed(segment, trigger);
+            checkpointingHandler.onSegmentClaimed(segment, from, trigger);
         }
     }
 

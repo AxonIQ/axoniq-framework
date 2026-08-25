@@ -469,7 +469,7 @@ class WorkflowEngineReplayTest {
         });
 
         replaySupport.setInitialEngineTokens(safePoint, tokenAtReset);
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
         workflowEngine.handle(startEvent(eventName, "wf-1"), processingContext(firstReplayToken));
         workflowEngine.handle(startEvent(eventName, "wf-2"), processingContext(secondReplayToken));
@@ -499,7 +499,7 @@ class WorkflowEngineReplayTest {
 
         var trigger = mock(CheckpointTrigger.class);
         replaySupport.setInitialEngineTokens(token(18), token(30));
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
         var requested = token(25);
         var advanced = checkpointingSupport.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
@@ -522,7 +522,7 @@ class WorkflowEngineReplayTest {
         var trigger = mock(CheckpointTrigger.class);
         var requested = token(25);
         replaySupport.setInitialEngineTokens(token(18), token(30));
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
         checkpointingSupport.requestCheckpoint(requested);
 
@@ -541,7 +541,7 @@ class WorkflowEngineReplayTest {
 
         verifyNoInteractions(trigger);
 
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
         verify(trigger).requestCheckpoint(secondRequested);
         verifyNoMoreInteractions(trigger);
@@ -553,7 +553,7 @@ class WorkflowEngineReplayTest {
         var firstRequested = token(25);
         var secondRequested = token(27);
         replaySupport.setInitialEngineTokens(token(18), token(30));
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
         checkpointingSupport.requestCheckpoint(firstRequested);
         checkpointingSupport.requestCheckpoint(secondRequested);
