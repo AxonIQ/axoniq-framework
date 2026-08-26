@@ -36,6 +36,10 @@ public class WorkflowProperties {
      * <p>
      * Unset by default, leaving the count to the event processing configuration. Only the initial count is set here:
      * once the processor has stored its tokens, the segment count changes through splitting and merging them.
+     * <p>
+     * Setting this above 1 only spreads instances across nodes when the application also registers a durable
+     * {@code TokenStore}. Without one, the processor falls back to an in-memory token store and every claim stays
+     * process-local, so multiple segments run on the same node without actually distributing any load.
      */
     @Nullable
     private Integer initialSegmentCount;
