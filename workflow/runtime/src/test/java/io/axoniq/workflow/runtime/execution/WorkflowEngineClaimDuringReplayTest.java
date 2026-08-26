@@ -82,6 +82,7 @@ class WorkflowEngineClaimDuringReplayTest {
         workflowEngine = new WorkflowEngine(
                 configurationRegistry,
                 new InMemoryWorkflowExecutionRepository(),
+                mock(WorkflowCancellationService.class),
                 workflowStore,
                 mock(UnitOfWorkFactory.class)
         );

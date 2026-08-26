@@ -283,7 +283,8 @@ class WorkflowEngineReplayTest {
         var startupUnitOfWork = mock(UnitOfWork.class);
         when(startupUnitOfWorkFactory.create("WorkflowRehydration")).thenReturn(startupUnitOfWork);
         when(startupUnitOfWork.executeWithResult(any()))
-                .thenAnswer(invocation -> invocation.<java.util.function.Function<ProcessingContext, CompletableFuture<Void>>>getArgument(0).apply(processingContext));
+                .thenAnswer(invocation -> invocation.<java.util.function.Function<ProcessingContext, CompletableFuture<Void>>>getArgument(
+                        0).apply(processingContext));
 
         workflowEngine.start(checkpointToken, false).join();
         ProcessingContext executionContext = processingContext(checkpointToken);
@@ -620,7 +621,9 @@ class WorkflowEngineReplayTest {
         return new GlobalSequenceTrackingToken(globalIndex);
     }
 
-    /** A processor batch context: it carries the segment being handled, exactly as a work package's context does. */
+    /**
+     * A processor batch context: it carries the segment being handled, exactly as a work package's context does.
+     */
     private ProcessingContext segmentedContext(TrackingToken token) {
         ProcessingContext processingContext = processingContext(token);
         when(processingContext.getResource(Segment.RESOURCE_KEY)).thenReturn(Segment.ROOT_SEGMENT);

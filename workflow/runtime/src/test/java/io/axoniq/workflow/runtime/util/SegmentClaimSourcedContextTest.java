@@ -35,8 +35,7 @@ import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.SimpleEventBus;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.Tag;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.Map;
@@ -157,7 +156,7 @@ class SegmentClaimSourcedContextTest {
                 context -> eventStore.publish(
                         context,
                         List.of(new GenericEventMessage(STEP_EVENT_TYPE, Map.of("stepName",
-                                                                                          "waitForResume")))
+                                                                                "waitForResume")))
                 )
         ).join();
     }

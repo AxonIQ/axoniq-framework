@@ -20,18 +20,17 @@ package io.axoniq.workflow.itest;
 
 import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
-import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
 import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
@@ -79,10 +78,10 @@ class SegmentReleaseDrainTest extends AbstractWorkflowTestBase<SimpleWorkflowCon
 
         assertThat(drained)
                 .as("""
-                    Interrupting '%s' must report back once its parked body unwound. A future that never completes \
-                    holds the release of every segment owning a parked instance until the processor cuts the wait at \
-                    its claim extension threshold, and one completing early reports this node quiet while the body \
-                    still runs.""", WORKFLOW_ID)
+                            Interrupting '%s' must report back once its parked body unwound. A future that never completes \
+                            holds the release of every segment owning a parked instance until the processor cuts the wait at \
+                            its claim extension threshold, and one completing early reports this node quiet while the body \
+                            still runs.""", WORKFLOW_ID)
                 .succeedsWithin(Duration.ofSeconds(10));
     }
 

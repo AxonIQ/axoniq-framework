@@ -33,7 +33,7 @@ import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -42,7 +42,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
+import static io.axoniq.workflow.dsl.api.EventAssociationsUtils.equalsTo;
 import static io.axoniq.workflow.runtime.association.Associations.associate;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
@@ -50,8 +50,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Proves instance-partitioned segment ownership under MVP multi-node sharding with the workflow
- * event processor initialized with four segments:
+ * Proves instance-partitioned segment ownership under MVP multi-node sharding with the workflow event processor
+ * initialized with four segments:
  * <ul>
  *     <li>instances whose ids hash to different segments both start (unique start candidates route to their owning
  *     segment) and complete;</li>
@@ -81,8 +81,10 @@ class SegmentShardingDeclarativeTest {
         try (var app = startApp()) {
             workflowIds.forEach(id -> app.publish(new StartShardedWorkflowEvent(id)));
 
-            await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
-                    assertThat(app.runningWorkflowIds()).containsExactlyInAnyOrderElementsOf(workflowIds));
+            await().atMost(Duration.ofSeconds(10))
+                   .untilAsserted(
+                           () -> assertThat(app.runningWorkflowIds()).containsExactlyInAnyOrderElementsOf(workflowIds)
+                   );
 
             workflowIds.forEach(id -> app.publish(new ResumeShardedWorkflowEvent(id)));
 
@@ -116,8 +118,8 @@ class SegmentShardingDeclarativeTest {
     }
 
     /**
-     * Returns two deterministic workflow ids whose hashes fall into different segments under
-     * {@link #SEGMENT_COUNT} balanced segments.
+     * Returns two deterministic workflow ids whose hashes fall into different segments under {@link #SEGMENT_COUNT}
+     * balanced segments.
      */
     private static List<String> idsOnDifferentSegments() {
         var first = "sharded-0";

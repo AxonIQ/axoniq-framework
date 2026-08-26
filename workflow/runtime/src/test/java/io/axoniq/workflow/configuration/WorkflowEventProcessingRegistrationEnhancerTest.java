@@ -26,17 +26,21 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.UnableToClaimTokenException;
 import org.axonframework.messaging.eventstreaming.StreamableEventSource;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.eq;
 
 /**
  * Test for processor-token based replay initialization.
@@ -102,7 +106,9 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         ownedByAnotherNode(tokenStore, 1);
         readable(tokenStore, 2, token(30));
 
-        var processorToken = enhancer().ensureSegmentsInitialized(tokenStore, eventSource(token(0)), SEGMENT_COUNT).join();
+        var processorToken = enhancer().ensureSegmentsInitialized(tokenStore, eventSource(token(0)), SEGMENT_COUNT)
+                                       .orTimeout(50, TimeUnit.MILLISECONDS)
+                                       .join();
 
         assertThat(processorToken).as("the earliest token over the segments this node could read")
                                   .isEqualTo(token(10));
@@ -118,7 +124,9 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         ownedByAnotherNode(tokenStore, 1);
         ownedByAnotherNode(tokenStore, 2);
 
-        var processorToken = enhancer().ensureSegmentsInitialized(tokenStore, eventSource(token(0)), SEGMENT_COUNT).join();
+        var processorToken = enhancer().ensureSegmentsInitialized(tokenStore, eventSource(token(0)), SEGMENT_COUNT)
+                                       .orTimeout(50, TimeUnit.MILLISECONDS)
+                                       .join();
 
         assertThat(processorToken).as("a node that owns no segment has nothing to replay").isNull();
     }
@@ -155,7 +163,9 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         when(tokenStore.fetchToken("Workflow", 1, null))
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("connection lost")));
 
-        assertThatThrownBy(() -> enhancer().ensureSegmentsInitialized(tokenStore, eventSource(token(0)), SEGMENT_COUNT).join())
+        assertThatThrownBy(() -> enhancer().ensureSegmentsInitialized(tokenStore, eventSource(token(0)), SEGMENT_COUNT)
+                                           .orTimeout(50, TimeUnit.MILLISECONDS)
+                                           .join())
                 .isInstanceOf(CompletionException.class)
                 .hasRootCauseInstanceOf(IllegalStateException.class);
     }
@@ -173,7 +183,9 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         readable(tokenStore, 0, token(5));
         readable(tokenStore, 1, token(9));
 
-        var processorToken = enhancer().ensureSegmentsInitialized(tokenStore, eventSource(token(0)), SEGMENT_COUNT).join();
+        var processorToken = enhancer().ensureSegmentsInitialized(tokenStore, eventSource(token(0)), SEGMENT_COUNT)
+                                       .orTimeout(50, TimeUnit.MILLISECONDS)
+                                       .join();
 
         assertThat(processorToken).isEqualTo(token(5));
     }
@@ -185,7 +197,9 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         when(tokenStore.initializeTokenSegments(eq("Workflow"), anyInt(), any(), isNull()))
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("token table missing")));
 
-        assertThatThrownBy(() -> enhancer().ensureSegmentsInitialized(tokenStore, eventSource(token(0)), SEGMENT_COUNT).join())
+        assertThatThrownBy(() -> enhancer().ensureSegmentsInitialized(tokenStore, eventSource(token(0)), SEGMENT_COUNT)
+                                           .orTimeout(50, TimeUnit.MILLISECONDS)
+                                           .join())
                 .isInstanceOf(CompletionException.class)
                 .hasRootCauseInstanceOf(IllegalStateException.class);
     }
@@ -194,7 +208,9 @@ class WorkflowEventProcessingRegistrationEnhancerTest {
         return new WorkflowEventProcessingRegistrationEnhancer("Workflow", null, null, true);
     }
 
-    /** The segment count these cases run with, matching the layout the stubbed token stores hold. */
+    /**
+     * The segment count these cases run with, matching the layout the stubbed token stores hold.
+     */
     private static final int SEGMENT_COUNT = 3;
 
     private static List<Segment> segments(int count) {

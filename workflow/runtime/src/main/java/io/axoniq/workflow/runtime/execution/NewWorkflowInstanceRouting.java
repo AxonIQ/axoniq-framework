@@ -21,21 +21,20 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Static helpers that decide whether, and under which workflow id, a new workflow instance starts under a
- * multi-version registry. Lives outside {@link WorkflowEngine} because the decision is pure routing
- * over the repository state.
+ * Static helpers that decide whether, and under which workflow id, a new workflow instance starts under a multi-version
+ * registry.
+ * <p>
+ * Lives outside {@link WorkflowEngine} because the decision is pure routing over the repository state.
  *
  * @author Stefan Dragisic
  * @since 0.2.0
  */
-@Internal
-public final class NewWorkflowInstanceRouting {
+final class NewWorkflowInstanceRouting {
 
     private static final Logger logger = LoggerFactory.getLogger(NewWorkflowInstanceRouting.class);
 
@@ -47,8 +46,8 @@ public final class NewWorkflowInstanceRouting {
      * logging the misconfiguration that produced no id and skipping the new instance when it did not.
      * <p>
      * A provider deriving no id (an {@code idProperty} naming a property the event does not carry, typically) is never
-     * transient: every event of that type derives no id again. Failing the start would fail the work package and
-     * stall the segment processing it, taking down every instance that segment owns instead of just the misconfigured
+     * transient: every event of that type derives no id again. Failing the start would fail the work package and stall
+     * the segment processing it, taking down every instance that segment owns instead of just the misconfigured
      * definition; skipping the start keeps the damage to that one definition, and naming the definition and the event
      * here keeps it attributable. The provider is an arbitrary function over the event that resolves property names
      * against the converted payload, so registration cannot reject it up front.

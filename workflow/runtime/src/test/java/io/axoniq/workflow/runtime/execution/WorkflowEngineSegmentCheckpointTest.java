@@ -33,8 +33,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.Map;
@@ -42,14 +41,12 @@ import java.util.Map;
 import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.FOUR_SEGMENTS;
 import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
- * Verifies that checkpoint holdback is scoped to the segment being advanced: a busy workflow only holds
- * back the token of the segment that owns it.
+ * Verifies that checkpoint holdback is scoped to the segment being advanced: a busy workflow only holds back the token
+ * of the segment that owns it.
  * <p>
  * The busy instance is started through the engine's own handling path rather than pushed into the repository, because
  * that path is where the engine indexes an instance as a source of checkpoint work. Asking the index instead of
@@ -72,6 +69,7 @@ class WorkflowEngineSegmentCheckpointTest {
         workflowEngine = new WorkflowEngine(
                 configurationRegistry,
                 new InMemoryWorkflowExecutionRepository(),
+                mock(WorkflowCancellationService.class),
                 mock(WorkflowStore.class),
                 mock(UnitOfWorkFactory.class)
         );

@@ -51,15 +51,15 @@ import static java.util.Objects.requireNonNull;
  * {@link org.axonframework.messaging.eventhandling.EventHandler event handling} or
  * {@link io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing checkpoint advancement}.
  * <p>
- * Replay state is intentionally kept separate from checkpoint advancement state: {@link #segmentTokens} tracks where
+ * Replay state is intentionally kept separate from checkpoint advancement state: {@link #segmentIdToToken} tracks where
  * each segment's processor callback currently is, {@link #startupLatestToken} remembers the stream position that marked
  * the end of replay at startup, and {@link #liveSegments} gates whether a segment's executions should start
  * immediately. None of those concerns are required to ask for a checkpoint, so they live here instead of inside
  * checkpoint support.
  * <p>
  * Both the position and the live-mode flag are kept <em>per segment</em>. Segments of one processor catch up
- * independently, so each segment starts its workflow bodies exactly when it has caught up, and each restored
- * execution resumes from the position its own segment reached.
+ * independently, so each segment starts its workflow bodies exactly when it has caught up, and each restored execution
+ * resumes from the position its own segment reached.
  * <p>
  * Replay state is read frequently from processor callbacks, so the {@code TrackingToken} references are
  * {@code volatile} and the per-segment state lives in concurrent collections. The engine-wide live-mode flag is an
@@ -78,10 +78,8 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
 
     private final LiveModeActivatedCallback liveModeCallback;
 
-    /** Segment ids that finished replaying. */
     private final Set<Integer> liveSegments = ConcurrentHashMap.newKeySet();
-    /** Last observed processor position per segment id. */
-    private final Map<Integer, TrackingToken> segmentTokens = new ConcurrentHashMap<>();
+    private final Map<Integer, TrackingToken> segmentIdToToken = new ConcurrentHashMap<>();
     @Nullable
     private volatile TrackingToken currentToken;
     @Nullable
@@ -132,7 +130,7 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
                          var normalized = WrappedToken.unwrapLowerBound(token);
                          currentToken = normalized;
                          if (segment != null && normalized != null) {
-                             segmentTokens.put(segment.getSegmentId(), normalized);
+                             segmentIdToToken.put(segment.getSegmentId(), normalized);
                          }
                      });
         return currentToken(segment);
@@ -199,10 +197,10 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
     /**
      * Returns whether the given segment has finished replaying and may run workflow bodies.
      * <p>
-     * The engine-wide flag answers only for non-segmented handling. A segment answers for itself alone: the
-     * engine-wide flag is set by a startup that found nothing to replay, and a node can start that way while owning
-     * nothing at all. Letting that flag stand in for a segment would declare every segment this node claims later
-     * live as well, including one whose observed position is still behind the stream.
+     * The engine-wide flag answers only for non-segmented handling. A segment answers for itself alone: the engine-wide
+     * flag is set by a startup that found nothing to replay, and a node can start that way while owning nothing at all.
+     * Letting that flag stand in for a segment would declare every segment this node claims later live as well,
+     * including one whose observed position is still behind the stream.
      *
      * @param segment the segment handling the current callback, or {@code null} when handling is not segmented
      * @return {@code true} once this segment has caught up
@@ -227,7 +225,7 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      */
     public boolean isReplaying(@Nonnull Segment segment, @Nullable TrackingToken claimedFrom) {
         var latest = startupLatestToken;
-        var observed = segmentTokens.get(segment.getSegmentId());
+        var observed = segmentIdToToken.get(segment.getSegmentId());
         return latest != null && observed != null && !inLiveMode(segment) && !covers(observed, latest);
     }
 
@@ -242,7 +240,7 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
         if (segment == null) {
             return currentToken;
         }
-        var token = segmentTokens.get(segment.getSegmentId());
+        var token = segmentIdToToken.get(segment.getSegmentId());
         // Falls back to the startup position, a lower bound of every segment, never to another segment's position.
         return token != null ? token : startupProcessorToken;
     }

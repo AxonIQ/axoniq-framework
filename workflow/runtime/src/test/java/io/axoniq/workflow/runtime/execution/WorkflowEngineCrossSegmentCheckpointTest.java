@@ -112,6 +112,7 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         repository = new InMemoryWorkflowExecutionRepository();
         workflowEngine = new WorkflowEngine(configurationRegistry,
                                             repository,
+                                            mock(WorkflowCancellationService.class),
                                             mock(WorkflowStore.class),
                                             mock(UnitOfWorkFactory.class));
         replaySupport = new WorkflowEngineReplaySupport(workflowEngine);

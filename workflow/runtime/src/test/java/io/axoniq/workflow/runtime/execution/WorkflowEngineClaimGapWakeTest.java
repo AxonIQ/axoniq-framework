@@ -37,8 +37,7 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Clock;
 import java.util.List;
@@ -48,15 +47,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
 import static io.axoniq.workflow.configuration.WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR;
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Claiming a segment starts the bodies of the instances it restores <em>asynchronously</em> and returns. The processor
@@ -68,8 +64,8 @@ import static org.mockito.Mockito.when;
  * drains the queue, rather than against the conditions it happened to hold on the delivering thread.
  * <p>
  * The rig reproduces the window deterministically: the workflow executor never runs the submitted body, which is
- * exactly the state {@code restoreWorkflowsFor} leaves behind when it returns, and the test then plays the two orderings by
- * hand.
+ * exactly the state {@code restoreWorkflowsFor} leaves behind when it returns, and the test then plays the two
+ * orderings by hand.
  */
 class WorkflowEngineClaimGapWakeTest {
 
@@ -85,7 +81,9 @@ class WorkflowEngineClaimGapWakeTest {
     private WorkflowEngineReplaySupport replaySupport;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
-    /** The real execution the claim materializes, so the wake travels the production path. */
+    /**
+     * The real execution the claim materializes, so the wake travels the production path.
+     */
     private SimpleWorkflowExecution restored;
 
     @BeforeEach
@@ -95,6 +93,7 @@ class WorkflowEngineClaimGapWakeTest {
         workflowEngine = new WorkflowEngine(
                 configurationRegistry,
                 new InMemoryWorkflowExecutionRepository(),
+                mock(WorkflowCancellationService.class),
                 workflowStore,
                 mock(UnitOfWorkFactory.class)
         );
@@ -124,11 +123,11 @@ class WorkflowEngineClaimGapWakeTest {
 
         assertThat(waitStep.isCancelled())
                 .as("""
-                    The resume event was delivered to segment %s while '%s' was running but had not yet re-registered \
-                    its wait condition. Waking the instance cancels the wait step's timeout future, so a cancelled \
-                    future is the wake. Not cancelled means the event was matched against an empty condition set on \
-                    the delivering thread and dropped: the instance then sits on its timeout with no warning and no \
-                    error.""", owner, RESIDENT_ID)
+                            The resume event was delivered to segment %s while '%s' was running but had not yet re-registered \
+                            its wait condition. Waking the instance cancels the wait step's timeout future, so a cancelled \
+                            future is the wake. Not cancelled means the event was matched against an empty condition set on \
+                            the delivering thread and dropped: the instance then sits on its timeout with no warning and no \
+                            error.""", owner, RESIDENT_ID)
                 .isTrue();
     }
 
@@ -148,7 +147,9 @@ class WorkflowEngineClaimGapWakeTest {
                 .isTrue();
     }
 
-    /** Stands in for the restored body arriving back at its {@code awaitEvent} call. */
+    /**
+     * Stands in for the restored body arriving back at its {@code awaitEvent} call.
+     */
     private CompletableFuture<Void> registerWaitFor(String stepName) {
         var timeoutFuture = new CompletableFuture<Void>();
         restored.registerRunningStep(stepName, timeoutFuture);
@@ -159,7 +160,9 @@ class WorkflowEngineClaimGapWakeTest {
         return timeoutFuture;
     }
 
-    /** Runs the single task the delivery queued on the instance, the way the parked body would. */
+    /**
+     * Runs the single task the delivery queued on the instance, the way the parked body would.
+     */
     private void drainOneTask() {
         Consumer<WorkflowExecution> task = restored.getNextTask();
         assertThat(task).as("delivering the event queues exactly one task on the instance").isNotNull();
@@ -205,8 +208,8 @@ class WorkflowEngineClaimGapWakeTest {
     }
 
     /**
-     * The context a restored body runs under. Its executor never runs the submitted body, which freezes the instance
-     * in the window this test is about.
+     * The context a restored body runs under. Its executor never runs the submitted body, which freezes the instance in
+     * the window this test is about.
      */
     private static ProcessingContext bodyContext() {
         var context = mock(ProcessingContext.class);
@@ -225,7 +228,9 @@ class WorkflowEngineClaimGapWakeTest {
         return context;
     }
 
-    /** A processor batch context carrying the segment the event is delivered under. */
+    /**
+     * A processor batch context carrying the segment the event is delivered under.
+     */
     private ProcessingContext deliveryContext(Segment segment) {
         var context = new StubProcessingContext();
         context.putResource(Segment.RESOURCE_KEY, segment);

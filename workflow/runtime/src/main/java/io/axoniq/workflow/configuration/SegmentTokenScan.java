@@ -55,12 +55,12 @@ final class SegmentTokenScan {
      * work of lagging segments would be treated as already-live processing.
      * <p>
      * A segment owned by another node is skipped: it is already being processed there and is not part of this node's
-     * replay decision. If no segment can be read the result is {@code null}, and the node starts without a replay;
-     * its executions are restored per segment by the segment change listener once it actually claims one.
+     * replay decision. If no segment can be read the result is {@code null}, and the node starts without a replay; its
+     * executions are restored per segment by the segment change listener once it actually claims one.
      * <p>
      * Segments are read one at a time and the claim the read takes is released before the next one is read, so a
-     * starting node never holds a claim on one segment while reading another. Holding them makes two nodes starting
-     * at the same time block each other.
+     * starting node never holds a claim on one segment while reading another. Holding them makes two nodes starting at
+     * the same time block each other.
      *
      * @param tokenStore    token store holding the processor's segment tokens
      * @param processorName name of the processor whose segments are read

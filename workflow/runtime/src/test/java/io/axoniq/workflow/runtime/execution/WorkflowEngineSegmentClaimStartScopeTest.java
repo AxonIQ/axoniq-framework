@@ -83,6 +83,7 @@ class WorkflowEngineSegmentClaimStartScopeTest {
         workflowEngine = new WorkflowEngine(
                 configurationRegistry,
                 new InMemoryWorkflowExecutionRepository(),
+                mock(WorkflowCancellationService.class),
                 workflowStore,
                 mock(UnitOfWorkFactory.class)
         );

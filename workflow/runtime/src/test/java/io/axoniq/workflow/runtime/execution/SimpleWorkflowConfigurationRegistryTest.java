@@ -298,6 +298,7 @@ class SimpleWorkflowConfigurationRegistryTest {
      * Stub with explicit workflowName + workflowVersion for {@code findClosestRegisteredVersion} tests.
      */
     private static class VersionedStub extends StubWorkflowConfiguration {
+
         private final String name;
         private final String version;
 

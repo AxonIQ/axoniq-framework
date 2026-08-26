@@ -120,20 +120,20 @@ public class ProcessingContextUtils {
      * Copies resources from the given context to the target processing context.
      * <p>
      * An {@link EventStoreTransaction} is deliberately left behind. It stays bound to the unit of work that opened it,
-     * so appending through a copy registers the append on <em>that</em> unit of work and fails once it has committed.
-     * A workflow instance restored while a segment is claimed sources its state in the claim's short-lived unit of
-     * work and keeps that context on its steps; without this, every event the instance publishes afterwards would be
-     * routed back into the finished claim, leaving it restored but unable to make progress. Skipping the transaction
-     * makes {@code to} open its own.
+     * so appending through a copy registers the append on <em>that</em> unit of work and fails once it has committed. A
+     * workflow instance restored while a segment is claimed sources its state in the claim's short-lived unit of work
+     * and keeps that context on its steps; without this, every event the instance publishes afterward would be routed
+     * back into the finished claim, leaving it restored but unable to make progress. Skipping the transaction makes
+     * {@code to} open its own.
      *
      * @param from source containing resources.
      * @param to   target processing context.
      * @return resulting processing context.
      */
+    @SuppressWarnings("unchecked")
     public static ProcessingContext copyResources(Context from,
                                                   ProcessingContext to) {
         var fromResource = from.resources();
-        //noinspection unchecked
         fromResource.forEach((k, v) -> {
             if (!(v instanceof EventStoreTransaction)) {
                 to.putResource((Context.ResourceKey<Object>) k, v);

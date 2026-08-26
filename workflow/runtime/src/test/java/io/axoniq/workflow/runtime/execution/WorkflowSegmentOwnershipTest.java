@@ -18,7 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.Set;
@@ -55,8 +55,8 @@ class WorkflowSegmentOwnershipTest {
     }
 
     /**
-     * The flip side of the test above, and the reason {@code '#'} is a reserved character rather than an
-     * implementation detail: the segment key is everything before the first {@code '#'}, so an application whose
+     * The flip side of the test above, and the reason {@code '#'} is a reserved character rather than an implementation
+     * detail: the segment key is everything before the first {@code '#'}, so an application whose
      * {@code workflowIdProvider} returns {@code order#123} hands every order the same segment key and runs the whole
      * workload on one segment. Nothing rejects such an id and nothing warns about it, so a sharded processor degrades
      * to a single segment while every count, claim row and health check still looks right. The remaining segments stay
@@ -69,9 +69,9 @@ class WorkflowSegmentOwnershipTest {
 
         assertThat(segmentsOf(collapsing))
                 .as("""
-                    Segments used by 200 ids of the shape 'order#<n>': %s. The segment key stops at the first '#', so \
-                    all 200 share the key 'order' and one of the %d segments does all the work. '#' is a common \
-                    identifier separator and its reservation is neither validated nor documented.""",
+                            Segments used by 200 ids of the shape 'order#<n>': %s. The segment key stops at the first '#', so \
+                            all 200 share the key 'order' and one of the %d segments does all the work. '#' is a common \
+                            identifier separator and its reservation is neither validated nor documented.""",
                     segmentsOf(collapsing), FOUR_SEGMENTS.size())
                 .hasSize(1);
         assertThat(segmentsOf(spreading))
@@ -82,8 +82,8 @@ class WorkflowSegmentOwnershipTest {
 
     /**
      * An id that starts with {@code '#'} has the empty string as its segment key, whose hash is zero, so it lands on
-     * segment 0 under every mask. Two consequences worth stating separately from the collapse above: segment 0 is
-     * where such ids pile up on any segment count, and the id is not rejected on the way in.
+     * segment 0 under every mask. Two consequences worth stating separately from the collapse above: segment 0 is where
+     * such ids pile up on any segment count, and the id is not rejected on the way in.
      */
     @Test
     void anIdStartingWithTheSeparatorAlwaysLandsOnSegmentZero() {
@@ -94,12 +94,15 @@ class WorkflowSegmentOwnershipTest {
         }
     }
 
-    /** The segments that own the given ids, as a set: its size is how much of the cluster the ids actually use. */
+    /**
+     * The segments that own the given ids, as a set: its size is how much of the cluster the ids actually use.
+     */
     private static Set<Integer> segmentsOf(List<String> workflowIds) {
         return workflowIds.stream()
                           .map(workflowId -> FOUR_SEGMENTS.stream()
-                                                          .filter(segment -> WorkflowSegmentOwnership.ownedBy(segment,
-                                                                                                             workflowId))
+                                                          .filter(segment -> WorkflowSegmentOwnership.ownedBy(
+                                                                  segment, workflowId
+                                                          ))
                                                           .findFirst()
                                                           .orElseThrow()
                                                           .getSegmentId())

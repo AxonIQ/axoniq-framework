@@ -39,8 +39,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.NonNull;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -52,19 +51,9 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.IntStream;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * How many start candidates a business event has decides how it is routed, and only the one-candidate case is well
@@ -100,7 +89,9 @@ class NewInstanceCandidateRoutingTest {
     private static final QualifiedName START_EVENT = new QualifiedName("FanOutRequested");
     private static final QualifiedName UNREGISTERED_EVENT = new QualifiedName("NobodyStartsOnThis");
 
-    /** Far ahead of any segment's position, so no segment reaches live mode and no body is started. */
+    /**
+     * Far ahead of any segment's position, so no segment reaches live mode and no body is started.
+     */
     private static final long STARTUP_LATEST_POSITION = 1_000;
 
     private SimpleWorkflowConfigurationRegistry registry;
@@ -110,9 +101,13 @@ class NewInstanceCandidateRoutingTest {
     private WorkflowEngineReplaySupport replaySupport;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
-    /** Workflow ids the engine created an instance for, one entry per start it actually performed. */
+    /**
+     * Workflow ids the engine created an instance for, one entry per start it actually performed.
+     */
     private final List<String> started = new ArrayList<>();
-    /** The executions those starts produced, so it can be asserted that none of their bodies ran. */
+    /**
+     * The executions those starts produced, so it can be asserted that none of their bodies ran.
+     */
     private final List<WorkflowExecution> startedExecutions = new ArrayList<>();
     private final Map<WorkflowContext, String> idOfContext = new IdentityHashMap<>();
 
@@ -123,6 +118,7 @@ class NewInstanceCandidateRoutingTest {
         repository = new InMemoryWorkflowExecutionRepository();
         engine = new WorkflowEngine(registry,
                                     repository,
+                                    mock(WorkflowCancellationService.class),
                                     mock(WorkflowStore.class),
                                     mock(UnitOfWorkFactory.class));
         replaySupport = new WorkflowEngineReplaySupport(engine);
@@ -172,11 +168,11 @@ class NewInstanceCandidateRoutingTest {
 
         assertThat(decision)
                 .as("""
-                    Routing decision for an event whose two definitions both name 'shared-1': %s. Expected the id \
-                    itself. The candidates are collected into a Set, so the duplicate collapses and a single owning \
-                    segment does exist. Broadcasting instead would still be correct in outcome, and an assertion that \
-                    only counted instances would not notice, but it would cost a delivery on every one of the %d \
-                    segments for an event that has one owner.""", decision, SEGMENT_COUNT)
+                            Routing decision for an event whose two definitions both name 'shared-1': %s. Expected the id \
+                            itself. The candidates are collected into a Set, so the duplicate collapses and a single owning \
+                            segment does exist. Broadcasting instead would still be correct in outcome, and an assertion that \
+                            only counted instances would not notice, but it would cost a delivery on every one of the %d \
+                            segments for an event that has one owner.""", decision, SEGMENT_COUNT)
                 .contains("shared-1");
         assertThat(decision).isNotEqualTo(java.util.Optional.of(SequencingPolicy.BROADCAST));
     }
@@ -240,10 +236,10 @@ class NewInstanceCandidateRoutingTest {
 
         assertThat(routing.sequenceIdentifierFor(startEvent(), context(SEGMENTS.getFirst())))
                 .as("""
-                    The catch surrounds the whole stream, so one definition that cannot derive its id discards the \
-                    candidates of every other definition on the same event and degrades it to a broadcast. Correct - \
-                    every ownership guard narrows it back to exactly-once - and cheap only while such events are \
-                    rare.""")
+                            The catch surrounds the whole stream, so one definition that cannot derive its id discards the \
+                            candidates of every other definition on the same event and degrades it to a broadcast. Correct - \
+                            every ownership guard narrows it back to exactly-once - and cheap only while such events are \
+                            rare.""")
                 .contains(SequencingPolicy.BROADCAST);
     }
 
@@ -259,8 +255,8 @@ class NewInstanceCandidateRoutingTest {
      * misconfigured definition.
      * <p>
      * The provider is only known at runtime - an arbitrary function over the event, resolving property names against
-     * the converted payload - so registration cannot reject it. Instead the start path reports the definition and
-     * skips it: no instance, no stall, and an attributable error.
+     * the converted payload - so registration cannot reject it. Instead the start path reports the definition and skips
+     * it: no instance, no stall, and an attributable error.
      */
     @Test
     void aDefinitionDerivingNoWorkflowIdIsSkippedInsteadOfFailingTheWorkPackage() {
@@ -280,9 +276,9 @@ class NewInstanceCandidateRoutingTest {
 
         assertThatCode(() -> engine.handle(startEvent(), context(segment)))
                 .as("""
-                    A definition whose idProperty names a field the event lacks derives no workflow id. Handing that \
-                    to the ownership guard would compute the segment key of nothing, fail the work package and stall \
-                    the segment for every instance it owns. The start path must reject the definition instead.""")
+                            A definition whose idProperty names a field the event lacks derives no workflow id. Handing that \
+                            to the ownership guard would compute the segment key of nothing, fail the work package and stall \
+                            the segment for every instance it owns. The start path must reject the definition instead.""")
                 .doesNotThrowAnyException();
 
         assertThat(started).as("there is no id to start under, so no instance is created").isEmpty();
@@ -295,11 +291,11 @@ class NewInstanceCandidateRoutingTest {
 
         assertThat(routing.sequenceIdentifierFor(startEvent(), context(SEGMENTS.getFirst())))
                 .as("""
-                    A definition that derives no id is dropped from the candidate set rather than collapsing it: the \
-                    collector's own rejection of nulls would discard 'alpha-1' too and broadcast an event that has \
-                    exactly one owner, on every event of this type. Contrast \
-                    oneThrowingDefinitionDiscardsTheCandidatesOfItsHealthySiblingsToo, where the derivation throws \
-                    and the whole stream is still lost.""")
+                            A definition that derives no id is dropped from the candidate set rather than collapsing it: the \
+                            collector's own rejection of nulls would discard 'alpha-1' too and broadcast an event that has \
+                            exactly one owner, on every event of this type. Contrast \
+                            oneThrowingDefinitionDiscardsTheCandidatesOfItsHealthySiblingsToo, where the derivation throws \
+                            and the whole stream is still lost.""")
                 .contains("alpha-1");
 
         SEGMENTS.forEach(candidate -> engine.handle(startEvent(), context(candidate)));
@@ -316,9 +312,9 @@ class NewInstanceCandidateRoutingTest {
 
         assertThatThrownBy(() -> WorkflowSegmentOwnership.ownedBy(SEGMENTS.getFirst(), missingId))
                 .as("""
-                    Defence in depth behind the start path's own rejection: no caller should reach the guard without \
-                    an id, and one that does must be told what is wrong rather than dereference nothing while \
-                    deriving the segment key.""")
+                            Defence in depth behind the start path's own rejection: no caller should reach the guard without \
+                            an id, and one that does must be told what is wrong rather than dereference nothing while \
+                            deriving the segment key.""")
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("without a workflow id")
                 .hasMessageContaining("idProperty");
@@ -369,10 +365,10 @@ class NewInstanceCandidateRoutingTest {
                 .isNotEqualTo(deliveredTo.getSegmentId());
         assertThat(started)
                 .as("""
-                    Instances created by the delivery: %s. The event was routed by '%s' to segment %d and the start \
-                    path then asked for '%s', which segment %d does not own, so the ownership guard skipped it. No \
-                    other segment is offered this event, so the start is lost outright - the outcome a purity \
-                    requirement stated nowhere buys.""",
+                            Instances created by the delivery: %s. The event was routed by '%s' to segment %d and the start \
+                            path then asked for '%s', which segment %d does not own, so the ownership guard skipped it. No \
+                            other segment is offered this event, so the start is lost outright - the outcome a purity \
+                            requirement stated nowhere buys.""",
                     started, ids.getFirst(), deliveredTo.getSegmentId(), ids.getLast(),
                     deliveredTo.getSegmentId())
                 .isEmpty();
@@ -401,8 +397,8 @@ class NewInstanceCandidateRoutingTest {
     }
 
     /**
-     * The precise negative of the two above, and the reason this is a purity requirement rather than an ordering bug:
-     * a disagreement in the other direction is harmless. A start condition that does not match while the event is
+     * The precise negative of the two above, and the reason this is a purity requirement rather than an ordering bug: a
+     * disagreement in the other direction is harmless. A start condition that does not match while the event is
      * sequenced contributes no candidate, so the event is broadcast to every segment, and the definition that has
      * changed its mind by the time the event is handled still finds its owner among them. Only a derivation that
      * <em>narrows</em> after sequencing loses work.
@@ -425,8 +421,8 @@ class NewInstanceCandidateRoutingTest {
 
     /**
      * Two ids owned by different segments, found by scanning rather than assumed: {@code String.hashCode} is specified
-     * by the JLS, so this is deterministic, and a scenario that happened to pick two ids on the same segment would
-     * pass while testing nothing.
+     * by the JLS, so this is deterministic, and a scenario that happened to pick two ids on the same segment would pass
+     * while testing nothing.
      */
     private static List<String> twoIdsOnDifferentSegments() {
         var first = "impure-0";
@@ -449,8 +445,8 @@ class NewInstanceCandidateRoutingTest {
 
         assertThat(routing.sequenceIdentifierFor(startEvent(), context(SEGMENTS.getFirst())))
                 .as("""
-                    Routing must see the single candidate the start path sees. Counting the superseded v1 as a second \
-                    candidate would broadcast an event that has exactly one owner, on every event of this type.""")
+                            Routing must see the single candidate the start path sees. Counting the superseded v1 as a second \
+                            candidate would broadcast an event that has exactly one owner, on every event of this type.""")
                 .contains("alpha-v2");
     }
 
@@ -486,8 +482,8 @@ class NewInstanceCandidateRoutingTest {
     }
 
     /**
-     * Registers a workflow definition on {@link #START_EVENT}. Its body is never run: these scenarios end at the
-     * moment the instance is created, and creation is recorded in {@link #started}.
+     * Registers a workflow definition on {@link #START_EVENT}. Its body is never run: these scenarios end at the moment
+     * the instance is created, and creation is recorded in {@link #started}.
      */
     @SuppressWarnings("unchecked")
     private void register(String workflowName,

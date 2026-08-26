@@ -214,9 +214,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * Skips the body of an instance that is already terminal, and reports it drained: no body ran, so an
      * {@link #interrupt()} has nothing to wait on.
      * <p>
-     * Only the drain state is reported here. The {@code running} flag also decides how this instance handles the
-     * events that still reach it, live or as a replay, so a terminal instance keeps the classification its execution
-     * gave it.
+     * Only the drain state is reported here. The {@code running} flag also decides how this instance handles the events
+     * that still reach it, live or as a replay, so a terminal instance keeps the classification its execution gave it.
      *
      * @return the context of this instance, as the result of an execution that ran no body
      */
@@ -226,7 +225,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         drained.complete(null);
         return CompletableFuture.completedFuture(this.contextDelegate);
     }
-
 
     /**
      * Emit start events if not already started.

@@ -48,9 +48,6 @@ import static org.mockito.Mockito.*;
  */
 final class WorkflowExecutionFixture {
 
-    private WorkflowExecutionFixture() {
-    }
-
     /**
      * Builds a {@link WorkflowExecution} mock for {@code workflowId}, with its {@link WorkflowContext} wired so that
      * {@code workflowContext().processingContext().whenComplete(...)} invokes the callback immediately.
@@ -114,5 +111,9 @@ final class WorkflowExecutionFixture {
             bodyStarts.accept(workflowId);
             return null;
         }).when(execution).execute(any());
+    }
+
+    private WorkflowExecutionFixture() {
+        // Utility class
     }
 }

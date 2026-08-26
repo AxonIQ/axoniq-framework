@@ -80,6 +80,7 @@ class WorkflowEngineSegmentLiveModeScopeTest {
         workflowEngine = new WorkflowEngine(
                 configurationRegistry,
                 new InMemoryWorkflowExecutionRepository(),
+                mock(WorkflowCancellationService.class),
                 mock(WorkflowStore.class),
                 mock(UnitOfWorkFactory.class)
         );
@@ -189,6 +190,7 @@ class WorkflowEngineSegmentLiveModeScopeTest {
         // from the same support the processor callbacks fed.
         var claimingEngine = new WorkflowEngine(configurationRegistry,
                                                 new InMemoryWorkflowExecutionRepository(),
+                                                mock(WorkflowCancellationService.class),
                                                 workflowStore,
                                                 mock(UnitOfWorkFactory.class));
         claimingEngine.setEngineSupportComponents(replaySupport, checkpointingSupport);

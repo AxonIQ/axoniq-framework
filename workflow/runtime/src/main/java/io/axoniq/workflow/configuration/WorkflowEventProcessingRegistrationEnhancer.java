@@ -54,8 +54,6 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import static java.util.concurrent.CompletableFuture.completedFuture;
-
 /**
  * Enhancer for registration of the workflow engine event processing.
  *
@@ -150,12 +148,12 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     }
 
     /**
-     * Configures the workflow event processor: it streams any event, partitioned over segments, with workflow
-     * instances distributed over segments by their workflow id.
+     * Configures the workflow event processor: it streams any event, partitioned over segments, with workflow instances
+     * distributed over segments by their workflow id.
      * <p>
-     * Everything set here is either the wiring the engine needs or the segment count. The segment change listener
-     * moves instances with their segment, and the event source, token store and unit of work factory are resolved from
-     * the components of this application. Every other processor setting is left to the standard event processing
+     * Everything set here is either the wiring the engine needs or the segment count. The segment change listener moves
+     * instances with their segment, and the event source, token store and unit of work factory are resolved from the
+     * components of this application. Every other processor setting is left to the standard event processing
      * configuration.
      * <p>
      * The criteria narrow to the registered start events, and admit any event when the engine reports none. That empty
@@ -225,12 +223,16 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
                                      // events and unique start candidates reach the owning segment and all other
                                      // business events are broadcast to every segment.
                                      var workflowEngine = workflowEngine(cfg);
-                                     var component = engineComponentName != null
-                                             ? new EventHandlingComponentHandlingAny(
-                                                     workflowEngine,
-                                                     cfg.getComponent(WorkflowEngineReplaySupport.class),
-                                                     cfg.getComponent(WorkflowEngineCheckpointingSupport.class))
-                                             : new EventHandlingComponentHandlingAny(workflowEngine);
+                                     EventHandlingComponentHandlingAny component;
+                                     if (engineComponentName != null) {
+                                         component = new EventHandlingComponentHandlingAny(
+                                                 workflowEngine,
+                                                 cfg.getComponent(WorkflowEngineReplaySupport.class),
+                                                 cfg.getComponent(WorkflowEngineCheckpointingSupport.class)
+                                         );
+                                     } else {
+                                         component = new EventHandlingComponentHandlingAny(workflowEngine);
+                                     }
                                      return new SequenceOverridingEventHandlingComponent(
                                              workflowEngine.segmentedRouting(),
                                              component

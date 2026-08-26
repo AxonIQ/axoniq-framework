@@ -48,6 +48,8 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import static io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState.PAYLOAD_TYPE;
+import static io.axoniq.workflow.runtime.execution.NewWorkflowInstanceRouting.hasDerivedWorkflowId;
+import static io.axoniq.workflow.runtime.execution.NewWorkflowInstanceRouting.resolveWorkflowIdForNewInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -74,8 +76,8 @@ public class WorkflowEngine implements
      * a segment's durable state before it fails the claim.
      * <p>
      * The workflow store is remote, so the load can stall without failing. The processor logs a failing claim listener
-     * and carries on, so an unbounded load would leave the segment claimed here with none of its instances running.
-     * A release needs no such bound: the processor already caps it at its claim extension threshold.
+     * and carries on, so an unbounded load would leave the segment claimed here with none of its instances running. A
+     * release needs no such bound: the processor already caps it at its claim extension threshold.
      */
     static final Duration DEFAULT_RESTORE_TIMEOUT = Duration.ofSeconds(30);
 
@@ -135,7 +137,7 @@ public class WorkflowEngine implements
      * Sets {@code WorkflowEngine} support components which are <b>required</b> for the engine to work.
      * <p>
      * Both {@code replaySupport} and {@code checkpointingSupport} are set outside the
-     * {@link #WorkflowEngine(WorkflowConfigurationRegistry, WorkflowExecutionRepository, WorkflowCancellationService
+     * {@link #WorkflowEngine(WorkflowConfigurationRegistry, WorkflowExecutionRepository, WorkflowCancellationService,
      * WorkflowStore, UnitOfWorkFactory)}, because they require <b>this</b> {@code WorkflowEngine} itself to function.
      * Hence, a cyclic dependency would exist upon start-up if completion otherwise.
      *
@@ -224,7 +226,7 @@ public class WorkflowEngine implements
             var baseWorkflowId = workflowConfiguration.workflowIdProvider().apply(eventMessage);
             // Must precede the ownership guard: that guard derives a segment key from the id, so an id the provider
             // could not derive would fail the work package there.
-            if (!NewWorkflowInstanceRouting.hasDerivedWorkflowId(baseWorkflowId, workflowConfiguration, eventMessage)) {
+            if (!hasDerivedWorkflowId(baseWorkflowId, workflowConfiguration, eventMessage)) {
                 return;
             }
             if (!WorkflowSegmentOwnership.ownedBy(segment, baseWorkflowId)) {
@@ -232,7 +234,7 @@ public class WorkflowEngine implements
                              baseWorkflowId, segment);
                 return;
             }
-            var workflowId = NewWorkflowInstanceRouting.resolveWorkflowIdForNewInstance(
+            var workflowId = resolveWorkflowIdForNewInstance(
                     workflowExecutionRepository, baseWorkflowId, workflowConfiguration.workflowVersion(), eventMessage
             );
 
@@ -323,7 +325,8 @@ public class WorkflowEngine implements
      * Initializes replay tracking before processor replay resumes.
      * <p>
      * Workflow executions are not restored here: they are restored per segment by
-     * {@link #restoreWorkflowsFor(Segment, TrackingToken, ProcessingContext, ProcessingContext)} as this node claims them.
+     * {@link #restoreWorkflowsFor(Segment, TrackingToken, ProcessingContext, ProcessingContext)} as this node claims
+     * them.
      *
      * @param processorToken processor token at startup; initializes replay tracking when no processor token has been
      *                       observed yet
@@ -352,10 +355,9 @@ public class WorkflowEngine implements
     /**
      * Restores and starts the workflow executions owned by a segment this node just claimed.
      * <p>
-     * Restoration is per segment rather than per node: a node materializes only the instances of the segments it
-     * holds, so a segment migrating between nodes carries its instances with it. When another node dies, the
-     * coordinator hands its segments to a surviving node and this callback rebuilds their instances there, without
-     * restarting anything.
+     * Restoration is per segment rather than per node: a node materializes only the instances of the segments it holds,
+     * so a segment migrating between nodes carries its instances with it. When another node dies, the coordinator hands
+     * its segments to a surviving node and this callback rebuilds their instances there, without restarting anything.
      * <p>
      * The instances are materialized from their current durable state, which is the state at the end of the stream, not
      * at the segment's position. Running their bodies while the segment is still replaying would let them act on events
@@ -374,8 +376,8 @@ public class WorkflowEngine implements
      *                         required {@code PREPARE_COMMIT} handler, and the workflow cannot persist its resumed,
      *                         timed-out, or terminal state
      * @return a future that completes once the segment's executions are restored and, unless the segment is still
-     *         replaying, started. It completes exceptionally when loading durable state does not finish within
-     *         {@link #DEFAULT_RESTORE_TIMEOUT}, failing the claim rather than holding the segment
+     * replaying, started. It completes exceptionally when loading durable state does not finish within
+     * {@link #DEFAULT_RESTORE_TIMEOUT}, failing the claim rather than holding the segment
      */
     public CompletableFuture<Void> restoreWorkflowsFor(@Nonnull Segment segment,
                                                        @Nullable TrackingToken claimedFrom,
@@ -399,8 +401,8 @@ public class WorkflowEngine implements
      *
      * @param segment the segment that was released
      * @return a future that completes once the interrupted bodies of this segment have unwound, so the processor
-     *         reports the segment released only after this node went quiet on it. A body that never unwinds does not
-     *         hold the segment: the processor stops waiting at its claim extension threshold and releases regardless
+     * reports the segment released only after this node went quiet on it. A body that never unwinds does not hold the
+     * segment: the processor stops waiting at its claim extension threshold and releases regardless
      */
     public CompletableFuture<Void> releaseWorkflowsFor(@Nonnull Segment segment) {
         var released = workflowExecutionRepository.findAll(ownedBy(segment));
@@ -448,7 +450,9 @@ public class WorkflowEngine implements
                             .thenCompose(runningWorkflows -> {
                                 var ownedIds = runningWorkflows.workflowIds()
                                                                .stream()
-                                                               .filter(id -> WorkflowSegmentOwnership.ownedBy(segment, id))
+                                                               .filter(id -> WorkflowSegmentOwnership.ownedBy(
+                                                                       segment, id
+                                                               ))
                                                                .toList();
                                 if (ownedIds.isEmpty()) {
                                     logger.debug("No running workflows to rehydrate for segment {}.",
@@ -524,8 +528,8 @@ public class WorkflowEngine implements
      * Removes terminal workflow executions and starts the remaining restored executions of the given segment.
      * <p>
      * Both passes are scoped to the segment they run for. Instances of other segments are none of this segment's
-     * business: they belong to a segment at its own position, possibly still replaying, and starting one here would
-     * run its body on behalf of a segment that never asked for it.
+     * business: they belong to a segment at its own position, possibly still replaying, and starting one here would run
+     * its body on behalf of a segment that never asked for it.
      *
      * @param segment the segment whose executions are considered, or {@code null} outside a segmented processor
      * @param phase   startup phase in which the executions are started

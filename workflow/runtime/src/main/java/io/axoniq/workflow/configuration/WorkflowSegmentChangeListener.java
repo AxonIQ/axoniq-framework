@@ -33,9 +33,8 @@ import java.util.function.Supplier;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Moves workflow executions with their segment: instances are restored on the node claiming their segment and
- * dropped again when it releases them, so segments migrating between nodes carry their instances along without a
- * restart.
+ * Moves workflow executions with their segment: instances are restored on the node claiming their segment and dropped
+ * again when it releases them, so segments migrating between nodes carry their instances along without a restart.
  * <p>
  * A claim runs in two nested units of work: a short-lived sourcing context that loads durable workflow state, and an
  * independent execution context that parents the restored workflow bodies, which outlive the claim callback. See
@@ -61,8 +60,8 @@ class WorkflowSegmentChangeListener implements SegmentChangeListener {
      * @param workflowEngine    supplies the engine whose executions follow the segments
      */
     WorkflowSegmentChangeListener(String moduleName,
-                                         UnitOfWorkFactory unitOfWorkFactory,
-                                         Supplier<WorkflowEngine> workflowEngine) {
+                                  UnitOfWorkFactory unitOfWorkFactory,
+                                  Supplier<WorkflowEngine> workflowEngine) {
         this.moduleName = requireNonNull(moduleName, "The module name must not be null.");
         this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
         this.workflowEngine = requireNonNull(workflowEngine, "The WorkflowEngine supplier must not be null.");

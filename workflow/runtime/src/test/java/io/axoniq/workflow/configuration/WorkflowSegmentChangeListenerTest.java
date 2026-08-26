@@ -24,21 +24,18 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
+import org.junit.jupiter.api.*;
+import org.mockito.*;
 
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
- * The segment change listener is how workflow executions follow their segment: a claim restores the segment's
- * instances inside a fresh unit of work, a release drops them again.
+ * The segment change listener is how workflow executions follow their segment: a claim restores the segment's instances
+ * inside a fresh unit of work, a release drops them again.
  */
 class WorkflowSegmentChangeListenerTest {
 
@@ -64,8 +61,8 @@ class WorkflowSegmentChangeListenerTest {
         verify(workflowEngine).restoreWorkflowsFor(eq(SEGMENT), eq(from), sourcing.capture(), execution.capture());
         assertThat(execution.getValue())
                 .as("""
-                    The execution context parents restored workflow bodies that outlive the claim callback, so it \
-                    must not be the short-lived sourcing context the claim loads durable state in.""")
+                            The execution context parents restored workflow bodies that outlive the claim callback, so it \
+                            must not be the short-lived sourcing context the claim loads durable state in.""")
                 .isNotSameAs(sourcing.getValue());
     }
 

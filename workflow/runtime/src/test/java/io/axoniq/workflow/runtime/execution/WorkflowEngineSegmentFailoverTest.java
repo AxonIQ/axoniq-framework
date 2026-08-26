@@ -23,24 +23,19 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.concurrent.CompletableFuture;
 
 import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.idOnAnotherSegmentThan;
 import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
- * Verifies that workflow executions follow their segment: a node materializes only the instances of the
- * segments it claims, and drops them again when it releases them.
+ * Verifies that workflow executions follow their segment: a node materializes only the instances of the segments it
+ * claims, and drops them again when it releases them.
  */
 class WorkflowEngineSegmentFailoverTest {
 
@@ -57,6 +52,7 @@ class WorkflowEngineSegmentFailoverTest {
         workflowEngine = new WorkflowEngine(
                 mock(WorkflowConfigurationRegistry.class),
                 repository,
+                mock(WorkflowCancellationService.class),
                 workflowStore,
                 mock(UnitOfWorkFactory.class)
         );

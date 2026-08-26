@@ -46,7 +46,9 @@ final class SegmentTestFixtures {
         return new GlobalSequenceTrackingToken(position);
     }
 
-    /** The segment of {@link #FOUR_SEGMENTS} that owns the given workflow id. */
+    /**
+     * The segment of {@link #FOUR_SEGMENTS} that owns the given workflow id.
+     */
     static Segment owningSegment(String workflowId) {
         return FOUR_SEGMENTS.stream()
                             .filter(segment -> WorkflowSegmentOwnership.ownedBy(segment, workflowId))
@@ -54,7 +56,9 @@ final class SegmentTestFixtures {
                             .orElseThrow();
     }
 
-    /** Any segment of {@link #FOUR_SEGMENTS} other than the given one. */
+    /**
+     * Any segment of {@link #FOUR_SEGMENTS} other than the given one.
+     */
     static Segment anotherSegmentThan(Segment segment) {
         return FOUR_SEGMENTS.stream()
                             .filter(candidate -> candidate.getSegmentId() != segment.getSegmentId())
@@ -62,7 +66,9 @@ final class SegmentTestFixtures {
                             .orElseThrow();
     }
 
-    /** A workflow id owned by the given segment. */
+    /**
+     * A workflow id owned by the given segment.
+     */
     static String anyIdOn(Segment segment) {
         return IntStream.range(0, 512)
                         .mapToObj(i -> "sharded-" + i)
@@ -71,7 +77,9 @@ final class SegmentTestFixtures {
                         .orElseThrow();
     }
 
-    /** A workflow id owned by a different segment than the given id's owner. */
+    /**
+     * A workflow id owned by a different segment than the given id's owner.
+     */
     static String idOnAnotherSegmentThan(String workflowId) {
         var owner = owningSegment(workflowId);
         return IntStream.range(1, 64)

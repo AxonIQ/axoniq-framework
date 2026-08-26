@@ -60,8 +60,7 @@ import static java.util.Objects.requireNonNull;
 public class WorkflowEngineCheckpointingSupport implements Checkpointing {
 
     private final CheckpointLatchCoordinator checkpointLatchCoordinator;
-    /** Trigger of every segment currently claimed on this node, keyed by segment id. */
-    private final Map<Integer, CheckpointTrigger> checkpointTriggers = new ConcurrentHashMap<>();
+    private final Map<Integer, CheckpointTrigger> segmentIdToTrigger = new ConcurrentHashMap<>();
 
     /**
      * Creates checkpointing support for a {@link WorkflowEngine} using the given {@code checkpointLatchCoordinator}.
@@ -79,7 +78,7 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     public void onSegmentClaimed(@NonNull Segment segment,
                                  @Nullable TrackingToken from,
                                  @NonNull CheckpointTrigger trigger) {
-        checkpointTriggers.put(segment.getSegmentId(), trigger);
+        segmentIdToTrigger.put(segment.getSegmentId(), trigger);
     }
 
     @NonNull
@@ -113,7 +112,7 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
                                                               @NonNull TrackingToken requested) {
         return onCheckpointAdvanced(segment, requested)
                 // Only this segment's trigger dies with its claim; the segments still held keep checkpointing.
-                .whenComplete((ignored, cause) -> checkpointTriggers.remove(segment.getSegmentId()));
+                .whenComplete((ignored, cause) -> segmentIdToTrigger.remove(segment.getSegmentId()));
     }
 
     /**
@@ -136,10 +135,10 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
      * <p>
      * The request is dropped when this node does not currently hold the segment, which includes a request without a
      * segment to attribute it to. The trigger of a segment that is not claimed is inert and ignores requests anyway;
-     * pushing the token through any other segment's trigger would advance that segment past events it never handled.
-     * A request can also arrive for a segment this node holds whose trigger has not been registered yet, and is
-     * dropped the same way. That is safe: the stored token merely stays behind, so the events are re-processed after
-     * a restart instead of being skipped.
+     * pushing the token through any other segment's trigger would advance that segment past events it never handled. A
+     * request can also arrive for a segment this node holds whose trigger has not been registered yet, and is dropped
+     * the same way. That is safe: the stored token merely stays behind, so the events are re-processed after a restart
+     * instead of being skipped.
      *
      * @param segment the segment the requested position belongs to, ignored when {@code null}
      * @param token   the token to request, ignored when {@code null}
@@ -148,7 +147,7 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
         if (segment == null || token == null) {
             return;
         }
-        var trigger = checkpointTriggers.get(segment.getSegmentId());
+        var trigger = segmentIdToTrigger.get(segment.getSegmentId());
         if (trigger != null) {
             trigger.requestCheckpoint(token);
         }

@@ -200,8 +200,8 @@ final class WorkflowExecutionCheckpointingSupport {
      * Whether this execution currently makes checkpoint advancement unsafe.
      * <p>
      * Deliberately independent of whether the body is running: a materialized but not started execution accumulates
-     * queued work that nothing drains until its body starts, and excusing it would let the segment token pass an
-     * event whose effect is still sitting in that queue.
+     * queued work that nothing drains until its body starts, and excusing it would let the segment token pass an event
+     * whose effect is still sitting in that queue.
      */
     private boolean unsafe() {
         return taskActive.get() || executionTaskQueue.hasQueuedTasks() || latchQueued;
