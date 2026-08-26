@@ -54,8 +54,7 @@ public interface AnyMatchCombinator {
      *
      * <h3>Event-sourcing replay safety</h3>
      * <p>When multiple steps match the predicate before cancellation takes effect
-     * (e.g. during event replay), the winner is determined by <b>event-sourced timestamps</b>
-     * via {@link WorkflowState#firstCompletedAmong(java.util.Set)}, not by array order.</p>
+     * (e.g. during event replay), the winner is determined by <b>event-sourced timestamps</b>, not by array order.</p>
      *
      * <h3>Completion</h3>
      * <p>{@code isCompleted()} is non-blocking and returns {@code true} when any completed result

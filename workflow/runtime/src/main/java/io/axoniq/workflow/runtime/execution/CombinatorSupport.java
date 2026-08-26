@@ -26,8 +26,10 @@ import org.axonframework.common.annotation.Internal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -90,7 +92,7 @@ final class CombinatorSupport {
         if (matchedNames.isEmpty()) {
             return Optional.empty();
         }
-        return workflowState.firstCompletedAmong(matchedNames)
+        return firstCompletedAmong(workflowState, matchedNames)
                              .flatMap(name -> Arrays.stream(results)
                                                     .filter(r -> r.getStepName().equals(name))
                                                     .findFirst())
@@ -112,7 +114,7 @@ final class CombinatorSupport {
         var names = items.stream()
                          .map(WorkflowStepResult::getStepName)
                          .collect(Collectors.toSet());
-        var sortedNames = workflowState.sortedCompletedAmong(names);
+        var sortedNames = sortedCompletedAmong(workflowState, names);
         if (!sortedNames.isEmpty()) {
             return sortedNames.stream()
                               .flatMap(name -> items.stream()
@@ -133,5 +135,25 @@ final class CombinatorSupport {
         var sorted = new ArrayList<>(sortByEventSourcedTimestamp(completed, workflowState));
         sorted.addAll(notCompleted);
         return Collections.unmodifiableList(sorted);
+    }
+
+    /**
+     * Finds the first terminal step among the candidates, ordered by event-sourced timestamp.
+     */
+    static Optional<String> firstCompletedAmong(WorkflowState workflowState, Set<String> stepNames) {
+        return sortedCompletedAmong(workflowState, stepNames).stream().findFirst();
+    }
+
+    /**
+     * Sorts terminal candidate steps by their event-sourced timestamp, earliest first.
+     */
+    static List<String> sortedCompletedAmong(WorkflowState workflowState, Set<String> stepNames) {
+        return stepNames.stream()
+                        .filter(name -> {
+                            var step = workflowState.getStep(name);
+                            return step != null && step.status().isTerminal();
+                        })
+                        .sorted(Comparator.comparing(name -> workflowState.getStep(name).timestamp()))
+                        .toList();
     }
 }

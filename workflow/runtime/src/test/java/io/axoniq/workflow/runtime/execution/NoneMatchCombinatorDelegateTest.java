@@ -20,12 +20,11 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import org.junit.jupiter.api.*;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -47,8 +46,10 @@ class NoneMatchCombinatorDelegateTest {
         workflowState = mock(WorkflowState.class);
         workflowExecution = mock(WorkflowExecution.class);
         when(workflowExecution.state()).thenReturn(workflowState);
-        when(workflowState.firstCompletedAmong(any())).thenReturn(Optional.empty());
-        when(workflowState.sortedCompletedAmong(any())).thenReturn(List.of());
+    }
+
+    private void givenTerminalStep(String name, Instant timestamp) {
+        when(workflowState.getStep(name)).thenReturn(WorkflowStep.completed(name, null, timestamp, null));
     }
 
     // --- All complete without match → success ---
@@ -221,9 +222,9 @@ class NoneMatchCombinatorDelegateTest {
         when(r2.failure()).thenReturn(true);
         when(r2.success()).thenReturn(false);
 
-        // Event-sourced state says stepB failed first
-        when(workflowState.firstCompletedAmong(Set.of("stepA", "stepB")))
-                .thenReturn(Optional.of("stepB"));
+        // Event-sourced state says stepB failed first.
+        givenTerminalStep("stepA", Instant.ofEpochMilli(2));
+        givenTerminalStep("stepB", Instant.ofEpochMilli(1));
 
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
@@ -299,8 +300,7 @@ class NoneMatchCombinatorDelegateTest {
         when(r2.isCompleted()).thenReturn(false);
         when(r2.failure()).thenReturn(true);
 
-        when(workflowState.sortedCompletedAmong(Set.of("failingStep1")))
-                .thenReturn(List.of("failingStep1"));
+        givenTerminalStep("failingStep1", Instant.ofEpochMilli(1));
 
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
@@ -317,9 +317,9 @@ class NoneMatchCombinatorDelegateTest {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
-        // Event-sourced order: stepB before stepA
-        when(workflowState.sortedCompletedAmong(Set.of("stepA", "stepB")))
-                .thenReturn(List.of("stepB", "stepA"));
+        // Event-sourced order: stepB before stepA.
+        givenTerminalStep("stepA", Instant.ofEpochMilli(2));
+        givenTerminalStep("stepB", Instant.ofEpochMilli(1));
 
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
