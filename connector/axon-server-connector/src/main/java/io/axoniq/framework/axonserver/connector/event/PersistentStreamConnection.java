@@ -421,8 +421,8 @@ public class PersistentStreamConnection {
          * {@code PersistentStreamSegment} before it may complete (exceptionally). If we'd stop processing before that
          * because {@link PersistentStreamSegment#isClosed()} is {@code true}, we may thus skip events.
          *
-         * @param batch the batch of events to process.
-         * @return a future completing when all events in the given {@code batch} have been processed.
+         * @param batch the batch of events to process
+         * @return a future completing when all events in the given {@code batch} have been processed
          */
         private CompletableFuture<Void> processBatch(List<PersistentStreamEvent> batch) {
             if (batch.isEmpty()) {
