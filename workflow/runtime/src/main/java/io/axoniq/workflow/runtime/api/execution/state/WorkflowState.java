@@ -132,7 +132,7 @@ public interface WorkflowState extends DescribableComponent {
      * @return effective version for the change
      */
     @Nonnull
-    String effectiveVersionFor(@Nonnull String changeId);
+    String versionFor(@Nonnull String changeId);
 
     /**
      * Returns {@code true} iff a migration step has been projected into state for the given {@code changeId}.

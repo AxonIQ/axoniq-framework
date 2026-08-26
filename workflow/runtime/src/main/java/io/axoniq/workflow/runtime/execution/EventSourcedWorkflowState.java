@@ -208,7 +208,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
 
     @Override
     @Nonnull
-    public String effectiveVersionFor(@Nonnull String changeId) {
+    public String versionFor(@Nonnull String changeId) {
         requireNonNull(changeId, "changeId must not be null");
         return versions.getOrDefault(changeId, workflowDefinition.version());
     }

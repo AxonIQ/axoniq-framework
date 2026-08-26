@@ -66,7 +66,7 @@ class VersionedWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowConte
 
         var state = testDriver.testingState().state();
         assertThat(state.hasVersionMigrationStep("payment-redesign")).isTrue();
-        assertThat(state.effectiveVersionFor("payment-redesign")).isEqualTo("0.0.2");
+        assertThat(state.versionFor("payment-redesign")).isEqualTo("0.0.2");
         assertThat(state.workflowDefinitionId().version()).isEqualTo("0.0.2");
         testDriver.testingState().hasSteps("reserveStock", "processPayment");
         testDriver.testingState().noStep("chargePayment");
