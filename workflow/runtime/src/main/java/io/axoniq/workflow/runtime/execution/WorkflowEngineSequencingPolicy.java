@@ -36,18 +36,17 @@ import java.util.stream.Collectors;
  * Sequences events so that the streaming processor delivers each one to the segment owning the affected workflow
  * instance, implementing the {@link SequencingPolicy} the workflow event handling components run with.
  * <p>
- * Placement follows {@link WorkflowSegmentOwnership}, the ownership rule the {@link WorkflowEngine} decides on as
- * well, so sequencing and handling never disagree about which segment an instance belongs to. Events that do not map
- * to a single instance are sequenced by {@link SequencingPolicy#BROADCAST} and thus delivered to every segment; each
- * segment then acts only on the instances it owns.
+ * Placement follows {@link WorkflowSegmentOwnership}, the ownership rule the {@link WorkflowEngine} decides on as well,
+ * so sequencing and handling never disagree about which segment an instance belongs to. Events that do not map to a
+ * single instance are sequenced by {@link SequencingPolicy#BROADCAST} and thus delivered to every segment; each segment
+ * then acts only on the instances it owns.
  *
  * @author Stefan Dragisic
  * @since 0.3.0
  */
-@Internal
-final class SegmentedWorkflowRouting implements SequencingPolicy<EventMessage> {
+@Internal final class WorkflowEngineSequencingPolicy implements SequencingPolicy<EventMessage> {
 
-    private static final Logger logger = LoggerFactory.getLogger(SegmentedWorkflowRouting.class);
+    private static final Logger logger = LoggerFactory.getLogger(WorkflowEngineSequencingPolicy.class);
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
 
@@ -57,13 +56,13 @@ final class SegmentedWorkflowRouting implements SequencingPolicy<EventMessage> {
      * @param workflowConfigurationRegistry registry consulted to derive start-candidate workflow ids from business
      *                                      events
      */
-    SegmentedWorkflowRouting(@Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry) {
+    WorkflowEngineSequencingPolicy(@Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry) {
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
     }
 
     /**
-     * Determines the identifier by which the given event must be sequenced so that the streaming processor delivers
-     * it to the segment owning the affected workflow instance. There are three routing cases:
+     * Determines the identifier by which the given event must be sequenced so that the streaming processor delivers it
+     * to the segment owning the affected workflow instance. There are three routing cases:
      * <ul>
      *   <li>Engine-emitted events (carrying {@code workflowId} metadata) are sequenced by the id's
      *   {@linkplain WorkflowSegmentOwnership#segmentKey(String) segment key}.</li>
@@ -77,8 +76,8 @@ final class SegmentedWorkflowRouting implements SequencingPolicy<EventMessage> {
      *
      * @param eventMessage      the event to sequence
      * @param processingContext the processing context of the event
-     * @return the workflow-aware sequence identifier, or {@link SequencingPolicy#BROADCAST} when the event does not
-     *         map to a single workflow instance
+     * @return the workflow-aware sequence identifier, or {@link SequencingPolicy#BROADCAST} when the event does not map
+     * map to a single workflow instance
      */
     @Override
     @Nonnull
@@ -95,9 +94,9 @@ final class SegmentedWorkflowRouting implements SequencingPolicy<EventMessage> {
     }
 
     /**
-     * Base workflow ids of all definitions that would start a new instance from the given event: the highest
-     * registered version of each definition whose start condition matches. Mirrors the matching performed by the
-     * engine's start path.
+     * Base workflow ids of all definitions that would start a new instance from the given event: the highest registered
+     * version of each definition whose start condition matches. Mirrors the matching performed by the engine's start
+     * path.
      */
     private Set<String> newInstanceCandidateIds(@Nonnull EventMessage eventMessage,
                                                 @Nonnull ProcessingContext processingContext) {

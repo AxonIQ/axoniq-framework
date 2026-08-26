@@ -19,8 +19,8 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.Version;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
@@ -46,9 +46,9 @@ public class SimpleWorkflowConfigurationRegistry
 
     /**
      * Highest-version configurations per start-event name, recomputed on registration. The lookup runs for every
-     * streamed event (see {@code SegmentedWorkflowRouting} and {@code WorkflowEngine}), so it must not re-derive
-     * version ordering per call; events without a registered start condition resolve to an empty list without
-     * creating an entry.
+     * streamed event (see {@link WorkflowEngineSequencingPolicy} and {@code WorkflowEngine}), so it must not re-derive
+     * version ordering per call; events without a registered start condition resolve to an empty list without creating
+     * an entry.
      */
     private final ConcurrentHashMap<QualifiedName, List<PredicatedWorkflowConfiguration>> highestVersionConfigurations = new ConcurrentHashMap<>();
 
@@ -84,8 +84,8 @@ public class SimpleWorkflowConfigurationRegistry
      * {@inheritDoc}
      * <p>
      * The memoized lookup is keyed by {@link MessageType#qualifiedName()}, as the event's version does not select a
-     * configuration yet. Taking the whole type here keeps {@link MessageType#version()} in reach of the lookup for
-     * when it does.
+     * configuration yet. Taking the whole type here keeps {@link MessageType#version()} in reach of the lookup for when
+     * it does.
      */
     @Nonnull
     @Override

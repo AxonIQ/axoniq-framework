@@ -87,7 +87,7 @@ public class WorkflowEngine implements
     private final UnitOfWorkFactory unitOfWorkFactory;
     private WorkflowEngineReplaySupport replaySupport;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
-    private final SegmentedWorkflowRouting segmentedRouting;
+    private final WorkflowEngineSequencingPolicy segmentedRouting;
     private final UnsafeCheckpointWorkIndex checkpointWorkIndex = new UnsafeCheckpointWorkIndex();
     // Package-private so a test can shrink it instead of waiting out the production timeout.
     Duration restoreTimeout = DEFAULT_RESTORE_TIMEOUT;
@@ -122,7 +122,7 @@ public class WorkflowEngine implements
         );
         this.workflowStore = requireNonNull(workflowStore, "The WorkflowStore must not be null.");
         this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
-        this.segmentedRouting = new SegmentedWorkflowRouting(workflowConfigurationRegistry);
+        this.segmentedRouting = new WorkflowEngineSequencingPolicy(workflowConfigurationRegistry);
         EntitlementManager.INSTANCE.registerAddon(WorkflowAxoniqAddon.class);
     }
 

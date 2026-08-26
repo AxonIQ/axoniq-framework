@@ -104,7 +104,7 @@ class NewInstanceCandidateRoutingTest {
     private static final long STARTUP_LATEST_POSITION = 1_000;
 
     private SimpleWorkflowConfigurationRegistry registry;
-    private SegmentedWorkflowRouting routing;
+    private WorkflowEngineSequencingPolicy routing;
     private WorkflowEngine engine;
     private InMemoryWorkflowExecutionRepository repository;
     private WorkflowEngineReplaySupport replaySupport;
@@ -119,7 +119,7 @@ class NewInstanceCandidateRoutingTest {
     @BeforeEach
     void setUp() {
         registry = new SimpleWorkflowConfigurationRegistry();
-        routing = new SegmentedWorkflowRouting(registry);
+        routing = new WorkflowEngineSequencingPolicy(registry);
         repository = new InMemoryWorkflowExecutionRepository();
         engine = new WorkflowEngine(registry,
                                     repository,

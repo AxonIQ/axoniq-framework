@@ -26,7 +26,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
  * The ownership rule partitioning workflow instances over the segments of a streaming event processor: a segment owns
  * the instances whose segment key it matches.
  * <p>
- * Both sides of sharding decide on this one rule. {@link SegmentedWorkflowRouting} applies it while sequencing, so an
+ * Both sides of sharding decide on this one rule. {@link WorkflowEngineSequencingPolicy} applies it while sequencing, so an
  * event is delivered to the segment owning the affected instance, and {@link WorkflowEngine} applies it before acting
  * on an instance, so an event delivered to every segment results in work at the owner only. A given {@code workflowId}
  * therefore maps to the same segment on every node and after every restart, because {@code String.hashCode()} is

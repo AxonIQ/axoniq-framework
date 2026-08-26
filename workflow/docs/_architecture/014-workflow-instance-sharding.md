@@ -29,7 +29,7 @@ The segment key of a workflow id is the part before the first `#`, so the cross-
 
 ### Routing
 
-`SegmentedWorkflowRouting` applies that rule as the processor's `SequencingPolicy`:
+`SegmentedSequencingPolicy` applies that rule as the processor's `SequencingPolicy`:
 
 - events carrying `workflowId` metadata are sequenced by that id's segment key
 - a business event with exactly one start candidate is sequenced by the candidate id, so a new instance is created on
