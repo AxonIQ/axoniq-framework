@@ -62,3 +62,32 @@ If the workflow body itself is blocked on the interrupted step (for example insi
 same `StepInterruptedException` unblocks it, so the body can catch it (or its parent `StepFailedException`) for
 compensation or cleanup, exactly like it would `StepCancellationException` for a single-step cancel. Catching it
 has no bearing on what is durable: the step's last recorded event-log state stays `STARTED` either way.
+
+### Parked-step timer lifecycle
+
+Waiting for an event and waiting for a retry backoff are both parked-step phases. A parked step has one owner that
+is registered with `RunningSteps` before its timer can become eligible. The owner keeps the completion future and
+the `ScheduledTask` handle together, and settles the phase exactly once.
+
+Every terminal path settles that same owner: the awaited event arrives, the timer expires, the step is cancelled,
+the workflow reaches a terminal state, or the engine stops for shutdown. Settling it removes the running-step
+registration and cancels the pending timer when it has not already fired. This prevents a completed or cancelled
+parked step from retaining a delayed task, its workflow execution, and its event-wait condition until the original
+deadline. Registration and cleanup must be ordered so a future that has already completed cannot be left in
+`RunningSteps`.
+
+The scheduler is a lifecycle-owned, configurable dependency of the workflow module or engine. It is not a static
+process-wide executor hidden in `DefaultWorkflowScheduler`. A timer callback only signals deadline expiry and
+enqueues the workflow continuation on the workflow control queue. It must not execute step logic, publish events,
+or otherwise block on the timer executor. This keeps timer delivery separate from workflow work and avoids one
+slow callback delaying unrelated workflow deadlines.
+
+## Consequences
+
+- `RunningSteps` tracks a cancellable parked-step owner rather than only a bare completion future where a timer is
+  involved.
+- Wait and retry implementations share the same parked-step lifecycle and cancellation rules.
+- Timer capacity is selected at engine or module configuration time. It is not an arbitrary constant in a static
+  scheduler.
+- Tests cover event completion, step cancellation, whole-workflow termination, shutdown, and an immediately due
+  timer, asserting that the scheduled task and running-step registration are removed in every case.

@@ -24,7 +24,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -37,14 +36,30 @@ import static org.awaitility.Awaitility.await;
 class DefaultWorkflowSchedulerTest {
 
     @Test
-    void cancel_removesThePendingTimerAndPreventsItsTaskFromRunning() {
+    void scheduledDeadlinesCompleteIndependently() {
+        var timerExecutor = new ScheduledThreadPoolExecutor(4);
+        var scheduler = new DefaultWorkflowScheduler(Clock.systemUTC(), timerExecutor);
+        try {
+            var now = Instant.now();
+            var first = scheduler.schedule(now);
+            var second = scheduler.schedule(now);
+
+            await().atMost(Duration.ofSeconds(1)).untilAsserted(() -> {
+                assertThat(first.completion()).isCompleted();
+                assertThat(second.completion()).isCompleted();
+            });
+        } finally {
+            scheduler.shutdown();
+        }
+    }
+
+    @Test
+    void cancelRemovesThePendingTimerAndPreventsItsTaskFromRunning() {
         var timerExecutor = new ScheduledThreadPoolExecutor(1);
         try {
             var now = Instant.parse("2026-08-19T12:00:00Z");
             var scheduler = new DefaultWorkflowScheduler(Clock.fixed(now, ZoneOffset.UTC), timerExecutor);
-            var taskRan = new AtomicBoolean();
-
-            var scheduledTask = scheduler.schedule(now.plusSeconds(10), () -> taskRan.set(true));
+            var scheduledTask = scheduler.schedule(now.plusSeconds(10));
             assertThat(timerExecutor.getQueue()).hasSize(1);
 
             scheduledTask.cancel();
@@ -53,9 +68,19 @@ class DefaultWorkflowSchedulerTest {
                     assertThat(timerExecutor.getQueue()).isEmpty()
             );
             assertThat(scheduledTask.completion()).isCancelled();
-            assertThat(taskRan).isFalse();
         } finally {
             timerExecutor.shutdownNow();
         }
+    }
+
+    @Test
+    void shutdownCancelsPendingTimersAndPreventsTheirTasksFromRunning() {
+        var timerExecutor = new ScheduledThreadPoolExecutor(1);
+        var scheduler = new DefaultWorkflowScheduler(Clock.systemUTC(), timerExecutor);
+        scheduler.schedule(Instant.now().plusSeconds(10));
+        scheduler.shutdown();
+
+        assertThat(timerExecutor.isShutdown()).isTrue();
+        assertThat(timerExecutor.getQueue()).isEmpty();
     }
 }

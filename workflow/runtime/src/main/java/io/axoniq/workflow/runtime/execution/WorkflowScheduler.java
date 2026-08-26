@@ -24,7 +24,7 @@ import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Schedules workflow timeout and retry-backoff tasks.
+ * Delivers workflow timeout and retry-backoff deadlines.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
@@ -32,14 +32,13 @@ import java.util.concurrent.CompletableFuture;
 public interface WorkflowScheduler {
 
     /**
-     * Schedule a task for the given deadline.
+     * Schedules a deadline notification.
      *
      * @param deadline deadline according to the configured workflow clock
-     * @param task     task to run once the deadline is reached
      * @return handle of the scheduled task
      */
     @Nonnull
-    ScheduledTask schedule(@Nonnull Instant deadline, @Nonnull Runnable task);
+    ScheduledTask schedule(@Nonnull Instant deadline);
 
     /**
      * Scheduled task handle.
@@ -47,7 +46,7 @@ public interface WorkflowScheduler {
     interface ScheduledTask {
 
         /**
-         * Future completed when the task runs, or cancelled when the task is cancelled.
+         * Future completed when the deadline is reached, or cancelled when the deadline is cancelled.
          *
          * @return completion future
          */

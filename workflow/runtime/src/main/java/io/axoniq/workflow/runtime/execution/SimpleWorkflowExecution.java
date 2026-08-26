@@ -86,7 +86,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final RunningSteps runningSteps = new RunningSteps();
     private final ReachedSteps reachedSteps = new ReachedSteps();
     private final WorkflowTerminalTransition terminalTransition = this::transitionToTerminalState;
-    private final WorkflowCancellation.External workflowCancellation;
+    private final WorkflowCancellation.Request workflowCancellationRequest;
     private final WorkflowExecutionCheckpointingSupport checkpointingSupport =
             new WorkflowExecutionCheckpointingSupport(
                     new ExecutionTaskQueue() {
@@ -133,13 +133,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         var configuredName = Objects.requireNonNull(workflowConfiguration.workflowName(),
                                                     "Workflow name must not be null");
 
-
-        this.workflowName = configuredName.isEmpty() ? workflowId : configuredName; // FIXME
+        this.workflowName = configuredName.isEmpty() ? workflowId : configuredName;
         var workflowDefinitionId = new MessageType(
                 new QualifiedName(configuredName),
                 workflowConfiguration.workflowVersion()
         );
-
 
         this.contextDelegate = new WorkflowContextDelegation(
                 workflowConfiguration,
@@ -151,11 +149,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 terminalTransition,
                 processingContext
         );
-        this.workflowCancellation = new DefaultWorkflowCancellation(this, contextDelegate, runningSteps);
+        this.workflowCancellationRequest = new DefaultWorkflowCancellation(this, contextDelegate, runningSteps);
 
         initializeState(
                 new EventSourcedWorkflowState(
-                        Objects.requireNonNull(workflowId, "Workflow id must not be null"),
+                        workflowId,
                         initial,
                         workflowDefinitionId
                 )
@@ -184,7 +182,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                         this.processingContext(),
                         ctx -> {
                             workflowThread = currentThread();
-                            if (workflowCancellation.hasPendingWorkflowCancellation()) {
+                            if (workflowCancellationRequest.hasPendingWorkflowCancellation()) {
                                 workflowThread.interrupt();
                             }
 
@@ -254,7 +252,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         ).workflowDefinition();
         definition.accept(this.contextDelegate.typedWorkflowContext());
 
-        if (completeExternalCancellation(ctx)) {
+        if (completeCancellationRequest(ctx)) {
             return;
         }
         if (!this.state().workflowStatus().isTerminal()) {
@@ -275,7 +273,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param exception exception to handle.
      */
     private void handleWorkflowException(@Nonnull ProcessingContext ctx, @Nonnull Throwable exception) {
-        if (completeExternalCancellation(ctx)) {
+        if (completeCancellationRequest(ctx)) {
             return;
         }
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
@@ -351,7 +349,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     /**
-     * Completes a cancellation request previously registered by the cancellation coordinator.
+     * Completes a pending cancellation request registered by the cancellation coordinator.
      * <p>
      * This method is called only by the workflow driver after it has been woken from a blocking workflow operation. It
      * consumes the request, clears the wake-up interrupt, and publishes the durable workflow cancellation event on the
@@ -359,10 +357,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * workflow state before their cancellation future completes.
      *
      * @param ctx processing context used to publish the terminal event
-     * @return {@code true} when an external cancellation was completed, otherwise {@code false}
+     * @return {@code true} when a cancellation request was completed, otherwise {@code false}
      */
-    private boolean completeExternalCancellation(@Nonnull ProcessingContext ctx) {
-        var cancellation = workflowCancellation.consumeWorkflowCancellation();
+    private boolean completeCancellationRequest(@Nonnull ProcessingContext ctx) {
+        var cancellation = workflowCancellationRequest.consumeWorkflowCancellation();
         if (cancellation == null) {
             return false;
         }
@@ -373,7 +371,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                     workflowState.workflowDefinitionId(), workflowConfiguration.eventNameCustomizer()), ctx
             ).join();
         });
-        cancellation.done().complete(null);
+        cancellation.callback().complete(null);
         return true;
     }
 
@@ -384,7 +382,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param terminationHandler termination handler to call.
      */
     private void finishWorkflow(Consumer<WorkflowExecution> terminationHandler) {
-        this.running = false; // mark we are done and are not executable anymore
+        this.running = false; // mark we are completion and are not executable anymore
         // TODO -> how do we recognize workflow executions which came to this point bit haven't reach the terminal states?
         this.taskQueue.clear();
         // Terminal cleanup removes queued barriers too. Release their callbacks because no workflow driver remains to
@@ -425,7 +423,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         if (running) {
             // live mode
             eventWaitConditions.evaluateAndApply(eventMessage, processingContext, contextDelegate::eventReceived);
-            appendTask(i -> state().evolve(eventMessage, processingContext));
+            appendTask(i -> workflowState.evolve(eventMessage, processingContext));
         } else {
             // replay mode
             workflowState.evolve(eventMessage, processingContext, false);
@@ -554,7 +552,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     @Nonnull
     @Override
     public WorkflowCancellation workflowCancellation() {
-        return workflowCancellation;
+        return workflowCancellationRequest;
     }
 
     @Override

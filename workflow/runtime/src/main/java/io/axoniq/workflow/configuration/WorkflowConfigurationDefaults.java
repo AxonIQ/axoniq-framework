@@ -61,6 +61,7 @@ import java.time.Clock;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getWorkflowDefinitionId;
 import static org.axonframework.eventsourcing.configuration.EventSourcedEntityModule.declarative;
@@ -74,6 +75,8 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
 @Internal
 @RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
 public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
+
+    static final int DEFAULT_WORKFLOW_TIMER_THREAD_COUNT = 4;
 
     /**
      * Name of the event handling component used for workflow history projector.
@@ -113,8 +116,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerExecuteStepActionResolver(componentRegistry);
         registerWorkflowTimeoutScheduler(componentRegistry);
         registerRunningWorkflowsModule(componentRegistry);
-        registerExecuteStepActionResolver(componentRegistry);
-        registerWorkflowTimeoutScheduler(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
         registerWorkflowExecutionRepository(componentRegistry);
         registerWorkflowCancellationService(componentRegistry);
@@ -150,8 +151,23 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
 
     void registerWorkflowTimeoutScheduler(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(
-                WorkflowScheduler.class,
-                cfg -> new DefaultWorkflowScheduler(cfg.getComponent(Clock.class)));
+                ComponentDefinition.ofType(WorkflowScheduler.class)
+                                   .withBuilder(cfg -> new DefaultWorkflowScheduler(
+                                           cfg.getComponent(Clock.class), defaultWorkflowTimerExecutor()
+                                   ))
+                                   .onShutdown(Phase.INBOUND_EVENT_CONNECTORS,
+                                               scheduler -> ((DefaultWorkflowScheduler) scheduler).shutdown()));
+    }
+
+    static ScheduledThreadPoolExecutor defaultWorkflowTimerExecutor() {
+        return new ScheduledThreadPoolExecutor(
+                DEFAULT_WORKFLOW_TIMER_THREAD_COUNT,
+                runnable -> {
+                    var thread = new Thread(runnable, "axon-workflow-timer");
+                    thread.setDaemon(true);
+                    return thread;
+                }
+        );
     }
 
     void decorateTagResolver(ComponentRegistry componentRegistry) {
@@ -179,9 +195,10 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     void registerWorkflowStateModule(ComponentRegistry componentRegistry) {
         componentRegistry.registerModule(
                 declarative(String.class, EventSourcedWorkflowState.class)
-                        .messagingModel((c, model) -> model.entityEvolver((entity, event, context) -> (EventSourcedWorkflowState) entity.evolve(
-                                event,
-                                context)).build())
+                        .messagingModel((c, model) -> model.entityEvolver((entity, event, context) ->
+                                                                                  EventSourcedWorkflowState.requireEventSourcedState(
+                                                                                          entity.evolve(event, context))
+                        ).build())
                         .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedWorkflowState(
                                 identifier,
                                 getWorkflowDefinitionId(firstEvent.metadata()).orElseThrow(

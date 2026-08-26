@@ -72,12 +72,12 @@ class PayloadDelegateDriftTest {
 
         delegate = new PayloadDelegate(
                 workflowContext, workflowExecution, new RunningSteps(), reachedSteps, parent,
-                Clock.systemUTC(), unitOfWorkFactory, eventSink, executor
+                Clock.systemUTC(), unitOfWorkFactory, eventSink, executor, new ControllableWorkflowScheduler()
         );
     }
 
     @Test
-    void modifyPayload_throwsDriftException_whenUnreferencedTerminalStepsInState() {
+    void modifyPayloadThrowsDriftExceptionWhenUnreferencedTerminalStepsInState() {
         reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));

@@ -81,6 +81,28 @@ public interface WorkflowState extends DescribableComponent {
     boolean containsStep(@Nonnull String stepName);
 
     /**
+     * Checks if a step with the given name exists and has reached a terminal status.
+     *
+     * @param stepName name of the step
+     * @return true if the step exists and is terminal, false otherwise
+     */
+    default boolean isStepTerminal(@Nonnull String stepName) {
+        var step = getStep(stepName);
+        return step != null && step.status().isTerminal();
+    }
+
+    /**
+     * Checks if a step with the given name exists and has not reached a terminal status.
+     *
+     * @param stepName name of the step
+     * @return true if the step exists and is not terminal, false otherwise
+     */
+    default boolean isStepActive(@Nonnull String stepName) {
+        var step = getStep(stepName);
+        return step != null && !step.status().isTerminal();
+    }
+
+    /**
      * Returns the status of the workflow execution.
      *
      * @return workflow status
@@ -139,16 +161,6 @@ public interface WorkflowState extends DescribableComponent {
     void throwTerminalCause();
 
     /**
-     * Handles an event message received during workflow execution. This handle is responsible for the modification of
-     * the state.
-     *
-     * @param eventMessage      the event message received
-     * @param processingContext the processing context for the event
-     * @return new evolved state
-     */
-    WorkflowState evolve(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
-
-    /**
      * Returns the step name that reached a terminal state first among the given candidates, determined by event-sourced
      * timestamps. This is a safeguard against a race condition during event-sourcing replay: when multiple steps
      * completed before cancellation took effect, array iteration order would pick an arbitrary winner. The event store
@@ -160,7 +172,7 @@ public interface WorkflowState extends DescribableComponent {
     @Nonnull
     default Optional<String> firstCompletedAmong(@Nonnull Set<String> stepNames) {
         return stepNames.stream()
-                        .filter(name -> containsStep(name) && getStep(name).status().isTerminal())
+                        .filter(this::isStepTerminal)
                         .min(Comparator.comparing(name -> getStep(name).timestamp()));
     }
 
@@ -174,7 +186,7 @@ public interface WorkflowState extends DescribableComponent {
     @Nonnull
     default List<String> sortedCompletedAmong(@Nonnull Set<String> stepNames) {
         return stepNames.stream()
-                        .filter(name -> containsStep(name) && getStep(name).status().isTerminal())
+                        .filter(this::isStepTerminal)
                         .sorted(Comparator.comparing(name -> getStep(name).timestamp()))
                         .toList();
     }

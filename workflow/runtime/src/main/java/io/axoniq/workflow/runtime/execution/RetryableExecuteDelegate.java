@@ -29,6 +29,7 @@ import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -159,11 +160,12 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             workflowExecution.appendTask(i -> retrying(stepName, retryInfo, eventNameCustomizer));
             try {
                 workflowExecution.awaitStateChange(s -> {
-                    var st = s.getStep(stepName);
-                    if (st.status().isTerminal()) {
+                    if (WorkflowStateUtils.isStepTerminal(s, stepName)) {
                         return true;
                     }
-                    return st.status() == StepStatus.RETRYING
+                    var st = s.getStep(stepName);
+                    return st != null
+                            && st.status() == StepStatus.RETRYING
                             && st.result() instanceof StepRetryInfo r
                             && r.attempt() == attempt;
                 });
@@ -171,7 +173,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
                 Thread.currentThread().interrupt();
                 return;
             }
-            if (workflowExecution.state().getStep(stepName).status().isTerminal()) {
+            if (WorkflowStateUtils.isStepTerminal(workflowExecution.state(), stepName)) {
                 return;
             }
 
@@ -213,45 +215,31 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             // future, exactly like the delayed branch below, so a step cancellation or a whole-workflow terminal
             // interrupt completes it exceptionally (the parked-step registration deregisters it) instead of launching
             // the next attempt. The launch is fired by the future's normal completion and is additionally gated on the
-            // workflow not being terminal (a cheap defensive guard).
+            // active step and a non-terminal workflow (cheap defensive guards).
             var gapFuture = new CompletableFuture<Void>();
             gapFuture.thenRun(() -> workflowExecution.appendTask(i -> {
-                if (!i.state().getStep(stepName).status().isTerminal()
+                if (WorkflowStateUtils.isStepActive(i.state(), stepName)
                         && !i.state().workflowStatus().isTerminal()) {
                     launchWithRetry(command, nextAttempt);
                 }
             }));
             registerParkedStep(stepName, gapFuture, command.eventNameCustomizer(), () -> {
+                // nothing to clean up here
             });
             workflowExecution.appendTask(i -> gapFuture.complete(null));
         } else {
-            // The scheduled task is a pure timer tick; the backoff window itself is the step's parked phase. The
-            // timer firing completes the future normally and launches the next attempt, gated on neither the step nor
-            // the workflow being terminal. Anything that ends the parked phase exceptionally (a step cancellation, an
-            // engine shutdown interrupt, a whole-workflow terminal interrupt) makes the later tick a no-op, so a
-            // doomed attempt can never launch.
-            var scheduledRetry = timeoutScheduler.schedule(retryReadyAt, () -> {
-            });
-            var backoffFuture = new CompletableFuture<Void>();
-            scheduledRetry.completion().whenComplete((result, error) -> {
-                if (error == null) {
-                    backoffFuture.complete(null);
-                } else {
-                    backoffFuture.completeExceptionally(error);
-                }
-            });
-            backoffFuture.whenComplete((result, error) -> {
-                if (error != null && isCancellation(error)) {
-                    scheduledRetry.cancel();
-                }
-            });
-            backoffFuture.thenRun(() -> workflowExecution.appendTask(i -> {
-                if (!i.state().getStep(stepName).status().isTerminal()
+            // The scheduler only delivers the deadline. The completion future itself represents the parked backoff
+            // phase, so cancellation makes the later deadline notification a no-op.
+            var scheduledRetry = timeoutScheduler.schedule(retryReadyAt);
+            scheduledRetry.completion().thenRun(() -> workflowExecution.appendTask(i -> {
+                if (WorkflowStateUtils.isStepActive(i.state(), stepName)
                         && !i.state().workflowStatus().isTerminal()) {
                     launchWithRetry(command, nextAttempt);
                 }
             }));
-            registerParkedStep(stepName, backoffFuture, command.eventNameCustomizer(), () -> {
+            registerParkedStep(stepName, scheduledRetry.completion(), scheduledRetry::cancel,
+                               command.eventNameCustomizer(), () -> {
+                // nothing to clean up here
             });
         }
     }

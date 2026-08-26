@@ -84,7 +84,7 @@ class CancelWorkflowInterruptsStepWithCatchableExceptionTest extends AbstractWor
     }
 
     @Test
-    void cancelWorkflow_deliversCatchableExceptionToParkedStep() {
+    void cancelWorkflowDeliversCatchableExceptionToParkedStep() {
         var id = "interrupt-catch-1";
         delayedPublisher.addSchedules(List.of(ofMillis(100, new StartParkedStepEvent(id))));
         delayedPublisher.start();
