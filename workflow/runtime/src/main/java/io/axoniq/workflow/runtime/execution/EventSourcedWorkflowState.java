@@ -30,6 +30,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
+import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.TypeReference;
@@ -291,7 +292,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
         // Apply step-level state changes — ignore transitions once already terminal
         MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
             var stepName = getStepName(metadata);
-            if (isStepTerminal(stepName)) {
+            if (WorkflowStateUtils.isStepTerminal(this, stepName)) {
                 logger.debug("Ignoring step status {} for step '{}' — already in terminal state {}",
                              stepStatus, stepName, getStep(stepName).status());
                 return;
