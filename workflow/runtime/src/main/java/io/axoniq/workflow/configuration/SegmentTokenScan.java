@@ -103,11 +103,9 @@ final class SegmentTokenScan {
         if (tokens.isEmpty() || tokens.contains(null)) {
             return null;
         }
-        var earliest = tokens.get(0);
-        for (var token : tokens) {
-            earliest = earliest.lowerBound(token);
-        }
-        return earliest;
+        return tokens.stream()
+                     .reduce(TrackingToken::lowerBound)
+                     .orElse(null);
     }
 
     private static CompletableFuture<TrackingToken> fetchTokenAndReleaseClaim(TokenStore tokenStore,
