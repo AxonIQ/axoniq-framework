@@ -24,7 +24,9 @@ import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.F
 import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.workflow.dsl.base.BaseWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.workflow.runtime.api.execution.context.retry.RetryContext;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
+import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
@@ -38,6 +40,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
@@ -130,6 +133,11 @@ class StepTimeoutWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowConte
                     StepTimeoutWorkflow.MAX_RETRIES + 1, StepTimeoutWorkflow.MAX_RETRIES)
                 .isEqualTo(StepTimeoutWorkflow.MAX_RETRIES + 1);
 
+        assertThat(workflow.retryContexts())
+                .as("each timed-out attempt must supply its timeout error to the retry policy")
+                .hasSize(StepTimeoutWorkflow.MAX_RETRIES)
+                .allSatisfy(context -> assertThat(context.error()).isInstanceOf(StepTimedOutException.class));
+
         long expectedMinDuration =
                 (StepTimeoutWorkflow.MAX_RETRIES + 1) * StepTimeoutWorkflow.STEP_TIMEOUT.toMillis();
         // 20% tolerance for scheduling jitter
@@ -150,6 +158,7 @@ class StepTimeoutWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowConte
         static final int MAX_RETRIES = 5;
 
         private final AtomicInteger attempts = new AtomicInteger(0);
+        private final List<RetryContext> retryContexts = new CopyOnWriteArrayList<>();
         private volatile WorkflowStepResult stepResult;
 
         int attempts() {
@@ -158,6 +167,10 @@ class StepTimeoutWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowConte
 
         WorkflowStepResult stepResult() {
             return stepResult;
+        }
+
+        List<RetryContext> retryContexts() {
+            return retryContexts;
         }
 
         @Workflow(
@@ -177,7 +190,7 @@ class StepTimeoutWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowConte
                         Map.of(),
                         this::slowAction,
                         step -> step.timeout(STEP_TIMEOUT)
-                                    .retryPolicy(RetryPolicy.maxRetries(MAX_RETRIES))
+                                    .retryPolicy(RetryPolicy.maxRetries(MAX_RETRIES).onRetry(retryContexts::add))
                 );
             } else {
                 stepResult = ctx.execute(
