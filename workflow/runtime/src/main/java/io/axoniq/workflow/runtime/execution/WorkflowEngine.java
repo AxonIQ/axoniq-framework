@@ -396,28 +396,22 @@ public class WorkflowEngine implements
     /**
      * Drops the workflow executions owned by a segment this node no longer holds.
      * <p>
-     * In-flight steps are interrupted rather than cancelled, exactly as on {@link #shutdown()}: no cancellation events
-     * are emitted, so the node claiming the segment next resumes each instance from its persisted state.
+     * In-flight steps are stopped rather than cancelled, exactly as on {@link #shutdown()}: no cancellation events are
+     * emitted, so the node claiming the segment next resumes each instance from its persisted state.
      *
      * @param segment the segment that was released
-     * @return a future that completes once the interrupted bodies of this segment have unwound, so the processor
-     * reports the segment released only after this node went quiet on it. A body that never unwinds does not hold the
-     * segment: the processor stops waiting at its claim extension threshold and releases regardless
+     * @return a future completed after this engine has requested every released execution to stop
      */
     public CompletableFuture<Void> releaseWorkflowsFor(@Nonnull Segment segment) {
         var released = workflowExecutionRepository.findAll(ownedBy(segment));
         if (released.isEmpty()) {
             return CompletableFuture.completedFuture(null);
         }
-        logger.info("Releasing segment {}: interrupting {} workflow execution(s).",
+        logger.info("Releasing segment {}: stopping {} workflow execution(s).",
                     segment.getSegmentId(), released.size());
-        var drained = released.stream()
-                              .map(WorkflowExecution::interrupt)
-                              .toArray(CompletableFuture[]::new);
-        // Removed ahead of the interrupts resolving, not after: an event for a removed id falls through the
-        // empty-check in handle() and gets ignored, so nothing depends on the removal waiting for allOf(drained).
+        released.forEach(WorkflowExecution::stopForShutdown);
         workflowExecutionRepository.removeAll(ownedBy(segment));
-        return CompletableFuture.allOf(drained);
+        return CompletableFuture.completedFuture(null);
     }
 
     private void startRestoredWorkflowsUnlessReplaying(@Nonnull Segment segment, @Nullable TrackingToken claimedFrom) {

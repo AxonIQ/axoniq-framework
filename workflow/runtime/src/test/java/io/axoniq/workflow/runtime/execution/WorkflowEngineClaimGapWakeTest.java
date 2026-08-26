@@ -80,6 +80,9 @@ class WorkflowEngineClaimGapWakeTest {
     private WorkflowEngine workflowEngine;
     private WorkflowEngineReplaySupport replaySupport;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
+    private final RunningSteps runningSteps = new RunningSteps();
+    private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
+    private final ReachedSteps reachedSteps = new ReachedSteps();
 
     /**
      * The real execution the claim materializes, so the wake travels the production path.
@@ -152,11 +155,11 @@ class WorkflowEngineClaimGapWakeTest {
      */
     private CompletableFuture<Void> registerWaitFor(String stepName) {
         var timeoutFuture = new CompletableFuture<Void>();
-        restored.registerRunningStep(stepName, timeoutFuture);
-        restored.registerWaitCondition(stepName,
-                                       EventConditions.fromQualifiedName(RESUME_EVENT),
-                                       GlobalOnlyPayloadReducer.INSTANCE,
-                                       defaults());
+        runningSteps.register(stepName, timeoutFuture);
+        eventWaitConditions.add(stepName,
+                                EventConditions.fromQualifiedName(RESUME_EVENT),
+                                GlobalOnlyPayloadReducer.INSTANCE,
+                                defaults());
         return timeoutFuture;
     }
 
@@ -201,7 +204,10 @@ class WorkflowEngineClaimGapWakeTest {
                                                    Map.of("orderId", RESIDENT_ID),
                                                    bodyContext(),
                                                    configuration,
-                                                   workflowContext);
+                                                   workflowContext,
+                                                   runningSteps,
+                                                   eventWaitConditions,
+                                                   reachedSteps);
             return restored;
         });
         when(configurationRegistry.getWorkflowConfiguration(DEFINITION_ID)).thenReturn(Optional.of(configuration));

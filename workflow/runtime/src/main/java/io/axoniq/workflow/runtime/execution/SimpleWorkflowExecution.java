@@ -80,16 +80,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     // Runtime
     private boolean running = false;
-    /**
-     * Completed once nothing runs for this instance any more, either because its body unwound or because it never
-     * started one. {@link #interrupt()} hands it out, so a caller can await this instance going quiet.
-     */
-    private final CompletableFuture<Void> drained = new CompletableFuture<>();
     private volatile Thread workflowThread;
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
-    private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
-    private final RunningSteps runningSteps = new RunningSteps();
-    private final ReachedSteps reachedSteps = new ReachedSteps();
+    private final EventWaitConditions eventWaitConditions;
+    private final RunningSteps runningSteps;
+    private final ReachedSteps reachedSteps;
     private final WorkflowTerminalTransition terminalTransition = this::transitionToTerminalState;
     private final WorkflowCancellation.Request workflowCancellationRequest;
     private final WorkflowExecutionCheckpointingSupport checkpointingSupport =
@@ -132,9 +127,30 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                                    @Nonnull WorkflowConfiguration<?> workflowConfiguration,
                                    @Nonnull WorkflowContext workflowContext
     ) {
+        this(workflowId,
+             initial,
+             processingContext,
+             workflowConfiguration,
+             workflowContext,
+             new RunningSteps(),
+             new EventWaitConditions(),
+             new ReachedSteps());
+    }
+
+    SimpleWorkflowExecution(@Nonnull String workflowId,
+                            @Nonnull Map<String, Object> initial,
+                            @Nonnull ProcessingContext processingContext,
+                            @Nonnull WorkflowConfiguration<?> workflowConfiguration,
+                            @Nonnull WorkflowContext workflowContext,
+                            @Nonnull RunningSteps runningSteps,
+                            @Nonnull EventWaitConditions eventWaitConditions,
+                            @Nonnull ReachedSteps reachedSteps) {
         this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must not be null");
         this.workflowConfiguration = Objects.requireNonNull(workflowConfiguration,
                                                             "Workflow configuration must not be null");
+        this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps must not be null");
+        this.eventWaitConditions = Objects.requireNonNull(eventWaitConditions, "Event wait conditions must not be null");
+        this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps must not be null");
         var configuredName = Objects.requireNonNull(workflowConfiguration.workflowName(),
                                                     "Workflow name must not be null");
 
@@ -211,18 +227,13 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
 
     /**
-     * Skips the body of an instance that is already terminal, and reports it drained: no body ran, so an
-     * {@link #interrupt()} has nothing to wait on.
-     * <p>
-     * Only the drain state is reported here. The {@code running} flag also decides how this instance handles the events
-     * that still reach it, live or as a replay, so a terminal instance keeps the classification its execution gave it.
+     * Skips the body of an instance that is already terminal.
      *
      * @return the context of this instance, as the result of an execution that ran no body
      */
     private CompletableFuture<WorkflowContextDelegation> skipTerminalInstance() {
         logger.trace("Workflow instance has reached terminal state {}, skipping execution.",
                      this.state().workflowStatus());
-        drained.complete(null);
         return CompletableFuture.completedFuture(this.contextDelegate);
     }
 
@@ -410,7 +421,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         });
         this.checkpointingSupport.refreshCheckpointWorkState();
         terminationHandler.accept(this);
-        drained.complete(null);
     }
 
     private void transitionToTerminalState(@Nonnull Runnable terminalEventPublication) {

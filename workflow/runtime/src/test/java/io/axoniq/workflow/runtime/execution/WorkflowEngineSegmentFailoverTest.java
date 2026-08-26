@@ -81,7 +81,7 @@ class WorkflowEngineSegmentFailoverTest {
     }
 
     @Test
-    void releasingASegmentInterruptsAndDropsOnlyTheInstancesItOwns() {
+    void releasingASegmentStopsAndDropsOnlyTheInstancesItOwns() {
         var owner = owningSegment(OWNED_ID);
         var foreignId = idOnAnotherSegmentThan(OWNED_ID);
         var owned = execution(OWNED_ID);
@@ -91,8 +91,8 @@ class WorkflowEngineSegmentFailoverTest {
 
         workflowEngine.releaseWorkflowsFor(owner);
 
-        verify(owned).interrupt();
-        verify(foreign, never()).interrupt();
+        verify(owned).stopForShutdown();
+        verify(foreign, never()).stopForShutdown();
         assertThat(repository.findAll()).containsExactly(foreign);
     }
 

@@ -30,7 +30,6 @@ import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
@@ -38,13 +37,13 @@ import static io.axoniq.workflow.runtime.association.Associations.associate;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
- * Releasing a segment reports it quiet only once the bodies it interrupted have unwound.
+ * Stopping a workflow execution unwinds a parked workflow body without publishing cancellation events.
  * <p>
  * The node handing a segment over must stop working on that segment's instances before another node resumes them from
- * their persisted state. Reporting the release while a body is still running lets both nodes drive the same instance
- * for as long as it takes the first one to notice the interrupt.
+ * their persisted state.
  */
 class SegmentReleaseDrainTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 
@@ -60,7 +59,7 @@ class SegmentReleaseDrainTest extends AbstractWorkflowTestBase<SimpleWorkflowCon
     }
 
     @Test
-    void releasingASegmentReportsQuietOnlyAfterTheParkedBodyUnwound() {
+    void stoppingAParkedWorkflowUnwindsItsBody() {
         delayedPublisher.addSchedules(List.of(
                 ofMillis(200, new RegistrationReceivedEvent(WORKFLOW_ID, "parked@test.com", "vip"))
         ));
@@ -74,15 +73,10 @@ class SegmentReleaseDrainTest extends AbstractWorkflowTestBase<SimpleWorkflowCon
                                    .findFirst()
                                    .orElseThrow();
 
-        CompletableFuture<Void> drained = parked.interrupt();
+        parked.stopForShutdown();
 
-        assertThat(drained)
-                .as("""
-                            Interrupting '%s' must report back once its parked body unwound. A future that never completes \
-                            holds the release of every segment owning a parked instance until the processor cuts the wait at \
-                            its claim extension threshold, and one completing early reports this node quiet while the body \
-                            still runs.""", WORKFLOW_ID)
-                .succeedsWithin(Duration.ofSeconds(10));
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                assertThat(parked.isRunning()).isFalse());
     }
 
     public static class ParkedWorkflow {

@@ -83,7 +83,7 @@ class WorkflowReplayRoutingTest {
         var spawn = new TestConfig(WORKFLOW, "1.0.0");
         registry.register(EVENT, spawn);
 
-        var picked = registry.resolveDefinitionForReplay(WORKFLOW, "wf-1", "1.0.0", start);
+        var picked = registry.resolveDefinitionForReplay(WORKFLOW, "wf-1", "1.0.0", spawn);
         assertThat(picked.workflowVersion()).isEqualTo("1.0.0");
     }
 

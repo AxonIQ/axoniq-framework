@@ -18,26 +18,16 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
 
-import java.time.Clock;
 import java.time.Duration;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import static io.axoniq.workflow.configuration.WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR;
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -47,9 +37,8 @@ import static org.mockito.Mockito.*;
 /**
  * Neither segment callback may hold a segment forever when the work it waits on never completes.
  * <p>
- * Both wait on work that can stall without failing: a claim on a remote workflow store loading durable state, a release
- * on interrupted bodies unwinding. Both report failure once the timeout elapses, so the coordinator can act on it
- * instead of the segment staying claimed on a node with no instance running and nothing in the log.
+ * A claim can stall on a remote workflow-store load, so it must time out rather than hold a segment forever. A release
+ * only requests the released executions to stop and reports that request immediately.
  */
 class WorkflowEngineSegmentCallbackTest {
 
@@ -80,23 +69,21 @@ class WorkflowEngineSegmentCallbackTest {
     }
 
     @Test
-    void aReleaseWaitsForTheInterruptedBodiesOfItsOwnSegmentOnly() {
-        var owned = executionNotUnwinding(OWNED_ID);
-        var foreign = executionNotUnwinding(FOREIGN_ID);
+    void aReleaseStopsAndDropsOnlyTheExecutionsOfItsOwnSegment() {
+        var owned = execution(OWNED_ID);
+        var foreign = execution(FOREIGN_ID);
         var repository = new InMemoryWorkflowExecutionRepository();
         repository.save(OWNED_ID, () -> owned);
         repository.save(FOREIGN_ID, () -> foreign);
+        var cancellationService = mock(WorkflowCancellationService.class);
 
-        var release = engine(repository, mock(WorkflowStore.class)).releaseWorkflowsFor(SEGMENT);
+        var release = engine(repository, mock(WorkflowStore.class), cancellationService).releaseWorkflowsFor(SEGMENT);
 
-        assertThat(release)
-                .as("""
-                            Segment %s owns '%s', whose body has not unwound yet, so the release must still be pending. \
-                            Completing it here reports this node quiet on the segment while a body of it is still running, so \
-                            the node claiming it next resumes the instance alongside the one still going here.""",
-                    SEGMENT, OWNED_ID)
-                .isNotDone();
-        verify(foreign, never()).interrupt();
+        assertThat(release).isCompleted();
+        verify(owned).stopForShutdown();
+        verify(foreign, never()).stopForShutdown();
+        verifyNoInteractions(cancellationService);
+        assertThat(repository.findAll()).containsExactly(foreign);
     }
 
     @Test
@@ -106,43 +93,6 @@ class WorkflowEngineSegmentCallbackTest {
         assertThat(engine.releaseWorkflowsFor(SEGMENT))
                 .as("nothing to drain, so nothing to wait for")
                 .isCompleted();
-    }
-
-    @Test
-    void interruptingAnInstanceWhoseBodyNeverStartedReportsItQuietRightAway() {
-        // A restored instance waiting for its segment to catch up: materialized, but never executed.
-        var configuration = mock(WorkflowConfiguration.class);
-        when(configuration.workflowName()).thenReturn("RestoredWorkflow");
-        when(configuration.workflowVersion()).thenReturn("1.0.0");
-        when(configuration.workflowStatusChangeListeners()).thenReturn(Map.of());
-        when(configuration.eventNameCustomizer()).thenReturn(defaults());
-        var restored = new SimpleWorkflowExecution(OWNED_ID,
-                                                   Map.of(),
-                                                   bodyContext(),
-                                                   configuration,
-                                                   mock(WorkflowContext.class));
-
-        assertThat(restored.interrupt())
-                .as("""
-                            Nothing is running for this instance, so there is nothing to unwind. Handing back a pending future \
-                            here would stall the release of every segment holding a restored instance until the timeout.""")
-                .isCompleted();
-    }
-
-    @Test
-    void aReleaseHandsBackAFutureACallerMayBoundWithoutTouchingTheInstance() {
-        var execution = executionNotUnwinding(OWNED_ID);
-        var repository = new InMemoryWorkflowExecutionRepository();
-        repository.save(OWNED_ID, () -> execution);
-        var release = engine(repository, mock(WorkflowStore.class)).releaseWorkflowsFor(SEGMENT);
-
-        release.orTimeout(1, TimeUnit.MILLISECONDS);
-
-        assertThat(execution.interrupt())
-                .as("""
-                            The processor bounds the release with its own timeout, which must not complete the drain state of \
-                            the instance itself: an instance whose body is still unwinding has to keep reporting that.""")
-                .isNotDone();
     }
 
     @Test
@@ -157,9 +107,15 @@ class WorkflowEngineSegmentCallbackTest {
     }
 
     private static WorkflowEngine engine(WorkflowExecutionRepository repository, WorkflowStore workflowStore) {
+        return engine(repository, workflowStore, mock(WorkflowCancellationService.class));
+    }
+
+    private static WorkflowEngine engine(WorkflowExecutionRepository repository,
+                                         WorkflowStore workflowStore,
+                                         WorkflowCancellationService cancellationService) {
         var engine = new WorkflowEngine(new SimpleWorkflowConfigurationRegistry(),
                                         repository,
-                                        mock(WorkflowCancellationService.class),
+                                        cancellationService,
                                         workflowStore,
                                         mock(UnitOfWorkFactory.class));
         engine.setEngineSupportComponents(new WorkflowEngineReplaySupport(engine),
@@ -168,30 +124,9 @@ class WorkflowEngineSegmentCallbackTest {
         return engine;
     }
 
-    /**
-     * The context a restored body would run under; its executor never runs anything in this test.
-     */
-    private static ProcessingContext bodyContext() {
-        return StubProcessingContext.withComponents(
-                registry -> registry
-                        .registerComponent(UnitOfWorkFactory.class, configuration -> mock(UnitOfWorkFactory.class))
-                        .registerComponent(Clock.class, configuration -> Clock.systemUTC())
-                        .registerComponent(ExecutorService.class,
-                                           WORKFLOW_ENGINE_EXECUTOR,
-                                           configuration -> mock(ExecutorService.class))
-                        .registerComponent(EventSink.class, configuration -> mock(EventSink.class))
-                        .registerComponent(WorkflowScheduler.class, configuration -> mock(WorkflowScheduler.class))
-                        .registerComponent(ExecuteStepActionResolver.class,
-                                           configuration -> mock(ExecuteStepActionResolver.class)));
-    }
-
-    /**
-     * An instance whose interrupt never reports back, which is what a body that does not unwind looks like.
-     */
-    private static WorkflowExecution executionNotUnwinding(String workflowId) {
+    private static WorkflowExecution execution(String workflowId) {
         var execution = mock(WorkflowExecution.class);
         when(execution.workflowId()).thenReturn(workflowId);
-        when(execution.interrupt()).thenReturn(new CompletableFuture<>());
         return execution;
     }
 }
