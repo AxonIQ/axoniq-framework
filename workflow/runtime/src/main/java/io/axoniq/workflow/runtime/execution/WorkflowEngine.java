@@ -119,7 +119,7 @@ public class WorkflowEngine implements
      * Both {@code replaySupport} and {@code checkpointingSupport} are set outside the
      * {@link #WorkflowEngine(WorkflowConfigurationRegistry, WorkflowExecutionRepository, WorkflowCancellationService
      * WorkflowStore, UnitOfWorkFactory)}, because they require <b>this</b> {@code WorkflowEngine} itself to function.
-     * Hence, a cyclic dependency would exist upon start-up if callback otherwise.
+     * Hence, a cyclic dependency would exist upon start-up if completion otherwise.
      *
      * @param replaySupport        provides replayability support to this {@code WorkflowEngine}
      * @param checkpointingSupport provides checkpointing support to this {@code WorkflowEngine}

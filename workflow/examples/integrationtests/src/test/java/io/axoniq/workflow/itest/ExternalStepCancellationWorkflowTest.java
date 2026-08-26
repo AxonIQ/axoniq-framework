@@ -53,7 +53,7 @@ import static org.awaitility.Awaitility.await;
 /**
  * Verifies that a running step can be cancelled from a thread other than the workflow's own control thread, and that
  * the workflow can catch the resulting {@link StepCancellationException} and continue with further steps (e.g.
- * compensation) to normal callback.
+ * compensation) to normal completion.
  *
  * @author Stefan Dragisic
  */

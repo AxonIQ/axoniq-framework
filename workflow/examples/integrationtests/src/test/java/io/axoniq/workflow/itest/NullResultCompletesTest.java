@@ -41,7 +41,7 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * F-26 regression: an {@code execute} action returning {@code null} must drive the step (and workflow) to a terminal
- * state rather than wedging on a null-result dereference in the callback handler. Before the fix the step stayed
+ * state rather than wedging on a null-result dereference in the completion handler. Before the fix the step stayed
  * {@code STARTED} forever; after the fix the null result sanitizes to an empty map and the step {@code COMPLETED}.
  *
  * @author Stefan Dragisic

@@ -382,7 +382,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param terminationHandler termination handler to call.
      */
     private void finishWorkflow(Consumer<WorkflowExecution> terminationHandler) {
-        this.running = false; // mark we are callback and are not executable anymore
+        this.running = false; // mark we are completion and are not executable anymore
         // TODO -> how do we recognize workflow executions which came to this point bit haven't reach the terminal states?
         this.taskQueue.clear();
         // Terminal cleanup removes queued barriers too. Release their callbacks because no workflow driver remains to

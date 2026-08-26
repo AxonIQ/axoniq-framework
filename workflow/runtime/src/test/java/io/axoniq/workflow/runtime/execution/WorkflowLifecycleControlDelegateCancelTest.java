@@ -192,7 +192,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
     void cancelStepCompletesFutureAndAwaitsTerminalWithoutDirectPublish() throws InterruptedException {
         // Single-step cancel does NOT author <step>:CANCELLED itself and never touches the event sink: it completes the
         // step's registered future exceptionally, then awaits the durable terminal record that the owning executor's
-        // callback handler publishes through its guarded path.
+        // completion handler publishes through its guarded path.
         var state = mock(WorkflowState.class);
         var step = new WorkflowStep(
                 "step-a", StepStatus.STARTED,

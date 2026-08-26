@@ -198,7 +198,7 @@ public abstract class AbstractStepExecutor {
     /**
      * Registers the given future as the step's running phase while the step is parked (a wait timeout window, a retry
      * backoff window). When the future is completed exceptionally with a cancellation cause, the step is recorded
-     * CANCELLED through the guarded publish path and the cleanup hook runs; any other callback only removes the
+     * CANCELLED through the guarded publish path and the cleanup hook runs; any other completion only removes the
      * running-step registration, leaving the durable step state untouched.
      *
      * @param stepName            name of the parked step
@@ -228,7 +228,7 @@ public abstract class AbstractStepExecutor {
                                       @Nonnull Runnable cancelTimer,
                                       @Nonnull EventNameCustomizer eventNameCustomizer,
                                       @Nonnull Runnable onCancelled) {
-        // Register before observing callback. If a timer has already completed, whenComplete removes this exact
+        // Register before observing completion. If a timer has already completed, whenComplete removes this exact
         // registration immediately instead of leaving a completed future permanently marked as running.
         runningSteps.register(stepName, parkedPhase);
         parkedPhase.whenComplete((result, e) -> {
@@ -353,9 +353,9 @@ public abstract class AbstractStepExecutor {
     }
 
     /**
-     * Determines whether an exceptional step callback represents cancellation rather than failure or interruption.
+     * Determines whether an exceptional step completion represents cancellation rather than failure or interruption.
      *
-     * @param error callback error to classify
+     * @param error completion error to classify
      * @return {@code true} when the error represents step or workflow cancellation
      */
     public static boolean isCancellation(@Nonnull Throwable error) {

@@ -79,7 +79,7 @@ public class ManualWorkflowScheduler implements WorkflowScheduler {
         /**
          * Returns a future completed when the deadline is reached or is cancelled.
          *
-         * @return callback future
+         * @return completion future
          */
         @Nonnull
         @Override

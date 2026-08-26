@@ -110,8 +110,6 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     @Override
     public void cancelWorkflow(@Nonnull WorkflowLifecycleControl.CancelWorkflowCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
-        // Drift guard: adding ctx.cancel() mid-body would force a terminal event onto a
-        // workflow whose old code already ran past this point. Throws non-terminally.
         reachedSteps.assertNoReplayDrift(
                 workflowExecution.workflowId(),
                 workflowExecution.state(),
@@ -130,8 +128,6 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     @Override
     public void failWorkflow(@Nonnull WorkflowLifecycleControl.FailWorkflowCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
-        // Drift guard: adding ctx.fail() mid-body would force a terminal event onto a
-        // workflow whose old code already ran past this point. Throws non-terminally.
         reachedSteps.assertNoReplayDrift(
                 workflowExecution.workflowId(),
                 workflowExecution.state(),
@@ -156,8 +152,6 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
                 stepName
         );
 
-        // Guard on the single-consumer control thread: only a present, non-terminal step can be cancelled. The check
-        // and the future callback below are atomic with respect to other queue tasks.
         if (!WorkflowStateUtils.isStepActive(workflowExecution.state(), stepName)) {
             return false;
         }
@@ -172,20 +166,9 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
             stepCause = new StepCancellationException("Step cancelled");
         }
 
-        // Do NOT author <step>:CANCELLED here and do NOT touch the event sink. Complete the step's registered future
-        // exceptionally; the owning step executor's callback handler then publishes <step>:CANCELLED through its
-        // guarded, queue-appended sendStepEvent path (both the step-terminal and workflow-terminal guards) and runs its
-        // own cleanup — exactly like every other primitive. A running execute action is not force-interrupted;
-        // first-writer-wins via the terminal guard.
         if (!runningSteps.cancelWithCause(stepName, stepCause)) {
-            // Non-terminal but nothing running to complete (e.g. a STARTED step with no registered future): no
-            // cancellation is driven, so report false rather than block on a terminal that would never arrive.
             return false;
         }
-
-        // Await the durable terminal record on the control thread so it cannot be lost: a result.cancel() immediately
-        // followed by a whole-workflow terminal would otherwise discard the still-
-        // queued CANCELLED publish. The await makes the record durable before this call returns.
         try {
             workflowExecution.awaitStateChange(WorkflowStateUtils.stepTerminal(stepName));
         } catch (InterruptedException e) {
@@ -235,7 +218,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
      * Terminal transitions must not proceed before their event is durable. Timeout policy intentionally remains
      * centralized here until issue #280 defines a configurable publication deadline and its recovery semantics.
      *
-     * @param publication asynchronous terminal-event publication
+     * @param publication    asynchronous terminal-event publication
      * @param terminalStatus terminal status represented by the event
      */
     private void awaitTerminalEventPublication(@Nonnull CompletableFuture<Void> publication,

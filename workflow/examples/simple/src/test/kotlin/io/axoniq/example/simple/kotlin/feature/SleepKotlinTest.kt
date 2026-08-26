@@ -42,7 +42,7 @@ class SleepKotlinTest : AbstractWorkflowTestBase<WorkflowKontext>(
             d.declarative {
                 WorkflowKontext.from {
                     val cooldown = waitForEvent("cooldown", EventConditions.never(), timeout = 500.milliseconds)
-                    val work = execute("work", timeout = 5.seconds) { _, _ -> mapOf("callback" to true) }
+                    val work = execute("work", timeout = 5.seconds) { _, _ -> mapOf("completion" to true) }
 
                     anyMatch({ it.isCompleted }, cooldown, work).await()
                 }
