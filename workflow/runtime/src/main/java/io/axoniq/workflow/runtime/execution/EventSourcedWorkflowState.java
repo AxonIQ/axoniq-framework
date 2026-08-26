@@ -284,7 +284,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
         // Apply step-level state changes — ignore transitions once already terminal
         MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
             var stepName = getStepName(metadata);
-            if (containsStep(stepName) && getStep(stepName).status().isTerminal()) {
+            if (isStepTerminal(stepName)) {
                 logger.debug("Ignoring step status {} for step '{}' — already in terminal state {}",
                              stepStatus, stepName, getStep(stepName).status());
                 return;

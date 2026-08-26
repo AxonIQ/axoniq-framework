@@ -37,6 +37,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
@@ -248,7 +249,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void seededInitialWorkflowVersion_isReflectedByCurrentWorkflowVersion() {
+    void seededInitialWorkflowVersionIsReflectedByCurrentWorkflowVersion() {
         // Seed state with the workflow definition's configured version so that, when SimpleWorkflowExecution
         // constructs the STARTED event via startedWorkflow(...), the event's MessageType.version() reflects
         // the configured version (not the implicit "0.0.1" default).
@@ -261,7 +262,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void startedEventOverridesSeededVersion_onReplayOfOlderInstance() {
+    void startedEventOverridesSeededVersionOnReplayOfOlderInstance() {
         // For replays, the workflow may have been spawned with the latest config (e.g. "2.0.0") but the
         // started event in history carries the original version it was launched under (e.g. "1.0.0").
         // evolve() must adopt the started event's MessageType.version() so resolveVersionedDefinition can
@@ -285,7 +286,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void version_returnsCurrentWorkflowVersion_whenNoMarkerRecorded() {
+    void versionReturnsCurrentWorkflowVersionWhenNoMarkerRecorded() {
         // Default before any STARTED event applies is MessageType.DEFAULT_VERSION ("0.0.1").
         assertThat(state.currentWorkflowVersion("payment-redesign"))
                 .isEqualTo(MessageType.DEFAULT_VERSION);
@@ -293,7 +294,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void evolve_migrationStep_populatesMap() {
+    void evolveMigrationStepPopulatesMap() {
         Metadata metadata = MetadataUtils.createVersionMigrationStep("workflowId", "payment-redesign", "0.0.2");
         EventMessage eventMessage = mockMigrationStepEvent(metadata);
 
@@ -308,7 +309,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void evolve_secondMarkerForSameChangeId_isIgnored() {
+    void evolveSecondMarkerForSameChangeIdIsIgnored() {
         Metadata first = MetadataUtils.createVersionMigrationStep("workflowId", "shipping-redesign", "0.0.3");
         Metadata second = MetadataUtils.createVersionMigrationStep("workflowId", "shipping-redesign", "0.0.7");
 
@@ -320,7 +321,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void evolve_independentChangeIds_areTrackedSeparately() {
+    void evolveIndependentChangeIdsAreTrackedSeparately() {
         Metadata a = MetadataUtils.createVersionMigrationStep("workflowId", "change-a", "0.0.2");
         Metadata b = MetadataUtils.createVersionMigrationStep("workflowId", "change-b", "0.0.5");
 
@@ -329,6 +330,53 @@ class EventSourcedWorkflowStateTest {
 
         assertThat(state.currentWorkflowVersion("change-a")).isEqualTo("0.0.2");
         assertThat(state.currentWorkflowVersion("change-b")).isEqualTo("0.0.5");
+    }
+
+    @Test
+    void isStepTerminalReturnsFalseWhenStepNotContained() {
+        assertThat(state.isStepTerminal("nonExistent")).isFalse();
+        assertThat(state.isStepActive("nonExistent")).isFalse();
+    }
+
+    @Test
+    void isStepTerminalReturnsFalseWhenStepIsStartedOrRetrying() {
+        String startedStep = "startedStep";
+        EventMessage started = mock(EventMessage.class);
+        when(started.metadata()).thenReturn(MetadataUtils.create("wf-1", startedStep, StepStatus.STARTED));
+        when(started.timestamp()).thenReturn(Instant.now());
+        when(started.payloadAs(Object.class)).thenReturn(Map.of());
+        state.evolve(started, processingContext);
+
+        assertThat(state.isStepTerminal(startedStep)).isFalse();
+        assertThat(state.isStepActive(startedStep)).isTrue();
+
+        String retryingStep = "retryingStep";
+        EventMessage retrying = mock(EventMessage.class);
+        when(retrying.metadata()).thenReturn(MetadataUtils.create("wf-1", retryingStep, StepStatus.RETRYING));
+        when(retrying.timestamp()).thenReturn(Instant.now());
+        when(retrying.payloadAs(StepRetryInfo.class)).thenReturn(new StepRetryInfo(1, 100, WorkflowError.from(new RuntimeException("retry"))));
+        state.evolve(retrying, processingContext);
+
+        assertThat(state.isStepTerminal(retryingStep)).isFalse();
+        assertThat(state.isStepActive(retryingStep)).isTrue();
+    }
+
+    @Test
+    void isStepTerminalReturnsTrueWhenStepIsTerminal() {
+        for (StepStatus terminalStatus : List.of(StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.TIMED_OUT, StepStatus.CANCELLED)) {
+            String stepName = "step-" + terminalStatus;
+            EventMessage eventMessage = mock(EventMessage.class);
+            when(eventMessage.metadata()).thenReturn(MetadataUtils.create("wf-1", stepName, terminalStatus));
+            when(eventMessage.timestamp()).thenReturn(Instant.now());
+            when(eventMessage.payloadAs(Object.class)).thenReturn(Map.of());
+            if (terminalStatus == StepStatus.FAILED) {
+                when(eventMessage.payloadAs(WorkflowError.class)).thenReturn(WorkflowError.from(new RuntimeException("err")));
+            }
+            state.evolve(eventMessage, processingContext);
+
+            assertThat(state.isStepTerminal(stepName)).isTrue();
+            assertThat(state.isStepActive(stepName)).isFalse();
+        }
     }
 
     private EventMessage mockMigrationStepEvent(Metadata metadata) {

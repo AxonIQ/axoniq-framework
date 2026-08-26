@@ -26,6 +26,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -38,35 +40,36 @@ import java.util.concurrent.TimeUnit;
 public class DefaultWorkflowScheduler implements WorkflowScheduler {
 
     private final Clock clock;
+    private final ScheduledThreadPoolExecutor timerExecutor;
 
     /**
-     * Creates a scheduler.
+     * Creates a scheduler backed by the provided timer executor.
      *
-     * @param clock workflow clock.
+     * @param clock workflow clock
+     * @param timerExecutor executor used only for deadline delivery
      */
-    public DefaultWorkflowScheduler(@Nonnull Clock clock) {
+    public DefaultWorkflowScheduler(@Nonnull Clock clock, @Nonnull ScheduledThreadPoolExecutor timerExecutor) {
         this.clock = Objects.requireNonNull(clock, "Clock must not be null");
+        this.timerExecutor = Objects.requireNonNull(timerExecutor, "Timer executor must not be null");
+        this.timerExecutor.setRemoveOnCancelPolicy(true);
+        this.timerExecutor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
     }
 
     @Nonnull
     @Override
-    public ScheduledTask schedule(@Nonnull Instant deadline, @Nonnull Runnable task) {
+    public ScheduledTask schedule(@Nonnull Instant deadline) {
         var completion = new CompletableFuture<Void>();
         var delay = Duration.between(clock.instant(), deadline);
         var delayMillis = Math.max(0, delay.toMillis());
-        CompletableFuture.runAsync(
+        ScheduledFuture<?> scheduledTask = timerExecutor.schedule(
                 () -> {
                     if (completion.isDone()) {
                         return;
                     }
-                    try {
-                        task.run();
-                        completion.complete(null);
-                    } catch (Throwable t) {
-                        completion.completeExceptionally(t);
-                    }
+                    completion.complete(null);
                 },
-                CompletableFuture.delayedExecutor(delayMillis, TimeUnit.MILLISECONDS)
+                delayMillis,
+                TimeUnit.MILLISECONDS
         );
         return new ScheduledTask() {
             @Nonnull
@@ -77,8 +80,17 @@ public class DefaultWorkflowScheduler implements WorkflowScheduler {
 
             @Override
             public void cancel() {
-                completion.cancel(false);
+                if (scheduledTask.cancel(false)) {
+                    completion.cancel(false);
+                }
             }
         };
+    }
+
+    /**
+     * Stops deadline delivery and cancels pending timer tasks.
+     */
+    public void shutdown() {
+        timerExecutor.shutdownNow();
     }
 }

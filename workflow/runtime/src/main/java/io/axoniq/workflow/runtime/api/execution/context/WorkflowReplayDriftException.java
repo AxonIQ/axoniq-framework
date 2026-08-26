@@ -35,7 +35,7 @@ import java.util.Objects;
  * code in {@code ctx.migrateVersion(changeId, n)} to fork the workflow.
  *
  * @author Stefan Dragisic
- * @since 1.1.0
+ * @since 0.2.0
  */
 public class WorkflowReplayDriftException extends RuntimeException {
 

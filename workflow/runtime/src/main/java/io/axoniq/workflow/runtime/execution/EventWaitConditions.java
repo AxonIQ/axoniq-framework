@@ -41,7 +41,7 @@ import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Bu
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public class EventWaitConditions implements DescribableComponent {
+final class EventWaitConditions implements DescribableComponent {
 
     private final ConcurrentHashMap<String, EventConditionWithStepNameCustomizer> waitConditions = new ConcurrentHashMap<>();
 

@@ -24,6 +24,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
+import io.axoniq.workflow.runtime.execution.WorkflowCancellationService;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
@@ -145,12 +146,15 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                         workflowExecutionRepositoryBuilder
                 );
             }
+            cr.registerIfNotPresent(WorkflowCancellationService.class,
+                                    cfg -> new WorkflowCancellationService());
 
             cr.registerComponent(
                     ComponentDefinition.ofTypeAndName(WorkflowEngine.class, COMPONENT_WORKFLOW_ENGINE)
                                        .withBuilder(cfg -> new WorkflowEngine(
                                                cfg.getComponent(WorkflowConfigurationRegistry.class),
                                                cfg.getComponent(WorkflowExecutionRepository.class),
+                                               cfg.getComponent(WorkflowCancellationService.class),
                                                cfg.getComponent(WorkflowStore.class),
                                                cfg.getComponent(UnitOfWorkFactory.class)
                                        ))

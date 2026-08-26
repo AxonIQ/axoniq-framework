@@ -100,11 +100,14 @@ class PayloadDelegateTest {
         delegate = new PayloadDelegate(
                 workflowContext,
                 workflowExecution,
+                new RunningSteps(),
+                new ReachedSteps(),
                 parentEventNameCustomizer,
                 clock,
                 unitOfWorkFactory,
                 eventSink,
-                executor
+                executor,
+                new ControllableWorkflowScheduler()
         );
     }
 

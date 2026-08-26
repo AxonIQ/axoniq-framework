@@ -38,9 +38,7 @@ import org.mockito.*;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -76,7 +74,7 @@ class VersionDelegateTest {
     private EventNameCustomizer parentCustomizer;
     private VersionDelegate delegate;
 
-    private final Set<String> referencedStepNames = new HashSet<>();
+    private final ReachedSteps reachedSteps = new ReachedSteps();
 
     @SuppressWarnings("unchecked")
     @BeforeEach
@@ -107,18 +105,13 @@ class VersionDelegateTest {
         when(workflowContext.processingContext()).thenReturn(processingContext);
         when(processingContext.component(EventConverter.class)).thenReturn(TestEventConverter.INSTANCE);
         when(workflowExecution.state()).thenReturn(state);
-        when(workflowExecution.referencedStepNames()).thenReturn(referencedStepNames);
-        // Wire the default-method helpers through Mockito so the real implementation runs against
-        // the mocked state() / referencedStepNames() stubs above.
-        when(workflowExecution.unreferencedTerminalSteps()).thenCallRealMethod();
-        when(workflowExecution.hasUnreferencedTerminalStep()).thenCallRealMethod();
-        doCallRealMethod().when(workflowExecution).guardAgainstReplayDrift(anyString());
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         delegate = new VersionDelegate(
                 workflowContext,
                 workflowExecution,
+                reachedSteps,
                 parentCustomizer,
                 Clock.systemUTC(),
                 unitOfWorkFactory,
@@ -142,7 +135,7 @@ class VersionDelegateTest {
     }
 
     @Test
-    void requestSameAsCurrent_emitsNoEvent() {
+    void requestSameAsCurrentEmitsNoEvent() {
         when(state.hasVersionMigrationStep("payment-redesign")).thenReturn(false);
         when(state.workflowDefinitionVersion()).thenReturn("0.0.1");
         when(state.workflowStepNames()).thenReturn(List.of());
@@ -155,7 +148,7 @@ class VersionDelegateTest {
     }
 
     @Test
-    void newWorkflowUpgradesToHigherVersion_emitsMarkerNamedAfterChangeId() throws InterruptedException {
+    void newWorkflowUpgradesToHigherVersionEmitsMarkerNamedAfterChangeId() throws InterruptedException {
         // State starts without the marker; once the task runs, the marker becomes present.
         when(state.hasVersionMigrationStep("payment-redesign")).thenReturn(false, true);
         when(state.currentWorkflowVersion("payment-redesign")).thenReturn("0.0.2");
@@ -196,7 +189,7 @@ class VersionDelegateTest {
     }
 
     @Test
-    void replayedWorkflowWithMarker_returnsRecordedValue_doesNotEmit() {
+    void replayedWorkflowWithMarkerReturnsRecordedValueDoesNotEmit() {
         when(state.hasVersionMigrationStep("payment-redesign")).thenReturn(true);
         when(state.currentWorkflowVersion("payment-redesign")).thenReturn("0.0.2");
 
@@ -209,7 +202,7 @@ class VersionDelegateTest {
     }
 
     @Test
-    void secondVersionCallForSameChangeId_returnsRecordedValue() throws InterruptedException {
+    void secondVersionCallForSameChangeIdReturnsRecordedValue() throws InterruptedException {
         // First call: no marker, emit; second call: marker present, no emit.
         when(state.hasVersionMigrationStep("payment-redesign")).thenReturn(false, true, true);
         when(state.currentWorkflowVersion("payment-redesign")).thenReturn("0.0.2");
@@ -233,8 +226,8 @@ class VersionDelegateTest {
      * the current version unchanged.
      */
     @Test
-    void downstreamStepsGuard_blocksEmission_whenLaterStepsArePresentInState() {
-        referencedStepNames.add("A");
+    void downstreamStepsGuardBlocksEmissionWhenLaterStepsArePresentInState() {
+        reachedSteps.record("A");
         when(state.hasVersionMigrationStep("x")).thenReturn(false);
         when(state.workflowDefinitionVersion()).thenReturn("0.0.1");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B", "C"));
@@ -255,8 +248,8 @@ class VersionDelegateTest {
      * downstream yet — guard allows emission, workflow adopts v0.0.2.
      */
     @Test
-    void downstreamStepsGuard_allowsEmissionWhenAllStateStepsReferenced() throws InterruptedException {
-        referencedStepNames.add("A");
+    void downstreamStepsGuardAllowsEmissionWhenAllStateStepsReferenced() throws InterruptedException {
+        reachedSteps.record("A");
         when(state.hasVersionMigrationStep("x")).thenReturn(false, true);
         when(state.currentWorkflowVersion("x")).thenReturn("0.0.2");
         when(state.workflowDefinitionVersion()).thenReturn("0.0.1");
@@ -272,7 +265,7 @@ class VersionDelegateTest {
     }
 
     @Test
-    void downstreamStepsGuard_emptyState_allowsEmission() throws InterruptedException {
+    void downstreamStepsGuardEmptyStateAllowsEmission() throws InterruptedException {
         when(state.hasVersionMigrationStep("x")).thenReturn(false, true);
         when(state.currentWorkflowVersion("x")).thenReturn("0.0.3");
         when(state.workflowDefinitionVersion()).thenReturn("0.0.1");
@@ -291,8 +284,8 @@ class VersionDelegateTest {
      * should NOT block emission — only terminal steps prove old-code execution committed past this point.
      */
     @Test
-    void downstreamStepsGuard_ignoresNonTerminalStepsAhead() throws InterruptedException {
-        referencedStepNames.add("A");
+    void downstreamStepsGuardIgnoresNonTerminalStepsAhead() throws InterruptedException {
+        reachedSteps.record("A");
         when(state.hasVersionMigrationStep("x")).thenReturn(false, true);
         when(state.currentWorkflowVersion("x")).thenReturn("0.0.2");
         when(state.workflowDefinitionVersion()).thenReturn("0.0.1");

@@ -23,10 +23,12 @@ import io.axoniq.workflow.runtime.api.payload.PayloadModification;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Commands helper.
@@ -94,6 +96,53 @@ public class PrimitiveCommands {
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) {
         return new SimpleVersionCommand(stepName, newVersion, eventNameCustomizer);
+    }
+
+    /**
+     * Creates a command cancelling an entire workflow.
+     *
+     * @param cause               optional cancellation cause
+     * @param eventNameCustomizer customizer for published event names
+     * @return workflow cancellation command
+     */
+    @Nonnull
+    public static WorkflowLifecycleControl.CancelWorkflowCommand cancelWorkflow(
+            @Nullable Throwable cause,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) {
+        return new DefaultCancelWorkflowCommand(cause, eventNameCustomizer);
+    }
+
+    /**
+     * Creates a command failing an entire workflow.
+     *
+     * @param cause               optional failure cause
+     * @param eventNameCustomizer customizer for published event names
+     * @return workflow failure command
+     */
+    @Nonnull
+    public static WorkflowLifecycleControl.FailWorkflowCommand failWorkflow(
+            @Nullable Throwable cause,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) {
+        return new DefaultFailWorkflowCommand(cause, eventNameCustomizer);
+    }
+
+    /**
+     * Creates a command cancelling one running step.
+     *
+     * @param stepName            logical name of the step
+     * @param cause               optional cancellation cause
+     * @param eventNameCustomizer customizer for published event names
+     * @return step cancellation command
+     */
+    @Nonnull
+    public static WorkflowLifecycleControl.CancelStepCommand cancelStep(
+            @Nonnull String stepName,
+            @Nullable Throwable cause,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) {
+        return new DefaultCancelStepCommand(stepName, cause, eventNameCustomizer);
     }
 
     /**
@@ -225,5 +274,49 @@ public class PrimitiveCommands {
             @Nonnull String newVersion,
             @Nonnull EventNameCustomizer eventNameCustomizer
     ) implements VersionPrimitive.VersionCommand {
+    }
+
+    /**
+     * Default command implementation for whole-workflow cancellation.
+     */
+    @Internal
+    record DefaultCancelWorkflowCommand(
+            @Nullable Throwable cause,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) implements WorkflowLifecycleControl.CancelWorkflowCommand {
+
+        DefaultCancelWorkflowCommand {
+            Objects.requireNonNull(eventNameCustomizer, "EventNameCustomizer is required");
+        }
+    }
+
+    /**
+     * Default command implementation for whole-workflow failure.
+     */
+    @Internal
+    record DefaultFailWorkflowCommand(
+            @Nullable Throwable cause,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) implements WorkflowLifecycleControl.FailWorkflowCommand {
+
+        DefaultFailWorkflowCommand {
+            Objects.requireNonNull(eventNameCustomizer, "EventNameCustomizer is required");
+        }
+    }
+
+    /**
+     * Default command implementation for single-step cancellation.
+     */
+    @Internal
+    record DefaultCancelStepCommand(
+            @Nonnull String stepName,
+            @Nullable Throwable cause,
+            @Nonnull EventNameCustomizer eventNameCustomizer
+    ) implements WorkflowLifecycleControl.CancelStepCommand {
+
+        DefaultCancelStepCommand {
+            Objects.requireNonNull(stepName, "Step name is required");
+            Objects.requireNonNull(eventNameCustomizer, "EventNameCustomizer is required");
+        }
     }
 }

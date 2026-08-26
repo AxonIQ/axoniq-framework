@@ -22,11 +22,9 @@ import io.axoniq.workflow.runtime.execution.WorkflowScheduler;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests for {@link ManualWorkflowScheduler}.
@@ -42,10 +40,10 @@ class ManualWorkflowSchedulerTest {
         Instant now = Instant.parse("2026-06-19T10:15:30Z");
         AtomicInteger invocations = new AtomicInteger();
 
-        WorkflowScheduler.ScheduledTask first = scheduler.schedule(now.plusSeconds(5),
-                                                                   invocations::incrementAndGet);
-        WorkflowScheduler.ScheduledTask second = scheduler.schedule(now.plusSeconds(10),
-                                                                    invocations::incrementAndGet);
+        WorkflowScheduler.ScheduledTask first = scheduler.schedule(now.plusSeconds(5));
+        WorkflowScheduler.ScheduledTask second = scheduler.schedule(now.plusSeconds(10));
+        first.completion().thenRun(invocations::incrementAndGet);
+        second.completion().thenRun(invocations::incrementAndGet);
 
         scheduler.runDueTasks(now.plusSeconds(5));
 
@@ -65,7 +63,8 @@ class ManualWorkflowSchedulerTest {
         Instant now = Instant.parse("2026-06-19T10:15:30Z");
         AtomicInteger invocations = new AtomicInteger();
 
-        WorkflowScheduler.ScheduledTask task = scheduler.schedule(now, invocations::incrementAndGet);
+        WorkflowScheduler.ScheduledTask task = scheduler.schedule(now);
+        task.completion().thenRun(invocations::incrementAndGet);
         task.cancel();
         scheduler.runDueTasks(now);
 
@@ -74,19 +73,16 @@ class ManualWorkflowSchedulerTest {
     }
 
     @Test
-    void failedTaskCompletesExceptionally() {
+    void deadlineCompletionRunsDependentAction() {
         ManualWorkflowScheduler scheduler = new ManualWorkflowScheduler();
         Instant now = Instant.parse("2026-06-19T10:15:30Z");
-        RuntimeException failure = new RuntimeException("boom");
+        AtomicInteger invocations = new AtomicInteger();
 
-        WorkflowScheduler.ScheduledTask task = scheduler.schedule(now, () -> {
-            throw failure;
-        });
+        WorkflowScheduler.ScheduledTask task = scheduler.schedule(now);
+        task.completion().thenRun(invocations::incrementAndGet);
         scheduler.runDueTasks(now);
 
-        assertThat(task.completion()).isCompletedExceptionally();
-        assertThatThrownBy(() -> task.completion().join())
-                .isInstanceOf(CompletionException.class)
-                .hasCause(failure);
+        assertThat(task.completion()).isCompleted();
+        assertThat(invocations).hasValue(1);
     }
 }

@@ -31,6 +31,7 @@ import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowStore;
 import io.axoniq.workflow.runtime.execution.ExecuteStepActionResolver;
 import io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
+import io.axoniq.workflow.runtime.execution.WorkflowCancellationService;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
@@ -60,6 +61,7 @@ import java.time.Clock;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import static io.axoniq.workflow.runtime.util.MetadataUtils.getWorkflowDefinitionId;
 import static org.axonframework.eventsourcing.configuration.EventSourcedEntityModule.declarative;
@@ -73,6 +75,8 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
 @Internal
 @RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
 public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
+
+    static final int DEFAULT_WORKFLOW_TIMER_THREAD_COUNT = 4;
 
     /**
      * Name of the event handling component used for workflow history projector.
@@ -92,10 +96,10 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     /**
      * Order for this enhancer.
      * <p>
-     * Enhancer math: we have to run AFTER the event souring part is set up and let some space for others to register.
+     * Enhancer math: register the tag-resolver decorator before event sourcing creates the event store.
      * </p>
      */
-    public static final int WORKFLOW_DEFAULTS_ENHANCER_ORDER = EventSourcingConfigurationDefaults.ENHANCER_ORDER + 50;
+    public static final int WORKFLOW_DEFAULTS_ENHANCER_ORDER = EventSourcingConfigurationDefaults.ENHANCER_ORDER - 10;
 
     /**
      * Registers default components.
@@ -112,10 +116,9 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerExecuteStepActionResolver(componentRegistry);
         registerWorkflowTimeoutScheduler(componentRegistry);
         registerRunningWorkflowsModule(componentRegistry);
-        registerExecuteStepActionResolver(componentRegistry);
-        registerWorkflowTimeoutScheduler(componentRegistry);
         registerWorkflowEngineExecutor(componentRegistry);
         registerWorkflowExecutionRepository(componentRegistry);
+        registerWorkflowCancellationService(componentRegistry);
         registerMutableWorkflowHistoryRepository(componentRegistry);
         registerWorkflowConfigurationRegistry(componentRegistry);
         registerWorkflowStore(componentRegistry);
@@ -148,8 +151,23 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
 
     void registerWorkflowTimeoutScheduler(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(
-                WorkflowScheduler.class,
-                cfg -> new DefaultWorkflowScheduler(cfg.getComponent(Clock.class)));
+                ComponentDefinition.ofType(WorkflowScheduler.class)
+                                   .withBuilder(cfg -> new DefaultWorkflowScheduler(
+                                           cfg.getComponent(Clock.class), defaultWorkflowTimerExecutor()
+                                   ))
+                                   .onShutdown(Phase.INBOUND_EVENT_CONNECTORS,
+                                               scheduler -> ((DefaultWorkflowScheduler) scheduler).shutdown()));
+    }
+
+    static ScheduledThreadPoolExecutor defaultWorkflowTimerExecutor() {
+        return new ScheduledThreadPoolExecutor(
+                DEFAULT_WORKFLOW_TIMER_THREAD_COUNT,
+                runnable -> {
+                    var thread = new Thread(runnable, "axon-workflow-timer");
+                    thread.setDaemon(true);
+                    return thread;
+                }
+        );
     }
 
     void decorateTagResolver(ComponentRegistry componentRegistry) {
@@ -205,6 +223,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                    .withBuilder(cfg -> new WorkflowEngine(
                                            cfg.getComponent(WorkflowConfigurationRegistry.class),
                                            cfg.getComponent(WorkflowExecutionRepository.class),
+                                           cfg.getComponent(WorkflowCancellationService.class),
                                            cfg.getComponent(WorkflowStore.class),
                                            cfg.getComponent(UnitOfWorkFactory.class)
                                    ))
@@ -255,6 +274,11 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         componentRegistry.registerComponent(
                 WorkflowExecutionRepository.class,
                 cfg -> new InMemoryWorkflowExecutionRepository());
+    }
+
+    void registerWorkflowCancellationService(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(WorkflowCancellationService.class,
+                                               cfg -> new WorkflowCancellationService());
     }
 
     void registerMutableWorkflowHistoryRepository(ComponentRegistry componentRegistry) {

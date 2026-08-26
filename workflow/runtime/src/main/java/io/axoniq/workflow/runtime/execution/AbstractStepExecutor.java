@@ -19,6 +19,7 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
@@ -27,8 +28,10 @@ import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
+import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Context;
@@ -44,7 +47,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.merge;
@@ -62,6 +64,8 @@ public abstract class AbstractStepExecutor {
     private static final Logger logger = LoggerFactory.getLogger(AbstractStepExecutor.class);
     protected final WorkflowContext workflowContext;
     protected final WorkflowExecution workflowExecution;
+    protected final RunningSteps runningSteps;
+    protected final ReachedSteps reachedSteps;
     protected final Clock clock;
     protected final EventNameCustomizer parentEventNameCustomizer;
     protected final UnitOfWorkFactory unitOfWorkFactory;
@@ -72,50 +76,23 @@ public abstract class AbstractStepExecutor {
     /**
      * Constructs the abstract step executor.
      *
-     * @param workflowContext           workflow context.
-     * @param workflowExecution         workflow execution.
-     * @param parentEventNameCustomizer parent event name customizer.
-     * @param clock                     clock for time calculations.
-     * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
-     * @param eventSink                 event sink for event publications.
-     * @param executor                  executor to offload execution tasks from workflow thread.
+     * @param workflowContext           workflow context
+     * @param workflowExecution         workflow execution
+     * @param runningSteps              running step registry
+     * @param reachedSteps              reached steps tracker
+     * @param parentEventNameCustomizer parent event name customizer
+     * @param clock                     clock for time calculations
+     * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts
+     * @param eventSink                 event sink for event publications
+     * @param executor                  executor to offload execution tasks from workflow thread
+     * @param timeoutScheduler          timeout scheduler
      */
     @Internal
     public AbstractStepExecutor(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
-            @Nonnull EventNameCustomizer parentEventNameCustomizer,
-            @Nonnull Clock clock,
-            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
-            @Nonnull EventSink eventSink,
-            @Nonnull Executor executor
-    ) {
-        this(workflowContext,
-             workflowExecution,
-             parentEventNameCustomizer,
-             clock,
-             unitOfWorkFactory,
-             eventSink,
-             executor,
-             new DefaultWorkflowScheduler(clock));
-    }
-
-    /**
-     * Constructs the abstract step executor.
-     *
-     * @param workflowContext           workflow context.
-     * @param workflowExecution         workflow execution.
-     * @param parentEventNameCustomizer parent event name customizer.
-     * @param clock                     clock for time calculations.
-     * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts.
-     * @param eventSink                 event sink for event publications.
-     * @param executor                  executor to offload execution tasks from workflow thread.
-     * @param timeoutScheduler          timeout scheduler.
-     */
-    @Internal
-    public AbstractStepExecutor(
-            @Nonnull WorkflowContext workflowContext,
-            @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
+            @Nonnull ReachedSteps reachedSteps,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -126,6 +103,8 @@ public abstract class AbstractStepExecutor {
         this.clock = Objects.requireNonNull(clock, "Clock is mandatory");
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow state is mandatory");
+        this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
+        this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
         this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,
                                                                 "Event name customizer is mandatory");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UoW Factory state is mandatory");
@@ -135,7 +114,7 @@ public abstract class AbstractStepExecutor {
     }
 
     protected void acceptAllPendingTasksForStep(@Nonnull String stepName) {
-        while ((!workflowExecution.state().containsStep(stepName) && !workflowExecution.hasTasks())
+        while ((!workflowExecution.state().containsStep(stepName) && workflowExecution.hasTasks())
                 || !workflowExecution.isRunning()) {
             var poll = workflowExecution.getNextTask();
             if (poll != null) {
@@ -216,6 +195,58 @@ public abstract class AbstractStepExecutor {
         ), getContext(stepName));
     }
 
+    /**
+     * Registers the given future as the step's running phase while the step is parked (a wait timeout window, a retry
+     * backoff window). When the future is completed exceptionally with a cancellation cause, the step is recorded
+     * CANCELLED through the guarded publish path and the cleanup hook runs; any other completion only removes the
+     * running-step registration, leaving the durable step state untouched.
+     *
+     * @param stepName            name of the parked step
+     * @param parkedPhase         future representing the parked phase
+     * @param eventNameCustomizer event name customizer of the step
+     * @param onCancelled         cleanup to run when the parked phase is cancelled
+     */
+    protected void registerParkedStep(@Nonnull String stepName,
+                                      @Nonnull CompletableFuture<?> parkedPhase,
+                                      @Nonnull EventNameCustomizer eventNameCustomizer,
+                                      @Nonnull Runnable onCancelled) {
+        registerParkedStep(stepName, parkedPhase, () -> {
+        }, eventNameCustomizer, onCancelled);
+    }
+
+    /**
+     * Registers a parked step and owns the lifetime of its timer.
+     *
+     * @param stepName            name of the parked step
+     * @param parkedPhase         future representing the parked phase
+     * @param cancelTimer         cancels the timer associated with the parked phase
+     * @param eventNameCustomizer event name customizer of the step
+     * @param onCancelled         cleanup to run when the parked phase is cancelled
+     */
+    protected void registerParkedStep(@Nonnull String stepName,
+                                      @Nonnull CompletableFuture<?> parkedPhase,
+                                      @Nonnull Runnable cancelTimer,
+                                      @Nonnull EventNameCustomizer eventNameCustomizer,
+                                      @Nonnull Runnable onCancelled) {
+        // Register before observing completion. If a timer has already completed, whenComplete removes this exact
+        // registration immediately instead of leaving a completed future permanently marked as running.
+        runningSteps.register(stepName, parkedPhase);
+        parkedPhase.whenComplete((result, e) -> {
+            runningSteps.remove(stepName);
+            cancelTimer.run();
+            if (e != null && isCancellation(e)) {
+                onCancelled.run();
+                var terminationCause = unwrapCancellation(e);
+                workflowExecution.appendTask(i -> {
+                    // FIXME - This is where we should publish using an append condition
+                    if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)) {
+                        cancelled(stepName, terminationCause, eventNameCustomizer);
+                    }
+                });
+            }
+        });
+    }
+
     @Nonnull
     protected CompletableFuture<Void> cancelledWaitForEvent(@Nonnull String stepName,
                                                             @Nullable Throwable cause,
@@ -284,8 +315,7 @@ public abstract class AbstractStepExecutor {
                     "Workflow is in terminal state " + workflowContext.workflowStatus()
                             + ", cannot publish step event " + eventMessage.type()));
         }
-        if (workflowExecution.state().containsStep(stepName) && workflowExecution.state().getStep(stepName).status()
-                                                                                 .isTerminal()) {
+        if (WorkflowStateUtils.isStepTerminal(workflowExecution.state(), stepName)) {
             logger.debug("Skipping step event {} — step '{}' is already in terminal state {}", eventMessage.type(),
                          stepName, workflowExecution.state().getStep(stepName).status());
             return CompletableFuture.failedFuture(new IllegalStateException(
@@ -322,8 +352,14 @@ public abstract class AbstractStepExecutor {
         );
     }
 
-    public static boolean isCancellation(@Nonnull Throwable e) {
-        var cause = e instanceof CompletionException ? e.getCause() : e;
+    /**
+     * Determines whether an exceptional step completion represents cancellation rather than failure or interruption.
+     *
+     * @param error completion error to classify
+     * @return {@code true} when the error represents step or workflow cancellation
+     */
+    public static boolean isCancellation(@Nonnull Throwable error) {
+        var cause = unwrapCompletionException(error);
         return cause instanceof StepCancellationException
                 || cause instanceof WorkflowCancelledException
                 || cause instanceof WorkflowFailedException;
@@ -331,14 +367,31 @@ public abstract class AbstractStepExecutor {
 
     @Nonnull
     protected static Throwable unwrapCancellation(@Nonnull Throwable e) {
-        return e instanceof CompletionException ? e.getCause() : e;
+        return unwrapCompletionException(e);
     }
 
-    public static WorkflowStepResult stateBased(@Nonnull String stepName, WorkflowExecution workflowExecution) {
+    @Nonnull
+    protected static Throwable unwrapCompletionException(@Nonnull Throwable e) {
+        return FutureUtils.unwrap(e);
+    }
+
+    /**
+     * Creates a durable result handle for a step while retaining its event-name customizer for later cancellation.
+     *
+     * @param stepName            logical name of the step
+     * @param eventNameCustomizer customizer originally supplied for the step primitive
+     * @param workflowExecution   execution providing state access and cancellation delegation
+     * @return state-backed step result handle
+     */
+    @Nonnull
+    public static WorkflowStepResult stateBased(@Nonnull String stepName,
+                                                @Nonnull EventNameCustomizer eventNameCustomizer,
+                                                @Nonnull WorkflowExecution workflowExecution) {
         return new StateBasedWorkflowStepResult(stepName, () -> {
             workflowExecution.awaitStateChange(s -> true);
             return null;
-        }, workflowExecution);
+        }, cause -> workflowExecution.workflowContext().cancelStep(PrimitiveCommands.cancelStep(
+                stepName, cause, eventNameCustomizer
+        )), workflowExecution);
     }
-
 }

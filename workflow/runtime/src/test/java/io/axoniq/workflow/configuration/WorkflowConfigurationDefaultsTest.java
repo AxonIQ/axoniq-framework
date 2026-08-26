@@ -36,6 +36,7 @@ import org.axonframework.eventsourcing.eventstore.TagResolver;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -52,6 +53,17 @@ class WorkflowConfigurationDefaultsTest {
     @Test
     void orderReturnsWorkflowDefaultsEnhancerOrder() {
         assertThat(subject.order()).isEqualTo(WorkflowConfigurationDefaults.WORKFLOW_DEFAULTS_ENHANCER_ORDER);
+    }
+
+    @Test
+    void defaultWorkflowTimerExecutorUsesBoundedTimerCapacity() {
+        ScheduledThreadPoolExecutor executor = WorkflowConfigurationDefaults.defaultWorkflowTimerExecutor();
+        try {
+            assertThat(executor.getCorePoolSize())
+                    .isEqualTo(WorkflowConfigurationDefaults.DEFAULT_WORKFLOW_TIMER_THREAD_COUNT);
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test

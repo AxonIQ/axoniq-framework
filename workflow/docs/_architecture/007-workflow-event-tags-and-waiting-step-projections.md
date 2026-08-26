@@ -75,4 +75,4 @@ They may also be reused by configuration-repository or reporting use cases, but 
 - Wait-step events now carry a small internal marker in metadata so the tag resolver can distinguish them from other
   step events.
 - The use of tags will potentially degrade the performance of the system, if used for sourcing of the list of all
-  workflow instances, since the stream is growing infinitely. 
+  workflow instances, since the stream is growing infinitely.

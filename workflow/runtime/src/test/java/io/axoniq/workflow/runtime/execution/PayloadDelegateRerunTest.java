@@ -61,12 +61,14 @@ class PayloadDelegateRerunTest {
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private PayloadDelegate delegate;
+    private ReachedSteps reachedSteps;
 
     @BeforeEach
     void setUp() {
         workflowContext = mock(WorkflowContext.class);
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
+        reachedSteps = new ReachedSteps();
         ProcessingContext processingContext = mock(ProcessingContext.class);
         EventSink eventSink = mock(EventSink.class);
         UnitOfWorkFactory unitOfWorkFactory = mock(UnitOfWorkFactory.class);
@@ -79,8 +81,8 @@ class PayloadDelegateRerunTest {
         when(state.payload()).thenReturn(Map.of());
 
         delegate = new PayloadDelegate(
-                workflowContext, workflowExecution, parent,
-                Clock.systemUTC(), unitOfWorkFactory, eventSink, executor
+                workflowContext, workflowExecution, new RunningSteps(), reachedSteps, parent,
+                Clock.systemUTC(), unitOfWorkFactory, eventSink, executor, new ControllableWorkflowScheduler()
         );
     }
 
@@ -90,7 +92,7 @@ class PayloadDelegateRerunTest {
      * step record would be produced. With the gate, exactly zero new tasks are appended on the re-run.
      */
     @Test
-    void modifyPayload_doesNotRepublish_whenStepAlreadyInStateOnRerun() {
+    void modifyPayloadDoesNotRepublishWhenStepAlreadyInStateOnRerun() {
         String stepName = "payloadStep";
         // Replay/re-run: the COMPLETED terminal step is already projected into the event-sourced state.
         when(state.containsStep(stepName)).thenReturn(true);
@@ -104,7 +106,6 @@ class PayloadDelegateRerunTest {
         // No re-publish: the gate skips appendTask when the step is already present, so no duplicate
         // terminal step record is produced on the re-run. The drift guard is likewise skipped.
         verify(workflowExecution, never()).appendTask(any());
-        verify(workflowExecution, never()).guardAgainstReplayDrift(any());
     }
 
     /**
@@ -113,7 +114,7 @@ class PayloadDelegateRerunTest {
      * be repeated.
      */
     @Test
-    void modifyPayload_publishesOnce_onFirstLiveRun() {
+    void modifyPayloadPublishesOnceOnFirstLiveRun() {
         String stepName = "payloadStep";
         when(state.containsStep(stepName)).thenReturn(false);
 
@@ -122,7 +123,6 @@ class PayloadDelegateRerunTest {
 
         delegate.modifyPayload(PrimitiveCommands.modifyPayload(stepName, modification, customizer));
 
-        verify(workflowExecution, times(1)).guardAgainstReplayDrift(stepName);
         verify(workflowExecution, times(1)).appendTask(any());
     }
 

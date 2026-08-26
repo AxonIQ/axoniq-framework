@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.AnyMatchCombinator;
 import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.state.StepFailedException;
+import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
@@ -102,7 +103,7 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
                     );
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    throw new IllegalStateException("Interrupted while awaiting anyMatch result", e);
+                    throw new StepInterruptedException("Interrupted while awaiting anyMatch result", e);
                 }
 
                 var matchAfterWait = CombinatorSupport.findFirstByPredicate(results,

@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.state.NoneMatchCombinator;
 import io.axoniq.workflow.runtime.api.execution.state.StepFailedException;
+import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
@@ -99,7 +100,7 @@ public class NoneMatchCombinatorDelegate implements NoneMatchCombinator {
                     );
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    throw new IllegalStateException("Interrupted while awaiting noneMatch result", e);
+                    throw new StepInterruptedException("Interrupted while awaiting noneMatch result", e);
                 }
 
                 var matchAfterWait = CombinatorSupport.findFirstByPredicate(results,

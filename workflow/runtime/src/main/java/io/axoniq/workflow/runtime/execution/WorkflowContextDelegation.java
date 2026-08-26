@@ -20,13 +20,14 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadPrimitive;
-import io.axoniq.workflow.runtime.api.execution.context.TerminatePrimitive;
+import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.VersionPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
@@ -62,7 +63,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
     // Primitive implementations
     private final RetryableExecuteDelegate retryableExecuteDelegate;
     private final WaitForDelegate waitForDelegate;
-    private final TerminateDelegate terminateDelegate;
+    private final WorkflowLifecycleControlDelegate lifecycleControlDelegate;
     private final PayloadDelegate payloadDelegate;
     private final VersionDelegate versionDelegate;
 
@@ -89,14 +90,23 @@ public class WorkflowContextDelegation implements WorkflowContext {
     /**
      * Creates the context delegation.
      *
-     * @param workflowContext   workflow context created by the factory.
-     * @param workflowExecution workflow execution.
-     * @param processingContext processing context.
+     * @param workflowConfiguration   workflow configuration
+     * @param workflowContext        workflow context created by the factory
+     * @param workflowExecution      workflow execution
+     * @param runningSteps          running step registry
+     * @param eventWaitConditions   event wait condition registry
+     * @param reachedSteps          reached steps tracker
+     * @param terminalTransition    owner of workflow terminal-transition execution mechanics
+     * @param processingContext     processing context
      */
     public WorkflowContextDelegation(
             @Nonnull WorkflowConfiguration<?> workflowConfiguration,
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
+            @Nonnull EventWaitConditions eventWaitConditions,
+            @Nonnull ReachedSteps reachedSteps,
+            @Nonnull WorkflowTerminalTransition terminalTransition,
             @Nonnull ProcessingContext processingContext
     ) {
 
@@ -131,6 +141,8 @@ public class WorkflowContextDelegation implements WorkflowContext {
 
         var executeDelegate = new ExecuteDelegate(workflowContext,
                                                   workflowExecution,
+                                                  runningSteps,
+                                                  reachedSteps,
                                                   stepParent,
                                                   clock,
                                                   unitOfWorkFactory,
@@ -141,6 +153,8 @@ public class WorkflowContextDelegation implements WorkflowContext {
         this.retryableExecuteDelegate = new RetryableExecuteDelegate(executeDelegate,
                                                                      workflowContext,
                                                                      workflowExecution,
+                                                                     runningSteps,
+                                                                     reachedSteps,
                                                                      stepParent,
                                                                      clock,
                                                                      unitOfWorkFactory,
@@ -149,19 +163,27 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                                      timeoutScheduler);
         this.waitForDelegate = new WaitForDelegate(workflowContext,
                                                    workflowExecution,
+                                                   runningSteps,
+                                                   eventWaitConditions,
+                                                   reachedSteps,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,
                                                    eventSink,
                                                    executorService,
                                                    timeoutScheduler);
-        this.terminateDelegate = new TerminateDelegate(workflowContext,
-                                                       workflowExecution,
-                                                       unitOfWorkFactory,
-                                                       eventSink,
-                                                       executorService);
+        this.lifecycleControlDelegate = new WorkflowLifecycleControlDelegate(workflowContext,
+                                                                             workflowExecution,
+                                                                             runningSteps,
+                                                                             reachedSteps,
+                                                                             terminalTransition,
+                                                                             unitOfWorkFactory,
+                                                                             eventSink,
+                                                                             executorService);
         this.payloadDelegate = new PayloadDelegate(workflowContext,
                                                    workflowExecution,
+                                                   runningSteps,
+                                                   reachedSteps,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,
@@ -170,6 +192,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                    timeoutScheduler);
         this.versionDelegate = new VersionDelegate(workflowContext,
                                                    workflowExecution,
+                                                   reachedSteps,
                                                    stepParent,
                                                    clock,
                                                    unitOfWorkFactory,
@@ -247,20 +270,26 @@ public class WorkflowContextDelegation implements WorkflowContext {
     }
 
     @Override
-    public void terminate(@Nonnull TerminatePrimitive.TerminateCommand command) {
-        if (command.isStepCancellation()) {
-            terminateDelegate.terminate(command);
-            return;
-        }
+    public void cancelWorkflow(@Nonnull WorkflowLifecycleControl.CancelWorkflowCommand command) {
         workflowExecution.state().throwTerminalCause();
-        terminateDelegate.terminate(new TerminatePrimitive.TerminateCommand(
-                command.error(),
+        lifecycleControlDelegate.cancelWorkflow(PrimitiveCommands.cancelWorkflow(
                 command.cause(),
-                merge(workflowExecution.workflowConfiguration().eventNameCustomizer(),
-                      command.eventNameCustomizer()),
-                workflowExecution.workflowName(),
-                null
+                merge(workflowExecution.workflowConfiguration().eventNameCustomizer(), command.eventNameCustomizer())
         ));
+    }
+
+    @Override
+    public void failWorkflow(@Nonnull WorkflowLifecycleControl.FailWorkflowCommand command) {
+        workflowExecution.state().throwTerminalCause();
+        lifecycleControlDelegate.failWorkflow(PrimitiveCommands.failWorkflow(
+                command.cause(),
+                merge(workflowExecution.workflowConfiguration().eventNameCustomizer(), command.eventNameCustomizer())
+        ));
+    }
+
+    @Override
+    public boolean cancelStep(@Nonnull WorkflowLifecycleControl.CancelStepCommand command) {
+        return lifecycleControlDelegate.cancelStep(command);
     }
 
     @Nonnull
@@ -305,11 +334,11 @@ public class WorkflowContextDelegation implements WorkflowContext {
     /**
      * Factory for the unit of work wrapping a workflow instance's body execution.
      * <p>
-     * The body-wrapper unit of work stays open for the workflow instance's entire lifetime, including any time the
-     * body spends parked at {@code awaitEvent}, {@code sleep}, or retry backoff. It is therefore non-transactional,
-     * as a transaction bound to it would hold its resources per in-flight instance for as long as the instance
-     * lives. Workflow and step events are published in short-lived child units of work created from the
-     * transactional {@link #unitOfWorkFactory()} instead.
+     * The body-wrapper unit of work stays open for the workflow instance's entire lifetime, including any time the body
+     * spends parked at {@code awaitEvent}, {@code sleep}, or retry backoff. It is therefore non-transactional, as a
+     * transaction bound to it would hold its resources per in-flight instance for as long as the instance lives.
+     * Workflow and step events are published in short-lived child units of work created from the transactional
+     * {@link #unitOfWorkFactory()} instead.
      *
      * @return the non-transactional unit of work factory used for the workflow-body wrapper.
      */
