@@ -486,12 +486,18 @@ class DistributedQueryBusTest {
             assertThat(matchingCallbackTwo.sendUpdateCount.get()).isEqualTo(1);
         }
 
+        @SuppressWarnings("Convert2Lambda") // Suppressed to support spying.
         @Test
         void emitUpdateWithErroredProcessingContextDropsUpdate() {
             // given - An exceptionally completed UnitOfWork/ProcessingContext
             SubscriptionQueryUpdateMessage update =
                     new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
-            Predicate<QueryMessage> spiedFilter = spy(query -> matchingFilter.test(query));
+            Predicate<QueryMessage> spiedFilter = spy(new Predicate<QueryMessage>() {
+                @Override
+                public boolean test(QueryMessage query) {
+                    return matchingFilter.test(query);
+                }
+            });
             AtomicReference<ProcessingContext> erroredContext = new AtomicReference<>();
             UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
             uow.runOnInvocation(context -> {
@@ -574,10 +580,16 @@ class DistributedQueryBusTest {
             assertThat(matchingCallbackTwo.completeCount.get()).isEqualTo(1);
         }
 
+        @SuppressWarnings("Convert2Lambda") // Suppressed to support spying.
         @Test
         void completeSubscriptionsWithErroredProcessingContextDropsCompletion() {
             // given - An exceptionally completed UnitOfWork/ProcessingContext
-            Predicate<QueryMessage> spiedFilter = spy(query -> matchingFilter.test(query));
+            Predicate<QueryMessage> spiedFilter = spy(new Predicate<QueryMessage>() {
+                @Override
+                public boolean test(QueryMessage query) {
+                    return matchingFilter.test(query);
+                }
+            });
             AtomicReference<ProcessingContext> erroredContext = new AtomicReference<>();
             UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
             uow.runOnInvocation(context -> {
@@ -643,11 +655,17 @@ class DistributedQueryBusTest {
             assertThat(matchingCallbackTwo.completeExceptionallyCount.get()).isEqualTo(1);
         }
 
+        @SuppressWarnings("Convert2Lambda") // Suppressed to support spying.
         @Test
         void completeSubscriptionsExceptionallyWithErroredProcessingContextDropsCompletion() {
             // given - An exceptionally completed UnitOfWork/ProcessingContext
             MockException cause = new MockException("Mock");
-            Predicate<QueryMessage> spiedFilter = spy(query -> matchingFilter.test(query));
+            Predicate<QueryMessage> spiedFilter = spy(new Predicate<QueryMessage>() {
+                @Override
+                public boolean test(QueryMessage query) {
+                    return matchingFilter.test(query);
+                }
+            });
             AtomicReference<ProcessingContext> erroredContext = new AtomicReference<>();
             UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
             uow.runOnInvocation(context -> {
@@ -658,9 +676,9 @@ class DistributedQueryBusTest {
             uow.execute().exceptionally(e -> null).join();
 
             // when completing exceptionally with an errored context...
-            OptionalInt result = testSubject.completeSubscriptionsExceptionallyAndCount(spiedFilter,
-                                                                                        cause,
-                                                                                        erroredContext.get())
+            OptionalInt result = testSubject.completeSubscriptionsExceptionallyAndCount(
+                                                    spiedFilter, cause, erroredContext.get()
+                                            )
                                             .orTimeout(1, TimeUnit.SECONDS)
                                             .join();
 
