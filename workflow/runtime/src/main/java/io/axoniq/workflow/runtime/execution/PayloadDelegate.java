@@ -25,6 +25,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
+import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -49,34 +50,24 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
 
     /**
      * Constructs the primitive implementation.
+     *
+     * @param workflowContext            workflow context
+     * @param workflowExecution          workflow execution
+     * @param runningSteps              running step registry
+     * @param reachedSteps              reached steps tracker
+     * @param parentEventNameCustomizer parent event name customizer
+     * @param clock                     clock for time calculations
+     * @param unitOfWorkFactory         unit of work factory for processing contexts
+     * @param eventSink                 event sink for event publications
+     * @param executor                  executor for step work
+     * @param timeoutScheduler          scheduler for step timeouts
      */
     @Internal
     public PayloadDelegate(
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
-            @Nonnull EventNameCustomizer parentEventNameCustomizer,
-            @Nonnull Clock clock,
-            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
-            @Nonnull EventSink eventSink,
-            @Nonnull Executor executor
-    ) {
-        this(workflowContext,
-             workflowExecution,
-             parentEventNameCustomizer,
-             clock,
-             unitOfWorkFactory,
-             eventSink,
-             executor,
-             new DefaultWorkflowScheduler(clock));
-    }
-
-    /**
-     * Constructs the primitive implementation.
-     */
-    @Internal
-    public PayloadDelegate(
-            @Nonnull WorkflowContext workflowContext,
-            @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
+            @Nonnull ReachedSteps reachedSteps,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -86,6 +77,8 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
     ) {
         super(workflowContext,
               workflowExecution,
+              runningSteps,
+              reachedSteps,
               parentEventNameCustomizer,
               clock,
               unitOfWorkFactory,
@@ -100,19 +93,19 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
         var stepName = command.stepName();
         var payloadModification = command.payloadModification();
         var eventNameCustomizer = command.eventNameCustomizer();
-        workflowExecution.recordStepReference(stepName);
+        reachedSteps.record(stepName);
         // Drift guard + replay-skip gate: payload publishes COMPLETED directly, so gate both the guard and the
         // publish on the first live run. On a post-crash live re-run the step is already present, so skip
         // re-publishing (the replay-skip gate the other primitives have) to avoid a duplicate terminal record.
         if (!workflowExecution.state().containsStep(stepName)) {
-            workflowExecution.guardAgainstReplayDrift(stepName);
+            reachedSteps.assertNoReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
             workflowExecution.appendTask(e -> {
                                              // apply modification right away
                                              var newPayload = payloadModification.apply(workflowExecution.workflowContext().workflowPayload());
                                              var payloadEvent = completedStep(workflowContext,
                                                                               stepName,
                                                                               sanitize(newPayload),
-                                               NAME, // replace later the entire payload
+                                                                              NAME, // replace later the entire payload
                                                                               merge(parentEventNameCustomizer, eventNameCustomizer));
                                              ProcessingContextUtils.executeWithResult(
                                                      workflowExecution.workflowId(),
@@ -125,8 +118,7 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
             );
         }
         try {
-            workflowExecution.awaitStateChange(s -> s.containsStep(stepName)
-                    && s.getStep(stepName).status() == StepStatus.COMPLETED);
+            workflowExecution.awaitStateChange(WorkflowStateUtils.stepStatus(stepName, StepStatus.COMPLETED));
             return WorkflowStepResults.completed(stepName,
                                                  workflowExecution.state().payload(),
                                                  workflowExecution.processingContext().component(EventConverter.class));

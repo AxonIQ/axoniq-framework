@@ -77,7 +77,7 @@ class MultiVersionRoutingWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
     }
 
     @Test
-    void freshStart_picksHighestVersion_andRunsV2Body() {
+    void freshStartPicksHighestVersionAndRunsV2Body() {
         delayedPublisher.addSchedules(List.of(
                 ofMillis(500, new OrderPlacedEvent("order-1", "alice"))
         ));
@@ -86,7 +86,7 @@ class MultiVersionRoutingWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
         testDriver.historyMatches(h -> h.state().workflowStatus() == WorkflowStatus.COMPLETED);
 
         var state = testDriver.testingState().state();
-        assertThat(state.workflowDefinitionVersion())
+        assertThat(state.workflowDefinitionId().version())
                 .as("Fresh start should pick the highest registered version")
                 .isEqualTo("2.0.0");
         testDriver.testingState().hasSteps("v2-only-step");
@@ -102,7 +102,7 @@ class MultiVersionRoutingWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
      * {@code findClosestRegisteredVersion} the v2 workflow would cross-jump or fail.
      */
     @Test
-    void bumpedVersion_routesToClosestRegisteredDefinition() {
+    void bumpedVersionRoutesToClosestRegisteredDefinition() {
         v2.bumpInsideBody = true; // make V2Body call ctx.migrateVersion(..., "2.0.1") before its step
 
         delayedPublisher.addSchedules(List.of(
@@ -113,7 +113,7 @@ class MultiVersionRoutingWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
         testDriver.historyMatches(h -> h.state().workflowStatus() == WorkflowStatus.COMPLETED);
 
         var state = testDriver.testingState().state();
-        assertThat(state.workflowDefinitionVersion())
+        assertThat(state.workflowDefinitionId().version())
                 .as("ctx.migrateVersion bumped state to 2.0.1")
                 .isEqualTo("2.0.1");
         testDriver.testingState().hasSteps("v2-only-step");

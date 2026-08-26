@@ -150,9 +150,9 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
     }
 
     /**
-     * Finds a registered configuration by stable workflow definition id.
+     * Finds a registered configuration by workflow definition reference.
      *
-     * @param workflowDefinitionId workflow definition id to resolve
+     * @param workflowDefinitionId workflow definition reference to resolve
      * @return matching configuration, or empty if none registered
      */
     @Nonnull

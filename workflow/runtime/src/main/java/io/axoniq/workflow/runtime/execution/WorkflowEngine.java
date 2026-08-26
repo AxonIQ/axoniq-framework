@@ -81,6 +81,7 @@ public class WorkflowEngine implements
 
     private final WorkflowConfigurationRegistry<?> workflowConfigurationRegistry;
     private final WorkflowExecutionRepository workflowExecutionRepository;
+    private final WorkflowCancellationService workflowCancellationService;
     private final WorkflowStore workflowStore;
     private final UnitOfWorkFactory unitOfWorkFactory;
     private WorkflowEngineReplaySupport replaySupport;
@@ -101,14 +102,17 @@ public class WorkflowEngine implements
      *                                      workflow configuration}
      * @param workflowExecutionRepository   repository dedicated towards {@link WorkflowExecution} storage and
      *                                      retrieval
+     * @param workflowCancellationService   workflow cancellation service
      * @param workflowStore                 dedicated store for workflow information, like {@link RunningWorkflows} and
      *                                      {@link WorkflowState}
      * @param unitOfWorkFactory             a unit of work factory dedicated to construct a unit of work during
      *                                      {@link #start(TrackingToken, boolean)} of this engine
      */
+    @Internal
     public WorkflowEngine(
             @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
             @Nonnull WorkflowExecutionRepository workflowExecutionRepository,
+            @Nonnull WorkflowCancellationService workflowCancellationService,
             @Nonnull WorkflowStore workflowStore,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory
     ) {
@@ -117,6 +121,9 @@ public class WorkflowEngine implements
         );
         this.workflowExecutionRepository = requireNonNull(
                 workflowExecutionRepository, "The WorkflowExecutionRepository must not be null."
+        );
+        this.workflowCancellationService = requireNonNull(
+                workflowCancellationService, "The WorkflowCancellationService must not be null."
         );
         this.workflowStore = requireNonNull(workflowStore, "The WorkflowStore must not be null.");
         this.unitOfWorkFactory = requireNonNull(unitOfWorkFactory, "The UnitOfWorkFactory must not be null.");
@@ -128,9 +135,9 @@ public class WorkflowEngine implements
      * Sets {@code WorkflowEngine} support components which are <b>required</b> for the engine to work.
      * <p>
      * Both {@code replaySupport} and {@code checkpointingSupport} are set outside the
-     * {@link #WorkflowEngine(WorkflowConfigurationRegistry, WorkflowExecutionRepository, WorkflowStore,
-     * UnitOfWorkFactory)}, because they require <b>this</b> {@code WorkflowEngine} itself to function. Hence, a cyclic
-     * dependency would exist upon start-up if done otherwise.
+     * {@link #WorkflowEngine(WorkflowConfigurationRegistry, WorkflowExecutionRepository, WorkflowCancellationService
+     * WorkflowStore, UnitOfWorkFactory)}, because they require <b>this</b> {@code WorkflowEngine} itself to function.
+     * Hence, a cyclic dependency would exist upon start-up if completion otherwise.
      *
      * @param replaySupport        provides replayability support to this {@code WorkflowEngine}
      * @param checkpointingSupport provides checkpointing support to this {@code WorkflowEngine}
@@ -197,7 +204,7 @@ public class WorkflowEngine implements
                                            @Nonnull ProcessingContext processingContext) {
         // For brand-new starts, only the highest-registered version starts instances.
         // Older registered versions stay available for replay routing (selected later in the execution path
-        // based on state.workflowDefinitionVersion(), itself sourced from the workflow's started event metadata).
+        // based on state.workflowDefinitionId().version(), itself sourced from the workflow's started event metadata).
         // Same-version duplicates start in parallel only if their workflowIdProviders produce distinct ids;
         // otherwise the second start is rejected as a same-version duplicate in resolveWorkflowIdForNewInstance.
         // The "multiple definitions at the same version" warning is emitted ONCE at engine startup (see
@@ -242,6 +249,7 @@ public class WorkflowEngine implements
                 logger.debug("Creating a new workflow '{}' with payload '{}'", workflowId, eventMessage.payload());
                 return workflowConfiguration.workflowExecutionFactory().create(workflowContext);
             });
+            registerCancellation(execution);
             checkpointWorkIndex.register(execution.workflowId(), execution::registerCheckpointWorkStateListener);
             if (replaySupport.inLiveMode(segment)) {
                 execute(execution, segment);
@@ -535,6 +543,7 @@ public class WorkflowEngine implements
         }
         logger.info("Starting {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
         for (var execution : executionsToStart) {
+            registerCancellation(execution);
             execute(execution, segment);
         }
         logger.info("Started {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
@@ -551,7 +560,7 @@ public class WorkflowEngine implements
                                      logger.debug("Workflow {} finished with status {}, removing it from repository",
                                                   execution.workflowId(),
                                                   finished.state().workflowStatus());
-                                     this.workflowExecutionRepository.remove(execution.workflowId());
+                                     removeExecution(execution.workflowId());
                                      checkpointWorkIndex.markSafe(execution.workflowId());
                                      // The completion is safe for the segment that owns this instance and started its
                                      // body, at that segment's own position: never at another segment's.
@@ -563,6 +572,21 @@ public class WorkflowEngine implements
                          throw new RuntimeException("Error during workflow execution", t);
                      }
                  });
+    }
+
+    private void registerCancellation(@Nonnull WorkflowExecution execution) {
+        if (execution instanceof WorkflowCancellationProvider provider) {
+            workflowCancellationService.register(execution.workflowId(), provider.workflowCancellation());
+        } else {
+            throw new IllegalStateException(
+                    "Provided workflow execution {} does not implement WorkflowCancellationProvider, but the cancellation was registered.".formatted(
+                            execution.workflowId()));
+        }
+    }
+
+    private void removeExecution(@Nonnull String workflowId) {
+        workflowExecutionRepository.remove(workflowId);
+        workflowCancellationService.unregister(workflowId);
     }
 
     /**
@@ -580,10 +604,11 @@ public class WorkflowEngine implements
         logger.info("Shutting down WorkflowEngine: interrupting running steps of {} workflow instance(s).",
                     executions.size());
         for (var execution : executions) {
-            execution.interrupt();
+            execution.stopForShutdown();
         }
         workflowExecutionRepository.clear();
         checkpointWorkIndex.clear();
+        workflowCancellationService.clear();
     }
 
     /**

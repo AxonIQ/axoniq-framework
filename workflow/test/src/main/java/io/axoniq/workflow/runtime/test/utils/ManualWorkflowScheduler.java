@@ -38,16 +38,15 @@ public class ManualWorkflowScheduler implements WorkflowScheduler {
     private final ConcurrentSkipListMap<Instant, List<ManualScheduledTask>> tasks = new ConcurrentSkipListMap<>();
 
     /**
-     * Schedules a task to run when fixture time reaches the given deadline.
+     * Schedules a deadline notification when fixture time reaches the given deadline.
      *
      * @param deadline deadline according to fixture-controlled time
-     * @param task     task to run
      * @return scheduled task handle
      */
     @Nonnull
     @Override
-    public ScheduledTask schedule(@Nonnull Instant deadline, @Nonnull Runnable task) {
-        var scheduledTask = new ManualScheduledTask(task);
+    public ScheduledTask schedule(@Nonnull Instant deadline) {
+        var scheduledTask = new ManualScheduledTask();
         tasks.compute(deadline, (ignored, existing) -> {
             var updated = existing == null ? new ArrayList<ManualScheduledTask>() : new ArrayList<>(existing);
             updated.add(scheduledTask);
@@ -72,15 +71,13 @@ public class ManualWorkflowScheduler implements WorkflowScheduler {
 
     private static class ManualScheduledTask implements ScheduledTask {
 
-        private final Runnable task;
         private final CompletableFuture<Void> completion = new CompletableFuture<>();
 
-        private ManualScheduledTask(Runnable task) {
-            this.task = task;
+        private ManualScheduledTask() {
         }
 
         /**
-         * Returns a future completed when the scheduled task runs or is cancelled.
+         * Returns a future completed when the deadline is reached or is cancelled.
          *
          * @return completion future
          */
@@ -102,12 +99,7 @@ public class ManualWorkflowScheduler implements WorkflowScheduler {
             if (completion.isDone()) {
                 return;
             }
-            try {
-                task.run();
-                completion.complete(null);
-            } catch (Throwable t) {
-                completion.completeExceptionally(t);
-            }
+            completion.complete(null);
         }
     }
 }

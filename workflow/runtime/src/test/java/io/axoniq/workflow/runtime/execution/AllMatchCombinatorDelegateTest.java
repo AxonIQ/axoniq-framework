@@ -20,22 +20,19 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import org.junit.jupiter.api.*;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
  * Tests for {@link AllMatchCombinatorDelegate#allMatch(java.util.function.Predicate, WorkflowStepResult...)}.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class AllMatchCombinatorDelegateTest {
 
@@ -47,14 +44,16 @@ class AllMatchCombinatorDelegateTest {
         workflowState = mock(WorkflowState.class);
         workflowExecution = mock(WorkflowExecution.class);
         when(workflowExecution.state()).thenReturn(workflowState);
-        when(workflowState.firstCompletedAmong(any())).thenReturn(Optional.empty());
-        when(workflowState.sortedCompletedAmong(any())).thenReturn(List.of());
+    }
+
+    private void givenTerminalStep(String name, Instant timestamp) {
+        when(workflowState.getStep(name)).thenReturn(WorkflowStep.completed(name, null, timestamp, null));
     }
 
     // --- All complete and all match → success ---
 
     @Test
-    void allMatch_allCompleteAndAllMatch_success() {
+    void allMatchAllCompleteAndAllMatchSuccess() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
@@ -68,7 +67,7 @@ class AllMatchCombinatorDelegateTest {
     }
 
     @Test
-    void allMatch_allCompleteAndAllMatch_resultIsEmpty() {
+    void allMatchAllCompleteAndAllMatchResultIsEmpty() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
@@ -81,7 +80,7 @@ class AllMatchCombinatorDelegateTest {
     // --- Short-circuit on first non-match ---
 
     @Test
-    void allMatch_shortCircuitsOnFirstNonMatch() {
+    void allMatchShortCircuitsOnFirstNonMatch() {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
         var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
@@ -93,7 +92,7 @@ class AllMatchCombinatorDelegateTest {
     }
 
     @Test
-    void allMatch_shortCircuit_delegatesToViolator() {
+    void allMatchShortCircuitDelegatesToViolator() {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
         var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
@@ -107,7 +106,7 @@ class AllMatchCombinatorDelegateTest {
     // --- isCompleted behavior ---
 
     @Test
-    void allMatch_isCompletedFalseWhileRunningAndAllMatchSoFar() {
+    void allMatchIsCompletedFalseWhileRunningAndAllMatchSoFar() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
 
@@ -125,7 +124,7 @@ class AllMatchCombinatorDelegateTest {
     }
 
     @Test
-    void allMatch_isCompletedTrueOnShortCircuit() {
+    void allMatchIsCompletedTrueOnShortCircuit() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
 
@@ -143,7 +142,7 @@ class AllMatchCombinatorDelegateTest {
     }
 
     @Test
-    void allMatch_isCompletedTrueWhenAllCompleteAllMatch() {
+    void allMatchIsCompletedTrueWhenAllCompleteAllMatch() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
 
@@ -163,7 +162,7 @@ class AllMatchCombinatorDelegateTest {
     // --- cancel propagation ---
 
     @Test
-    void allMatch_cancelPropagatesToAll() {
+    void allMatchCancelPropagatesToAll() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
         when(r1.getStepName()).thenReturn("stepA");
@@ -178,7 +177,7 @@ class AllMatchCombinatorDelegateTest {
     }
 
     @Test
-    void allMatch_cancelWithReasonPropagatesToAll() {
+    void allMatchCancelWithReasonPropagatesToAll() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
         when(r1.getStepName()).thenReturn("stepA");
@@ -195,7 +194,7 @@ class AllMatchCombinatorDelegateTest {
     // --- Step name format ---
 
     @Test
-    void allMatch_stepNameFormat() {
+    void allMatchStepNameFormat() {
         var r1 = WorkflowStepResults.completed("stepA", null, TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", null, TestEventConverter.INSTANCE);
 
@@ -207,7 +206,7 @@ class AllMatchCombinatorDelegateTest {
     // --- Event ordering determines violator ---
 
     @Test
-    void allMatch_eventOrderDeterminesViolator() {
+    void allMatchEventOrderDeterminesViolator() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
 
@@ -221,9 +220,9 @@ class AllMatchCombinatorDelegateTest {
         when(r2.success()).thenReturn(false);
         when(r2.failure()).thenReturn(true);
 
-        // Event-sourced state says stepB failed first
-        when(workflowState.firstCompletedAmong(Set.of("stepA", "stepB")))
-                .thenReturn(Optional.of("stepB"));
+        // Event-sourced state says stepB failed first.
+        givenTerminalStep("stepA", Instant.ofEpochMilli(2));
+        givenTerminalStep("stepB", Instant.ofEpochMilli(1));
 
         var result = new AllMatchCombinatorDelegate(workflowExecution).allMatch(WorkflowStepResult::success, r1, r2);
 
@@ -234,7 +233,7 @@ class AllMatchCombinatorDelegateTest {
     // --- matched() / unmatched() ---
 
     @Test
-    void allMatch_matched_returnsSuccessfulSteps() {
+    void allMatchMatchedReturnsSuccessfulSteps() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
@@ -246,7 +245,7 @@ class AllMatchCombinatorDelegateTest {
     }
 
     @Test
-    void allMatch_unmatched_returnsViolatorOnShortCircuit() {
+    void allMatchUnmatchedReturnsViolatorOnShortCircuit() {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
         var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
@@ -259,7 +258,7 @@ class AllMatchCombinatorDelegateTest {
     }
 
     @Test
-    void allMatch_unmatched_emptyWhenAllMatch() {
+    void allMatchUnmatchedEmptyWhenAllMatch() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
@@ -269,7 +268,7 @@ class AllMatchCombinatorDelegateTest {
     }
 
     @Test
-    void allMatch_unmatched_includesNonCompletedResults() {
+    void allMatchUnmatchedIncludesNonCompletedResults() {
         var r1 = WorkflowStepResults.failed("failingStep", new RuntimeException("boom"));
         var r2 = mock(WorkflowStepResult.class);
         when(r2.getStepName()).thenReturn("slowStep");
@@ -286,7 +285,7 @@ class AllMatchCombinatorDelegateTest {
     }
 
     @Test
-    void allMatch_unmatched_includesViolatorAndRunningStep() {
+    void allMatchUnmatchedIncludesViolatorAndRunningStep() {
         var r1 = WorkflowStepResults.completed("successStep", "ok", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.failed("failingStep", new RuntimeException("boom"));
         var r3 = mock(WorkflowStepResult.class);
@@ -308,13 +307,13 @@ class AllMatchCombinatorDelegateTest {
     }
 
     @Test
-    void allMatch_categoriesSortedByEventSourcedTimestamp() {
+    void allMatchCategoriesSortedByEventSourcedTimestamp() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
-        // Event-sourced order: stepB before stepA
-        when(workflowState.sortedCompletedAmong(Set.of("stepA", "stepB")))
-                .thenReturn(List.of("stepB", "stepA"));
+        // Event-sourced order: stepB before stepA.
+        givenTerminalStep("stepA", Instant.ofEpochMilli(2));
+        givenTerminalStep("stepB", Instant.ofEpochMilli(1));
 
         var result = new AllMatchCombinatorDelegate(workflowExecution).allMatch(WorkflowStepResult::success, r1, r2);
 

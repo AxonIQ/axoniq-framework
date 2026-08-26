@@ -20,12 +20,11 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import org.junit.jupiter.api.*;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -47,14 +46,16 @@ class NoneMatchCombinatorDelegateTest {
         workflowState = mock(WorkflowState.class);
         workflowExecution = mock(WorkflowExecution.class);
         when(workflowExecution.state()).thenReturn(workflowState);
-        when(workflowState.firstCompletedAmong(any())).thenReturn(Optional.empty());
-        when(workflowState.sortedCompletedAmong(any())).thenReturn(List.of());
+    }
+
+    private void givenTerminalStep(String name, Instant timestamp) {
+        when(workflowState.getStep(name)).thenReturn(WorkflowStep.completed(name, null, timestamp, null));
     }
 
     // --- All complete without match → success ---
 
     @Test
-    void noneMatch_allCompleteWithoutMatch_success() {
+    void noneMatchAllCompleteWithoutMatchSuccess() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
@@ -68,7 +69,7 @@ class NoneMatchCombinatorDelegateTest {
     }
 
     @Test
-    void noneMatch_allCompleteWithoutMatch_resultIsEmpty() {
+    void noneMatchAllCompleteWithoutMatchResultIsEmpty() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
@@ -81,7 +82,7 @@ class NoneMatchCombinatorDelegateTest {
     // --- Short-circuit on first match ---
 
     @Test
-    void noneMatch_shortCircuitsOnFirstMatch() {
+    void noneMatchShortCircuitsOnFirstMatch() {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
         var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
@@ -93,7 +94,7 @@ class NoneMatchCombinatorDelegateTest {
     }
 
     @Test
-    void noneMatch_shortCircuit_delegatesToViolator() {
+    void noneMatchShortCircuitDelegatesToViolator() {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
         var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
@@ -107,7 +108,7 @@ class NoneMatchCombinatorDelegateTest {
     // --- isCompleted behavior ---
 
     @Test
-    void noneMatch_isCompletedFalseWhileStillRunningAndNoMatch() {
+    void noneMatchIsCompletedFalseWhileStillRunningAndNoMatch() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
 
@@ -125,7 +126,7 @@ class NoneMatchCombinatorDelegateTest {
     }
 
     @Test
-    void noneMatch_isCompletedTrueOnShortCircuit() {
+    void noneMatchIsCompletedTrueOnShortCircuit() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
 
@@ -143,7 +144,7 @@ class NoneMatchCombinatorDelegateTest {
     }
 
     @Test
-    void noneMatch_isCompletedTrueWhenAllCompleteNoMatch() {
+    void noneMatchIsCompletedTrueWhenAllCompleteNoMatch() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
 
@@ -163,7 +164,7 @@ class NoneMatchCombinatorDelegateTest {
     // --- cancel propagation ---
 
     @Test
-    void noneMatch_cancelPropagatesToAll() {
+    void noneMatchCancelPropagatesToAll() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
         when(r1.getStepName()).thenReturn("stepA");
@@ -178,7 +179,7 @@ class NoneMatchCombinatorDelegateTest {
     }
 
     @Test
-    void noneMatch_cancelWithReasonPropagatesToAll() {
+    void noneMatchCancelWithReasonPropagatesToAll() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
         when(r1.getStepName()).thenReturn("stepA");
@@ -195,7 +196,7 @@ class NoneMatchCombinatorDelegateTest {
     // --- Step name format ---
 
     @Test
-    void noneMatch_stepNameFormat() {
+    void noneMatchStepNameFormat() {
         var r1 = WorkflowStepResults.completed("stepA", null, TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", null, TestEventConverter.INSTANCE);
 
@@ -207,7 +208,7 @@ class NoneMatchCombinatorDelegateTest {
     // --- Event ordering determines violator ---
 
     @Test
-    void noneMatch_eventOrderDeterminesViolator() {
+    void noneMatchEventOrderDeterminesViolator() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
 
@@ -221,9 +222,9 @@ class NoneMatchCombinatorDelegateTest {
         when(r2.failure()).thenReturn(true);
         when(r2.success()).thenReturn(false);
 
-        // Event-sourced state says stepB failed first
-        when(workflowState.firstCompletedAmong(Set.of("stepA", "stepB")))
-                .thenReturn(Optional.of("stepB"));
+        // Event-sourced state says stepB failed first.
+        givenTerminalStep("stepA", Instant.ofEpochMilli(2));
+        givenTerminalStep("stepB", Instant.ofEpochMilli(1));
 
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
@@ -234,7 +235,7 @@ class NoneMatchCombinatorDelegateTest {
     // --- matched() / unmatched() ---
 
     @Test
-    void noneMatch_matched_returnsViolators() {
+    void noneMatchMatchedReturnsViolators() {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
         var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
@@ -247,7 +248,7 @@ class NoneMatchCombinatorDelegateTest {
     }
 
     @Test
-    void noneMatch_unmatched_returnsCleanResults() {
+    void noneMatchUnmatchedReturnsCleanResults() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
@@ -259,7 +260,7 @@ class NoneMatchCombinatorDelegateTest {
     }
 
     @Test
-    void noneMatch_matched_emptyWhenNoneMatched() {
+    void noneMatchMatchedEmptyWhenNoneMatched() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
@@ -269,7 +270,7 @@ class NoneMatchCombinatorDelegateTest {
     }
 
     @Test
-    void noneMatch_unmatched_includesNonCompletedResults() {
+    void noneMatchUnmatchedIncludesNonCompletedResults() {
         var r1 = WorkflowStepResults.failed("failingStep", new RuntimeException("boom"));
         var r2 = mock(WorkflowStepResult.class);
         when(r2.getStepName()).thenReturn("slowStep");
@@ -285,7 +286,7 @@ class NoneMatchCombinatorDelegateTest {
     }
 
     @Test
-    void noneMatch_unmatched_includesNotYetCompletedFailure() {
+    void noneMatchUnmatchedIncludesNotYetCompletedFailure() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
 
@@ -299,8 +300,7 @@ class NoneMatchCombinatorDelegateTest {
         when(r2.isCompleted()).thenReturn(false);
         when(r2.failure()).thenReturn(true);
 
-        when(workflowState.sortedCompletedAmong(Set.of("failingStep1")))
-                .thenReturn(List.of("failingStep1"));
+        givenTerminalStep("failingStep1", Instant.ofEpochMilli(1));
 
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 
@@ -313,13 +313,13 @@ class NoneMatchCombinatorDelegateTest {
     }
 
     @Test
-    void noneMatch_categoriesSortedByTimestamp() {
+    void noneMatchCategoriesSortedByTimestamp() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
-        // Event-sourced order: stepB before stepA
-        when(workflowState.sortedCompletedAmong(Set.of("stepA", "stepB")))
-                .thenReturn(List.of("stepB", "stepA"));
+        // Event-sourced order: stepB before stepA.
+        givenTerminalStep("stepA", Instant.ofEpochMilli(2));
+        givenTerminalStep("stepB", Instant.ofEpochMilli(1));
 
         var result = new NoneMatchCombinatorDelegate(workflowExecution).noneMatch(WorkflowStepResult::failure, r1, r2);
 

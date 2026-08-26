@@ -183,9 +183,9 @@ public void execute(SimpleWorkflowContext ctx) {
 ----
 
 *Returns a boolean.* `true` iff the workflow has committed to (or is past) `newVersion` for this
-`changeId`; `false` if it stays on the legacy branch. The boolean is read from state which is sourced from
-the recorded migration step when one exists, otherwise from `state.workflowDefinitionVersion()` (driven by the
-started event's `MessageType.version()`).
+`changeId`; `false` if it stays on the legacy branch. Internally, `WorkflowState.effectiveVersionFor(changeId)`
+obtains this from the recorded migration step when one exists, otherwise from `state.workflowDefinitionId().version()`
+(driven by the started event's `MessageType.version()`).
 
 *Versions are semver strings,* compared by `Version`. Downgrades
 (requested `<` current, no recorded step) raise `IllegalArgumentException`. Same-version requests

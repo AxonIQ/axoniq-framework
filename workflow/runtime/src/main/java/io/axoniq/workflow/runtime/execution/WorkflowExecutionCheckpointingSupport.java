@@ -20,6 +20,7 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution.CheckpointWorkStateListener;
+import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
@@ -98,7 +99,8 @@ import static java.util.Objects.requireNonNull;
  * @author Steven van Beelen
  * @since 1.0.0
  */
-@Internal final class WorkflowExecutionCheckpointingSupport {
+@Internal
+final class WorkflowExecutionCheckpointingSupport {
 
     private static final Runnable NO_OP = () -> {
     };
@@ -290,6 +292,32 @@ import static java.util.Objects.requireNonNull;
         } else {
             checkpointWorkStateListener.onMarkedSafe();
         }
+    }
+
+    /**
+     * Indicates whether the given queued task is a checkpoint barrier owned by this support instance.
+     *
+     * @param task queued workflow task to inspect
+     * @return {@code true} if the task is a checkpoint barrier
+     */
+    boolean isCheckpointLatch(@Nonnull Consumer<WorkflowExecution> task) {
+        return task instanceof CheckpointLatch;
+    }
+
+    /**
+     * Completes any checkpoint callbacks whose latches cannot be consumed because the workflow driver has stopped.
+     * <p>
+     * Once the driver is no longer executable, no further queue work can make checkpoint advancement unsafe. Releasing
+     * the callbacks prevents a checkpoint waiter from being stranded by terminal cleanup.
+     */
+    void completePendingCheckpointLatch() {
+        Runnable callback;
+        synchronized (this) {
+            checkpointWorkUnsafe = false;
+            callback = latchCallback;
+            latchCallback = NO_OP;
+        }
+        callback.run();
     }
 
     /**

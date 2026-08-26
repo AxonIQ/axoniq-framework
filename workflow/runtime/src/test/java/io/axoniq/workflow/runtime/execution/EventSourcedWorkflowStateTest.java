@@ -37,6 +37,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 import static io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer.NAME;
@@ -248,7 +249,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void seededInitialWorkflowVersion_isReflectedByCurrentWorkflowVersion() {
+    void seededInitialWorkflowVersionIsReflectedByCurrentWorkflowVersion() {
         // Seed state with the workflow definition's configured version so that, when SimpleWorkflowExecution
         // constructs the STARTED event via startedWorkflow(...), the event's MessageType.version() reflects
         // the configured version (not the implicit "0.0.1" default).
@@ -257,11 +258,11 @@ class EventSourcedWorkflowStateTest {
                                                    new MessageType(new QualifiedName("OrderWorkflow"), "1.2.3"),
                                                    mock(WorkflowContext.class),
                                                    Map.of());
-        assertThat(seeded.workflowDefinitionVersion()).isEqualTo("1.2.3");
+        assertThat(seeded.workflowDefinitionId().version()).isEqualTo("1.2.3");
     }
 
     @Test
-    void startedEventOverridesSeededVersion_onReplayOfOlderInstance() {
+    void startedEventOverridesSeededVersionOnReplayOfOlderInstance() {
         // For replays, the workflow may have been started with the latest config (e.g. "2.0.0") but the
         // started event in history carries the original version it was launched under (e.g. "1.0.0").
         // evolve() must adopt the started event's MessageType.version() so resolveVersionedDefinition can
@@ -281,34 +282,34 @@ class EventSourcedWorkflowStateTest {
 
         seeded.evolve(started, processingContext);
 
-        assertThat(seeded.workflowDefinitionVersion()).isEqualTo("1.0.0");
+        assertThat(seeded.workflowDefinitionId().version()).isEqualTo("1.0.0");
     }
 
     @Test
-    void version_returnsCurrentWorkflowVersion_whenNoMarkerRecorded() {
+    void versionReturnsCurrentWorkflowVersionWhenNoMarkerRecorded() {
         // Default before any STARTED event applies is MessageType.DEFAULT_VERSION ("0.0.1").
-        assertThat(state.currentWorkflowVersion("payment-redesign"))
+        assertThat(state.versionFor("payment-redesign"))
                 .isEqualTo(MessageType.DEFAULT_VERSION);
         assertThat(state.hasVersionMigrationStep("payment-redesign")).isFalse();
     }
 
     @Test
-    void evolve_migrationStep_populatesMap() {
+    void evolveMigrationStepPopulatesMap() {
         Metadata metadata = MetadataUtils.createVersionMigrationStep("workflowId", "payment-redesign", "0.0.2");
         EventMessage eventMessage = mockMigrationStepEvent(metadata);
 
         state.evolve(eventMessage, processingContext);
 
         assertThat(state.hasVersionMigrationStep("payment-redesign")).isTrue();
-        assertThat(state.currentWorkflowVersion("payment-redesign")).isEqualTo("0.0.2");
+        assertThat(state.versionFor("payment-redesign")).isEqualTo("0.0.2");
         // Migration also bumps the workflow's current version (new > previous).
-        assertThat(state.workflowDefinitionVersion()).isEqualTo("0.0.2");
+        assertThat(state.workflowDefinitionId().version()).isEqualTo("0.0.2");
         // Migration is registered as a real step under the changeId as stepName.
         assertThat(state.containsStep("payment-redesign")).isTrue();
     }
 
     @Test
-    void evolve_secondMarkerForSameChangeId_isIgnored() {
+    void evolveSecondMarkerForSameChangeIdIsIgnored() {
         Metadata first = MetadataUtils.createVersionMigrationStep("workflowId", "shipping-redesign", "0.0.3");
         Metadata second = MetadataUtils.createVersionMigrationStep("workflowId", "shipping-redesign", "0.0.7");
 
@@ -316,19 +317,66 @@ class EventSourcedWorkflowStateTest {
         state.evolve(mockMigrationStepEvent(second), processingContext);
 
         // First-writer wins - replay must stay deterministic.
-        assertThat(state.currentWorkflowVersion("shipping-redesign")).isEqualTo("0.0.3");
+        assertThat(state.versionFor("shipping-redesign")).isEqualTo("0.0.3");
     }
 
     @Test
-    void evolve_independentChangeIds_areTrackedSeparately() {
+    void evolveIndependentChangeIdsAreTrackedSeparately() {
         Metadata a = MetadataUtils.createVersionMigrationStep("workflowId", "change-a", "0.0.2");
         Metadata b = MetadataUtils.createVersionMigrationStep("workflowId", "change-b", "0.0.5");
 
         state.evolve(mockMigrationStepEvent(a), processingContext);
         state.evolve(mockMigrationStepEvent(b), processingContext);
 
-        assertThat(state.currentWorkflowVersion("change-a")).isEqualTo("0.0.2");
-        assertThat(state.currentWorkflowVersion("change-b")).isEqualTo("0.0.5");
+        assertThat(state.versionFor("change-a")).isEqualTo("0.0.2");
+        assertThat(state.versionFor("change-b")).isEqualTo("0.0.5");
+    }
+
+    @Test
+    void isStepTerminalReturnsFalseWhenStepNotContained() {
+        assertThat(state.isStepTerminal("nonExistent")).isFalse();
+        assertThat(state.isStepActive("nonExistent")).isFalse();
+    }
+
+    @Test
+    void isStepTerminalReturnsFalseWhenStepIsStartedOrRetrying() {
+        String startedStep = "startedStep";
+        EventMessage started = mock(EventMessage.class);
+        when(started.metadata()).thenReturn(MetadataUtils.create("wf-1", startedStep, StepStatus.STARTED));
+        when(started.timestamp()).thenReturn(Instant.now());
+        when(started.payloadAs(Object.class)).thenReturn(Map.of());
+        state.evolve(started, processingContext);
+
+        assertThat(state.isStepTerminal(startedStep)).isFalse();
+        assertThat(state.isStepActive(startedStep)).isTrue();
+
+        String retryingStep = "retryingStep";
+        EventMessage retrying = mock(EventMessage.class);
+        when(retrying.metadata()).thenReturn(MetadataUtils.create("wf-1", retryingStep, StepStatus.RETRYING));
+        when(retrying.timestamp()).thenReturn(Instant.now());
+        when(retrying.payloadAs(StepRetryInfo.class)).thenReturn(new StepRetryInfo(1, 100, WorkflowError.from(new RuntimeException("retry"))));
+        state.evolve(retrying, processingContext);
+
+        assertThat(state.isStepTerminal(retryingStep)).isFalse();
+        assertThat(state.isStepActive(retryingStep)).isTrue();
+    }
+
+    @Test
+    void isStepTerminalReturnsTrueWhenStepIsTerminal() {
+        for (StepStatus terminalStatus : List.of(StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.TIMED_OUT, StepStatus.CANCELLED)) {
+            String stepName = "step-" + terminalStatus;
+            EventMessage eventMessage = mock(EventMessage.class);
+            when(eventMessage.metadata()).thenReturn(MetadataUtils.create("wf-1", stepName, terminalStatus));
+            when(eventMessage.timestamp()).thenReturn(Instant.now());
+            when(eventMessage.payloadAs(Object.class)).thenReturn(Map.of());
+            if (terminalStatus == StepStatus.FAILED) {
+                when(eventMessage.payloadAs(WorkflowError.class)).thenReturn(WorkflowError.from(new RuntimeException("err")));
+            }
+            state.evolve(eventMessage, processingContext);
+
+            assertThat(state.isStepTerminal(stepName)).isTrue();
+            assertThat(state.isStepActive(stepName)).isFalse();
+        }
     }
 
     private EventMessage mockMigrationStepEvent(Metadata metadata) {

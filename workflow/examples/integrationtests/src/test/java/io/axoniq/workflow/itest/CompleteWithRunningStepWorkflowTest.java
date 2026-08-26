@@ -41,9 +41,11 @@ import static io.axoniq.workflow.dsl.api.Payload.payload;
 import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 
 /**
- * Issue #127: when a workflow reaches any terminal state while an async step is still running, the engine must cancel
- * that step so its terminal event is written before the workflow itself transitions. Covers all four paths in
- * {@code SimpleWorkflowExecution}: normal completion, {@code ctx.fail(...)}, and {@code ctx.cancel(...)}.
+ * Issue #224: when a workflow reaches any terminal state while an async step is still running, the engine publishes
+ * only the workflow-level terminal event and <b>interrupts</b> the running step (no per-step terminal event); the step
+ * is left in its last recorded {@code STARTED} state. Covers all four paths in {@code SimpleWorkflowExecution}: normal
+ * completion, {@code ctx.fail(...)}, and {@code ctx.cancel(...)}. (Single-step cancel is the way to get a step
+ * terminal + compensation — see {@code CancelStepWorkflowTest}.)
  *
  * @author Stefan Dragisic
  * @since 1.0.0
@@ -61,22 +63,22 @@ class CompleteWithRunningStepWorkflowTest extends AbstractWorkflowTestBase<Simpl
     }
 
     @Test
-    void runningStepIsCancelledOnCompletion() {
-        runAndAssertBackgroundCancelled("user-cr-1", "vip", WorkflowStatus.COMPLETED);
+    void runningStepIsInterruptedAndLeftStartedOnCompletion() {
+        runAndAssertBackgroundLeftStarted("user-cr-1", "vip", WorkflowStatus.COMPLETED);
     }
 
     @Test
-    void runningStepIsCancelledOnFail() {
-        runAndAssertBackgroundCancelled("user-cr-2", "FAIL", WorkflowStatus.FAILED);
+    void runningStepIsInterruptedAndLeftStartedOnFail() {
+        runAndAssertBackgroundLeftStarted("user-cr-2", "FAIL", WorkflowStatus.FAILED);
     }
 
     @Test
-    void runningStepIsCancelledOnExplicitCancel() {
-        runAndAssertBackgroundCancelled("user-cr-3", "CANCEL", WorkflowStatus.CANCELLED);
+    void runningStepIsInterruptedAndLeftStartedOnExplicitCancel() {
+        runAndAssertBackgroundLeftStarted("user-cr-3", "CANCEL", WorkflowStatus.CANCELLED);
     }
 
-    private void runAndAssertBackgroundCancelled(String userId, String status,
-                                                 WorkflowStatus expectedWorkflowStatus) {
+    private void runAndAssertBackgroundLeftStarted(String userId, String status,
+                                                   WorkflowStatus expectedWorkflowStatus) {
         delayedPublisher.addSchedules(List.of(
                 ofMillis(500, new RegistrationReceivedEvent(userId, userId + "@test.com", status))
         ));
@@ -85,8 +87,10 @@ class CompleteWithRunningStepWorkflowTest extends AbstractWorkflowTestBase<Simpl
         testDriver.historyMatches(h -> h.state().workflowStatus() == expectedWorkflowStatus);
         testDriver.noExecution();
         testDriver.testingState().hasSteps("background");
+        // New semantics (issue #224): whole-workflow terminal interrupts the still-running step (no per-step terminal
+        // event) and leaves it in its last recorded STARTED state — it is NOT driven to CANCELLED.
         testDriver.testingState().stepMatches(
-                step -> step.stepName().equals("background") && step.status() == StepStatus.CANCELLED
+                step -> step.stepName().equals("background") && step.status() == StepStatus.STARTED
         );
     }
 

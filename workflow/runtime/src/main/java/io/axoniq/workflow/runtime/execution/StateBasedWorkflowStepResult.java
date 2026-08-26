@@ -21,8 +21,10 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepFailedException;
+import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
@@ -30,8 +32,10 @@ import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.lang.reflect.Type;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 
 import static io.axoniq.workflow.runtime.api.execution.status.StepStatus.*;
 import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.PAYLOAD_TYPE;
@@ -49,12 +53,25 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     private final String stepName;
     private final Callable<Void> stateChangeTrigger;
+    private final Consumer<Throwable> cancellation;
     private final WorkflowExecution workflowExecution;
 
-    public StateBasedWorkflowStepResult(String stepName, Callable<Void> stateChangeTrigger, WorkflowExecution state) {
-        this.stepName = stepName;
-        this.stateChangeTrigger = stateChangeTrigger;
-        this.workflowExecution = state;
+    /**
+     * Creates a result backed by the current workflow execution state.
+     *
+     * @param stepName           step represented by this result
+     * @param stateChangeTrigger operation that waits for the next state change
+     * @param cancellation       operation that requests cancellation of this step
+     * @param state              workflow execution providing the state
+     */
+    public StateBasedWorkflowStepResult(@Nonnull String stepName,
+                                        @Nonnull Callable<Void> stateChangeTrigger,
+                                        @Nonnull Consumer<Throwable> cancellation,
+                                        @Nonnull WorkflowExecution state) {
+        this.stepName = Objects.requireNonNull(stepName, "Step name must not be null");
+        this.stateChangeTrigger = Objects.requireNonNull(stateChangeTrigger, "State change trigger must not be null");
+        this.cancellation = Objects.requireNonNull(cancellation, "Cancellation operation must not be null");
+        this.workflowExecution = Objects.requireNonNull(state, "Workflow execution must not be null");
     }
 
     @Override
@@ -65,7 +82,7 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     @Override
     public boolean isCompleted() {
-        return workflowExecution.state().getStep(stepName).status().isTerminal();
+        return WorkflowStateUtils.isStepTerminal(workflowExecution.state(), stepName);
     }
 
     @Override
@@ -107,35 +124,39 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
     @Override
     public boolean success() {
         await();
-        return COMPLETED == workflowExecution.state().getStep(stepName).status();
+        return WorkflowStateUtils.isStepStatus(workflowExecution.state(), stepName, COMPLETED);
     }
 
     @Override
     public boolean failure() {
         await();
-        return FAILED == workflowExecution.state().getStep(stepName).status();
+        return WorkflowStateUtils.isStepStatus(workflowExecution.state(), stepName, FAILED);
     }
 
     @Override
     public boolean canceled() {
         await();
-        return CANCELLED == workflowExecution.state().getStep(stepName).status();
+        return WorkflowStateUtils.isStepStatus(workflowExecution.state(), stepName, CANCELLED);
     }
 
     @Override
     public boolean timeout() {
         await();
-        return TIMED_OUT == workflowExecution.state().getStep(stepName).status();
+        return WorkflowStateUtils.isStepStatus(workflowExecution.state(), stepName, TIMED_OUT);
     }
 
     @Override
     public void await() {
         do {
-            if (workflowExecution.state().getStep(stepName).status().isTerminal()) {
+            if (WorkflowStateUtils.isStepTerminal(workflowExecution.state(), stepName)) {
                 return;
             }
             try {
                 stateChangeTrigger.call();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new StepInterruptedException("Step wait interrupted because the workflow reached a terminal state",
+                                                   e);
             } catch (Exception e) {
                 throw new RuntimeException(e); // FIXME -> replace callable with a better fit.
             }
@@ -144,11 +165,11 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
 
     @Override
     public void cancel() {
-        workflowExecution.cancelRunningStep(stepName, new StepCancellationException("Step cancelled"));
+        cancellation.accept(new StepCancellationException("Step cancelled"));
     }
 
     @Override
     public void cancel(@Nonnull String reason) {
-        workflowExecution.cancelRunningStep(stepName, new StepCancellationException(reason));
+        cancellation.accept(new StepCancellationException(reason));
     }
 }

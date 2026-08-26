@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
  * over the repository state.
  *
  * @author Stefan Dragisic
- * @since 1.1.0
+ * @since 0.2.0
  */
 @Internal
 public final class NewWorkflowInstanceRouting {
@@ -100,7 +100,7 @@ public final class NewWorkflowInstanceRouting {
         if (existing.isEmpty()) {
             return baseWorkflowId;
         }
-        var existingVersion = existing.get().state().workflowDefinitionVersion();
+        var existingVersion = existing.get().state().workflowDefinitionId().version();
         if (existingVersion.equals(newInstanceVersion)) {
             logger.warn(
                     "A workflow with id '{}' is already running at version '{}'; ignoring new start request "

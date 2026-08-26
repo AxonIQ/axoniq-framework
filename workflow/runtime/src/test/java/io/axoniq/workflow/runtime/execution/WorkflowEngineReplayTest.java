@@ -90,6 +90,7 @@ class WorkflowEngineReplayTest {
         workflowEngine = new WorkflowEngine(
                 workflowConfigurationRegistry,
                 workflowExecutionRepository,
+                new WorkflowCancellationService(),
                 workflowStore,
                 startupUnitOfWorkFactory
         );
@@ -138,7 +139,7 @@ class WorkflowEngineReplayTest {
         when(terminalContext.processingContext()).thenReturn(terminalPC);
         when(terminalPC.whenComplete(any())).thenReturn(terminalPC);
 
-        WorkflowExecution runningExecution = mock(WorkflowExecution.class);
+        WorkflowExecution runningExecution = cancellationCapableExecution();
         WorkflowState runningState = mock(WorkflowState.class);
         WorkflowContext runningContext = mock(WorkflowContext.class);
         when(runningExecution.workflowId()).thenReturn("runningId");
@@ -307,7 +308,7 @@ class WorkflowEngineReplayTest {
         WorkflowExecution existing = mock(WorkflowExecution.class);
         WorkflowState existingState = mock(WorkflowState.class);
         when(existing.state()).thenReturn(existingState);
-        when(existingState.workflowDefinitionVersion()).thenReturn("1.0.0");
+        when(existingState.workflowDefinitionId()).thenReturn(new MessageType("TestWorkflow", "1.0.0"));
         when(existingState.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(baseId, () -> existing);
         clearInvocations(workflowExecutionRepository);
@@ -323,7 +324,9 @@ class WorkflowEngineReplayTest {
         when(contextFactory.createContext(anyMap(), anyString(), any(), any())).thenReturn(workflowContext);
         when(v2.workflowContextFactory()).thenReturn(contextFactory);
         var executionFactory = mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory.class);
-        when(executionFactory.create(any())).thenReturn(mock(WorkflowExecution.class));
+        var execution = cancellationCapableExecution();
+        when(execution.workflowId()).thenReturn(baseId + "#2.0.0");
+        when(executionFactory.create(any())).thenReturn(execution);
         when(v2.workflowExecutionFactory()).thenReturn(executionFactory);
 
         QualifiedName eventName = new QualifiedName("OrderPlaced");
@@ -349,14 +352,14 @@ class WorkflowEngineReplayTest {
     }
 
     @Test
-    void sameVersionDuplicateStart_isRejected() {
+    void sameVersionDuplicateStartIsRejected() {
         String workflowId = "order-1";
 
         // Pre-register a running v2.0.0 workflow under "order-1".
         WorkflowExecution existing = mock(WorkflowExecution.class);
         WorkflowState existingState = mock(WorkflowState.class);
         when(existing.state()).thenReturn(existingState);
-        when(existingState.workflowDefinitionVersion()).thenReturn("2.0.0");
+        when(existingState.workflowDefinitionId()).thenReturn(new MessageType("TestWorkflow", "2.0.0"));
         when(existingState.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(workflowId, () -> existing);
         clearInvocations(workflowExecutionRepository);
@@ -391,7 +394,7 @@ class WorkflowEngineReplayTest {
         WorkflowExecution existing = mock(WorkflowExecution.class);
         WorkflowState existingState = mock(WorkflowState.class);
         when(existing.state()).thenReturn(existingState);
-        when(existingState.workflowDefinitionVersion()).thenReturn("1.0.0");
+        when(existingState.workflowDefinitionId()).thenReturn(new MessageType("TestWorkflow", "1.0.0"));
         when(existingState.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(workflowId, () -> existing);
         clearInvocations(workflowExecutionRepository);
@@ -461,7 +464,7 @@ class WorkflowEngineReplayTest {
         });
         when(executionFactory.create(any())).thenAnswer(invocation -> {
             WorkflowContext workflowContext = invocation.getArgument(0);
-            var execution = mock(WorkflowExecution.class);
+            var execution = cancellationCapableExecution();
             var state = mock(WorkflowState.class);
             when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
             when(execution.workflowId()).thenReturn(workflowIdsByContext.get(workflowContext));
@@ -764,7 +767,7 @@ class WorkflowEngineReplayTest {
     }
 
     @Test
-    void crossVersionStart_disambiguatedIdAlsoTaken_isRejected() {
+    void crossVersionStartDisambiguatedIdAlsoTakenIsRejected() {
         // Both the base id and the disambiguated id are already occupied.
         String baseId = "order-1";
         String disambiguatedId = baseId + "#2.0.0";
@@ -772,14 +775,14 @@ class WorkflowEngineReplayTest {
         WorkflowExecution v1Existing = mock(WorkflowExecution.class);
         WorkflowState v1State = mock(WorkflowState.class);
         when(v1Existing.state()).thenReturn(v1State);
-        when(v1State.workflowDefinitionVersion()).thenReturn("1.0.0");
+        when(v1State.workflowDefinitionId()).thenReturn(new MessageType("TestWorkflow", "1.0.0"));
         when(v1State.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(baseId, () -> v1Existing);
 
         WorkflowExecution v2Existing = mock(WorkflowExecution.class);
         WorkflowState v2State = mock(WorkflowState.class);
         when(v2Existing.state()).thenReturn(v2State);
-        when(v2State.workflowDefinitionVersion()).thenReturn("2.0.0");
+        when(v2State.workflowDefinitionId()).thenReturn(new MessageType("TestWorkflow", "2.0.0"));
         when(v2State.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(disambiguatedId, () -> v2Existing);
         clearInvocations(workflowExecutionRepository);
@@ -803,6 +806,13 @@ class WorkflowEngineReplayTest {
 
         // Even the disambiguated id is taken - nothing new is started.
         verify(workflowExecutionRepository, never()).save(anyString(), any());
+    }
+
+    private WorkflowExecution cancellationCapableExecution() {
+        var execution = mock(SimpleWorkflowExecution.class);
+        var cancellation = mock(WorkflowCancellation.class);
+        when(execution.workflowCancellation()).thenReturn(cancellation);
+        return execution;
     }
 
     private static void assertSameToken(@Nullable TrackingToken actual, @Nullable TrackingToken expected) {

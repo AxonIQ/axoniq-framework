@@ -25,9 +25,11 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryContext;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
+import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -37,6 +39,7 @@ import org.axonframework.messaging.eventhandling.EventSink;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
 /**
@@ -59,17 +62,22 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
      * @param delegate executoion delegate.
      * @param workflowContext workflow context.
      * @param workflowExecution workflow execution.
+     * @param runningSteps running step registry
+     * @param reachedSteps reached steps tracker
      * @param parentEventNameCustomizer parent event name customizer.
      * @param clock clock for time calculations.
      * @param unitOfWorkFactory unit of work factory for creation of new processing contexts.
      * @param eventSink event sink for event publications.
      * @param executor executor to offload execution tasks from workflow thread.
+     * @param timeoutScheduler scheduler for workflow step timeouts
      */
     @Internal
     public RetryableExecuteDelegate(
             @Nonnull ExecuteDelegate delegate,
             @Nonnull WorkflowContext workflowContext,
             @Nonnull WorkflowExecution workflowExecution,
+            @Nonnull RunningSteps runningSteps,
+            @Nonnull ReachedSteps reachedSteps,
             @Nonnull EventNameCustomizer parentEventNameCustomizer,
             @Nonnull Clock clock,
             @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -77,8 +85,17 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             @Nonnull ExecutorService executor,
             @Nonnull WorkflowScheduler timeoutScheduler
     ) {
-        super(workflowContext, workflowExecution, parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink,
-              executor, timeoutScheduler);
+        super(workflowContext,
+              workflowExecution,
+              runningSteps,
+              reachedSteps,
+              parentEventNameCustomizer,
+              clock,
+              unitOfWorkFactory,
+              eventSink,
+              executor,
+              timeoutScheduler
+        );
         this.delegate = delegate;
     }
 
@@ -98,7 +115,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             if (step.status() == StepStatus.RETRYING && step.result() instanceof StepRetryInfo info) {
                 Instant retryReadyAt = computeRetryReadyAt(retryPolicy, info.attempt(), step.timestamp());
                 scheduleRetryAttempt(command, info.attempt() + 1, retryReadyAt);
-                return stateBased(stepName, workflowExecution);
+                return stateBased(stepName, command.eventNameCustomizer(), workflowExecution);
             }
         }
 
@@ -113,7 +130,12 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
                 handleAttemptFailure(command, name, error, false, enc, attempt);
 
         TimeoutHandler timeoutHandler = (name, enc) ->
-                handleAttemptFailure(command, name, null, true, enc, attempt);
+                handleAttemptFailure(command,
+                                     name,
+                                     new StepTimedOutException("Step '" + name + "' timed out"),
+                                     true,
+                                     enc,
+                                     attempt);
 
         return delegate.execute(command, failureHandler, timeoutHandler);
     }
@@ -122,7 +144,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
     private void handleAttemptFailure(
             @Nonnull ExecutePrimitive.ExecuteCommand command,
             @Nonnull String stepName,
-            @Nullable Throwable error,
+            @Nonnull Throwable error,
             boolean isTimeout,
             @Nonnull EventNameCustomizer eventNameCustomizer,
             int attempt
@@ -138,11 +160,12 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             workflowExecution.appendTask(i -> retrying(stepName, retryInfo, eventNameCustomizer));
             try {
                 workflowExecution.awaitStateChange(s -> {
-                    var st = s.getStep(stepName);
-                    if (st.status().isTerminal()) {
+                    if (WorkflowStateUtils.isStepTerminal(s, stepName)) {
                         return true;
                     }
-                    return st.status() == StepStatus.RETRYING
+                    var st = s.getStep(stepName);
+                    return st != null
+                            && st.status() == StepStatus.RETRYING
                             && st.result() instanceof StepRetryInfo r
                             && r.attempt() == attempt;
                 });
@@ -150,7 +173,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
                 Thread.currentThread().interrupt();
                 return;
             }
-            if (workflowExecution.state().getStep(stepName).status().isTerminal()) {
+            if (WorkflowStateUtils.isStepTerminal(workflowExecution.state(), stepName)) {
                 return;
             }
 
@@ -188,30 +211,36 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
                 : Duration.between(Instant.now(clock), retryReadyAt);
 
         if (delay.isNegative() || delay.isZero()) {
-            // No backoff or already elapsed (crash recovery) — launch on next task cycle
-            workflowExecution.appendTask(i -> {
-                if (!i.state().getStep(stepName).status().isTerminal()) {
+            // No backoff or already elapsed (crash recovery). Park the (near-instant) retry gap on a cancellable
+            // future, exactly like the delayed branch below, so a step cancellation or a whole-workflow terminal
+            // interrupt completes it exceptionally (the parked-step registration deregisters it) instead of launching
+            // the next attempt. The launch is fired by the future's normal completion and is additionally gated on the
+            // active step and a non-terminal workflow (cheap defensive guards).
+            var gapFuture = new CompletableFuture<Void>();
+            gapFuture.thenRun(() -> workflowExecution.appendTask(i -> {
+                if (WorkflowStateUtils.isStepActive(i.state(), stepName)
+                        && !i.state().workflowStatus().isTerminal()) {
                     launchWithRetry(command, nextAttempt);
                 }
+            }));
+            registerParkedStep(stepName, gapFuture, command.eventNameCustomizer(), () -> {
+                // nothing to clean up here
             });
+            workflowExecution.appendTask(i -> gapFuture.complete(null));
         } else {
-            var backoffTask = timeoutScheduler.schedule(
-                    retryReadyAt,
-                    () -> {
-                        workflowExecution.removeRunningStep(stepName);
-                        workflowExecution.appendTask(i -> {
-                            if (!i.state().getStep(stepName).status().isTerminal()) {
-                                launchWithRetry(command, nextAttempt);
-                            }
-                        });
-                    }
-            );
-            var backoffFuture = backoffTask.completion();
-            backoffFuture.exceptionally(e -> {
-                // Cancelled during backoff — cancellation handled by the event flow
-                return null;
+            // The scheduler only delivers the deadline. The completion future itself represents the parked backoff
+            // phase, so cancellation makes the later deadline notification a no-op.
+            var scheduledRetry = timeoutScheduler.schedule(retryReadyAt);
+            scheduledRetry.completion().thenRun(() -> workflowExecution.appendTask(i -> {
+                if (WorkflowStateUtils.isStepActive(i.state(), stepName)
+                        && !i.state().workflowStatus().isTerminal()) {
+                    launchWithRetry(command, nextAttempt);
+                }
+            }));
+            registerParkedStep(stepName, scheduledRetry.completion(), scheduledRetry::cancel,
+                               command.eventNameCustomizer(), () -> {
+                // nothing to clean up here
             });
-            workflowExecution.registerRunningStep(stepName, backoffFuture);
         }
     }
 

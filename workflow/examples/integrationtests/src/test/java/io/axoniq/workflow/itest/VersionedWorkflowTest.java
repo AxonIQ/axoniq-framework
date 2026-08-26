@@ -56,7 +56,7 @@ class VersionedWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowConte
     }
 
     @Test
-    void freshWorkflow_recordsV2Marker_andTakesNewBranch() {
+    void freshWorkflowRecordsV2MarkerAndTakesNewBranch() {
         delayedPublisher.addSchedules(List.of(
                 ofMillis(500, new OrderPlacedEvent("order-v2-1", "customer-1"))
         ));
@@ -66,8 +66,8 @@ class VersionedWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowConte
 
         var state = testDriver.testingState().state();
         assertThat(state.hasVersionMigrationStep("payment-redesign")).isTrue();
-        assertThat(state.currentWorkflowVersion("payment-redesign")).isEqualTo("0.0.2");
-        assertThat(state.workflowDefinitionVersion()).isEqualTo("0.0.2");
+        assertThat(state.versionFor("payment-redesign")).isEqualTo("0.0.2");
+        assertThat(state.workflowDefinitionId().version()).isEqualTo("0.0.2");
         testDriver.testingState().hasSteps("reserveStock", "processPayment");
         testDriver.testingState().noStep("chargePayment");
     }

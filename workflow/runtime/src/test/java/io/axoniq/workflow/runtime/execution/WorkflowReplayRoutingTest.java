@@ -79,9 +79,9 @@ class WorkflowReplayRoutingTest {
 
     @Test
     @DisplayName("exact-match-start-config - state == start, use it")
-    void row1_exactMatchStartConfig() {
-        var start = new TestConfig(WORKFLOW, "1.0.0");
-        registry.register(EVENT, start);
+    void row1ExactMatchSpawnConfig() {
+        var spawn = new TestConfig(WORKFLOW, "1.0.0");
+        registry.register(EVENT, spawn);
 
         var picked = registry.resolveDefinitionForReplay(WORKFLOW, "wf-1", "1.0.0", start);
         assertThat(picked.workflowVersion()).isEqualTo("1.0.0");
@@ -91,7 +91,7 @@ class WorkflowReplayRoutingTest {
 
     @Test
     @DisplayName("exact-match-sibling - registry has a sibling exactly at state, use it")
-    void row2_exactMatchSibling() {
+    void row2ExactMatchSibling() {
         var v1 = new TestConfig(WORKFLOW, "1.0.0");
         var v2 = new TestConfig(WORKFLOW, "2.0.0");
         registry.register(EVENT, v1);
@@ -105,7 +105,7 @@ class WorkflowReplayRoutingTest {
 
     @Test
     @DisplayName("closest-sibling - no exact match; pick the closest registered version below state")
-    void row3_closestSibling_picksHighestBelowState() {
+    void row3ClosestSiblingPicksHighestBelowState() {
         var v1 = new TestConfig(WORKFLOW, "1.0.0");
         var v2 = new TestConfig(WORKFLOW, "2.0.0");
         registry.register(EVENT, v1);
@@ -119,7 +119,7 @@ class WorkflowReplayRoutingTest {
 
     @Test
     @DisplayName("closest-higher-sibling - nothing registered ≤ state; pick the closest above")
-    void row4_closestHigherSibling_picksLowestAboveState() {
+    void row4ClosestHigherSiblingPicksLowestAboveState() {
         var v002 = new TestConfig(WORKFLOW, "0.0.2");
         registry.register(EVENT, v002);
 
@@ -131,7 +131,7 @@ class WorkflowReplayRoutingTest {
 
     @Test
     @DisplayName("closest-higher-sibling - pick the lowest above state, not the highest")
-    void row5_closestHigherSibling_picksLowestNotHighest() {
+    void row5ClosestHigherSiblingPicksLowestNotHighest() {
         var v002 = new TestConfig(WORKFLOW, "0.0.2");
         var v005 = new TestConfig(WORKFLOW, "0.0.5");
         registry.register(EVENT, v002);
@@ -145,7 +145,7 @@ class WorkflowReplayRoutingTest {
 
     @Test
     @DisplayName("closest-higher-sibling - closest above wins even across a major boundary")
-    void row6_closestHigherSibling_crossesMajorBoundary() {
+    void row6ClosestHigherSiblingCrossesMajorBoundary() {
         var v2 = new TestConfig(WORKFLOW, "2.0.0");
         registry.register(EVENT, v2);
 
@@ -157,7 +157,7 @@ class WorkflowReplayRoutingTest {
 
     @Test
     @DisplayName("closest-sibling - one definition registered, state drifted past it via migrateVersion")
-    void row7_closestSibling_stateDriftedPastOnlyRegistered() {
+    void row7ClosestSiblingStateDriftedPastOnlyRegistered() {
         var v001 = new TestConfig(WORKFLOW, "0.0.1");
         registry.register(EVENT, v001);
 
@@ -169,7 +169,7 @@ class WorkflowReplayRoutingTest {
 
     @Test
     @DisplayName("legacy-fallback - state isn't parseable semver; fall back to start")
-    void row8_legacyFallback_whenStateIsUnparseable() {
+    void row8LegacyFallbackWhenStateIsUnparseable() {
         var start = new TestConfig(WORKFLOW, "1.0.0");
         registry.register(EVENT, start);
 
@@ -181,7 +181,7 @@ class WorkflowReplayRoutingTest {
 
     @Test
     @DisplayName("no-match-fallback - nothing registered for this workflow name; use start config + WARN")
-    void noMatchFallback_whenNothingRegisteredForThisName() {
+    void noMatchFallbackWhenNothingRegisteredForThisName() {
         // Defensive: caller passes a start config not in the registry. In normal operation this
         // does not happen (the start config is always one of the registered configs), but the
         // routing logic must still return something usable.

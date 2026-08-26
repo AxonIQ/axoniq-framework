@@ -23,6 +23,7 @@ import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
@@ -62,8 +63,10 @@ class WaitForDelegateTest {
     private EventSink eventSink;
     private ProcessingContext processingContext;
     private WaitForDelegate delegate;
+    private EventWaitConditions eventWaitConditions;
     private AtomicReference<WorkflowStep> startedStep;
-    private WorkflowScheduler workflowScheduler;
+    private ControllableWorkflowScheduler workflowScheduler;
+    private RunningSteps runningSteps;
 
     @BeforeEach
     void setUp() {
@@ -74,10 +77,8 @@ class WaitForDelegateTest {
         eventSink = mock(EventSink.class);
         processingContext = mock(ProcessingContext.class);
         startedStep = new AtomicReference<>();
-        workflowScheduler = mock(WorkflowScheduler.class);
-        var scheduledTask = mock(WorkflowScheduler.ScheduledTask.class);
-        when(scheduledTask.completion()).thenReturn(new CompletableFuture<>());
-        when(workflowScheduler.schedule(any(), any())).thenReturn(scheduledTask);
+        workflowScheduler = new ControllableWorkflowScheduler();
+        eventWaitConditions = spy(new EventWaitConditions());
         Executor executor = Runnable::run;
         EventNameCustomizer customizer = DefaultEventNameCustomizer.Builder.defaults();
 
@@ -92,7 +93,7 @@ class WaitForDelegateTest {
         when(workflowExecution.state()).thenReturn(state);
         when(workflowExecution.processingContext()).thenReturn(processingContext);
         when(workflowExecution.isRunning()).thenReturn(true);
-        when(workflowExecution.hasTasks()).thenReturn(true);
+        when(workflowExecution.hasTasks()).thenReturn(false);
         when(state.containsStep("awaitPayment")).thenAnswer(inv -> startedStep.get() != null);
         when(state.getStep("awaitPayment")).thenAnswer(inv -> startedStep.get());
 
@@ -109,6 +110,9 @@ class WaitForDelegateTest {
         delegate = new WaitForDelegate(
                 workflowContext,
                 workflowExecution,
+                runningSteps = new RunningSteps(),
+                eventWaitConditions,
+                new ReachedSteps(),
                 customizer,
                 clock,
                 unitOfWorkFactory,
@@ -141,8 +145,60 @@ class WaitForDelegateTest {
                 "associations", Set.of("payload:orderId=123", "metadata:tenantId=eu"),
                 "timeoutTime", Instant.parse("2026-07-08T10:15:00Z")
         ));
-        assertThat(eventCaptor.getValue().metadata().get("stepPrimitive")).isEqualTo("WAIT_FOR_EVENT");
-        verify(workflowExecution).registerWaitCondition(anyString(), any(EventCondition.class), any(), any());
+        verify(eventWaitConditions).add(anyString(), any(EventCondition.class), any(), any());
+    }
+
+    @Test
+    void cancellingAParkedWaitCancelsItsTimer() {
+        var condition = mock(EventCondition.class);
+        when(condition.qualifiedName()).thenReturn(new QualifiedName("io.acme.PaymentConfirmed"));
+        when(condition.associations()).thenReturn(Set.of());
+
+        delegate.waitForEvent(new PrimitiveCommands.WorkflowStepResultWaitForCommand(
+                "awaitPayment", condition, GlobalOnlyPayloadReducer.INSTANCE, Duration.ofMinutes(15),
+                DefaultEventNameCustomizer.Builder.defaults()
+        ));
+
+        assertThat(runningSteps.cancelWithCause("awaitPayment", new StepCancellationException("cancelled"))).isTrue();
+
+        assertThat(workflowScheduler.pendingTaskCount()).isZero();
+    }
+
+    @Test
+    void receivingTheAwaitedEventCancelsItsTimer() {
+        var condition = mock(EventCondition.class);
+        when(condition.qualifiedName()).thenReturn(new QualifiedName("io.acme.PaymentConfirmed"));
+        when(condition.associations()).thenReturn(Set.of());
+        var event = mock(EventMessage.class);
+        when(event.payloadAs(any(org.axonframework.common.TypeReference.class))).thenReturn(Map.of());
+
+        delegate.waitForEvent(new PrimitiveCommands.WorkflowStepResultWaitForCommand(
+                "awaitPayment", condition, GlobalOnlyPayloadReducer.INSTANCE, Duration.ofMinutes(15),
+                DefaultEventNameCustomizer.Builder.defaults()
+        ));
+
+        delegate.eventReceived(new EventWaitConditions.Awaited(
+                event, processingContext, "awaitPayment", GlobalOnlyPayloadReducer.INSTANCE,
+                DefaultEventNameCustomizer.Builder.defaults()
+        ));
+
+        assertThat(workflowScheduler.pendingTaskCount()).isZero();
+    }
+
+    @Test
+    void anAlreadyCompletedTimerIsNotLeftRegisteredAsRunning() {
+        workflowScheduler.fireDuringSchedule();
+        var condition = mock(EventCondition.class);
+        when(condition.qualifiedName()).thenReturn(new QualifiedName("io.acme.PaymentConfirmed"));
+        when(condition.associations()).thenReturn(Set.of());
+
+        delegate.waitForEvent(new PrimitiveCommands.WorkflowStepResultWaitForCommand(
+                "awaitPayment", condition, GlobalOnlyPayloadReducer.INSTANCE, Duration.ofMinutes(15),
+                DefaultEventNameCustomizer.Builder.defaults()
+        ));
+
+        assertThat(runningSteps.stepNames()).isEmpty();
+        assertThat(workflowScheduler.pendingTaskCount()).isZero();
     }
 
     private void stubUnitOfWorkFactory() {
@@ -159,14 +215,16 @@ class WaitForDelegateTest {
     private void stubEventPublishing() {
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class))).thenAnswer(invocation -> {
             EventMessage message = invocation.getArgument(1);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> payload = (Map<String, Object>) message.payload();
-            startedStep.set(WorkflowStep.started(
-                    "awaitPayment",
-                    payload,
-                    (Instant) payload.get("startTime"),
-                    processingContext
-            ));
+            if (message.payload() instanceof Map<?, ?> payload) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> startPayload = (Map<String, Object>) payload;
+                startedStep.set(WorkflowStep.started(
+                        "awaitPayment",
+                        startPayload,
+                        (Instant) startPayload.get("startTime"),
+                        processingContext
+                ));
+            }
             return CompletableFuture.completedFuture(null);
         });
     }

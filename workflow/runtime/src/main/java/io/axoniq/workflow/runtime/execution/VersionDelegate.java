@@ -19,13 +19,13 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.workflow.runtime.api.execution.context.Version;
 import io.axoniq.workflow.runtime.api.execution.context.VersionPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
-import io.axoniq.workflow.runtime.api.execution.context.Version;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -42,13 +42,12 @@ import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Bu
 /**
  * Implements the {@link VersionPrimitive}.
  * <p>
- * The delegate is intentionally tiny: there is no user-supplied action to run, no async lifecycle to
- * manage, and at most a single event is published per invocation. Correctness hinges on the
- * "downstream-steps guard" — see the algorithm in {@link #version(VersionPrimitive.VersionCommand)} for
- * details.
+ * The delegate is intentionally tiny: there is no user-supplied action to run, no async lifecycle to manage, and at
+ * most a single event is published per invocation. Correctness hinges on the "downstream-steps guard" — see the
+ * algorithm in {@link #version(VersionPrimitive.VersionCommand)} for details.
  *
  * @author Stefan Dragisic
- * @since 1.1.0
+ * @since 0.2.0
  */
 @Internal
 public class VersionDelegate implements VersionPrimitive {
@@ -57,6 +56,7 @@ public class VersionDelegate implements VersionPrimitive {
 
     private final WorkflowContext workflowContext;
     private final WorkflowExecution workflowExecution;
+    private final ReachedSteps reachedSteps;
     private final EventNameCustomizer parentEventNameCustomizer;
     private final Clock clock;
     private final UnitOfWorkFactory unitOfWorkFactory;
@@ -66,16 +66,18 @@ public class VersionDelegate implements VersionPrimitive {
     /**
      * Constructs the delegate.
      *
-     * @param workflowContext           workflow context.
-     * @param workflowExecution         workflow execution.
-     * @param parentEventNameCustomizer parent event name customizer.
-     * @param clock                     clock for time calculations.
-     * @param unitOfWorkFactory         unit of work factory.
-     * @param eventSink                 event sink.
-     * @param executor                  executor for event publication.
+     * @param workflowContext            workflow context
+     * @param workflowExecution          workflow execution
+     * @param reachedSteps              reached steps tracker
+     * @param parentEventNameCustomizer parent event name customizer
+     * @param clock                     clock for time calculations
+     * @param unitOfWorkFactory         unit of work factory
+     * @param eventSink                 event sink
+     * @param executor                  executor for event publication
      */
     public VersionDelegate(@Nonnull WorkflowContext workflowContext,
                            @Nonnull WorkflowExecution workflowExecution,
+                           @Nonnull ReachedSteps reachedSteps,
                            @Nonnull EventNameCustomizer parentEventNameCustomizer,
                            @Nonnull Clock clock,
                            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
@@ -83,6 +85,7 @@ public class VersionDelegate implements VersionPrimitive {
                            @Nonnull Executor executor) {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow execution is mandatory");
+        this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
         this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,
                                                                 "Parent event name customizer is mandatory");
         this.clock = Objects.requireNonNull(clock, "Clock is mandatory");
@@ -97,14 +100,14 @@ public class VersionDelegate implements VersionPrimitive {
         var stepName = command.stepName();
         var requestedRaw = command.newVersion();
         var state = workflowExecution.state();
-        workflowExecution.recordStepReference(stepName);
+        reachedSteps.record(stepName);
 
         // 1. Step already recorded for this stepName — return its value deterministically.
         if (state.hasVersionMigrationStep(stepName)) {
             return WorkflowStepResults.completed(stepName);
         }
 
-        var currentRaw = state.workflowDefinitionVersion();
+        var currentRaw = state.workflowDefinitionId().version();
         var requested = Version.of(requestedRaw);
         var current = Version.of(currentRaw);
 
@@ -124,7 +127,7 @@ public class VersionDelegate implements VersionPrimitive {
         // 4. Downstream-steps guard: if state contains any terminal step that the current invocation has
         //    not yet referenced, the workflow has already executed past this point under old code, so we
         //    must stay on the legacy branch and emit nothing. See ADR 005 for the full rationale.
-        if (workflowExecution.hasUnreferencedTerminalStep()) {
+        if (reachedSteps.hasUnreferencedTerminalStep(workflowExecution.state())) {
             logger.debug("ctx.migrateVersion(\"{}\", \"{}\") staying on legacy branch (workflow stays at \"{}\", "
                                  + "no migration step emitted) — workflow has already executed past this point "
                                  + "under old code (untouched terminal steps in state).",
@@ -136,7 +139,10 @@ public class VersionDelegate implements VersionPrimitive {
         //    returning so a subsequent ctx.migrateVersion() call later in the same invocation sees the
         //    recorded value.
         var eventNameCustomizer = merge(parentEventNameCustomizer, command.eventNameCustomizer());
-        var event = EventMessageUtils.versionMigrationStep(workflowContext, stepName, requestedRaw, eventNameCustomizer);
+        var event = EventMessageUtils.versionMigrationStep(workflowContext,
+                                                           stepName,
+                                                           requestedRaw,
+                                                           eventNameCustomizer);
 
         workflowExecution.appendTask(e -> ProcessingContextUtils.executeWithResult(
                 workflowExecution.workflowId(),

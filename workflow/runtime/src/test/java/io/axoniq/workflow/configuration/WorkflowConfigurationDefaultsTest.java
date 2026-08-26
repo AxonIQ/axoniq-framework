@@ -39,6 +39,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,6 +57,17 @@ class WorkflowConfigurationDefaultsTest {
     @Test
     void orderReturnsWorkflowDefaultsEnhancerOrder() {
         assertThat(subject.order()).isEqualTo(WorkflowConfigurationDefaults.WORKFLOW_DEFAULTS_ENHANCER_ORDER);
+    }
+
+    @Test
+    void defaultWorkflowTimerExecutorUsesBoundedTimerCapacity() {
+        ScheduledThreadPoolExecutor executor = WorkflowConfigurationDefaults.defaultWorkflowTimerExecutor();
+        try {
+            assertThat(executor.getCorePoolSize())
+                    .isEqualTo(WorkflowConfigurationDefaults.DEFAULT_WORKFLOW_TIMER_THREAD_COUNT);
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test
@@ -97,8 +109,8 @@ class WorkflowConfigurationDefaultsTest {
      * repository before the processor drains. The drain then finds nothing pending and stores a token covering events
      * whose wake was never applied, and no later claim redelivers them.
      * <p>
-     * Shutdown handlers run from the highest phase down, so the engine must sit strictly below the processor's phase
-     * to run after it, and strictly above {@link Phase#LOCAL_MESSAGE_HANDLER_REGISTRATIONS}, where the processor's
+     * Shutdown handlers run from the highest phase down, so the engine must sit strictly below the processor's phase to
+     * run after it, and strictly above {@link Phase#LOCAL_MESSAGE_HANDLER_REGISTRATIONS}, where the processor's
      * coordinator and worker executors are torn down.
      */
     @Test
@@ -113,10 +125,10 @@ class WorkflowConfigurationDefaultsTest {
 
         assertThat(shutdownPhases.getFirst())
                 .as("""
-                    The engine's shutdown phase is %s and the PooledStreamingEventProcessor shuts down at %s. \
-                    Shutdown runs the highest phase first, so the engine must be strictly lower to run after the \
-                    processor's drain. At the same phase the two are launched together and joined, and clearing the \
-                    execution repository first makes the drain store a token whose wakes were never applied.""",
+                            The engine's shutdown phase is %s and the PooledStreamingEventProcessor shuts down at %s. \
+                            Shutdown runs the highest phase first, so the engine must be strictly lower to run after the \
+                            processor's drain. At the same phase the two are launched together and joined, and clearing the \
+                            execution repository first makes the drain store a token whose wakes were never applied.""",
                     shutdownPhases.getFirst(), Phase.INBOUND_EVENT_CONNECTORS)
                 .isLessThan(Phase.INBOUND_EVENT_CONNECTORS);
     }
@@ -127,8 +139,8 @@ class WorkflowConfigurationDefaultsTest {
         private ComponentDefinition<?> componentDefinition;
 
         /**
-         * Phases the captured definition registers shutdown handlers at. The component is only resolved from inside
-         * the handler, so initializing the lifecycle never builds a {@code WorkflowEngine}.
+         * Phases the captured definition registers shutdown handlers at. The component is only resolved from inside the
+         * handler, so initializing the lifecycle never builds a {@code WorkflowEngine}.
          */
         private List<Integer> capturedShutdownPhases() {
             var phases = new ArrayList<Integer>();
@@ -162,7 +174,8 @@ class WorkflowConfigurationDefaultsTest {
         }
 
         private TagResolver decorate(TagResolver delegate) {
-            var component = new StaticComponent<>(new Component.Identifier<>(TagResolver.class, "tagResolver"), delegate);
+            var component = new StaticComponent<>(new Component.Identifier<>(TagResolver.class, "tagResolver"),
+                                                  delegate);
             return decoratorDefinition.decorate(component).resolve(mock(Configuration.class));
         }
 

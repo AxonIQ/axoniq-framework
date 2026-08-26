@@ -543,7 +543,7 @@ The `reserveInventory` step with `RetryPolicy.maxRetries(3)`—fails twice, succ
 ====
 If a step throws `StepCancellationException` during any retry attempt, the step immediately transitions to `CANCELLED`—remaining retries are skipped.
 Cancellation always takes precedence over the retry policy.
-This also applies when the step is cancelled externally via `ctx.cancelStep()` or when the workflow itself is cancelled—any in-flight backoff delay is interrupted and the step moves to a terminal state.
+This also applies when the workflow cancels a step through `ctx.cancelStep()` or when the workflow itself is cancelled: any in-flight backoff delay is interrupted and the step moves to a terminal state.
 ====
 
 === Crash recovery

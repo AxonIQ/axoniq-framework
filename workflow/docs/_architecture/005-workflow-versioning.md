@@ -92,7 +92,7 @@ version unchanged rather than throwing — that's the entire purpose of the prim
   the programmatic setter, the `ctx.migrateVersion(...)` primitive, every emitted event's
   `MessageType.version()`, and the registry's lookup helpers.
 - New public API surface: `Workflow.workflowVersion()`, `WorkflowContext.workflowVersion()`,
-  `WorkflowState.workflowDefinitionVersion()` / `currentWorkflowVersion(changeId)` /
+  `WorkflowState.workflowDefinitionId()` / `effectiveVersionFor(changeId)` /
   `hasVersionMigrationStep(changeId)`,
   `WorkflowConfiguration.workflowVersion()` and `WorkflowCustomization.workflowVersion(String)`,
   `WorkflowConfigurationRegistry.getHighestVersionConfigurations(...)`,

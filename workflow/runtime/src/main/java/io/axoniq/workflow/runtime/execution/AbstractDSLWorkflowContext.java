@@ -35,6 +35,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WaitForStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
@@ -167,11 +168,11 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
         var state = workflowExecution.state();
         var requested = Version.of(newVersion);
         if (state.hasVersionMigrationStep(stepName)) {
-            return Version.of(state.currentWorkflowVersion(stepName)).isGreaterThanOrEqualTo(requested);
+            return Version.of(state.versionFor(stepName)).isGreaterThanOrEqualTo(requested);
         }
         // No step recorded: either same-as-current path (true) or guard-blocked (false).
         // Inspect current workflow version to distinguish.
-        return Version.of(state.workflowDefinitionVersion()).isGreaterThanOrEqualTo(requested);
+        return Version.of(state.workflowDefinitionId().version()).isGreaterThanOrEqualTo(requested);
     }
 
 
@@ -201,26 +202,27 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
 
     @Override
     public void fail(@Nonnull FailWorkflowDefinition definition) {
-        delegate.terminate(
-                TerminateCommand.fail(
-                        definition.cause(),
-                        definition.primitiveMetadata().eventNameCustomizer()
-                )
-        );
+        delegate.failWorkflow(PrimitiveCommands.failWorkflow(
+                definition.cause(),
+                definition.primitiveMetadata().eventNameCustomizer()
+        ));
     }
 
     @Override
     public void cancel(@Nonnull CancelWorkflowDefinition definition) {
-        delegate.terminate(TerminateCommand.cancel(definition.cause(),
-                                                   definition.primitiveMetadata().eventNameCustomizer()));
+        delegate.cancelWorkflow(PrimitiveCommands.cancelWorkflow(
+                definition.cause(),
+                definition.primitiveMetadata().eventNameCustomizer()
+        ));
     }
 
     @Override
     public void cancelStep(@Nonnull CancelStepDefinition definition) {
-        delegate.terminate(TerminateCommand.cancelledStep(definition.primitiveMetadata().stepName(),
-                                                          definition.cause(),
-                                                          definition.primitiveMetadata().eventNameCustomizer())
-        );
+        delegate.cancelStep(PrimitiveCommands.cancelStep(
+                definition.primitiveMetadata().stepName(),
+                definition.cause(),
+                definition.primitiveMetadata().eventNameCustomizer()
+        ));
     }
 
 
@@ -246,8 +248,18 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     }
 
     @Override
-    public void terminate(@Nonnull TerminateCommand command) {
-        delegate.terminate(command);
+    public void cancelWorkflow(@Nonnull WorkflowLifecycleControl.CancelWorkflowCommand command) {
+        delegate.cancelWorkflow(command);
+    }
+
+    @Override
+    public void failWorkflow(@Nonnull WorkflowLifecycleControl.FailWorkflowCommand command) {
+        delegate.failWorkflow(command);
+    }
+
+    @Override
+    public boolean cancelStep(@Nonnull WorkflowLifecycleControl.CancelStepCommand command) {
+        return delegate.cancelStep(command);
     }
 
 

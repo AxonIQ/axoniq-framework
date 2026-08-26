@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.api.execution.context;
 
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
@@ -28,14 +27,14 @@ import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
- * Represents the part of the execution accessed by the Workflow Engine (internal).
+ * Represents the mechanics of a workflow execution accessed by the workflow engine and its primitives.
+ * <p>
+ * This contract deliberately excludes workflow and step cancellation policy. Cancellation is coordinated separately so
+ * an execution remains focused on its control queue, state, event delivery, and local lifecycle.
  *
  * @author Allard Buijze
  * @author Simon Zambrovski
@@ -47,7 +46,7 @@ import java.util.function.Predicate;
 public interface WorkflowExecution extends DescribableComponent {
 
     /**
-     * Execute workflow.
+     * Executes the workflow body.
      *
      * @param terminationHandler termination handler, which is executed after the execution has reached a terminal
      *                           {@link WorkflowStatus}
@@ -55,16 +54,17 @@ public interface WorkflowExecution extends DescribableComponent {
     void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler);
 
     /**
-     * Returns workflow context of the current execution.
+     * Returns the workflow context of the current execution.
      *
      * @return workflow context facing the user
      */
+    @Nonnull
     WorkflowContext workflowContext();
 
     /**
-     * Apply tasks as long the condition is not satisfied.
+     * Applies queued tasks until the condition is satisfied.
      *
-     * @param condition condition on workflow execution
+     * @param condition condition on the workflow state
      * @throws InterruptedException if interrupted while waiting
      */
     void awaitStateChange(@Nonnull Predicate<WorkflowState> condition) throws InterruptedException;
@@ -72,22 +72,29 @@ public interface WorkflowExecution extends DescribableComponent {
     /**
      * Delivers an event to the workflow execution.
      *
-     * @param eventMessage      event message
-     * @param processingContext processing context
+     * @param eventMessage      event message to deliver
+     * @param processingContext processing context of the delivered event
      */
     void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
 
     /**
-     * Append a task to the workflow execution.
+     * Appends a task for execution by the workflow control thread.
      *
-     * @param task a task to execute by the workflow control thread
+     * @param task task to execute
      */
     void appendTask(@Nonnull Consumer<WorkflowExecution> task);
 
     /**
-     * Returns the next task to execute.
+     * Interrupts the workflow driver so it can re-evaluate pending external control requests.
+     * <p>
+     * This is a wake-up mechanism only. It does not mutate workflow state or publish workflow events.
+     */
+    void interruptWorkflowDriver();
+
+    /**
+     * Returns and removes the next queued task.
      *
-     * @return new task to execute
+     * @return next task, or {@code null} when no task is queued
      */
     @Nullable
     Consumer<WorkflowExecution> getNextTask();
@@ -100,57 +107,16 @@ public interface WorkflowExecution extends DescribableComponent {
     boolean isRunning();
 
     /**
-     * Returns true if the workflow execution has tasks to execute.
+     * Indicates whether the workflow execution has queued tasks.
      *
-     * @return true if the workflow execution has tasks to execute
+     * @return {@code true} when tasks are queued
      */
     boolean hasTasks();
 
-    /**
-     * Registers a new wait condition.
-     *
-     * @param stepName             waiting step name
-     * @param eventCondition       event condition
-     * @param resultPayloadReducer step result payload reducer
-     * @param eventNameCustomizer  event name customizer
-     */
-    void registerWaitCondition(@Nonnull String stepName,
-                               @Nonnull EventCondition eventCondition,
-                               @Nonnull PayloadReducer resultPayloadReducer,
-                               @Nonnull EventNameCustomizer eventNameCustomizer);
 
     /**
-     * Remove existing wait condition.
-     *
-     * @param stepName name of the waiting step
-     */
-    void removeWaitCondition(@Nonnull String stepName);
-
-    /**
-     * Register a running step.
-     *
-     * @param stepName step name
-     * @param future   future of the execution
-     */
-    void registerRunningStep(@Nonnull String stepName, @Nonnull CompletableFuture<?> future);
-
-    /**
-     * Remove a running step.
-     *
-     * @param stepName step name
-     */
-    void removeRunningStep(@Nonnull String stepName);
-
-    /**
-     * Cancel a running step.
-     *
-     * @param stepName name of the step
-     * @param cause    optional cause of the cancellation
-     */
-    void cancelRunningStep(@Nonnull String stepName, @Nullable Throwable cause);
-
-    /**
-     * Adds a {@code latch} task to this {@code WorkflowExecution} representing a point in time when a checkpoint can be made.
+     * Adds a {@code latch} task to this {@code WorkflowExecution} representing a point in time when a checkpoint can be
+     * made.
      *
      * @param latch the latch to run when reached in this {@code WorkflowExecution's} task queue
      */
@@ -201,36 +167,20 @@ public interface WorkflowExecution extends DescribableComponent {
     }
 
     /**
-     * Cancel all running steps.
-     *
-     * @param cause optional cause of the cancellation
+     * Interrupt all running steps without producing any step/workflow cancellation events. This method is for abrupt
+     * process-level teardown (e.g. an engine shutdown lifecycle hook): it completes in-flight step futures with a
+     * non-cancellation failure so the running step is removed from bookkeeping and no {@code <Step>Cancelled} event is
+     * published. The workflow's state in the event store is left at its most recent {@code <Step>Started} entry so the
+     * step can resume on the next app start. Safe to call from any thread. Stops only in-memory execution as part of
+     * engine shutdown.
+     * <p>
+     * This operation preserves the durable workflow state for replay and produces no step or workflow cancellation
+     * events. It must never be used to cancel or otherwise terminate a workflow.
      */
-    void cancelAllRunningSteps(@Nullable Throwable cause);
+    void stopForShutdown();
 
     /**
-     * Interrupt all running steps without producing any step/workflow cancellation events. Unlike
-     * {@link #cancelAllRunningSteps(Throwable)}, this method is for abrupt process-level teardown (e.g. an engine
-     * shutdown lifecycle hook): it completes in-flight step futures with a non-cancellation failure so the running step
-     * is removed from bookkeeping and no {@code <Step>Cancelled} event is published. The workflow's state in the event
-     * store is left at its most recent {@code <Step>Started} entry so the step can resume on the next app start. Safe
-     * to call from any thread.
-     *
-     * @return a future that completes once the interrupted body has unwound, or immediately when this instance has no
-     *         body running. Callers handing the instance's segment to another node await it, so the next node resumes
-     *         the instance only after this one went quiet
-     */
-    CompletableFuture<Void> interrupt();
-
-    /**
-     * Cancel and remove a running step.
-     *
-     * @param stepName              name of the step
-     * @param mayInterruptIfRunning whether to interrupt the step if it is running
-     */
-    void cancelAndRemoveRunningStep(@Nonnull String stepName, boolean mayInterruptIfRunning);
-
-    /**
-     * Retrieves the current state of the workflow execution.
+     * Returns the current workflow state.
      *
      * @return workflow state
      */
@@ -249,12 +199,11 @@ public interface WorkflowExecution extends DescribableComponent {
      *
      * @return processing context
      */
-    // FIXME check if we can replace this for the Context interface
     @Nonnull
     ProcessingContext processingContext();
 
     /**
-     * Returns the name of the workflow.
+     * Returns the human-readable workflow name.
      *
      * @return returns the human-readable name of the workflow
      */
@@ -262,81 +211,18 @@ public interface WorkflowExecution extends DescribableComponent {
     String workflowName();
 
     /**
-     * Returns the id of the workflow.
+     * Returns the workflow identifier.
      *
-     * @return unique id of the workflow execution
+     * @return unique workflow execution identifier
      */
     @Nonnull
     String workflowId();
 
     /**
-     * Returns the configuration of the workflow.
+     * Returns the workflow configuration.
      *
      * @return workflow configuration
      */
     @Nonnull
     WorkflowConfiguration<?> workflowConfiguration();
-
-    /**
-     * Records that the live execution has reached the step with the given name during the current invocation. Forms the
-     * runtime "book"; comparing it against the event-sourced book (state) detects when the code has drifted past what
-     * history accounts for.
-     *
-     * @param stepName step name encountered
-     */
-    void recordStepReference(@Nonnull String stepName);
-
-    /**
-     * Returns the set of step names the current invocation of the workflow body has already referenced.
-     *
-     * @return live view of referenced step names for this invocation
-     */
-    @Nonnull
-    Set<String> referencedStepNames();
-
-    /**
-     * Terminal steps in {@link #state()} (event-sourced book) that the current live run has not referenced (runtime
-     * book). A non-empty result means old code already ran past this position — the signal used by the version
-     * primitive's downstream-steps guard and by the drift safety net.
-     *
-     * @return ordered list of unreferenced terminal step names; empty when state is fully accounted for
-     */
-    @Nonnull
-    default List<String> unreferencedTerminalSteps() {
-        Set<String> referenced = referencedStepNames();
-        WorkflowState state = state();
-        return state.workflowStepNames().stream()
-                    .filter(name -> !referenced.contains(name))
-                    .filter(name -> {
-                        var step = state.getStep(name);
-                        return step != null && step.status().isTerminal();
-                    })
-                    .toList();
-    }
-
-    /**
-     * Convenience boolean for {@link #unreferencedTerminalSteps()}.
-     *
-     * @return {@code true} iff at least one terminal step in history is not yet referenced
-     */
-    default boolean hasUnreferencedTerminalStep() {
-        return !unreferencedTerminalSteps().isEmpty();
-    }
-
-    /**
-     * Throws {@link WorkflowReplayDriftException} when the event-sourced book contains terminal steps the current run
-     * has not referenced yet — i.e. the new code is about to publish past where the old code already ran.
-     * <p>
-     * <b>Invariant:</b> anything that publishes events or changes workflow state must call this guard
-     * before doing so. Per-step primitives gate on first live publish; workflow-level termination gates on the
-     * {@code "<terminate>"} marker.
-     *
-     * @param aboutToExecute step name about to publish
-     */
-    default void guardAgainstReplayDrift(@Nonnull String aboutToExecute) {
-        List<String> unreferenced = unreferencedTerminalSteps();
-        if (!unreferenced.isEmpty()) {
-            throw new WorkflowReplayDriftException(workflowId(), aboutToExecute, unreferenced);
-        }
-    }
 }

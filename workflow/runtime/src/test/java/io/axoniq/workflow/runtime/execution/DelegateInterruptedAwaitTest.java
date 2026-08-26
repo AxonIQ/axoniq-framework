@@ -71,7 +71,7 @@ class DelegateInterruptedAwaitTest {
 
         when(workflowExecution.state()).thenReturn(state);
         when(workflowExecution.isRunning()).thenReturn(true);
-        when(workflowExecution.hasTasks()).thenReturn(true);
+        when(workflowExecution.hasTasks()).thenReturn(false);
         when(state.workflowStepNames()).thenReturn(List.of());
         doThrow(new InterruptedException("workflow interrupted"))
                 .when(workflowExecution)
@@ -80,22 +80,27 @@ class DelegateInterruptedAwaitTest {
         waitForDelegate = new WaitForDelegate(
                 workflowContext,
                 workflowExecution,
+                new RunningSteps(),
+                new EventWaitConditions(),
+                new ReachedSteps(),
                 parentCustomizer,
                 Clock.systemUTC(),
                 unitOfWorkFactory,
                 eventSink,
                 executor,
-                new DefaultWorkflowScheduler(Clock.systemUTC())
+                new ControllableWorkflowScheduler()
         );
         executeDelegate = new ExecuteDelegate(
                 workflowContext,
                 workflowExecution,
+                new RunningSteps(),
+                new ReachedSteps(),
                 parentCustomizer,
                 Clock.systemUTC(),
                 unitOfWorkFactory,
                 eventSink,
                 executor,
-                new DefaultWorkflowScheduler(Clock.systemUTC()),
+                new ControllableWorkflowScheduler(),
                 new DefaultExecuteStepActionResolver()
         );
     }
@@ -147,7 +152,7 @@ class DelegateInterruptedAwaitTest {
     }
 
     private PrimitiveCommands.WorkflowStepResultExecuteCommand executeCommand(String stepName) {
-        PayloadProcessor action = (ctx, payload) -> Map.of("result", "done");
+        PayloadProcessor action = (ctx, payload) -> Map.of("result", "completion");
         return new PrimitiveCommands.WorkflowStepResultExecuteCommand(
                 stepName,
                 Map.of(),

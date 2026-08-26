@@ -313,6 +313,12 @@ class Kontext(
         eventNameCustomizer: EventNameCustomizer = defaults()
     ) {
         val result = waitForEvent(stepName, EventConditions.never(), timeout, eventNameCustomizer)
+        // A cancelled sleep must surface, symmetric with awaitExecute/awaitEvent — otherwise a cancellation is
+        // silently swallowed and the body sails past the sleep as if the delay had simply elapsed.
+        if (result.canceled()) {
+            throw StepCancellationException("Step '$stepName' was cancelled before completing")
+        }
+        // A timed-out sleep is the normal, expected completion of a sleep — return without throwing.
         if (result.failure() && result.error().isPresent) {
             throw result.error().get()
         }
@@ -587,6 +593,14 @@ class Kontext(
      */
     fun block(result: Kontext.() -> WorkflowStepResult) {
         val r = result()
+        // Symmetric with awaitExecute/awaitEvent/awaitModifyPayload: surface cancellation and timeout too, not only
+        // failure — otherwise a cancelled or timed-out step is silently swallowed and the body continues.
+        if (r.canceled()) {
+            throw StepCancellationException("Step '${r.stepName}' was cancelled before completing")
+        }
+        if (r.timeout()) {
+            throw StepTimedOutException("Step '${r.stepName}' timed out before completing")
+        }
         if (r.failure()) {
             if (r.error().isPresent) {
                 throw r.error().get()

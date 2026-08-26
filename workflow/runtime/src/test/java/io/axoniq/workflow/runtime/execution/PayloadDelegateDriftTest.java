@@ -34,9 +34,7 @@ import org.junit.jupiter.api.*;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,7 +55,7 @@ class PayloadDelegateDriftTest {
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private PayloadDelegate delegate;
-    private final Set<String> referencedStepNames = new HashSet<>();
+    private final ReachedSteps reachedSteps = new ReachedSteps();
 
     @BeforeEach
     void setUp() {
@@ -71,20 +69,16 @@ class PayloadDelegateDriftTest {
 
         when(workflowExecution.workflowId()).thenReturn("wf-1");
         when(workflowExecution.state()).thenReturn(state);
-        when(workflowExecution.referencedStepNames()).thenReturn(referencedStepNames);
-        when(workflowExecution.unreferencedTerminalSteps()).thenCallRealMethod();
-        when(workflowExecution.hasUnreferencedTerminalStep()).thenCallRealMethod();
-        doCallRealMethod().when(workflowExecution).guardAgainstReplayDrift(anyString());
 
         delegate = new PayloadDelegate(
-                workflowContext, workflowExecution, parent,
-                Clock.systemUTC(), unitOfWorkFactory, eventSink, executor
+                workflowContext, workflowExecution, new RunningSteps(), reachedSteps, parent,
+                Clock.systemUTC(), unitOfWorkFactory, eventSink, executor, new ControllableWorkflowScheduler()
         );
     }
 
     @Test
-    void modifyPayload_throwsDriftException_whenUnreferencedTerminalStepsInState() {
-        referencedStepNames.add("A");
+    void modifyPayloadThrowsDriftExceptionWhenUnreferencedTerminalStepsInState() {
+        reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
