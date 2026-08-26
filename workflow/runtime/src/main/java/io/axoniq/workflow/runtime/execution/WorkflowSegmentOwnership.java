@@ -50,20 +50,10 @@ final class WorkflowSegmentOwnership {
      * @param segment    the segment to test against, or {@code null} when acting outside a segmented processor
      * @param workflowId id of the workflow instance
      * @return {@code true} when the segment matches the id's segment key, or no segment is given
-     * @throws IllegalArgumentException when no workflow id is given: an id is required to name a segment, and a
-     *                                  diagnosable rejection beats the {@link NullPointerException} deriving the
-     *                                  segment key would raise
      */
     static boolean ownedBy(@Nullable Segment segment, @Nonnull String workflowId) {
         if (segment == null) {
             return true;
-        }
-        if (workflowId == null) {
-            throw new IllegalArgumentException(
-                    "Cannot decide ownership by segment " + segment + " without a workflow id. The "
-                            + "workflowIdProvider of the definition acting on this event derived no id; a "
-                            + "misconfigured idProperty, naming a property the event does not carry, is the usual "
-                            + "cause.");
         }
         return segment.matches(segmentKey(workflowId));
     }
