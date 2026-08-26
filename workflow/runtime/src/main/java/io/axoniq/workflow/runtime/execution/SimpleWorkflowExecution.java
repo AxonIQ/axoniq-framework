@@ -246,9 +246,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         // Reset the runtime "book" — step-reference tracker for the drift guard.
         this.reachedSteps.clear();
 
-        // Dispatch to the definition matching state.workflowDefinitionVersion().
+        // Dispatch to the definition matching state.workflowDefinitionId().version().
         var definition = WorkflowConfigurationRegistry.resolveOrFallback(
-                ctx, workflowName, workflowId, this.state().workflowDefinitionVersion(), this.workflowConfiguration
+                ctx, workflowName, workflowId, this.state().workflowDefinitionId().version(), this.workflowConfiguration
         ).workflowDefinition();
         definition.accept(this.contextDelegate.typedWorkflowContext());
 

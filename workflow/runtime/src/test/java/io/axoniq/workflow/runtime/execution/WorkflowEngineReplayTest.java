@@ -303,7 +303,7 @@ class WorkflowEngineReplayTest {
         WorkflowExecution existing = mock(WorkflowExecution.class);
         WorkflowState existingState = mock(WorkflowState.class);
         when(existing.state()).thenReturn(existingState);
-        when(existingState.workflowDefinitionVersion()).thenReturn("1.0.0");
+        when(existingState.workflowDefinitionId()).thenReturn(new MessageType("TestWorkflow", "1.0.0"));
         when(existingState.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(baseId, () -> existing);
         clearInvocations(workflowExecutionRepository);
@@ -354,7 +354,7 @@ class WorkflowEngineReplayTest {
         WorkflowExecution existing = mock(WorkflowExecution.class);
         WorkflowState existingState = mock(WorkflowState.class);
         when(existing.state()).thenReturn(existingState);
-        when(existingState.workflowDefinitionVersion()).thenReturn("2.0.0");
+        when(existingState.workflowDefinitionId()).thenReturn(new MessageType("TestWorkflow", "2.0.0"));
         when(existingState.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(workflowId, () -> existing);
         clearInvocations(workflowExecutionRepository);
@@ -389,7 +389,7 @@ class WorkflowEngineReplayTest {
         WorkflowExecution existing = mock(WorkflowExecution.class);
         WorkflowState existingState = mock(WorkflowState.class);
         when(existing.state()).thenReturn(existingState);
-        when(existingState.workflowDefinitionVersion()).thenReturn("1.0.0");
+        when(existingState.workflowDefinitionId()).thenReturn(new MessageType("TestWorkflow", "1.0.0"));
         when(existingState.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(workflowId, () -> existing);
         clearInvocations(workflowExecutionRepository);
@@ -754,14 +754,14 @@ class WorkflowEngineReplayTest {
         WorkflowExecution v1Existing = mock(WorkflowExecution.class);
         WorkflowState v1State = mock(WorkflowState.class);
         when(v1Existing.state()).thenReturn(v1State);
-        when(v1State.workflowDefinitionVersion()).thenReturn("1.0.0");
+        when(v1State.workflowDefinitionId()).thenReturn(new MessageType("TestWorkflow", "1.0.0"));
         when(v1State.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(baseId, () -> v1Existing);
 
         WorkflowExecution v2Existing = mock(WorkflowExecution.class);
         WorkflowState v2State = mock(WorkflowState.class);
         when(v2Existing.state()).thenReturn(v2State);
-        when(v2State.workflowDefinitionVersion()).thenReturn("2.0.0");
+        when(v2State.workflowDefinitionId()).thenReturn(new MessageType("TestWorkflow", "2.0.0"));
         when(v2State.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         workflowExecutionRepository.save(disambiguatedId, () -> v2Existing);
         clearInvocations(workflowExecutionRepository);

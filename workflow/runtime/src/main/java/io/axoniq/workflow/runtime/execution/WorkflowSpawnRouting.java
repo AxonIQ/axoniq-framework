@@ -63,7 +63,7 @@ public final class WorkflowSpawnRouting {
         if (existing.isEmpty()) {
             return baseWorkflowId;
         }
-        var existingVersion = existing.get().state().workflowDefinitionVersion();
+        var existingVersion = existing.get().state().workflowDefinitionId().version();
         if (existingVersion.equals(newSpawnVersion)) {
             logger.warn(
                     "A workflow with id '{}' is already running at version '{}'; ignoring new start request "

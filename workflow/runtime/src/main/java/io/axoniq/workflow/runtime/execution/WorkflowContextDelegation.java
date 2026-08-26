@@ -213,7 +213,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
     @Nonnull
     @Override
     public String workflowVersion() {
-        return workflowExecution.state().workflowDefinitionVersion();
+        return workflowExecution.state().workflowDefinitionId().version();
     }
 
     @Nonnull

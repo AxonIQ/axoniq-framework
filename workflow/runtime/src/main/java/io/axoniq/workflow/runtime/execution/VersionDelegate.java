@@ -107,7 +107,7 @@ public class VersionDelegate implements VersionPrimitive {
             return WorkflowStepResults.completed(stepName);
         }
 
-        var currentRaw = state.workflowDefinitionVersion();
+        var currentRaw = state.workflowDefinitionId().version();
         var requested = Version.of(requestedRaw);
         var current = Version.of(currentRaw);
 
