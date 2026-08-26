@@ -195,9 +195,10 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     void registerWorkflowStateModule(ComponentRegistry componentRegistry) {
         componentRegistry.registerModule(
                 declarative(String.class, EventSourcedWorkflowState.class)
-                        .messagingModel((c, model) -> model.entityEvolver((entity, event, context) -> (EventSourcedWorkflowState) entity.evolve(
-                                event,
-                                context)).build())
+                        .messagingModel((c, model) -> model.entityEvolver((entity, event, context) ->
+                                                                                  EventSourcedWorkflowState.requireEventSourcedState(
+                                                                                          entity.evolve(event, context))
+                        ).build())
                         .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedWorkflowState(
                                 identifier,
                                 getWorkflowDefinitionId(firstEvent.metadata()).orElseThrow(
