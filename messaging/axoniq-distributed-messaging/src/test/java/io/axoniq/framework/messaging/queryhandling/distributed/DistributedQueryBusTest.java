@@ -50,6 +50,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.*;
 
 /**
@@ -490,6 +491,7 @@ class DistributedQueryBusTest {
             // given - An exceptionally completed UnitOfWork/ProcessingContext
             SubscriptionQueryUpdateMessage update =
                     new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
+            Predicate<QueryMessage> spiedFilter = spy(query -> matchingFilter.test(query));
             AtomicReference<ProcessingContext> erroredContext = new AtomicReference<>();
             UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
             uow.runOnInvocation(context -> {
@@ -500,14 +502,15 @@ class DistributedQueryBusTest {
             uow.execute().exceptionally(e -> null).join();
 
             // when emitting with an errored context...
-            OptionalInt result = testSubject.emitUpdateAndCount(matchingFilter, () -> update, erroredContext.get())
+            OptionalInt result = testSubject.emitUpdateAndCount(spiedFilter, () -> update, erroredContext.get())
                                             .orTimeout(1, TimeUnit.SECONDS)
                                             .join();
 
-            // then - the update must never be dispatched
+            // then - the update must never be dispatched, and the filter must not be invoked
             assertThat(result).isEmpty();
             assertThat(matchingCallbackOne.sendUpdateCount.get()).isZero();
             assertThat(matchingCallbackTwo.sendUpdateCount.get()).isZero();
+            verify(spiedFilter, never()).test(any());
         }
 
         @Test
@@ -574,6 +577,7 @@ class DistributedQueryBusTest {
         @Test
         void completeSubscriptionsWithErroredProcessingContextDropsCompletion() {
             // given - An exceptionally completed UnitOfWork/ProcessingContext
+            Predicate<QueryMessage> spiedFilter = spy(query -> matchingFilter.test(query));
             AtomicReference<ProcessingContext> erroredContext = new AtomicReference<>();
             UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
             uow.runOnInvocation(context -> {
@@ -584,14 +588,15 @@ class DistributedQueryBusTest {
             uow.execute().exceptionally(e -> null).join();
 
             // when completing with an errored context...
-            OptionalInt result = testSubject.completeSubscriptionsAndCount(matchingFilter, erroredContext.get())
+            OptionalInt result = testSubject.completeSubscriptionsAndCount(spiedFilter, erroredContext.get())
                                             .orTimeout(1, TimeUnit.SECONDS)
                                             .join();
 
-            // then - completion must never be dispatched
+            // then - completion must never be dispatched, and the filter must not be invoked
             assertThat(result).isEmpty();
             assertThat(matchingCallbackOne.completeCount.get()).isZero();
             assertThat(matchingCallbackTwo.completeCount.get()).isZero();
+            verify(spiedFilter, never()).test(any());
         }
 
         @Test
@@ -642,6 +647,7 @@ class DistributedQueryBusTest {
         void completeSubscriptionsExceptionallyWithErroredProcessingContextDropsCompletion() {
             // given - An exceptionally completed UnitOfWork/ProcessingContext
             MockException cause = new MockException("Mock");
+            Predicate<QueryMessage> spiedFilter = spy(query -> matchingFilter.test(query));
             AtomicReference<ProcessingContext> erroredContext = new AtomicReference<>();
             UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
             uow.runOnInvocation(context -> {
@@ -652,16 +658,37 @@ class DistributedQueryBusTest {
             uow.execute().exceptionally(e -> null).join();
 
             // when completing exceptionally with an errored context...
-            OptionalInt result = testSubject.completeSubscriptionsExceptionallyAndCount(matchingFilter,
+            OptionalInt result = testSubject.completeSubscriptionsExceptionallyAndCount(spiedFilter,
                                                                                         cause,
                                                                                         erroredContext.get())
                                             .orTimeout(1, TimeUnit.SECONDS)
                                             .join();
 
-            // then - completion must never be dispatched
+            // then - completion must never be dispatched, and the filter must not be invoked
             assertThat(result).isEmpty();
             assertThat(matchingCallbackOne.completeExceptionallyCount.get()).isZero();
             assertThat(matchingCallbackTwo.completeExceptionallyCount.get()).isZero();
+            verify(spiedFilter, never()).test(any());
+        }
+
+        @Test
+        void deferredUpdateTaskCompletingExceptionallyIsLoggedAndDoesNotEscapeOrBlockOtherSubscriptions() {
+            // given - one matching subscription whose update dispatch fails, another that succeeds
+            SubscriptionQueryUpdateMessage update =
+                    new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
+            MockException cause = new MockException("Simulated dispatch failure");
+            connector.incomingHandler.registerUpdateHandler(matchingQueryOne, new FailingUpdateCallback(cause));
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+
+            // when emitting on invocation, staging the dispatch to after commit...
+            uow.onInvocation(context -> testSubject.emitUpdateAndCount(matchingFilter, () -> update, context));
+
+            // then executing the UnitOfWork does not propagate the failing subscriber's exception...
+            assertThatCode(() -> uow.execute().orTimeout(1, TimeUnit.SECONDS).join())
+                    .doesNotThrowAnyException();
+
+            // ...and the other matching subscription still received its update
+            assertThat(matchingCallbackTwo.sendUpdateCount.get()).isEqualTo(1);
         }
     }
 
@@ -741,6 +768,25 @@ class DistributedQueryBusTest {
         public CompletableFuture<Void> completeExceptionally(Throwable cause) {
             completeExceptionallyCount.incrementAndGet();
             return CompletableFuture.completedFuture(null);
+        }
+    }
+
+    /**
+     * Variant of {@link StubUpdateCallback} whose {@link #sendUpdate(SubscriptionQueryUpdateMessage)} always completes
+     * exceptionally, for verifying failures in one subscriber do not affect others.
+     */
+    private static class FailingUpdateCallback extends StubUpdateCallback {
+
+        private final Throwable cause;
+
+        FailingUpdateCallback(Throwable cause) {
+            this.cause = cause;
+        }
+
+        @Override
+        public CompletableFuture<Void> sendUpdate(SubscriptionQueryUpdateMessage update) {
+            sendUpdateCount.incrementAndGet();
+            return CompletableFuture.failedFuture(cause);
         }
     }
 }
