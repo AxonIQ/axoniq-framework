@@ -63,6 +63,8 @@
         <mysql-connector-java.version>26.7.0</mysql-connector-java.version>
         <postgresql.version>42.7.13</postgresql.version>
         <ojdbc.version>23.26.1.0.0</ojdbc.version>
+        <!-- gRPC -->
+        <protobuf-java.version>4.36.0</protobuf-java.version>
         <!-- Jakarta -->
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <jakarta.el.version>6.0.1</jakarta.el.version>
@@ -323,6 +325,15 @@
                 <artifactId>postgresql</artifactId>
                 <version>${postgresql.version}</version>
             </dependency>
+
+            <!-- gRPC -->
+            <!-- Pinned so transitive versions don't overtake the version Axon Server generated class used. -->
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>${protobuf-java.version}</version>
+            </dependency>
+
             <!-- Jakarta -->
             <dependency>
                 <groupId>jakarta.annotation</groupId>
