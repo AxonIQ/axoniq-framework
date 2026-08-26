@@ -55,6 +55,10 @@ final class WorkflowSegmentOwnership {
         if (segment == null) {
             return true;
         }
+        if (workflowId == null) {
+            throw new IllegalArgumentException(
+                    "Cannot decide segment ownership without a workflow id; configure an idProperty for the workflow");
+        }
         return segment.matches(segmentKey(workflowId));
     }
 

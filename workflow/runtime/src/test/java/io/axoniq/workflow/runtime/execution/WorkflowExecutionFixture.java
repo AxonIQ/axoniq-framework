@@ -60,10 +60,11 @@ final class WorkflowExecutionFixture {
      * @param running    whether the execution reports {@link WorkflowExecution#isRunning()} as {@code true}
      */
     static WorkflowExecution mockExecution(String workflowId, WorkflowState state, boolean running) {
-        var execution = mock(WorkflowExecution.class);
+        var execution = mock(CancellationCapableExecution.class);
         when(execution.workflowId()).thenReturn(workflowId);
         when(execution.state()).thenReturn(state);
         when(execution.isRunning()).thenReturn(running);
+        when(execution.workflowCancellation()).thenReturn(mock(WorkflowCancellation.class));
 
         var workflowContext = mock(WorkflowContext.class);
         var bodyContext = mock(ProcessingContext.class);
@@ -115,5 +116,9 @@ final class WorkflowExecutionFixture {
 
     private WorkflowExecutionFixture() {
         // Utility class
+    }
+
+    interface CancellationCapableExecution extends WorkflowExecution, WorkflowCancellationProvider {
+
     }
 }

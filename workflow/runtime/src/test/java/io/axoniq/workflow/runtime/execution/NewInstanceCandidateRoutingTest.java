@@ -543,12 +543,13 @@ class NewInstanceCandidateRoutingTest {
     }
 
     private static WorkflowExecution execution(String workflowId) {
-        var execution = mock(WorkflowExecution.class);
+        var execution = mock(WorkflowExecutionFixture.CancellationCapableExecution.class);
         var state = mock(WorkflowState.class);
         doReturn(WorkflowStatus.STARTED).when(state).workflowStatus();
         doReturn(workflowId).when(execution).workflowId();
         doReturn(state).when(execution).state();
         doReturn(workflowContext()).when(execution).workflowContext();
+        doReturn(mock(WorkflowCancellation.class)).when(execution).workflowCancellation();
         return execution;
     }
 
