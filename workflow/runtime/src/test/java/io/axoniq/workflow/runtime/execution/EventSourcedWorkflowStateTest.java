@@ -249,7 +249,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void seededInitialWorkflowVersion_isReflectedByCurrentWorkflowVersion() {
+    void seededInitialWorkflowVersionIsReflectedByCurrentWorkflowVersion() {
         // Seed state with the workflow definition's configured version so that, when SimpleWorkflowExecution
         // constructs the STARTED event via startedWorkflow(...), the event's MessageType.version() reflects
         // the configured version (not the implicit "0.0.1" default).
@@ -262,7 +262,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void startedEventOverridesSeededVersion_onReplayOfOlderInstance() {
+    void startedEventOverridesSeededVersionOnReplayOfOlderInstance() {
         // For replays, the workflow may have been spawned with the latest config (e.g. "2.0.0") but the
         // started event in history carries the original version it was launched under (e.g. "1.0.0").
         // evolve() must adopt the started event's MessageType.version() so resolveVersionedDefinition can
@@ -286,7 +286,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void version_returnsEffectiveVersion_whenNoMarkerRecorded() {
+    void versionReturnsCurrentWorkflowVersionWhenNoMarkerRecorded() {
         // Default before any STARTED event applies is MessageType.DEFAULT_VERSION ("0.0.1").
         assertThat(state.versionFor("payment-redesign"))
                 .isEqualTo(MessageType.DEFAULT_VERSION);
@@ -294,7 +294,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void evolve_migrationStep_populatesMap() {
+    void evolveMigrationStepPopulatesMap() {
         Metadata metadata = MetadataUtils.createVersionMigrationStep("workflowId", "payment-redesign", "0.0.2");
         EventMessage eventMessage = mockMigrationStepEvent(metadata);
 
@@ -309,7 +309,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void evolve_secondMarkerForSameChangeId_isIgnored() {
+    void evolveSecondMarkerForSameChangeIdIsIgnored() {
         Metadata first = MetadataUtils.createVersionMigrationStep("workflowId", "shipping-redesign", "0.0.3");
         Metadata second = MetadataUtils.createVersionMigrationStep("workflowId", "shipping-redesign", "0.0.7");
 
@@ -321,7 +321,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void evolve_independentChangeIds_areTrackedSeparately() {
+    void evolveIndependentChangeIdsAreTrackedSeparately() {
         Metadata a = MetadataUtils.createVersionMigrationStep("workflowId", "change-a", "0.0.2");
         Metadata b = MetadataUtils.createVersionMigrationStep("workflowId", "change-b", "0.0.5");
 
@@ -333,13 +333,13 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void isStepTerminal_returnsFalse_whenStepNotContained() {
+    void isStepTerminalReturnsFalseWhenStepNotContained() {
         assertThat(state.isStepTerminal("nonExistent")).isFalse();
         assertThat(state.isStepActive("nonExistent")).isFalse();
     }
 
     @Test
-    void isStepTerminal_returnsFalse_whenStepIsStartedOrRetrying() {
+    void isStepTerminalReturnsFalseWhenStepIsStartedOrRetrying() {
         String startedStep = "startedStep";
         EventMessage started = mock(EventMessage.class);
         when(started.metadata()).thenReturn(MetadataUtils.create("wf-1", startedStep, StepStatus.STARTED));
@@ -362,7 +362,7 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
-    void isStepTerminal_returnsTrue_whenStepIsTerminal() {
+    void isStepTerminalReturnsTrueWhenStepIsTerminal() {
         for (StepStatus terminalStatus : List.of(StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.TIMED_OUT, StepStatus.CANCELLED)) {
             String stepName = "step-" + terminalStatus;
             EventMessage eventMessage = mock(EventMessage.class);

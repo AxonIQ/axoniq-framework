@@ -54,7 +54,7 @@ class DefaultWorkflowSchedulerTest {
     }
 
     @Test
-    void cancel_removesThePendingTimerAndPreventsItsTaskFromRunning() {
+    void cancelRemovesThePendingTimerAndPreventsItsTaskFromRunning() {
         var timerExecutor = new ScheduledThreadPoolExecutor(1);
         try {
             var now = Instant.parse("2026-08-19T12:00:00Z");
@@ -74,7 +74,7 @@ class DefaultWorkflowSchedulerTest {
     }
 
     @Test
-    void shutdown_cancelsPendingTimersAndPreventsTheirTasksFromRunning() {
+    void shutdownCancelsPendingTimersAndPreventsTheirTasksFromRunning() {
         var timerExecutor = new ScheduledThreadPoolExecutor(1);
         var scheduler = new DefaultWorkflowScheduler(Clock.systemUTC(), timerExecutor);
         scheduler.schedule(Instant.now().plusSeconds(10));

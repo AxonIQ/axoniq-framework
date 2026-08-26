@@ -145,7 +145,14 @@ public class EventSourcedWorkflowState implements WorkflowState {
         this(requireEventSourcedState(state), context, listeners);
     }
 
-    private static EventSourcedWorkflowState requireEventSourcedState(WorkflowState state) {
+    /**
+     * Returns the event sourced workflow state.
+     *
+     * @param state workflow state
+     * @return event sourced workflow state or throws an exception if the given state is not an event sourced state
+     * @throws IllegalArgumentException if the given state is not an event sourced state
+     */
+    public static EventSourcedWorkflowState requireEventSourcedState(WorkflowState state) {
         if (!(state instanceof EventSourcedWorkflowState sourcedState)) {
             throw new IllegalArgumentException(
                     "Currently only EventSourcedWorkflowState is supported, but you passed an instance of %s.".formatted(
@@ -245,7 +252,13 @@ public class EventSourcedWorkflowState implements WorkflowState {
         return Map.copyOf(payload);
     }
 
-    @Override
+    /**
+     * Applies an event while notifying workflow status listeners.
+     *
+     * @param eventMessage      event message applied to the workflow state
+     * @param processingContext context in which the event is applied
+     * @return this evolved workflow state
+     */
     public WorkflowState evolve(
             @Nonnull EventMessage eventMessage,
             @Nonnull ProcessingContext processingContext) {

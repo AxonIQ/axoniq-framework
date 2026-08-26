@@ -24,7 +24,6 @@ import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.F
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
@@ -41,7 +40,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
@@ -96,7 +94,7 @@ class ExternalStepCancellationWorkflowTest extends AbstractWorkflowTestBase<Simp
             assertThat(state.getStep("awaitApproval").status()).isEqualTo(StepStatus.STARTED);
         });
 
-        // Cancel the running step from the test thread — NOT the workflow control thread.
+        // Request cancellation from the test thread; the service queues the actual cancellation on the workflow control thread.
         workflowCancellationService.requestStepCancellation(
                 WORKFLOW_ID, "awaitApproval", new StepCancellationException("cancelled externally")
         ).join();
@@ -112,10 +110,10 @@ class ExternalStepCancellationWorkflowTest extends AbstractWorkflowTestBase<Simp
         });
 
         var cancelledStepEvent = PrettyPrintingRecordingEventStore.lastInstance().recorded().stream()
-                                                                   .filter(event -> MetadataUtils.getStepStatus(event.metadata())
-                                                                                                 .filter(StepStatus.CANCELLED::equals)
-                                                                                                 .isPresent())
-                                                                   .findFirst();
+                                                                  .filter(event -> MetadataUtils.getStepStatus(event.metadata())
+                                                                                                .filter(StepStatus.CANCELLED::equals)
+                                                                                                .isPresent())
+                                                                  .findFirst();
         assertThat(cancelledStepEvent).isPresent();
         assertThat(cancelledStepEvent.orElseThrow().type().qualifiedName().toString())
                 .isEqualTo("io.axoniq.dsl.externalcancel.AwaitApprovalCancelled");

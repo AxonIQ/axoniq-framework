@@ -65,7 +65,7 @@ class DefaultWorkflowCancellationTest {
     }
 
     @Test
-    void requestWorkflowCancellation_concurrentCallersShareOnePendingRequest() throws Exception {
+    void requestWorkflowCancellationConcurrentCallersShareOnePendingRequest() throws Exception {
         var cancellation = requestForRealExecution();
         var callersReady = new CountDownLatch(2);
         var startTogether = new CyclicBarrier(2);
@@ -83,7 +83,7 @@ class DefaultWorkflowCancellationTest {
     }
 
     @Test
-    void unregisteringWorkflowWithPendingCancellation_completesTheRequestExceptionally() {
+    void unregisteringWorkflowWithPendingCancellationCompletesTheRequestExceptionally() {
         var cancellation = requestForRealExecution();
         var service = new WorkflowCancellationService();
         service.register("workflow-id", cancellation);

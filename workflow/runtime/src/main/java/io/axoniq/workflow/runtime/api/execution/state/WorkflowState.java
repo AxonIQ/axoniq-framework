@@ -153,16 +153,6 @@ public interface WorkflowState extends DescribableComponent {
     void throwTerminalCause();
 
     /**
-     * Handles an event message received during workflow execution. This handle is responsible for the modification of
-     * the state.
-     *
-     * @param eventMessage      the event message received
-     * @param processingContext the processing context for the event
-     * @return new evolved state
-     */
-    WorkflowState evolve(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
-
-    /**
      * Returns the step name that reached a terminal state first among the given candidates, determined by event-sourced
      * timestamps. This is a safeguard against a race condition during event-sourcing replay: when multiple steps
      * completed before cancellation took effect, array iteration order would pick an arbitrary winner. The event store

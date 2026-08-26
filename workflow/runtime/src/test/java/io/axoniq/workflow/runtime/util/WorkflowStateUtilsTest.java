@@ -34,7 +34,7 @@ import static org.mockito.Mockito.when;
 class WorkflowStateUtilsTest {
 
     @Test
-    void testConstructorIsPrivate() throws NoSuchMethodException {
+    void constructorIsPrivate() throws NoSuchMethodException {
         Constructor<WorkflowStateUtils> constructor = WorkflowStateUtils.class.getDeclaredConstructor();
         assertThat(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers())).isTrue();
         constructor.setAccessible(true);
@@ -42,7 +42,7 @@ class WorkflowStateUtilsTest {
     }
 
     @Test
-    void matchesStep_returnsFalse_whenStepNotContained() {
+    void matchesStepReturnsFalseWhenStepNotContained() {
         WorkflowState state = mock(WorkflowState.class);
         when(state.getStep("step1")).thenReturn(null);
 
@@ -50,7 +50,7 @@ class WorkflowStateUtilsTest {
     }
 
     @Test
-    void matchesStep_evaluatesPredicate_whenStepExists() {
+    void matchesStepEvaluatesPredicateWhenStepExists() {
         WorkflowState state = mock(WorkflowState.class);
         WorkflowStep step = mock(WorkflowStep.class);
         when(state.getStep("step1")).thenReturn(step);
@@ -61,7 +61,7 @@ class WorkflowStateUtilsTest {
     }
 
     @Test
-    void isStepTerminal_returnsFalse_whenStepNotContained() {
+    void isStepTerminalReturnsFalseWhenStepNotContained() {
         WorkflowState state = mock(WorkflowState.class);
         when(state.getStep("step1")).thenReturn(null);
 
@@ -70,7 +70,7 @@ class WorkflowStateUtilsTest {
     }
 
     @Test
-    void isStepTerminal_returnsFalse_whenStepNotTerminal() {
+    void isStepTerminalReturnsFalseWhenStepNotTerminal() {
         WorkflowState state = mock(WorkflowState.class);
         WorkflowStep step = mock(WorkflowStep.class);
 
@@ -82,7 +82,7 @@ class WorkflowStateUtilsTest {
     }
 
     @Test
-    void isStepTerminal_returnsTrue_whenStepIsTerminal() {
+    void isStepTerminalReturnsTrueWhenStepIsTerminal() {
         for (StepStatus terminalStatus : List.of(StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.TIMED_OUT, StepStatus.CANCELLED)) {
             WorkflowState state = mock(WorkflowState.class);
             WorkflowStep step = mock(WorkflowStep.class);
@@ -96,7 +96,7 @@ class WorkflowStateUtilsTest {
     }
 
     @Test
-    void isStepActive_returnsFalse_whenStepNotContained() {
+    void isStepActiveReturnsFalseWhenStepNotContained() {
         WorkflowState state = mock(WorkflowState.class);
         when(state.getStep("step1")).thenReturn(null);
 
@@ -105,7 +105,7 @@ class WorkflowStateUtilsTest {
     }
 
     @Test
-    void isStepActive_returnsTrue_whenStepStartedOrRetrying() {
+    void isStepActiveReturnsTrueWhenStepStartedOrRetrying() {
         for (StepStatus activeStatus : List.of(StepStatus.STARTED, StepStatus.RETRYING)) {
             WorkflowState state = mock(WorkflowState.class);
             WorkflowStep step = mock(WorkflowStep.class);
@@ -119,7 +119,7 @@ class WorkflowStateUtilsTest {
     }
 
     @Test
-    void isStepActive_returnsFalse_whenStepIsTerminal() {
+    void isStepActiveReturnsFalseWhenStepIsTerminal() {
         for (StepStatus terminalStatus : List.of(StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.TIMED_OUT, StepStatus.CANCELLED)) {
             WorkflowState state = mock(WorkflowState.class);
             WorkflowStep step = mock(WorkflowStep.class);
@@ -133,7 +133,7 @@ class WorkflowStateUtilsTest {
     }
 
     @Test
-    void isStepStatus_matchesCorrectStatus() {
+    void isStepStatusMatchesCorrectStatus() {
         WorkflowState state = mock(WorkflowState.class);
         WorkflowStep step = mock(WorkflowStep.class);
 

@@ -61,7 +61,7 @@ public interface WorkflowCancellation {
      * @return a future completing with the number of steps for which terminal cancellation was recorded
      */
     @Nonnull
-    CompletableFuture<Integer> requestRunningStepCancellations(@Nullable Throwable cause);
+    CompletableFuture<Integer> requestCancellationOfAllSteps(@Nullable Throwable cause);
 
     /**
      * Requests cancellation of the workflow and its local execution.
@@ -107,13 +107,13 @@ public interface WorkflowCancellation {
      * Represents one pending workflow-cancellation request owned by the cancellation coordinator.
      *
      * @param cause cancellation cause to record durably
-     * @param completion future completed after the workflow driver performs the terminal transition
+     * @param callback future completed after the workflow driver performs the terminal transition
      */
     record PendingRequest(@Nonnull WorkflowCancelledException cause,
-                          @Nonnull CompletableFuture<Void> completion) {
+                          @Nonnull CompletableFuture<Void> callback) {
         public PendingRequest {
             Objects.requireNonNull(cause, "Cancellation cause must not be null");
-            Objects.requireNonNull(completion, "Completion future must not be null");
+            Objects.requireNonNull(callback, "Completion future must not be null");
         }
 
     }

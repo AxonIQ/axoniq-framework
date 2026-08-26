@@ -25,6 +25,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryContext;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
+import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
@@ -129,7 +130,12 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
                 handleAttemptFailure(command, name, error, false, enc, attempt);
 
         TimeoutHandler timeoutHandler = (name, enc) ->
-                handleAttemptFailure(command, name, null, true, enc, attempt);
+                handleAttemptFailure(command,
+                                     name,
+                                     new StepTimedOutException("Step '" + name + "' timed out"),
+                                     true,
+                                     enc,
+                                     attempt);
 
         return delegate.execute(command, failureHandler, timeoutHandler);
     }
@@ -138,7 +144,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
     private void handleAttemptFailure(
             @Nonnull ExecutePrimitive.ExecuteCommand command,
             @Nonnull String stepName,
-            @Nullable Throwable error,
+            @Nonnull Throwable error,
             boolean isTimeout,
             @Nonnull EventNameCustomizer eventNameCustomizer,
             int attempt
@@ -209,10 +215,10 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             // future, exactly like the delayed branch below, so a step cancellation or a whole-workflow terminal
             // interrupt completes it exceptionally (the parked-step registration deregisters it) instead of launching
             // the next attempt. The launch is fired by the future's normal completion and is additionally gated on the
-            // workflow not being terminal (a cheap defensive guard).
+            // active step and a non-terminal workflow (cheap defensive guards).
             var gapFuture = new CompletableFuture<Void>();
             gapFuture.thenRun(() -> workflowExecution.appendTask(i -> {
-                if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)
+                if (WorkflowStateUtils.isStepActive(i.state(), stepName)
                         && !i.state().workflowStatus().isTerminal()) {
                     launchWithRetry(command, nextAttempt);
                 }
@@ -226,7 +232,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             // phase, so cancellation makes the later deadline notification a no-op.
             var scheduledRetry = timeoutScheduler.schedule(retryReadyAt);
             scheduledRetry.completion().thenRun(() -> workflowExecution.appendTask(i -> {
-                if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)
+                if (WorkflowStateUtils.isStepActive(i.state(), stepName)
                         && !i.state().workflowStatus().isTerminal()) {
                     launchWithRetry(command, nextAttempt);
                 }

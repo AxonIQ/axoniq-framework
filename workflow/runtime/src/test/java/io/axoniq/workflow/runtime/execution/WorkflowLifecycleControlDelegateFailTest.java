@@ -109,7 +109,7 @@ class WorkflowLifecycleControlDelegateFailTest {
     }
 
     @Test
-    void failWorkflow_interruptsRunningStepsWithoutPerStepEvent() {
+    void failWorkflowInterruptsRunningStepsWithoutPerStepEvent() {
         assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(new RuntimeException("boom"), eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
@@ -118,7 +118,7 @@ class WorkflowLifecycleControlDelegateFailTest {
     }
 
     @Test
-    void failWorkflow_withNullCauseInterruptsRunningSteps() {
+    void failWorkflowWithNullCauseInterruptsRunningSteps() {
         assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
@@ -126,7 +126,7 @@ class WorkflowLifecycleControlDelegateFailTest {
     }
 
     @Test
-    void failWorkflow_publishesFailedWorkflowEvent() {
+    void failWorkflowPublishesFailedWorkflowEvent() {
         assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(new RuntimeException("boom"), eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
@@ -134,7 +134,7 @@ class WorkflowLifecycleControlDelegateFailTest {
     }
 
     @Test
-    void failWorkflow_throwsWorkflowFailedExceptionWithCause() {
+    void failWorkflowThrowsWorkflowFailedExceptionWithCause() {
         var cause = new RuntimeException("boom");
 
         assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(cause, eventNameCustomizer)))
@@ -143,14 +143,14 @@ class WorkflowLifecycleControlDelegateFailTest {
     }
 
     @Test
-    void failWorkflow_withNullCauseThrowsWorkflowFailedExceptionWithMessage() {
+    void failWorkflowWithNullCauseThrowsWorkflowFailedExceptionWithMessage() {
         assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class)
                 .hasRootCauseMessage("Workflow failed");
     }
 
     @Test
-    void failWorkflow_executesStepsInOrder() {
+    void failWorkflowExecutesStepsInOrder() {
         var cause = new RuntimeException("boom");
         var order = inOrder(terminalTransition, eventSink);
 
@@ -163,7 +163,7 @@ class WorkflowLifecycleControlDelegateFailTest {
 
     @SuppressWarnings("unchecked")
     @Test
-    void failWorkflow_invokesFailedStatusChangeListener() throws InterruptedException {
+    void failWorkflowInvokesFailedStatusChangeListener() throws InterruptedException {
         var listener = mock(WorkflowStatusChangeListener.class);
         EventSourcedWorkflowState state = workflowState(Map.of(WorkflowStatus.FAILED, listener));
         when(workflowExecution.state()).thenReturn(state);

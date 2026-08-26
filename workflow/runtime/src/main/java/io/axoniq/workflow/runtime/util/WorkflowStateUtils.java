@@ -33,7 +33,7 @@ import java.util.function.Predicate;
  * @since 1.0.0
  */
 @Internal
-public class WorkflowStateUtils {
+public final class WorkflowStateUtils {
 
     private WorkflowStateUtils() {
         // avoid instantiation

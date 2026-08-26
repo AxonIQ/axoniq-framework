@@ -88,7 +88,7 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
     }
 
     @Test
-    void cancelAllRunningStepsThenCancel_backToBack_cancelsAwaitedStepAndCompensates() {
+    void cancelAllRunningStepsThenCancelBackToBackCancelsAwaitedStepAndCompensates() {
         assertCancellationSequence("cancel-all-then-cancel");
     }
 
@@ -102,7 +102,7 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
     @Tag("stress")
     @EnabledIfSystemProperty(named = "workflow.stress-tests", matches = "true")
     @RepeatedTest(20)
-    void cancelAllRunningStepsThenCancel_stressTest(RepetitionInfo repetitionInfo) {
+    void cancelAllRunningStepsThenCancelStressTest(RepetitionInfo repetitionInfo) {
         assertCancellationSequence("cancel-all-then-cancel-" + repetitionInfo.getCurrentRepetition());
     }
 
@@ -111,7 +111,7 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
         delayedPublisher.start();
 
         awaitParked(id);
-        workflowCancellationService.requestRunningStepCancellations(
+        workflowCancellationService.requestCancellationOfAllSteps(
                 id, new StepCancellationException("cancel all running steps")
         ).orTimeout(10, TimeUnit.SECONDS).join();
         workflowCancellationService.requestWorkflowCancellation(id, new WorkflowCancelledException("cancel workflow"))

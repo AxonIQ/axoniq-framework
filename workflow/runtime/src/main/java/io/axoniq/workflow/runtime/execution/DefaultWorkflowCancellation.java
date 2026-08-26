@@ -86,7 +86,7 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
 
     @Nonnull
     @Override
-    public CompletableFuture<Integer> requestRunningStepCancellations(@Nullable Throwable cause) {
+    public CompletableFuture<Integer> requestCancellationOfAllSteps(@Nullable Throwable cause) {
         var stepNames = runningSteps.stepNames();
         if (stepNames.isEmpty()) {
             return CompletableFuture.completedFuture(0);
@@ -118,7 +118,7 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
         synchronized (workflowCancellationMonitor) {
             var pending = pendingWorkflowCancellation.get();
             if (pending != null) {
-                return pending.completion();
+                return pending.callback();
             }
             pendingWorkflowCancellation.set(request);
         }
@@ -127,9 +127,9 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
         } catch (Throwable error) {
             abortPendingWorkflowCancellation(new CancellationException(
                     "Workflow cancellation could not wake the workflow driver"));
-            request.completion().completeExceptionally(error);
+            request.callback().completeExceptionally(error);
         }
-        return request.completion();
+        return request.callback();
     }
 
     @Override
@@ -160,7 +160,7 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
                 return;
             }
         }
-        pending.completion().completeExceptionally(reason);
+        pending.callback().completeExceptionally(reason);
     }
 
     @Nonnull

@@ -63,7 +63,7 @@ class RetryableExecuteDelegateTest {
     private static final String STEP_NAME = "retrying-step";
 
     @Test
-    void recoveredImmediateRetry_isParkedAndCancellationPreventsTheNextAttempt() {
+    void recoveredImmediateRetryIsParkedAndCancellationPreventsTheNextAttempt() {
         var fixture = fixture();
         try (fixture) {
             fixture.delegate.execute(command());
@@ -81,7 +81,7 @@ class RetryableExecuteDelegateTest {
     }
 
     @Test
-    void recoveredDelayedRetry_cancelsItsTimerWhenTheParkedStepIsCancelled() {
+    void recoveredDelayedRetryCancelsItsTimerWhenTheParkedStepIsCancelled() {
         var fixture = fixture();
         try (fixture) {
             fixture.delegate.execute(commandWithBackoff());
@@ -96,7 +96,7 @@ class RetryableExecuteDelegateTest {
     }
 
     @Test
-    void recoveredDelayedRetry_launchesExactlyOneAttemptWhenItsTimerFires() {
+    void recoveredDelayedRetryLaunchesExactlyOneAttemptWhenItsTimerFires() {
         var fixture = fixture();
         try (fixture) {
             fixture.delegate.execute(commandWithBackoff());
@@ -112,7 +112,7 @@ class RetryableExecuteDelegateTest {
     }
 
     @Test
-    void recoveredDelayedRetry_cancelsItsTimerWhenTheWorkflowStops() {
+    void recoveredDelayedRetryCancelsItsTimerWhenTheWorkflowStops() {
         var fixture = fixture();
         try (fixture) {
             fixture.delegate.execute(commandWithBackoff());

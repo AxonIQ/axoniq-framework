@@ -56,7 +56,7 @@ class VersionedWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowConte
     }
 
     @Test
-    void freshWorkflow_recordsV2Marker_andTakesNewBranch() {
+    void freshWorkflowRecordsV2MarkerAndTakesNewBranch() {
         delayedPublisher.addSchedules(List.of(
                 ofMillis(500, new OrderPlacedEvent("order-v2-1", "customer-1"))
         ));

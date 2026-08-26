@@ -138,7 +138,7 @@ class VersionDelegateTest {
     }
 
     @Test
-    void requestSameAsCurrent_emitsNoEvent() {
+    void requestSameAsCurrentEmitsNoEvent() {
         when(state.hasVersionMigrationStep("payment-redesign")).thenReturn(false);
         givenWorkflowDefinitionVersion("0.0.1");
         when(state.workflowStepNames()).thenReturn(List.of());
@@ -151,7 +151,7 @@ class VersionDelegateTest {
     }
 
     @Test
-    void newWorkflowUpgradesToHigherVersion_emitsMarkerNamedAfterChangeId() throws InterruptedException {
+    void newWorkflowUpgradesToHigherVersionEmitsMarkerNamedAfterChangeId() throws InterruptedException {
         // State starts without the marker; once the task runs, the marker becomes present.
         when(state.hasVersionMigrationStep("payment-redesign")).thenReturn(false, true);
         when(state.versionFor("payment-redesign")).thenReturn("0.0.2");
@@ -192,7 +192,7 @@ class VersionDelegateTest {
     }
 
     @Test
-    void replayedWorkflowWithMarker_returnsRecordedValue_doesNotEmit() {
+    void replayedWorkflowWithMarkerReturnsRecordedValueDoesNotEmit() {
         when(state.hasVersionMigrationStep("payment-redesign")).thenReturn(true);
         when(state.versionFor("payment-redesign")).thenReturn("0.0.2");
 
@@ -205,7 +205,7 @@ class VersionDelegateTest {
     }
 
     @Test
-    void secondVersionCallForSameChangeId_returnsRecordedValue() throws InterruptedException {
+    void secondVersionCallForSameChangeIdReturnsRecordedValue() throws InterruptedException {
         // First call: no marker, emit; second call: marker present, no emit.
         when(state.hasVersionMigrationStep("payment-redesign")).thenReturn(false, true, true);
         when(state.versionFor("payment-redesign")).thenReturn("0.0.2");
@@ -229,7 +229,7 @@ class VersionDelegateTest {
      * the current version unchanged.
      */
     @Test
-    void downstreamStepsGuard_blocksEmission_whenLaterStepsArePresentInState() {
+    void downstreamStepsGuardBlocksEmissionWhenLaterStepsArePresentInState() {
         reachedSteps.record("A");
         when(state.hasVersionMigrationStep("x")).thenReturn(false);
         givenWorkflowDefinitionVersion("0.0.1");
@@ -251,7 +251,7 @@ class VersionDelegateTest {
      * downstream yet — guard allows emission, workflow adopts v0.0.2.
      */
     @Test
-    void downstreamStepsGuard_allowsEmissionWhenAllStateStepsReferenced() throws InterruptedException {
+    void downstreamStepsGuardAllowsEmissionWhenAllStateStepsReferenced() throws InterruptedException {
         reachedSteps.record("A");
         when(state.hasVersionMigrationStep("x")).thenReturn(false, true);
         when(state.versionFor("x")).thenReturn("0.0.2");
@@ -268,7 +268,7 @@ class VersionDelegateTest {
     }
 
     @Test
-    void downstreamStepsGuard_emptyState_allowsEmission() throws InterruptedException {
+    void downstreamStepsGuardEmptyStateAllowsEmission() throws InterruptedException {
         when(state.hasVersionMigrationStep("x")).thenReturn(false, true);
         when(state.versionFor("x")).thenReturn("0.0.3");
         givenWorkflowDefinitionVersion("0.0.1");
@@ -287,7 +287,7 @@ class VersionDelegateTest {
      * should NOT block emission — only terminal steps prove old-code execution committed past this point.
      */
     @Test
-    void downstreamStepsGuard_ignoresNonTerminalStepsAhead() throws InterruptedException {
+    void downstreamStepsGuardIgnoresNonTerminalStepsAhead() throws InterruptedException {
         reachedSteps.record("A");
         when(state.hasVersionMigrationStep("x")).thenReturn(false, true);
         when(state.versionFor("x")).thenReturn("0.0.2");

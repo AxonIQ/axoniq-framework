@@ -77,7 +77,7 @@ class MultiVersionRoutingWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
     }
 
     @Test
-    void freshStart_picksHighestVersion_andRunsV2Body() {
+    void freshStartPicksHighestVersionAndRunsV2Body() {
         delayedPublisher.addSchedules(List.of(
                 ofMillis(500, new OrderPlacedEvent("order-1", "alice"))
         ));
@@ -102,7 +102,7 @@ class MultiVersionRoutingWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
      * {@code findClosestRegisteredVersion} the v2 workflow would cross-jump or fail.
      */
     @Test
-    void bumpedVersion_routesToClosestRegisteredDefinition() {
+    void bumpedVersionRoutesToClosestRegisteredDefinition() {
         v2.bumpInsideBody = true; // make V2Body call ctx.migrateVersion(..., "2.0.1") before its step
 
         delayedPublisher.addSchedules(List.of(

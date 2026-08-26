@@ -40,7 +40,7 @@ class WorkflowCancellationServiceTest {
     private static final String WORKFLOW_ID = "workflow-id";
 
     @Test
-    void cancellationRequests_delegateToRegisteredCoordinator() {
+    void cancellationRequestsDelegateToRegisteredCoordinator() {
         var service = new WorkflowCancellationService();
         var cancellation = mock(WorkflowCancellation.class);
         var stepCause = new IllegalStateException("step cancellation");
@@ -51,16 +51,16 @@ class WorkflowCancellationServiceTest {
         var workflowCancellation = CompletableFuture.<Void>completedFuture(null);
         service.register(WORKFLOW_ID, cancellation);
         when(cancellation.requestStepCancellation("step", stepCause)).thenReturn(stepCancellation);
-        when(cancellation.requestRunningStepCancellations(runningStepsCause)).thenReturn(runningStepCancellations);
+        when(cancellation.requestCancellationOfAllSteps(runningStepsCause)).thenReturn(runningStepCancellations);
         when(cancellation.requestWorkflowCancellation(workflowCause)).thenReturn(workflowCancellation);
 
         assertThat(service.requestStepCancellation(WORKFLOW_ID, "step", stepCause)).isSameAs(stepCancellation);
-        assertThat(service.requestRunningStepCancellations(WORKFLOW_ID, runningStepsCause))
+        assertThat(service.requestCancellationOfAllSteps(WORKFLOW_ID, runningStepsCause))
                 .isSameAs(runningStepCancellations);
         assertThat(service.requestWorkflowCancellation(WORKFLOW_ID, workflowCause)).isSameAs(workflowCancellation);
 
         verify(cancellation).requestStepCancellation("step", stepCause);
-        verify(cancellation).requestRunningStepCancellations(runningStepsCause);
+        verify(cancellation).requestCancellationOfAllSteps(runningStepsCause);
         verify(cancellation).requestWorkflowCancellation(workflowCause);
     }
 
@@ -106,7 +106,7 @@ class WorkflowCancellationServiceTest {
         assertThatThrownBy(() -> service.requestStepCancellation(WORKFLOW_ID, "step", null))
                 .isInstanceOf(NoSuchElementException.class)
                 .hasMessage("No running workflow found with id 'workflow-id'");
-        assertThatThrownBy(() -> service.requestRunningStepCancellations(WORKFLOW_ID, null))
+        assertThatThrownBy(() -> service.requestCancellationOfAllSteps(WORKFLOW_ID, null))
                 .isInstanceOf(NoSuchElementException.class)
                 .hasMessage("No running workflow found with id 'workflow-id'");
     }

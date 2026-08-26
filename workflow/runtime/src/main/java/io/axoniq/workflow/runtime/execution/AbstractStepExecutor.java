@@ -31,6 +31,7 @@ import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Context;
@@ -46,7 +47,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.merge;
@@ -76,8 +76,8 @@ public abstract class AbstractStepExecutor {
     /**
      * Constructs the abstract step executor.
      *
-     * @param workflowContext            workflow context
-     * @param workflowExecution          workflow execution
+     * @param workflowContext           workflow context
+     * @param workflowExecution         workflow execution
      * @param runningSteps              running step registry
      * @param reachedSteps              reached steps tracker
      * @param parentEventNameCustomizer parent event name customizer
@@ -201,16 +201,16 @@ public abstract class AbstractStepExecutor {
      * CANCELLED through the guarded publish path and the cleanup hook runs; any other completion only removes the
      * running-step registration, leaving the durable step state untouched.
      *
-     * @param stepName            name of the parked step.
-     * @param future              future representing the parked phase.
-     * @param eventNameCustomizer event name customizer of the step.
-     * @param onCancelled         cleanup to run when the parked phase is cancelled.
+     * @param stepName            name of the parked step
+     * @param parkedPhase         future representing the parked phase
+     * @param eventNameCustomizer event name customizer of the step
+     * @param onCancelled         cleanup to run when the parked phase is cancelled
      */
     protected void registerParkedStep(@Nonnull String stepName,
-                                      @Nonnull CompletableFuture<?> future,
+                                      @Nonnull CompletableFuture<?> parkedPhase,
                                       @Nonnull EventNameCustomizer eventNameCustomizer,
                                       @Nonnull Runnable onCancelled) {
-        registerParkedStep(stepName, future, () -> {
+        registerParkedStep(stepName, parkedPhase, () -> {
         }, eventNameCustomizer, onCancelled);
     }
 
@@ -218,20 +218,20 @@ public abstract class AbstractStepExecutor {
      * Registers a parked step and owns the lifetime of its timer.
      *
      * @param stepName            name of the parked step
-     * @param future              future representing the parked phase
+     * @param parkedPhase         future representing the parked phase
      * @param cancelTimer         cancels the timer associated with the parked phase
      * @param eventNameCustomizer event name customizer of the step
      * @param onCancelled         cleanup to run when the parked phase is cancelled
      */
     protected void registerParkedStep(@Nonnull String stepName,
-                                      @Nonnull CompletableFuture<?> future,
+                                      @Nonnull CompletableFuture<?> parkedPhase,
                                       @Nonnull Runnable cancelTimer,
                                       @Nonnull EventNameCustomizer eventNameCustomizer,
                                       @Nonnull Runnable onCancelled) {
         // Register before observing completion. If a timer has already completed, whenComplete removes this exact
         // registration immediately instead of leaving a completed future permanently marked as running.
-        runningSteps.register(stepName, future);
-        future.whenComplete((result, e) -> {
+        runningSteps.register(stepName, parkedPhase);
+        parkedPhase.whenComplete((result, e) -> {
             runningSteps.remove(stepName);
             cancelTimer.run();
             if (e != null && isCancellation(e)) {
@@ -372,7 +372,7 @@ public abstract class AbstractStepExecutor {
 
     @Nonnull
     protected static Throwable unwrapCompletionException(@Nonnull Throwable e) {
-        return e instanceof CompletionException ? e.getCause() : e;
+        return FutureUtils.unwrap(e);
     }
 
     /**

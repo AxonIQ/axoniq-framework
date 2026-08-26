@@ -98,7 +98,7 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
         // publish on the first live run. On a post-crash live re-run the step is already present, so skip
         // re-publishing (the replay-skip gate the other primitives have) to avoid a duplicate terminal record.
         if (!workflowExecution.state().containsStep(stepName)) {
-            reachedSteps.guardAgainstReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
+            reachedSteps.assertNoReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
             workflowExecution.appendTask(e -> {
                                              // apply modification right away
                                              var newPayload = payloadModification.apply(workflowExecution.workflowContext().workflowPayload());

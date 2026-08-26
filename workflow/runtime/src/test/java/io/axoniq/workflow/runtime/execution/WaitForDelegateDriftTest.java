@@ -82,7 +82,7 @@ class WaitForDelegateDriftTest {
     }
 
     @Test
-    void waitFor_throwsDriftException_whenUnreferencedTerminalStepsInState() {
+    void waitForThrowsDriftExceptionWhenUnreferencedTerminalStepsInState() {
         reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
@@ -99,7 +99,7 @@ class WaitForDelegateDriftTest {
     }
 
     @Test
-    void waitFor_guardPasses_whenAllTerminalStepsReferenced() {
+    void waitForGuardPassesWhenAllTerminalStepsReferenced() {
         reachedSteps.record("A");
         reachedSteps.record("B");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
@@ -111,7 +111,7 @@ class WaitForDelegateDriftTest {
     }
 
     @Test
-    void waitFor_guardPasses_forCachedStepLookup() {
+    void waitForGuardPassesForCachedStepLookup() {
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(terminalStep("A"));
         when(state.getStep("B")).thenReturn(terminalStep("B"));
