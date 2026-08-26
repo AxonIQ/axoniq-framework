@@ -36,7 +36,6 @@ import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -69,7 +68,6 @@ public class WorkflowEngine implements
     private static final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
 
     private static final String AFTER_REPLAY_LOG = "after replay catch-up";
-    private static final String BEFORE_REPLAY_LOG = "before replay catch-up";
 
     /**
      * Time {@link #restoreWorkflowsFor(Segment, TrackingToken, ProcessingContext, ProcessingContext)} is given to load
@@ -406,6 +404,8 @@ public class WorkflowEngine implements
         var drained = released.stream()
                               .map(WorkflowExecution::interrupt)
                               .toArray(CompletableFuture[]::new);
+        // Removed ahead of the interrupts resolving, not after: an event for a removed id falls through the
+        // empty-check in handle() and gets ignored, so nothing depends on the removal waiting for allOf(drained).
         workflowExecutionRepository.removeAll(ownedBy(segment));
         return CompletableFuture.allOf(drained);
     }
