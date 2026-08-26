@@ -18,11 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
@@ -36,25 +31,19 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
 
 import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
 import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.token;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Claiming a segment sources its instances from the event store <em>head</em>, while the segment's own processor
@@ -81,7 +70,9 @@ class WorkflowEngineClaimDuringReplayTest {
     private WorkflowEngineReplaySupport replaySupport;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
-    /** Body starts observed for the resident instance, in order. The observation channel. */
+    /**
+     * Body starts observed for the resident instance, in order. The observation channel.
+     */
     private final List<String> bodyStarts = new ArrayList<>();
 
     @BeforeEach
@@ -134,10 +125,10 @@ class WorkflowEngineClaimDuringReplayTest {
 
         assertThat(bodyStarts)
                 .as("""
-                    Workflow bodies started by the re-claim of segment %s: %s. Expected: none. The claim sourced \
-                    '%s' from the event-store head while segment %s sits at position %s and the startup latest token \
-                    is %s, so positions %s..%s are still to be delivered to it. A body started here runs at head \
-                    state and emits live side effects while those events replay onto it.""",
+                            Workflow bodies started by the re-claim of segment %s: %s. Expected: none. The claim sourced \
+                            '%s' from the event-store head while segment %s sits at position %s and the startup latest token \
+                            is %s, so positions %s..%s are still to be delivered to it. A body started here runs at head \
+                            state and emits live side effects while those events replay onto it.""",
                     owner, bodyStarts, RESIDENT_ID, owner, SEGMENT_POSITION_BEFORE_RELEASE, STARTUP_LATEST_POSITION,
                     SEGMENT_POSITION_BEFORE_RELEASE + 1, STARTUP_LATEST_POSITION)
                 .isEmpty();
@@ -155,7 +146,6 @@ class WorkflowEngineClaimDuringReplayTest {
      * counting body. The execution reports {@code isRunning() == false} throughout, the state of an instance whose body
      * has not been started, so nothing but the engine's own gate can keep it from being started.
      */
-    @SuppressWarnings("unchecked")
     private void registerRestorableWorkflow() {
         var restoredState = mock(WorkflowState.class);
         when(restoredState.workflowDefinitionId()).thenReturn(DEFINITION_ID);
@@ -168,33 +158,9 @@ class WorkflowEngineClaimDuringReplayTest {
         when(workflowStore.loadWorkflow(eq(RESIDENT_ID), any()))
                 .thenReturn(CompletableFuture.completedFuture(restoredState));
 
-        var workflowContext = mock(WorkflowContext.class);
-        var bodyContext = mock(ProcessingContext.class);
-        when(workflowContext.processingContext()).thenReturn(bodyContext);
-        when(bodyContext.whenComplete(any())).thenAnswer(invocation -> {
-            invocation.<Consumer<ProcessingContext>>getArgument(0).accept(bodyContext);
-            return bodyContext;
-        });
-
-        WorkflowConfiguration<WorkflowContext> configuration = mock(WorkflowConfiguration.class);
-        WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
-        WorkflowExecutionFactory executionFactory = mock(WorkflowExecutionFactory.class);
-        when(configuration.workflowContextFactory()).thenReturn(contextFactory);
-        when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
-        when(contextFactory.createContext(anyMap(), eq(RESIDENT_ID), any(), eq(configuration)))
-                .thenReturn(workflowContext);
-        when(executionFactory.create(workflowContext)).thenAnswer(invocation -> {
-            var execution = mock(WorkflowExecution.class);
-            when(execution.workflowId()).thenReturn(RESIDENT_ID);
-            when(execution.state()).thenReturn(restoredState);
-            when(execution.isRunning()).thenReturn(false);
-            when(execution.workflowContext()).thenReturn(workflowContext);
-            doAnswer(ignored -> {
-                bodyStarts.add(RESIDENT_ID);
-                return null;
-            }).when(execution).execute(any());
-            return execution;
-        });
+        var execution = WorkflowExecutionFixture.mockExecution(RESIDENT_ID, restoredState, false);
+        WorkflowExecutionFixture.recordBodyStartOn(execution, bodyStarts::add, RESIDENT_ID);
+        var configuration = WorkflowExecutionFixture.mockConfiguration(RESIDENT_ID, execution);
         when(configurationRegistry.getWorkflowConfiguration(DEFINITION_ID)).thenReturn(Optional.of(configuration));
     }
 
@@ -206,7 +172,9 @@ class WorkflowEngineClaimDuringReplayTest {
         return new StubProcessingContext();
     }
 
-    /** A processor batch context carrying the segment the event is delivered under, and its position. */
+    /**
+     * A processor batch context carrying the segment the event is delivered under, and its position.
+     */
     private ProcessingContext deliveryContext(Segment segment, @Nullable TrackingToken trackingToken) {
         var context = new StubProcessingContext();
         context.putResource(Segment.RESOURCE_KEY, segment);

@@ -21,11 +21,7 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointTrigger;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointingProgressStrategy;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
@@ -42,10 +38,9 @@ import org.axonframework.messaging.eventhandling.processing.streaming.progress.S
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.*;
+import org.junit.jupiter.params.provider.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,25 +50,15 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.FOUR_SEGMENTS;
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.SEGMENT_COUNT;
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.idOnAnotherSegmentThan;
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.token;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
- * Pins that a checkpoint is scoped to the segment that asked for it: {@link WorkflowEngineCheckpointingSupport}
- * retains the {@code CheckpointTrigger} of each claimed segment separately, and the engine routes every request to the
- * segment that produced it, so no segment's stored token is ever advanced by another segment's progress.
+ * Pins that a checkpoint is scoped to the segment that asked for it: {@link WorkflowEngineCheckpointingSupport} retains
+ * the {@code CheckpointTrigger} of each claimed segment separately, and the engine routes every request to the segment
+ * that produced it, so no segment's stored token is ever advanced by another segment's progress.
  * <p>
  * Behaviour measured here: an asynchronous checkpoint request raised by a workflow owned by segment A must not be
  * delivered through the trigger of segment B. If it were, <em>B's</em> stored token would jump to A's stream position
@@ -82,10 +67,10 @@ import static org.mockito.Mockito.when;
  * <p>
  * The rig is deliberately the real machinery on both sides of the boundary: the real framework
  * {@link CheckpointingProgressStrategy} (one per segment, exactly as a work package owns one) drives the engine's real
- * {@link Checkpointing} implementation, and the resulting token is stored in a real
- * {@link InMemoryTokenStore} and read back from it. Only {@link SegmentProgressContext} is a test double: it is the
- * thin work-package seam (segment identity, last consumed position, monotonic store) and it mirrors
- * {@code WorkPackage#storeIfAdvanced}. An in-memory token store is enough because this oracle needs stored
+ * {@link Checkpointing} implementation, and the resulting token is stored in a real {@link InMemoryTokenStore} and read
+ * back from it. Only {@link SegmentProgressContext} is a test double: it is the thin work-package seam (segment
+ * identity, last consumed position, monotonic store) and it mirrors {@code WorkPackage#storeIfAdvanced}. An in-memory
+ * token store is enough because this oracle needs stored
  * <em>positions</em> only, never claim ownership.
  * <p>
  * The framework does not defend against this on the caller's behalf: a requested position is neither clamped to the
@@ -97,11 +82,15 @@ class WorkflowEngineCrossSegmentCheckpointTest {
 
     private static final String PROCESSOR = "Workflow";
 
-    /** Instance whose start event segment A handles, and whose asynchronous completion raises the leaking request. */
+    /**
+     * Instance whose start event segment A handles, and whose asynchronous completion raises the leaking request.
+     */
     private static final String STRAGGLER_ID = "sharded-0";
     private static final QualifiedName START_EVENT = new QualifiedName("StartShardedWorkflow");
 
-    /** Stream positions of the four events this test places on the (shared) event stream. */
+    /**
+     * Stream positions of the four events this test places on the (shared) event stream.
+     */
     private static final long SLOW_SEGMENT_HANDLED_POSITION = 5;
     private static final long SLOW_SEGMENT_UNHANDLED_POSITION = 42;
     private static final long FAST_SEGMENT_HANDLED_POSITION = 100;
@@ -122,9 +111,9 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         configurationRegistry = mock(WorkflowConfigurationRegistry.class);
         repository = new InMemoryWorkflowExecutionRepository();
         workflowEngine = new WorkflowEngine(configurationRegistry,
-                                                    repository,
-                                                    mock(WorkflowStore.class),
-                                                    mock(UnitOfWorkFactory.class));
+                                            repository,
+                                            mock(WorkflowStore.class),
+                                            mock(UnitOfWorkFactory.class));
         replaySupport = new WorkflowEngineReplaySupport(workflowEngine);
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
         workflowEngine.setEngineSupportComponents(replaySupport, checkpointingSupport);
@@ -189,12 +178,12 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         var slowStored = storedToken(slow);
         assertThat(slowStored)
                 .as("""
-                    Stored token of segment %s, read back from the token store: %s.
-                    Expected: %s, this segment's own last consumed position, so the event at position %s for instance \
-                    '%s' -- owned by this segment and never handled by it -- is still redelivered after a restart.
-                    A regression shows up as %s, the FAST segment's position, pushed through this segment's trigger \
-                    because WorkflowEngineCheckpointingSupport stopped keeping a CheckpointTrigger per segment. \
-                    Positions %s..%s of this segment would then be silently skipped after a restart.""",
+                            Stored token of segment %s, read back from the token store: %s.
+                            Expected: %s, this segment's own last consumed position, so the event at position %s for instance \
+                            '%s' -- owned by this segment and never handled by it -- is still redelivered after a restart.
+                            A regression shows up as %s, the FAST segment's position, pushed through this segment's trigger \
+                            because WorkflowEngineCheckpointingSupport stopped keeping a CheckpointTrigger per segment. \
+                            Positions %s..%s of this segment would then be silently skipped after a restart.""",
                     slow,
                     slowStored,
                     token(SLOW_SEGMENT_HANDLED_POSITION),
@@ -320,7 +309,9 @@ class WorkflowEngineCrossSegmentCheckpointTest {
             strategy.onBatchCommit(batchContext(null)).join();
         }
 
-        /** A processor batch context carrying this segment, its position and, as the processor does, its trigger. */
+        /**
+         * A processor batch context carrying this segment, its position and, as the processor does, its trigger.
+         */
         private ProcessingContext batchContext(@Nullable Long position) {
             var context = processingContext(segment, position == null ? lastConsumed : token(position));
             strategy.contributeBatchResources(context);
@@ -342,37 +333,19 @@ class WorkflowEngineCrossSegmentCheckpointTest {
      * termination handler the engine installs, so the test can complete the workflow body asynchronously, after the
      * segment that handled its start event has moved on.
      */
-    @SuppressWarnings("unchecked")
     private WorkflowExecution registerStartConfiguration() {
-        var execution = mock(WorkflowExecution.class);
         var state = mock(WorkflowState.class);
         when(state.workflowStatus()).thenReturn(WorkflowStatus.COMPLETED);
-        when(execution.workflowId()).thenReturn(STRAGGLER_ID);
-        when(execution.state()).thenReturn(state);
 
-        var workflowContext = mock(WorkflowContext.class);
-        var bodyContext = mock(ProcessingContext.class);
-        when(workflowContext.processingContext()).thenReturn(bodyContext);
-        when(bodyContext.whenComplete(any())).thenAnswer(invocation -> {
-            invocation.<Consumer<ProcessingContext>>getArgument(0).accept(bodyContext);
-            return bodyContext;
-        });
-        when(execution.workflowContext()).thenReturn(workflowContext);
+        var execution = WorkflowExecutionFixture.mockExecution(STRAGGLER_ID, state, false);
         doAnswer(invocation -> {
             stragglerTermination.set(invocation.getArgument(0));
             return null;
         }).when(execution).execute(any());
 
-        WorkflowConfiguration<WorkflowContext> configuration = mock(WorkflowConfiguration.class);
-        WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
-        WorkflowExecutionFactory executionFactory = mock(WorkflowExecutionFactory.class);
+        var configuration = WorkflowExecutionFixture.mockConfiguration(STRAGGLER_ID, execution);
         when(configuration.workflowIdProvider()).thenReturn(event -> STRAGGLER_ID);
         when(configuration.workflowVersion()).thenReturn("1.0.0");
-        when(configuration.workflowContextFactory()).thenReturn(contextFactory);
-        when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
-        when(contextFactory.createContext(anyMap(), eq(STRAGGLER_ID), any(), eq(configuration)))
-                .thenReturn(workflowContext);
-        when(executionFactory.create(workflowContext)).thenReturn(execution);
         when(configurationRegistry.getHighestVersionConfigurations(new MessageType(START_EVENT)))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
         return execution;

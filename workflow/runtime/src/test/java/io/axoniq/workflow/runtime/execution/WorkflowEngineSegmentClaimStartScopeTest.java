@@ -18,11 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
@@ -36,30 +31,18 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
 
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.SEGMENT_COUNT;
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.anotherSegmentThan;
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.anyIdOn;
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.token;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * The pass that removes terminal executions and starts the restored ones is scoped by {@link Segment}, at both of its
@@ -88,7 +71,9 @@ class WorkflowEngineSegmentClaimStartScopeTest {
     private WorkflowEngineReplaySupport replaySupport;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
-    /** Body starts observed for the resident instance, in claim order. */
+    /**
+     * Body starts observed for the resident instance, in claim order.
+     */
     private final List<String> bodyStarts = new ArrayList<>();
 
     @BeforeEach
@@ -138,10 +123,10 @@ class WorkflowEngineSegmentClaimStartScopeTest {
 
         assertThat(bodyStarts)
                 .as("""
-                    Workflow bodies started by the claim of segment %s: %s. Expected: none. Instance '%s' is owned by \
-                    segment %s, which this claim does not concern, so claiming %s must start nothing (mirroring \
-                    releaseWorkflowsFor, which is scoped by ownedBy(segment)). Starting it here gives '%s' a second, \
-                    concurrent run of a body that is already running.""",
+                            Workflow bodies started by the claim of segment %s: %s. Expected: none. Instance '%s' is owned by \
+                            segment %s, which this claim does not concern, so claiming %s must start nothing (mirroring \
+                            releaseWorkflowsFor, which is scoped by ownedBy(segment)). Starting it here gives '%s' a second, \
+                            concurrent run of a body that is already running.""",
                     other, bodyStarts, RESIDENT_ID, owner, other, RESIDENT_ID)
                 .isEmpty();
     }
@@ -151,9 +136,9 @@ class WorkflowEngineSegmentClaimStartScopeTest {
      * executions it owns.
      * <p>
      * An instance restored while its own segment was still replaying stays materialized-but-not-started. When an
-     * unrelated segment then catches up, {@code onLiveModeActivated} runs for that segment, and its start pass must
-     * not touch the parked instance of the other segment. The owning segment catching up must still start it: the
-     * scoping must narrow the pass, not disable it.
+     * unrelated segment then catches up, {@code onLiveModeActivated} runs for that segment, and its start pass must not
+     * touch the parked instance of the other segment. The owning segment catching up must still start it: the scoping
+     * must narrow the pass, not disable it.
      */
     @Test
     void aSegmentReachingTheReplayBoundaryStartsOnlyItsOwnWorkflowExecutions() {
@@ -186,10 +171,10 @@ class WorkflowEngineSegmentClaimStartScopeTest {
         assertThat(replaySupport.inLiveMode(other)).as("segment %s must have gone live", other).isTrue();
         assertThat(bodyStarts)
                 .as("""
-                    Workflow bodies started when segment %s reached the replay boundary: %s. Expected: none. \
-                    Instance '%s' is owned by segment %s, which is still replaying at position %s; segment %s going \
-                    live concerns only its own instances. Starting '%s' here runs a body on behalf of a segment that \
-                    has not caught up, and any completion it produces would be attributed to segment %s's position.""",
+                            Workflow bodies started when segment %s reached the replay boundary: %s. Expected: none. \
+                            Instance '%s' is owned by segment %s, which is still replaying at position %s; segment %s going \
+                            live concerns only its own instances. Starting '%s' here runs a body on behalf of a segment that \
+                            has not caught up, and any completion it produces would be attributed to segment %s's position.""",
                     other, bodyStarts, RESIDENT_ID, owner, LAGGING_POSITION, other, RESIDENT_ID, other)
                 .isEmpty();
 
@@ -203,11 +188,11 @@ class WorkflowEngineSegmentClaimStartScopeTest {
     /**
      * A claim is the only signal a node gets for a segment no delivery has reached, and the deferral is lifted
      * exclusively by a delivery on that same segment. Deferring on the claim position alone therefore parks the
-     * segment's instances for good whenever the remaining events belong to other segments: their deliveries
-     * advance this segment's stored token without ever reaching its handler.
+     * segment's instances for good whenever the remaining events belong to other segments: their deliveries advance
+     * this segment's stored token without ever reaching its handler.
      * <p>
-     * So a segment claimed behind the startup latest token, with no delivery ever observed on it, starts its
-     * bodies. The sibling case above defers, because a delivery was observed there and can lift it again.
+     * So a segment claimed behind the startup latest token, with no delivery ever observed on it, starts its bodies.
+     * The sibling case above defers, because a delivery was observed there and can lift it again.
      */
     @Test
     void aSegmentClaimedBehindWithNoObservedDeliveryStartsItsBodies() {
@@ -243,12 +228,11 @@ class WorkflowEngineSegmentClaimStartScopeTest {
     }
 
     /**
-     * Wires the store and the registry so that {@link RESIDENT_ID} can be rehydrated, and gives the resulting
-     * execution the counting body. The execution reports {@code isRunning() == false} throughout: that is the state
-     * of an instance whose body has not been started (what {@code restoreWorkflow} leaves behind, since it only calls
+     * Wires the store and the registry so that {@code RESIDENT_ID} can be rehydrated, and gives the resulting execution
+     * the counting body. The execution reports {@code isRunning() == false} throughout: that is the state of an
+     * instance whose body has not been started (what {@code restoreWorkflow} leaves behind, since it only calls
      * {@code initializeState}) and of one parked between runs.
      */
-    @SuppressWarnings("unchecked")
     private void registerRestorableWorkflow(WorkflowState restoredState) {
         var running = new EventSourcedRunningWorkflows();
         running.evolve(MetadataUtils.create(RESIDENT_ID, WorkflowStatus.STARTED));
@@ -256,31 +240,9 @@ class WorkflowEngineSegmentClaimStartScopeTest {
         when(workflowStore.loadWorkflow(eq(RESIDENT_ID), any()))
                 .thenReturn(CompletableFuture.completedFuture(restoredState));
 
-        var execution = mock(WorkflowExecution.class);
-        when(execution.workflowId()).thenReturn(RESIDENT_ID);
-        when(execution.state()).thenReturn(restoredState);
-        when(execution.isRunning()).thenReturn(false);
-        var workflowContext = mock(WorkflowContext.class);
-        var bodyContext = mock(ProcessingContext.class);
-        when(workflowContext.processingContext()).thenReturn(bodyContext);
-        when(bodyContext.whenComplete(any())).thenAnswer(invocation -> {
-            invocation.<Consumer<ProcessingContext>>getArgument(0).accept(bodyContext);
-            return bodyContext;
-        });
-        when(execution.workflowContext()).thenReturn(workflowContext);
-        doAnswer(invocation -> {
-            bodyStarts.add(RESIDENT_ID);
-            return null;
-        }).when(execution).execute(any());
-
-        WorkflowConfiguration<WorkflowContext> configuration = mock(WorkflowConfiguration.class);
-        WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
-        WorkflowExecutionFactory executionFactory = mock(WorkflowExecutionFactory.class);
-        when(configuration.workflowContextFactory()).thenReturn(contextFactory);
-        when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
-        when(contextFactory.createContext(anyMap(), eq(RESIDENT_ID), any(), eq(configuration)))
-                .thenReturn(workflowContext);
-        when(executionFactory.create(workflowContext)).thenReturn(execution);
+        var execution = WorkflowExecutionFixture.mockExecution(RESIDENT_ID, restoredState, false);
+        WorkflowExecutionFixture.recordBodyStartOn(execution, bodyStarts::add, RESIDENT_ID);
+        var configuration = WorkflowExecutionFixture.mockConfiguration(RESIDENT_ID, execution);
         when(configurationRegistry.getWorkflowConfiguration(DEFINITION_ID)).thenReturn(Optional.of(configuration));
     }
 

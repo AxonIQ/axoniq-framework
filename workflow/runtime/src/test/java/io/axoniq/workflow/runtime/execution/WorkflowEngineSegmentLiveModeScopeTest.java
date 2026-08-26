@@ -18,11 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
@@ -37,28 +32,17 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
 
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.FOUR_SEGMENTS;
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.SEGMENT_COUNT;
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.anotherSegmentThan;
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.anyIdOn;
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.owningSegment;
-import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.token;
+import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * {@link WorkflowEngineReplaySupport} keys its replay state by {@link Segment}: a live-mode flag and a current position
@@ -85,7 +69,9 @@ class WorkflowEngineSegmentLiveModeScopeTest {
     private WorkflowEngineReplaySupport replaySupport;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
-    /** Workflow bodies the engine started, in order. The observation channel. */
+    /**
+     * Workflow bodies the engine started, in order. The observation channel.
+     */
     private final List<String> bodyStarts = new ArrayList<>();
 
     @BeforeEach
@@ -131,11 +117,11 @@ class WorkflowEngineSegmentLiveModeScopeTest {
 
         assertThat(bodyStarts)
                 .as("""
-                    Workflow bodies started while their own segment is still replaying: %s. Expected: none. Segment \
-                    %s is at position %s and the startup latest token is %s, so it is still replaying; the start of \
-                    '%s' must be materialized without running its body until that segment catches up. Segment %s \
-                    reaching %s switches only itself to live mode. A body started here would run against a partially \
-                    replayed instance view and emit live side effects during replay.""",
+                            Workflow bodies started while their own segment is still replaying: %s. Expected: none. Segment \
+                            %s is at position %s and the startup latest token is %s, so it is still replaying; the start of \
+                            '%s' must be materialized without running its body until that segment catches up. Segment %s \
+                            reaching %s switches only itself to live mode. A body started here would run against a partially \
+                            replayed instance view and emit live side effects during replay.""",
                     bodyStarts, lagging, LAGGING_SEGMENT_POSITION, STARTUP_LATEST_POSITION, startId,
                     caughtUp, CAUGHT_UP_SEGMENT_POSITION)
                 .isEmpty();
@@ -162,22 +148,22 @@ class WorkflowEngineSegmentLiveModeScopeTest {
 
         assertThat(replaySupport.isReplaying(lagging, token(LAGGING_SEGMENT_POSITION)))
                 .as("""
-                    Segment %s was observed at position %s, behind the startup latest token %s, so it is replaying. \
-                    The engine-wide live-mode flag of a node that started owning nothing must not mask that.""",
+                            Segment %s was observed at position %s, behind the startup latest token %s, so it is replaying. \
+                            The engine-wide live-mode flag of a node that started owning nothing must not mask that.""",
                     lagging, LAGGING_SEGMENT_POSITION, STARTUP_LATEST_POSITION)
                 .isTrue();
         assertThat(bodyStarts)
                 .as("""
-                    Workflow bodies started on a still-replaying segment: %s. Expected: none. The node started \
-                    owning zero segments, which set the engine-wide live-mode flag; that flag must not make a \
-                    later-claimed lagging segment run bodies at head state during its catch-up.""",
+                            Workflow bodies started on a still-replaying segment: %s. Expected: none. The node started \
+                            owning zero segments, which set the engine-wide live-mode flag; that flag must not make a \
+                            later-claimed lagging segment run bodies at head state during its catch-up.""",
                     bodyStarts)
                 .isEmpty();
     }
 
     @Test
     void aRestoredExecutionIsSeededWithTheTokenOfItsOwnSegment() {
-        var lagging = FOUR_SEGMENTS.get(0);
+        var lagging = FOUR_SEGMENTS.getFirst();
         var caughtUp = anotherSegmentThan(lagging);
         var laggingId = anyIdOn(lagging);
         var caughtUpId = anyIdOn(caughtUp);
@@ -212,43 +198,22 @@ class WorkflowEngineSegmentLiveModeScopeTest {
         var seeded = executionContext.resources().get(TrackingToken.RESOURCE_KEY);
         assertThat(seeded)
                 .as("""
-                    Tracking token seeded into the restore context of segment %s: %s. Expected: %s, that segment's \
-                    own position, not %s, the position of segment %s. A restored instance seeded with another \
-                    segment's position is told it resumes from a position its own segment never reached.""",
+                            Tracking token seeded into the restore context of segment %s: %s. Expected: %s, that segment's \
+                            own position, not %s, the position of segment %s. A restored instance seeded with another \
+                            segment's position is told it resumes from a position its own segment never reached.""",
                     lagging, seeded, token(LAGGING_SEGMENT_POSITION), token(CAUGHT_UP_SEGMENT_POSITION), caughtUp)
                 .isEqualTo(token(LAGGING_SEGMENT_POSITION));
     }
 
-    @SuppressWarnings("unchecked")
     private void registerStartConfiguration(String workflowId) {
-        var execution = mock(WorkflowExecution.class);
         var state = mock(WorkflowState.class);
         when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
-        when(execution.workflowId()).thenReturn(workflowId);
-        when(execution.state()).thenReturn(state);
-        var workflowContext = mock(WorkflowContext.class);
-        var bodyContext = mock(ProcessingContext.class);
-        when(workflowContext.processingContext()).thenReturn(bodyContext);
-        when(bodyContext.whenComplete(any())).thenAnswer(invocation -> {
-            invocation.<Consumer<ProcessingContext>>getArgument(0).accept(bodyContext);
-            return bodyContext;
-        });
-        when(execution.workflowContext()).thenReturn(workflowContext);
-        doAnswer(invocation -> {
-            bodyStarts.add(workflowId);
-            return null;
-        }).when(execution).execute(any());
 
-        WorkflowConfiguration<WorkflowContext> configuration = mock(WorkflowConfiguration.class);
-        WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
-        WorkflowExecutionFactory executionFactory = mock(WorkflowExecutionFactory.class);
+        var execution = WorkflowExecutionFixture.mockExecution(workflowId, state, false);
+        WorkflowExecutionFixture.recordBodyStartOn(execution, bodyStarts::add, workflowId);
+        var configuration = WorkflowExecutionFixture.mockConfiguration(workflowId, execution);
         when(configuration.workflowIdProvider()).thenReturn(event -> workflowId);
         when(configuration.workflowVersion()).thenReturn("1.0.0");
-        when(configuration.workflowContextFactory()).thenReturn(contextFactory);
-        when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
-        when(contextFactory.createContext(anyMap(), eq(workflowId), any(), eq(configuration)))
-                .thenReturn(workflowContext);
-        when(executionFactory.create(workflowContext)).thenReturn(execution);
         when(configurationRegistry.getHighestVersionConfigurations(new MessageType(START_EVENT)))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
     }

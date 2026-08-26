@@ -21,7 +21,6 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
@@ -32,24 +31,18 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Rehydration on a segment claim must resolve the same set of definitions the replay path resolves, and one instance
@@ -65,7 +58,9 @@ import static org.mockito.Mockito.when;
  */
 class WorkflowEngineRestoreFaultIsolationTest {
 
-    /** One segment owning every workflow id, so both instances below land in the same restore pass. */
+    /**
+     * One segment owning every workflow id, so both instances below land in the same restore pass.
+     */
     private static final Segment ONLY_SEGMENT = new Segment(0, 0);
 
     private static final String MIGRATED_ID = "migrated-instance";
@@ -74,15 +69,18 @@ class WorkflowEngineRestoreFaultIsolationTest {
 
     private static final String MIGRATING_WORKFLOW = "MigratingWorkflow";
     private static final String HEALTHY_WORKFLOW = "HealthyWorkflow";
-    /** No definition is registered under this name at all: not exactly, not lower, not higher. */
+    /**
+     * No definition is registered under this name at all: not exactly, not lower, not higher.
+     */
     private static final String RETIRED_WORKFLOW = "RetiredWorkflow";
 
     private SimpleWorkflowConfigurationRegistry configurationRegistry;
     private WorkflowStore workflowStore;
     private WorkflowEngine workflowEngine;
-    private WorkflowEngineReplaySupport replaySupport;
 
-    /** Ids whose body the engine started, in restore order. */
+    /**
+     * Ids whose body the engine started, in restore order.
+     */
     private final List<String> bodyStarts = new ArrayList<>();
     private final EventSourcedRunningWorkflows runningWorkflows = new EventSourcedRunningWorkflows();
     private final Map<String, WorkflowState> statesById = new HashMap<>();
@@ -97,7 +95,7 @@ class WorkflowEngineRestoreFaultIsolationTest {
                 workflowStore,
                 mock(UnitOfWorkFactory.class)
         );
-        replaySupport = new WorkflowEngineReplaySupport(workflowEngine);
+        WorkflowEngineReplaySupport replaySupport = new WorkflowEngineReplaySupport(workflowEngine);
         workflowEngine.setEngineSupportComponents(
                 replaySupport, new WorkflowEngineCheckpointingSupport(workflowEngine));
         when(workflowStore.loadRunningWorkflows(any()))
@@ -126,9 +124,9 @@ class WorkflowEngineRestoreFaultIsolationTest {
 
         assertThat(bodyStarts)
                 .as("""
-                    Instance '%s' recorded version 2.2.0 after two ctx.migrateVersion bumps, and only 2.0.0 is \
-                    registered. Rehydration must route it to the closest registered sibling, as the replay path does. \
-                    Failing the lookup strands a live workflow that the engine explicitly supports.""",
+                            Instance '%s' recorded version 2.2.0 after two ctx.migrateVersion bumps, and only 2.0.0 is \
+                            registered. Rehydration must route it to the closest registered sibling, as the replay path does. \
+                            Failing the lookup strands a live workflow that the engine explicitly supports.""",
                     MIGRATED_ID)
                 .containsExactly(MIGRATED_ID);
     }
@@ -155,20 +153,20 @@ class WorkflowEngineRestoreFaultIsolationTest {
                 .isTrue();
 
         assertThatCode(() -> workflowEngine.restoreWorkflowsFor(ONLY_SEGMENT,
-                                                               null,
-                                                               sourcingContext(),
-                                                               new StubProcessingContext())
+                                                                null,
+                                                                sourcingContext(),
+                                                                new StubProcessingContext())
                                            .join())
                 .as("""
-                    The claim of segment %s must survive an instance it cannot restore. Letting it fail aborts the \
-                    restore pass of the whole segment; the processor only logs that, so the node keeps the segment \
-                    while none of its instances is ever rehydrated.""", ONLY_SEGMENT)
+                            The claim of segment %s must survive an instance it cannot restore. Letting it fail aborts the \
+                            restore pass of the whole segment; the processor only logs that, so the node keeps the segment \
+                            while none of its instances is ever rehydrated.""", ONLY_SEGMENT)
                 .doesNotThrowAnyException();
 
         assertThat(bodyStarts)
                 .as("""
-                    Bodies started by the claim of segment %s: %s. Instance '%s' cannot be resolved to a definition \
-                    and is skipped, but '%s' can and must be running.""",
+                            Bodies started by the claim of segment %s: %s. Instance '%s' cannot be resolved to a definition \
+                            and is skipped, but '%s' can and must be running.""",
                     ONLY_SEGMENT, bodyStarts, UNRESOLVABLE_ID, HEALTHY_ID)
                 .containsExactly(HEALTHY_ID);
         assertThat(workflowEngine.workflowExecutions())
@@ -176,7 +174,9 @@ class WorkflowEngineRestoreFaultIsolationTest {
                 .hasSize(1);
     }
 
-    /** Registers a definition whose restored execution records its own body start. */
+    /**
+     * Registers a definition whose restored execution records its own body start.
+     */
     @SuppressWarnings("unchecked")
     private void registerDefinition(String workflowName, String workflowVersion) {
         WorkflowConfiguration<WorkflowContext> configuration = mock(WorkflowConfiguration.class);
@@ -189,19 +189,9 @@ class WorkflowEngineRestoreFaultIsolationTest {
         when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
         doAnswer(contextInvocation -> {
             var workflowId = contextInvocation.<String>getArgument(1);
-            var workflowContext = mock(WorkflowContext.class);
-            var bodyContext = mock(ProcessingContext.class);
-            when(workflowContext.processingContext()).thenReturn(bodyContext);
-            when(bodyContext.whenComplete(any())).thenAnswer(invocation -> {
-                invocation.<Consumer<ProcessingContext>>getArgument(0).accept(bodyContext);
-                return bodyContext;
-            });
-            var execution = mock(WorkflowExecution.class);
-            when(execution.workflowId()).thenReturn(workflowId);
-            when(execution.state()).thenReturn(stateOf(workflowId));
-            when(execution.isRunning()).thenReturn(false);
-            when(execution.workflowContext()).thenReturn(workflowContext);
-            doAnswer(started -> bodyStarts.add(workflowId)).when(execution).execute(any());
+            var execution = WorkflowExecutionFixture.mockExecution(workflowId, stateOf(workflowId), false);
+            WorkflowExecutionFixture.recordBodyStartOn(execution, bodyStarts::add, workflowId);
+            var workflowContext = execution.workflowContext();
             when(executionFactory.create(workflowContext)).thenReturn(execution);
             return workflowContext;
         }).when(contextFactory).createContext(anyMap(), any(), any(), eq(configuration));
@@ -209,7 +199,9 @@ class WorkflowEngineRestoreFaultIsolationTest {
         configurationRegistry.register(new QualifiedName(workflowName + "Started"), configuration);
     }
 
-    /** Makes {@code workflowId} a running workflow whose durable state records the given definition. */
+    /**
+     * Makes {@code workflowId} a running workflow whose durable state records the given definition.
+     */
     private WorkflowState restorable(String workflowId, String workflowName, String recordedVersion) {
         var state = mock(WorkflowState.class);
         when(state.workflowDefinitionId())
