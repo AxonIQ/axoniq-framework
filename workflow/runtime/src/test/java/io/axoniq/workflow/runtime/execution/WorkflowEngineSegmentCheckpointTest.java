@@ -151,6 +151,7 @@ class WorkflowEngineSegmentCheckpointTest {
 
     private ProcessingContext processingContext(Segment segment) {
         var context = new StubProcessingContext();
+        context.putResource(Segment.RESOURCE_KEY, segment);
         return context;
     }
 }
