@@ -238,7 +238,7 @@ public class DistributedQueryBus implements QueryBus {
             Supplier<CompletableFuture<OptionalInt>> updateTask
     ) {
         if (context == null || context.isCommitted()) {
-            return updateTask.get();
+            return invokeSafely(updateTask);
         } else if (!context.isCompleted()) {
             int matchCount = matchCount(filter);
             context.computeResourceIfAbsent(
@@ -249,7 +249,7 @@ public class DistributedQueryBus implements QueryBus {
                                return subscriptionQueryTasks;
                            }
                    )
-                   .add(() -> updateTask.get().whenComplete((result, exception) -> {
+                   .add(() -> invokeSafely(updateTask).whenComplete((result, exception) -> {
                        if (exception != null) {
                            logger.warn("An error occurred while delivering a deferred subscription query update.",
                                        exception);
@@ -259,6 +259,18 @@ public class DistributedQueryBus implements QueryBus {
         }
         // else: context completed with an error - drop the update
         return CompletableFuture.completedFuture(OptionalInt.empty());
+    }
+
+    /**
+     * Invokes the given {@code updateTask}, converting any exception it throws synchronously into a failed
+     * {@link CompletableFuture} rather than letting it propagate to the caller.
+     */
+    private static <T> CompletableFuture<T> invokeSafely(Supplier<CompletableFuture<T>> updateTask) {
+        try {
+            return updateTask.get();
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
     }
 
     private int matchCount(Predicate<QueryMessage> filter) {
