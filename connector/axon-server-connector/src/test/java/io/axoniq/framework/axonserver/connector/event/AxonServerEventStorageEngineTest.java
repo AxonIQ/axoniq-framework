@@ -25,6 +25,7 @@ import io.axoniq.axonserver.connector.event.DcbEventChannel;
 import io.axoniq.axonserver.grpc.event.dcb.AppendEventsResponse;
 import io.axoniq.axonserver.grpc.event.dcb.Event;
 import io.axoniq.axonserver.grpc.event.dcb.SequencedEvent;
+import io.axoniq.axonserver.grpc.event.dcb.SourceEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsResponse;
 import io.grpc.Status;
 import org.axonframework.conversion.jackson.JacksonConverter;
@@ -81,7 +82,7 @@ class AxonServerEventStorageEngineTest {
         sourcingStream = mock(ResultStream.class);
 
         when(connection.dcbEventChannel()).thenReturn(dcbEventChannel);
-        when(dcbEventChannel.source(any())).thenReturn(sourcingStream);
+        when(dcbEventChannel.source(any(SourceEventsRequest.class))).thenReturn(sourcingStream);
         when(sourcingStream.getError()).thenReturn(java.util.Optional.empty());
         when(sourcingStream.isClosed()).thenReturn(true);
 
