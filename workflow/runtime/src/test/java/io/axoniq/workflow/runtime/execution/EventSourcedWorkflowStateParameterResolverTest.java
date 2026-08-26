@@ -77,7 +77,7 @@ class EventSourcedWorkflowStateParameterResolverTest {
     }
 
     @Test
-    void testMatches_NoWorkflowId() {
+    void testMatchesNoWorkflowId() {
         GenericMessage message = new GenericMessage(messageType, "payload", Metadata.with("foo", "bar"));
         setMessageInContext(message);
 
@@ -85,7 +85,7 @@ class EventSourcedWorkflowStateParameterResolverTest {
     }
 
     @Test
-    void testMatches_WithWorkflowId() {
+    void testMatchesWithWorkflowId() {
         GenericMessage message = new GenericMessage(messageType, "payload", MetadataUtils.create("workflow-1"));
         setMessageInContext(message);
 
@@ -93,7 +93,7 @@ class EventSourcedWorkflowStateParameterResolverTest {
     }
 
     @Test
-    void testResolve_NoWorkflowId() {
+    void testResolveNoWorkflowId() {
         GenericMessage message = new GenericMessage(messageType, "payload", Metadata.with("foo", "bar"));
         setMessageInContext(message);
 
@@ -107,7 +107,7 @@ class EventSourcedWorkflowStateParameterResolverTest {
     }
 
     @Test
-    void testResolve_InExecutionRepository() throws Exception {
+    void testResolveInExecutionRepository() throws Exception {
         String workflowId = "workflow-1";
         GenericMessage message = new GenericMessage(messageType, "payload", MetadataUtils.create(workflowId));
         setMessageInContext(message);
@@ -128,7 +128,7 @@ class EventSourcedWorkflowStateParameterResolverTest {
     }
 
     @Test
-    void testResolve_InHistoryRepository() throws Exception {
+    void testResolveInHistoryRepository() throws Exception {
         String workflowId = "workflow-1";
         GenericMessage message = new GenericMessage(messageType, "payload", MetadataUtils.create(workflowId));
         setMessageInContext(message);
@@ -152,7 +152,7 @@ class EventSourcedWorkflowStateParameterResolverTest {
     }
 
     @Test
-    void testResolve_NotFound() {
+    void testResolveNotFound() {
         String workflowId = "workflow-1";
         GenericMessage message = new GenericMessage(messageType, "payload", MetadataUtils.create(workflowId));
         setMessageInContext(message);

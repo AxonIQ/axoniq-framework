@@ -75,6 +75,7 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
 
     @Override
     public void onSegmentClaimed(@NonNull Segment segment,
+                                 @Nullable TrackingToken from,
                                  @NonNull CheckpointTrigger trigger) {
         setTriggerAndFlush(trigger);
     }

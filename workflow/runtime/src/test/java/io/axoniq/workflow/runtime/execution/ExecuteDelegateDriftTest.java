@@ -88,13 +88,13 @@ class ExecuteDelegateDriftTest {
                 unitOfWorkFactory,
                 eventSink,
                 executor,
-                new DefaultWorkflowScheduler(Clock.systemUTC()),
+                new ControllableWorkflowScheduler(),
                 new DefaultExecuteStepActionResolver()
         );
     }
 
     @Test
-    void execute_throwsDriftException_whenUnreferencedTerminalStepsInState() {
+    void executeThrowsDriftExceptionWhenUnreferencedTerminalStepsInState() {
         // History has A and B terminal; invocation has only referenced A so far; about to run new step "C".
         reachedSteps.record("A");
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
@@ -113,7 +113,7 @@ class ExecuteDelegateDriftTest {
     }
 
     @Test
-    void execute_guardPasses_whenAllTerminalStepsReferenced() {
+    void executeGuardPassesWhenAllTerminalStepsReferenced() {
         // Body has referenced both terminal steps; about to run a new step legitimately appended.
         // The full delegate path needs more mocks to run; we only assert the drift guard does NOT
         // fire (any downstream NPE from incomplete mock setup is fine — it proves the guard let us
@@ -129,7 +129,7 @@ class ExecuteDelegateDriftTest {
     }
 
     @Test
-    void execute_guardPasses_forCachedStepLookup() {
+    void executeGuardPassesForCachedStepLookup() {
         // State has a terminal step the invocation hasn't referenced yet, BUT execute is called on
         // a step already in state — that's a cached lookup, no live publish, no drift exception.
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
@@ -141,7 +141,7 @@ class ExecuteDelegateDriftTest {
     }
 
     @Test
-    void execute_guardPasses_onEmptyState() {
+    void executeGuardPassesOnEmptyState() {
         // Fresh workflow — nothing in state yet — no drift possible.
         when(state.workflowStepNames()).thenReturn(List.of());
         when(state.containsStep("first")).thenReturn(false);

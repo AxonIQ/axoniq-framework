@@ -42,7 +42,6 @@ import static org.mockito.Mockito.eq;
 
 /**
  * Unit test class for the {@code ProcessingContextUtils} utility class.
- * @since 1.0.0
  * @author Simon Zambrovski
  */
 class ProcessingContextUtilsTest {
@@ -95,13 +94,13 @@ class ProcessingContextUtilsTest {
 
     @Test
     void testExecuteWithResultNoId() {
-        Function<ProcessingContext, CompletableFuture<String>> action = ctx -> CompletableFuture.completedFuture("done");
+        Function<ProcessingContext, CompletableFuture<String>> action = ctx -> CompletableFuture.completedFuture("completion");
 
         CompletableFuture<String> resultFuture = ProcessingContextUtils.executeWithResult(
                 null, unitOfWorkFactory, executor, parentContext, action
         );
 
-        assertThat(resultFuture.join()).isEqualTo("done");
+        assertThat(resultFuture.join()).isEqualTo("completion");
         verify(unitOfWorkFactory).create(any(Function.class));
         verify(childContext).putResource(any(), eq("testValue"));
         // verify lifecycle hooks registration
@@ -112,13 +111,13 @@ class ProcessingContextUtilsTest {
 
     @Test
     void testExecuteWithResultWithId() {
-        Function<ProcessingContext, CompletableFuture<String>> action = ctx -> CompletableFuture.completedFuture("done");
+        Function<ProcessingContext, CompletableFuture<String>> action = ctx -> CompletableFuture.completedFuture("completion");
 
         CompletableFuture<String> resultFuture = ProcessingContextUtils.executeWithResult(
                 "myId", unitOfWorkFactory, executor, parentContext, action
         );
 
-        assertThat(resultFuture.join()).isEqualTo("done");
+        assertThat(resultFuture.join()).isEqualTo("completion");
         verify(unitOfWorkFactory).create(anyString(), any(Function.class));
     }
 
@@ -131,7 +130,7 @@ class ProcessingContextUtilsTest {
             return null;
         }).when(executorService).execute(any(Runnable.class));
 
-        Function<ProcessingContext, CompletableFuture<String>> action = ctx -> CompletableFuture.completedFuture("done");
+        Function<ProcessingContext, CompletableFuture<String>> action = ctx -> CompletableFuture.completedFuture("completion");
 
         ProcessingContextUtils.executeWithResultInSeparateThread(
                 "myId", unitOfWorkFactory, executorService, parentContext, action

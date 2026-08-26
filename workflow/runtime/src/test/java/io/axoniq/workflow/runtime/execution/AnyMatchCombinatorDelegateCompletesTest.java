@@ -287,7 +287,7 @@ class AnyMatchCombinatorDelegateCompletesTest {
     // --- matched() / unmatched() ---
 
     @Test
-    void anyMatch_terminal_allCompletedGoToMatched() {
+    void anyMatchTerminalAllCompletedGoToMatched() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 

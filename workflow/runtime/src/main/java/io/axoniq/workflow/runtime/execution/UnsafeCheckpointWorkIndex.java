@@ -34,7 +34,8 @@ import java.util.function.Consumer;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-@Internal final class UnsafeCheckpointWorkIndex {
+@Internal
+final class UnsafeCheckpointWorkIndex {
 
     private final Set<String> unsafeWorkflowIds = ConcurrentHashMap.newKeySet();
 

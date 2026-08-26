@@ -18,6 +18,7 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
@@ -29,14 +30,19 @@ import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -52,8 +58,15 @@ import static org.mockito.Mockito.when;
  */
 class SimpleWorkflowExecutionTest {
 
+    private final List<ExecutorService> executorServices = new ArrayList<>();
+
+    @AfterEach
+    void shutDownExecutors() {
+        executorServices.forEach(ExecutorService::shutdownNow);
+    }
+
     @Test
-    void hasTasks_reflectsWhetherTheTaskQueueContainsTasks() {
+    void hasTasksReflectsWhetherTheTaskQueueContainsTasks() {
         var execution = execution();
 
         assertThat(execution.hasTasks()).isFalse();
@@ -64,20 +77,88 @@ class SimpleWorkflowExecutionTest {
         assertThat(execution.hasTasks()).isTrue();
     }
 
-    private static SimpleWorkflowExecution execution() {
+    @Test
+    void workflowCancellationExposesPendingRequestToWorkflowDriver() {
+        var execution = execution();
+        var cancellation = (WorkflowCancellation.Request) execution.workflowCancellation();
+        var cause = new IllegalStateException("operator requested cancellation");
+
+        var completion = cancellation.requestWorkflowCancellation(cause);
+
+        assertThat(completion).isNotCompleted();
+        assertThat(cancellation.hasPendingWorkflowCancellation()).isTrue();
+        var pendingRequest = cancellation.consumeWorkflowCancellation();
+        assertThat(pendingRequest).isNotNull();
+        assertThat(pendingRequest.cause()).isInstanceOf(WorkflowCancelledException.class).hasCause(cause);
+        assertThat(cancellation.hasPendingWorkflowCancellation()).isFalse();
+
+        pendingRequest.callback().complete(null);
+
+        assertThat(completion).isCompleted();
+    }
+
+    @Test
+    void interruptWorkflowDriverInterruptsAssignedWorkflowDriver() throws Exception {
+        var execution = execution();
+        var driverReady = new CountDownLatch(1);
+        var interrupted = new CompletableFuture<Boolean>();
+        var driver = Thread.ofPlatform().start(() -> {
+            driverReady.countDown();
+            try {
+                new CountDownLatch(1).await();
+                interrupted.complete(false);
+            } catch (InterruptedException e) {
+                interrupted.complete(true);
+            }
+        });
+        setWorkflowDriver(execution, driver);
+
+        assertThat(driverReady.await(5, TimeUnit.SECONDS)).isTrue();
+
+        execution.interruptWorkflowDriver();
+
+        assertThat(interrupted.get(5, TimeUnit.SECONDS)).isTrue();
+    }
+
+    @Test
+    void stopForShutdownQueuesAnInterruptForWorkflowDriver() throws Exception {
+        var execution = execution();
+
+        execution.stopForShutdown();
+
+        var task = execution.getNextTask();
+        assertThat(task).isNotNull();
+        try (var worker = Executors.newSingleThreadExecutor()) {
+            var interrupted = worker.submit(() -> {
+                task.accept(execution);
+                return Thread.interrupted();
+            });
+
+            assertThat(interrupted.get(5, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    private static void setWorkflowDriver(SimpleWorkflowExecution execution, Thread driver)
+            throws ReflectiveOperationException {
+        Field field = SimpleWorkflowExecution.class.getDeclaredField("workflowThread");
+        field.setAccessible(true);
+        field.set(execution, driver);
+    }
+
+    private SimpleWorkflowExecution execution() {
         var processingContext = mock(ProcessingContext.class);
         when(processingContext.component(UnitOfWorkFactory.class)).thenReturn(new SimpleUnitOfWorkFactory(processingContext));
         when(processingContext.component(Clock.class)).thenReturn(Clock.systemUTC());
         when(processingContext.component(EventSink.class)).thenReturn(new NoOpEventSink());
-        when(processingContext.component(WorkflowScheduler.class)).thenReturn(new DefaultWorkflowScheduler(Clock.systemUTC()));
+        when(processingContext.component(WorkflowScheduler.class)).thenReturn(new ControllableWorkflowScheduler());
         when(processingContext.component(ExecuteStepActionResolver.class)).thenReturn(new DefaultExecuteStepActionResolver());
 
-        try (var executor = Executors.newSingleThreadExecutor()) {
-            when(processingContext.component(eq(ExecutorService.class), any())).thenReturn(executor);
-            return new SimpleWorkflowExecution(
-                    "workflow-id", Map.of(), processingContext, new TestWorkflowConfiguration(), mock(WorkflowContext.class)
-            );
-        }
+        var executor = Executors.newSingleThreadExecutor();
+        executorServices.add(executor);
+        when(processingContext.component(eq(ExecutorService.class), any())).thenReturn(executor);
+        return new SimpleWorkflowExecution(
+                "workflow-id", Map.of(), processingContext, new TestWorkflowConfiguration(), mock(WorkflowContext.class)
+        );
     }
 
     private static final class TestWorkflowConfiguration implements WorkflowConfiguration<WorkflowContext> {

@@ -29,7 +29,7 @@ import jakarta.annotation.Nullable;
  * workflow context. Implementations apply these commands synchronously on the workflow control thread.
  *
  * @author Stefan Dragisic
- * @since 0.2.0
+ * @since 0.3.0
  */
 public interface WorkflowLifecycleControl {
 

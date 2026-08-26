@@ -106,7 +106,8 @@ class PayloadDelegateTest {
                 clock,
                 unitOfWorkFactory,
                 eventSink,
-                executor
+                executor,
+                new ControllableWorkflowScheduler()
         );
     }
 

@@ -139,7 +139,7 @@ class WorkflowEngineReplayTest {
         when(terminalContext.processingContext()).thenReturn(terminalPC);
         when(terminalPC.whenComplete(any())).thenReturn(terminalPC);
 
-        WorkflowExecution runningExecution = mock(WorkflowExecution.class);
+        WorkflowExecution runningExecution = cancellationCapableExecution();
         WorkflowState runningState = mock(WorkflowState.class);
         WorkflowContext runningContext = mock(WorkflowContext.class);
         when(runningExecution.workflowId()).thenReturn("runningId");
@@ -319,7 +319,9 @@ class WorkflowEngineReplayTest {
         when(contextFactory.createContext(anyMap(), anyString(), any(), any())).thenReturn(workflowContext);
         when(v2.workflowContextFactory()).thenReturn(contextFactory);
         var executionFactory = mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory.class);
-        when(executionFactory.create(any())).thenReturn(mock(WorkflowExecution.class));
+        var execution = cancellationCapableExecution();
+        when(execution.workflowId()).thenReturn(baseId + "#2.0.0");
+        when(executionFactory.create(any())).thenReturn(execution);
         when(v2.workflowExecutionFactory()).thenReturn(executionFactory);
 
         QualifiedName eventName = new QualifiedName("OrderPlaced");
@@ -345,7 +347,7 @@ class WorkflowEngineReplayTest {
     }
 
     @Test
-    void sameVersionDuplicateStart_isRejected() {
+    void sameVersionDuplicateStartIsRejected() {
         String workflowId = "order-1";
 
         // Pre-register a running v2.0.0 workflow under "order-1".
@@ -457,7 +459,7 @@ class WorkflowEngineReplayTest {
         });
         when(executionFactory.create(any())).thenAnswer(invocation -> {
             WorkflowContext workflowContext = invocation.getArgument(0);
-            var execution = mock(WorkflowExecution.class);
+            var execution = cancellationCapableExecution();
             var state = mock(WorkflowState.class);
             when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
             when(execution.workflowId()).thenReturn(workflowIdsByContext.get(workflowContext));
@@ -467,7 +469,7 @@ class WorkflowEngineReplayTest {
         });
 
         replaySupport.setInitialEngineTokens(safePoint, tokenAtReset);
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
         workflowEngine.handle(startEvent(eventName, "wf-1"), processingContext(firstReplayToken));
         workflowEngine.handle(startEvent(eventName, "wf-2"), processingContext(secondReplayToken));
@@ -497,7 +499,7 @@ class WorkflowEngineReplayTest {
 
         var trigger = mock(CheckpointTrigger.class);
         replaySupport.setInitialEngineTokens(token(18), token(30));
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
         var requested = token(25);
         var advanced = checkpointingSupport.onCheckpointAdvanced(Segment.ROOT_SEGMENT, requested);
@@ -520,7 +522,7 @@ class WorkflowEngineReplayTest {
         var trigger = mock(CheckpointTrigger.class);
         var requested = token(25);
         replaySupport.setInitialEngineTokens(token(18), token(30));
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
         checkpointingSupport.requestCheckpoint(requested);
 
@@ -539,7 +541,7 @@ class WorkflowEngineReplayTest {
 
         verifyNoInteractions(trigger);
 
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
         verify(trigger).requestCheckpoint(secondRequested);
         verifyNoMoreInteractions(trigger);
@@ -551,7 +553,7 @@ class WorkflowEngineReplayTest {
         var firstRequested = token(25);
         var secondRequested = token(27);
         replaySupport.setInitialEngineTokens(token(18), token(30));
-        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, trigger);
+        checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
         checkpointingSupport.requestCheckpoint(firstRequested);
         checkpointingSupport.requestCheckpoint(secondRequested);
@@ -744,7 +746,7 @@ class WorkflowEngineReplayTest {
     }
 
     @Test
-    void crossVersionStart_disambiguatedIdAlsoTaken_isRejected() {
+    void crossVersionStartDisambiguatedIdAlsoTakenIsRejected() {
         // Both the base id and the disambiguated id are already occupied.
         String baseId = "order-1";
         String disambiguatedId = baseId + "#2.0.0";
@@ -783,6 +785,13 @@ class WorkflowEngineReplayTest {
 
         // Even the disambiguated id is taken — nothing new is spawned.
         verify(workflowExecutionRepository, never()).save(anyString(), any());
+    }
+
+    private WorkflowExecution cancellationCapableExecution() {
+        var execution = mock(SimpleWorkflowExecution.class);
+        var cancellation = mock(WorkflowCancellation.class);
+        when(execution.workflowCancellation()).thenReturn(cancellation);
+        return execution;
     }
 
     private static void assertSameToken(@Nullable TrackingToken actual, @Nullable TrackingToken expected) {

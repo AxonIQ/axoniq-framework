@@ -300,7 +300,7 @@ class AnyMatchCombinatorDelegateTest {
     // --- matched() / unmatched() with success predicate ---
 
     @Test
-    void anyMatch_matched_returnsWinners() {
+    void anyMatchMatchedReturnsWinners() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.failed("stepB", new RuntimeException("boom"));
 
@@ -313,7 +313,7 @@ class AnyMatchCombinatorDelegateTest {
     }
 
     @Test
-    void anyMatch_unmatched_returnsLosers() {
+    void anyMatchUnmatchedReturnsLosers() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
@@ -325,7 +325,7 @@ class AnyMatchCombinatorDelegateTest {
     }
 
     @Test
-    void anyMatch_unmatched_includesNonCompletedResults() {
+    void anyMatchUnmatchedIncludesNonCompletedResults() {
         var r1 = WorkflowStepResults.completed("fastStep", "ok", TestEventConverter.INSTANCE);
         var r2 = mock(WorkflowStepResult.class);
         when(r2.getStepName()).thenReturn("slowStep");
@@ -341,7 +341,7 @@ class AnyMatchCombinatorDelegateTest {
     }
 
     @Test
-    void anyMatch_matched_sortedByTimestamp() {
+    void anyMatchMatchedSortedByTimestamp() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
@@ -358,7 +358,7 @@ class AnyMatchCombinatorDelegateTest {
     // --- anyMatch with failure predicate ---
 
     @Test
-    void anyMatch_FAILED_firstToFailWins() {
+    void anyMatchFAILEDFirstToFailWins() {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
         var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
@@ -370,7 +370,7 @@ class AnyMatchCombinatorDelegateTest {
     }
 
     @Test
-    void anyMatch_FAILED_successIgnoredWhileRunning() {
+    void anyMatchFAILEDSuccessIgnoredWhileRunning() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
 
@@ -390,7 +390,7 @@ class AnyMatchCombinatorDelegateTest {
     }
 
     @Test
-    void anyMatch_FAILED_allSucceedFallsBackToFirstCompleted() {
+    void anyMatchFAILEDAllSucceedFallsBackToFirstCompleted() {
         var r1 = WorkflowStepResults.completed("stepA", "ok-A", TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", "ok-B", TestEventConverter.INSTANCE);
 
@@ -405,7 +405,7 @@ class AnyMatchCombinatorDelegateTest {
     // --- anyMatch with timeout predicate ---
 
     @Test
-    void anyMatch_TIMED_OUT_firstToTimeoutWins() {
+    void anyMatchTIMEDOUTFirstToTimeoutWins() {
         var r1 = WorkflowStepResults.timeout("stepA", Duration.ofSeconds(5));
         var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
@@ -418,7 +418,7 @@ class AnyMatchCombinatorDelegateTest {
     // --- anyMatch with canceled predicate ---
 
     @Test
-    void anyMatch_canceled_firstcanceledWins() {
+    void anyMatchCanceledFirstcanceledWins() {
         var r1 = WorkflowStepResults.canceled("stepA");
         var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 
@@ -431,7 +431,7 @@ class AnyMatchCombinatorDelegateTest {
     // --- Step name format with non-success predicate ---
 
     @Test
-    void anyMatch_stepNameFormat() {
+    void anyMatchStepNameFormat() {
         var r1 = WorkflowStepResults.completed("stepA", null, TestEventConverter.INSTANCE);
         var r2 = WorkflowStepResults.completed("stepB", null, TestEventConverter.INSTANCE);
 
@@ -443,7 +443,7 @@ class AnyMatchCombinatorDelegateTest {
     // --- Fallback uses event-sourced timestamp ordering ---
 
     @Test
-    void anyMatch_fallbackUsesEventTimestampOrdering() {
+    void anyMatchFallbackUsesEventTimestampOrdering() {
         var r1 = mock(WorkflowStepResult.class);
         var r2 = mock(WorkflowStepResult.class);
 
@@ -473,7 +473,7 @@ class AnyMatchCombinatorDelegateTest {
     // --- matched() / unmatched() with failure predicate ---
 
     @Test
-    void anyMatch_matched_withFailurePredicate() {
+    void anyMatchMatchedWithFailurePredicate() {
         var r1 = WorkflowStepResults.failed("stepA", new RuntimeException("boom"));
         var r2 = WorkflowStepResults.completed("stepB", "ok", TestEventConverter.INSTANCE);
 

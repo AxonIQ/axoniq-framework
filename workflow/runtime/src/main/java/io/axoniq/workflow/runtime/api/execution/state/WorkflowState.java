@@ -23,8 +23,6 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.List;
 import java.util.Map;
@@ -76,6 +74,28 @@ public interface WorkflowState extends DescribableComponent {
      * @return true if the step exists, false otherwise
      */
     boolean containsStep(@Nonnull String stepName);
+
+    /**
+     * Checks if a step with the given name exists and has reached a terminal status.
+     *
+     * @param stepName name of the step
+     * @return true if the step exists and is terminal, false otherwise
+     */
+    default boolean isStepTerminal(@Nonnull String stepName) {
+        var step = getStep(stepName);
+        return step != null && step.status().isTerminal();
+    }
+
+    /**
+     * Checks if a step with the given name exists and has not reached a terminal status.
+     *
+     * @param stepName name of the step
+     * @return true if the step exists and is not terminal, false otherwise
+     */
+    default boolean isStepActive(@Nonnull String stepName) {
+        var step = getStep(stepName);
+        return step != null && !step.status().isTerminal();
+    }
 
     /**
      * Returns the status of the workflow execution.
@@ -134,15 +154,4 @@ public interface WorkflowState extends DescribableComponent {
      * original termination cause wrapped in the appropriate exception type.
      */
     void throwTerminalCause();
-
-    /**
-     * Handles an event message received during workflow execution. This handle is responsible for the modification of
-     * the state.
-     *
-     * @param eventMessage      the event message received
-     * @param processingContext the processing context for the event
-     * @return new evolved state
-     */
-    WorkflowState evolve(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
-
 }
