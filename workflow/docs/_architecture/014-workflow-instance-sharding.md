@@ -87,14 +87,14 @@ app starts
   -> engine loads nothing, only sets up replay bookkeeping
 
 processor claims segment 2
-  -> engine.claimSegment(2)
+  -> engine.restoreWorkflowsFor(2)
        -> read the running workflow ids
        -> keep the ids segment 2 owns
        -> load each one's durable state
        -> create and start those executions
 
 processor releases segment 2      (shutdown, rebalance, or lost claim)
-  -> engine.releaseSegment(2)
+  -> engine.releaseWorkflowsFor(2)
        -> interrupt those executions
        -> remove them from the repository
 ```
@@ -106,7 +106,7 @@ node A owns segments 0,1        node B owns segments 2,3
 node A dies
   -> its token store claims go stale
   -> node B claims segments 0 and 1
-  -> claimSegment(0) and claimSegment(1) run on node B
+  -> restoreWorkflowsFor(0) and restoreWorkflowsFor(1) run on node B
   -> node B resumes those instances from their persisted state
 ```
 
