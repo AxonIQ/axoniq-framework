@@ -46,14 +46,23 @@ public class TenantRoutingSequencedDeadLetterQueueRegistry implements MultiTenan
 
     private final Map<String, TenantScopedCache<SequencedDeadLetterQueue<EventMessage>>> queues = new ConcurrentHashMap<>();
     private final Map<TenantDescriptor, TenantRegistration> tenants = new ConcurrentHashMap<>();
+    /**
+     * Guards registry mutations that span the tenant registrations and all processing-group queue caches.
+     *
+     * <p>A {@code ConcurrentHashMap} (or an {@code AtomicBoolean}) cannot protect the compound invariant that a cache
+     * is registered with every currently known tenant while a tenant cannot be removed concurrently. The lock is held
+     * only for that bookkeeping; the tenant-specific queue lookup is delegated to the concurrent
+     * {@link TenantScopedCache} outside this critical section.</p>
+     */
+    private final Object registryLock = new Object();
 
     /**
      * Returns the queue of the given tenant for the dead-letter queue identified by the supplied processing group,
      * configuration, and delegate factory.
      * <p>
      * The queue cache is created lazily and registered with every tenant known to this registry before it is used.
-     * Synchronization keeps cache creation atomic with tenant registration and removal, so a new cache cannot escape a
-     * concurrent tenant removal.
+     * Cache creation is synchronized with tenant registration and removal, so a new cache cannot escape a concurrent
+     * tenant removal. The tenant-specific lookup itself remains concurrent.
      *
      * @param processingGroup the processing group owning the queue
      * @param configuration   the configuration passed to the delegate factory
@@ -61,30 +70,35 @@ public class TenantRoutingSequencedDeadLetterQueueRegistry implements MultiTenan
      * @param tenant          the registered tenant whose queue to return
      * @return the tenant's queue
      */
-    public synchronized SequencedDeadLetterQueue<EventMessage> queueFor(String processingGroup,
-                                                                          Configuration configuration,
-                                                                          TenantAwareSequencedDeadLetterQueueFactory factory,
-                                                                          TenantDescriptor tenant) {
-        TenantScopedCache<SequencedDeadLetterQueue<EventMessage>> queueCache = queues.computeIfAbsent(
-                processingGroup,
-                ignored -> registerKnownTenants(new TenantScopedCache<>(
-                        descriptor -> factory.create(descriptor, processingGroup, configuration),
-                        "the tenant-routing dead-letter queue [" + processingGroup + "]"
-                ))
-        );
+    public SequencedDeadLetterQueue<EventMessage> queueFor(String processingGroup,
+                                                           Configuration configuration,
+                                                           TenantAwareSequencedDeadLetterQueueFactory factory,
+                                                           TenantDescriptor tenant) {
+        TenantScopedCache<SequencedDeadLetterQueue<EventMessage>> queueCache;
+        synchronized (registryLock) {
+            queueCache = queues.computeIfAbsent(
+                    processingGroup,
+                    ignored -> registerKnownTenants(new TenantScopedCache<>(
+                            descriptor -> factory.create(descriptor, processingGroup, configuration),
+                            "the tenant-routing dead-letter queue [" + processingGroup + "]"
+                    ))
+            );
+        }
         return queueCache.componentFor(tenant);
     }
 
     @Override
-    public synchronized Registration registerTenant(TenantDescriptor tenantDescriptor) {
+    public Registration registerTenant(TenantDescriptor tenantDescriptor) {
         requireNonNull(tenantDescriptor, "The tenant descriptor must not be null");
-        TenantRegistration registration = new TenantRegistration(tenantDescriptor);
-        TenantRegistration superseded = tenants.put(tenantDescriptor, registration);
-        if (superseded != null) {
-            superseded.cancel();
+        synchronized (registryLock) {
+            TenantRegistration registration = new TenantRegistration(tenantDescriptor);
+            TenantRegistration superseded = tenants.put(tenantDescriptor, registration);
+            if (superseded != null) {
+                superseded.cancel();
+            }
+            queues.values().forEach(registration::register);
+            return () -> unregister(tenantDescriptor, registration);
         }
-        queues.values().forEach(registration::register);
-        return () -> unregister(tenantDescriptor, registration);
     }
 
     @Override
@@ -103,11 +117,13 @@ public class TenantRoutingSequencedDeadLetterQueueRegistry implements MultiTenan
         return queueCache;
     }
 
-    private synchronized boolean unregister(TenantDescriptor tenant, TenantRegistration registration) {
-        if (!tenants.remove(tenant, registration)) {
-            return false;
+    private boolean unregister(TenantDescriptor tenant, TenantRegistration registration) {
+        synchronized (registryLock) {
+            if (!tenants.remove(tenant, registration)) {
+                return false;
+            }
+            return registration.cancel();
         }
-        return registration.cancel();
     }
 
     private static final class TenantRegistration {
