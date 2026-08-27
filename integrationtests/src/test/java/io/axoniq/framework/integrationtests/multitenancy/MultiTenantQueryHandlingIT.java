@@ -27,7 +27,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.DefaultAxonApplication;
@@ -125,8 +124,6 @@ class MultiTenantQueryHandlingIT {
                         DistributedQueryBusConfiguration.class,
                         cfg -> DistributedQueryBusConfiguration.DEFAULT
                                 .preferLocalQueryHandler(preferLocalQueryHandler)))
-                .componentRegistry(cr -> cr.registerComponent(TenantResolver.class,
-                                                              c -> new MetadataBasedTenantResolver()))
                 .componentRegistry(cr -> cr.registerComponent(
                         TenantConnectPredicate.class,
                         c -> d -> !Set.of(ADMIN_CONTEXT, DEFAULT_CONTEXT).contains(d.tenantId())))

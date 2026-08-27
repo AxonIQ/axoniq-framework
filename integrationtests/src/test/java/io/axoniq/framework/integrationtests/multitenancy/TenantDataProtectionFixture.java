@@ -28,12 +28,10 @@ import io.axoniq.framework.dataprotection.api.FieldEncryptingConverter;
 import io.axoniq.framework.dataprotection.api.PersonalData;
 import io.axoniq.framework.dataprotection.cryptoengine.InMemoryCryptoEngine;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
-import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.conversion.Converter;
 import org.axonframework.conversion.jackson.JacksonConverter;
@@ -96,10 +94,6 @@ final class TenantDataProtectionFixture {
 
         EventSourcingConfigurer configurer = EventSourcingConfigurer.create()
                                                                   .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                                                                  .componentRegistry(registry -> registry.registerComponent(
-                                                                          TenantResolver.class,
-                                                                          configuration -> new MetadataBasedTenantResolver()
-                                                                  ))
                                                                   .componentRegistry(registry -> registry.registerComponent(
                                                                           TenantConnectPredicate.class,
                                                                           configuration -> descriptor -> !Set.of(ADMIN_CONTEXT,
