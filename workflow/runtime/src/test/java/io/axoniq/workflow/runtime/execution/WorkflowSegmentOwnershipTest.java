@@ -29,11 +29,16 @@ import java.util.stream.IntStream;
 import static io.axoniq.workflow.runtime.execution.SegmentTestFixtures.FOUR_SEGMENTS;
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Test class validating the {@link WorkflowSegmentOwnership}.
+ *
+ * @author Stefan Dragisic
+ */
 class WorkflowSegmentOwnershipTest {
 
     @Test
     void everyIdIsOwnedByExactlyOneSegment() {
-        for (var workflowId : List.of("order-1", "order-1#2.0.0", "a#b", "")) {
+        for (var workflowId : List.of("order-1", "order-1#2.0.0", "a#b")) {
             var owners = FOUR_SEGMENTS.stream()
                                       .filter(segment -> WorkflowSegmentOwnership.ownedBy(segment, workflowId))
                                       .count();

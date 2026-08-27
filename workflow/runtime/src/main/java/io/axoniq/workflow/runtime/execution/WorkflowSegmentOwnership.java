@@ -20,7 +20,10 @@ package io.axoniq.workflow.runtime.execution;
 
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
+import org.axonframework.common.StringUtils;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
+
+import java.util.Objects;
 
 /**
  * The ownership rule partitioning workflow instances over the segments of a streaming event processor: a segment owns
@@ -55,9 +58,10 @@ final class WorkflowSegmentOwnership {
         if (segment == null) {
             return true;
         }
-        if (workflowId == null) {
+        if (StringUtils.emptyOrNull(workflowId)) {
             throw new IllegalArgumentException(
-                    "Cannot decide segment ownership without a workflow id; configure an idProperty for the workflow");
+                    "Cannot decide segment ownership without a workflow id; configure an idProperty for the workflow."
+            );
         }
         return segment.matches(segmentKey(workflowId));
     }
