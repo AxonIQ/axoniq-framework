@@ -73,7 +73,7 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
                                                     }));
     }
 
-    static boolean isDeadLetterQueuePresent(ClassLoader classLoader) {
+    public static boolean isDeadLetterQueuePresent(ClassLoader classLoader) {
         try {
             Class.forName(DEAD_LETTER_QUEUE_CONFIGURATION, false, classLoader);
             return true;

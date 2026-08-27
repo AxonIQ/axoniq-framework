@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.multitenancy.configuration;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.deadletter.DeadLetterMultiTenancyConfigurationEnhancer;
 import io.axoniq.framework.messaging.multitenancy.deadletter.TenantRoutingSequencedDeadLetterQueueRegistry;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantSnapshotStoreFactory;
@@ -55,7 +56,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 class TenantComponentProviderSubscriber {
 
     private static final Logger logger = LoggerFactory.getLogger(TenantComponentProviderSubscriber.class);
-
     private final Configuration configuration;
     private final List<Registration> subscriptions = new CopyOnWriteArrayList<>();
 
@@ -76,7 +76,10 @@ class TenantComponentProviderSubscriber {
         subscribeComponents(configuration.getComponents(TenantComponentProvider.class).values().toArray());
         subscribeComponentIfPresent(TenantSnapshotStoreFactory.class);
         subscribeComponentIfPresent(TenantEventStorageEngineFactory.class);
-        subscribeComponentIfPresent(TenantRoutingSequencedDeadLetterQueueRegistry.class);
+        if (DeadLetterMultiTenancyConfigurationEnhancer.isDeadLetterQueuePresent(
+                TenantComponentProviderSubscriber.class.getClassLoader())) {
+            subscribeComponentIfPresent(TenantRoutingSequencedDeadLetterQueueRegistry.class);
+        }
     }
 
     /**
