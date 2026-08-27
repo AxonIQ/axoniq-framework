@@ -37,6 +37,17 @@ jobs:
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
 
+      - name: Restore/save Maven build cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/build-cache
+          key: maven-build-cache-${{ runner.os }}-jdk${{ matrix.java-version }}-${{ github.run_id }}
+          restore-keys: |
+            maven-build-cache-${{ runner.os }}-jdk${{ matrix.java-version }}-
+
+      - name: Fingerprint SNAPSHOT dependencies for build cache
+        run: ./.github/scripts/fingerprint-snapshot-deps.sh
+
       - name: Write Axon Server test license
         run: |
           mkdir -p integrationtests/src/test/resources
@@ -49,14 +60,14 @@ jobs:
       - name: Regular Build
         if: ${{ !matrix.sonar-enabled }}
         run: |
-          ./mvnw -B -U -ntp -Dstyle.color=always -Possrh -Pintegration-test -Djacoco.skip=true clean verify \
+          ./mvnw -B -U -ntp -Dstyle.color=always -fae -Possrh -Pintegration-test -Djacoco.skip=true clean verify \
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
           -Dparallel=classes -DthreadCount=1 -DforkCount=2
 
       - name: Build with Coverage reports
         if: matrix.sonar-enabled
         run: |
-          ./mvnw -B -U -ntp -Dstyle.color=always -Possrh -Dcoverage clean verify \
+          ./mvnw -B -U -ntp -Dstyle.color=always -fae -Possrh -Dcoverage clean verify \
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
           -Dparallel=classes -DthreadCount=1 -DforkCount=2
 
