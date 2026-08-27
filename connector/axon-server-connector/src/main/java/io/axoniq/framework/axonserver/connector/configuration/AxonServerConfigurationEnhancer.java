@@ -55,6 +55,37 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * A {@link ConfigurationEnhancer} that is auto-loadable by the
  * {@link ApplicationConfigurer}, setting sensible defaults when using Axon Server.
+ * <p>
+ * Will only register the following components <b>if</b> there is no component registered for the given class yet:
+ * <ul>
+ *     <li>Registers a default {@link AxonServerConfiguration} for class {@link AxonServerConfiguration}</li>
+ *     <li>Registers a {@link AxonServerConnectionManager} for class {@link AxonServerConnectionManager}, connecting
+ *     to Axon Server on start and disconnecting on shutdown.</li>
+ *     <li>Registers a default {@link ManagedChannelCustomizer} ({@link ManagedChannelCustomizer#identity()}) for
+ *     class {@link ManagedChannelCustomizer}</li>
+ *     <li>Registers the {@link AxonServerEventStorageEngine} for classes {@link EventStorageEngine} and
+ *     {@link SnapshotStore}, sharing the same instance for both so snapshot sourcing resolves the snapshot and the
+ *     events that follow it in a single round trip to Axon Server.</li>
+ *     <li>Registers a {@link AxonServerCommandBusConnector} for class {@link CommandBusConnector}</li>
+ *     <li>Registers a {@link AxonServerQueryBusConnector} for class {@link QueryBusConnector}</li>
+ *     <li>Registers a {@link EventProcessorControlService} for class {@link EventProcessorControlService}</li>
+ * </ul>
+ * <p>
+ * Additionally, registers a {@link AxonServerEventStorageEngineFactory}
+ * {@link org.axonframework.common.configuration.ComponentFactory ComponentFactory} constructing an
+ * {@link AxonServerEventStorageEngine} for each named, non-default context requested (named
+ * {@code storageEngine@{context}}).
+ * <p>
+ * Furthermore, this enhancer will decorate the following components:
+ * <ul>
+ *     <li>The {@link CommandBusConnector} in a {@link PayloadConvertingCommandBusConnector}, converting payloads
+ *     using the present {@link MessageConverter}.</li>
+ *     <li>The {@link QueryBusConnector} in a {@link PayloadConvertingQueryBusConnector}, converting payloads using
+ *     the present {@link MessageConverter}.</li>
+ *     <li>The {@link AxonServerConnectionManager}, registering a {@link TopologyChangeListener} with the
+ *     {@link io.axoniq.axonserver.connector.control.ControlChannel ControlChannel} of its default context on start,
+ *     <b>if</b> one is present.</li>
+ * </ul>
  *
  * @author Allard Buijze
  * @author Steven van Beelen
