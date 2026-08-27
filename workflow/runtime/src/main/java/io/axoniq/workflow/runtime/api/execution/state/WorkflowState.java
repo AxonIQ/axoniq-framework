@@ -78,28 +78,6 @@ public interface WorkflowState extends DescribableComponent {
     boolean containsStep(@Nonnull String stepName);
 
     /**
-     * Checks if a step with the given name exists and has reached a terminal status.
-     *
-     * @param stepName name of the step
-     * @return true if the step exists and is terminal, false otherwise
-     */
-    default boolean isStepTerminal(@Nonnull String stepName) {
-        var step = getStep(stepName);
-        return step != null && step.status().isTerminal();
-    }
-
-    /**
-     * Checks if a step with the given name exists and has not reached a terminal status.
-     *
-     * @param stepName name of the step
-     * @return true if the step exists and is not terminal, false otherwise
-     */
-    default boolean isStepActive(@Nonnull String stepName) {
-        var step = getStep(stepName);
-        return step != null && !step.status().isTerminal();
-    }
-
-    /**
      * Returns the status of the workflow execution.
      *
      * @return workflow status
@@ -119,9 +97,9 @@ public interface WorkflowState extends DescribableComponent {
      * Returns the effective version for the given {@code changeId}.
      * <p>
      * The effective version is the recorded version-migration string when a migration step has been projected for the
-     * change. Otherwise, it is {@link #workflowDefinitionId()}'s version. This fallback is implicit, so workflows
-     * that have never executed a {@code ctx.migrateVersion(changeId, newVersion)} call carry no version-migration step
-     * in their event history.
+     * change. Otherwise, it is {@link #workflowDefinitionId()}'s version. This fallback is implicit, so workflows that
+     * have never executed a {@code ctx.migrateVersion(changeId, newVersion)} call carry no version-migration step in
+     * their event history.
      *
      * @param changeId the change identifier to query
      * @return effective version for the change
