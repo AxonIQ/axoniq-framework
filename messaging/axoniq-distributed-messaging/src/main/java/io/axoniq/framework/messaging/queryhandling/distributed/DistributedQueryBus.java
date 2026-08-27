@@ -19,10 +19,11 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.common.util.PriorityRunnable;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.DelayedMessageStream;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
@@ -32,7 +33,7 @@ import org.axonframework.messaging.queryhandling.QueryHandler;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
-import org.axonframework.common.util.PriorityRunnable;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,6 +66,9 @@ import java.util.function.Supplier;
 public class DistributedQueryBus implements QueryBus {
 
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+
+    private static final Context.ResourceKey<List<Runnable>> UPDATE_TASKS_KEY =
+            Context.ResourceKey.withLabel("update-tasks");
 
     private final QueryBus localSegment;
     private final QueryBusConnector connector;
@@ -141,6 +145,11 @@ public class DistributedQueryBus implements QueryBus {
     public CompletableFuture<OptionalInt> emitUpdateAndCount(Predicate<QueryMessage> filter,
                                                              Supplier<SubscriptionQueryUpdateMessage> updateSupplier,
                                                              @Nullable ProcessingContext context) {
+        return runAfterCommitOrImmediately(context, filter, () -> emitUpdate(filter, updateSupplier));
+    }
+
+    private CompletableFuture<OptionalInt> emitUpdate(Predicate<QueryMessage> filter,
+                                                      Supplier<SubscriptionQueryUpdateMessage> updateSupplier) {
         List<CompletableFuture<Void>> tasks = new ArrayList<>();
         updateRegistry.forEach((message, sender) -> {
             if (filter.test((message))) {
@@ -161,6 +170,10 @@ public class DistributedQueryBus implements QueryBus {
     @Override
     public CompletableFuture<OptionalInt> completeSubscriptionsAndCount(Predicate<QueryMessage> filter,
                                                                         @Nullable ProcessingContext context) {
+        return runAfterCommitOrImmediately(context, filter, () -> completeSubscriptions(filter));
+    }
+
+    private CompletableFuture<OptionalInt> completeSubscriptions(Predicate<QueryMessage> filter) {
         List<CompletableFuture<Void>> tasks = new ArrayList<>();
         updateRegistry.forEach((message, sender) -> {
             if (filter.test((message))) {
@@ -187,6 +200,11 @@ public class DistributedQueryBus implements QueryBus {
             Throwable cause,
             @Nullable ProcessingContext context
     ) {
+        return runAfterCommitOrImmediately(context, filter, () -> completeSubscriptionsExceptionally(filter, cause));
+    }
+
+    private CompletableFuture<OptionalInt> completeSubscriptionsExceptionally(Predicate<QueryMessage> filter,
+                                                                              Throwable cause) {
         List<CompletableFuture<Void>> tasks = new ArrayList<>();
         updateRegistry.forEach((message, sender) -> {
             if (filter.test((message))) {
@@ -195,6 +213,71 @@ public class DistributedQueryBus implements QueryBus {
         });
         return CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0]))
                                 .thenApply(v -> OptionalInt.of(tasks.size()));
+    }
+
+    /**
+     * Runs the given {@code updateTask} immediately, or defers it until the given {@code context} commits, matching
+     * {@code updateTask}'s subscriptions to the given {@code filter}.
+     * <p>
+     * When run immediately, the returned count reflects the actual outcome of the {@code updateTask} - e.g. the number
+     * of subscribers an update was successfully dispatched to, as opposed to the number of subscribers merely matching
+     * the {@code filter} before dispatch was attempted.
+     * <p>
+     * When deferred to after commit, the {@code updateTask} itself runs later and its outcome is not available to this
+     * method. In that case, the returned count is a match count against the given {@code filter}, computed at call time
+     * since waiting for that outcome would require blocking until after the given {@code context} commits. This could
+     * deadlock a caller invoking this from within that same commit pipeline.
+     * <p>
+     * The match count is only computed when the {@code updateTask} will actually run (now or after commit), not for an
+     * already-errored {@code context}, since the update is silently dropped in that case and the {@code filter} must
+     * not observe any side effects.
+     */
+    private CompletableFuture<OptionalInt> runAfterCommitOrImmediately(
+            @Nullable ProcessingContext context,
+            Predicate<QueryMessage> filter,
+            Supplier<CompletableFuture<OptionalInt>> updateTask
+    ) {
+        if (context == null || context.isCommitted()) {
+            return invokeSafely(updateTask);
+        } else if (!context.isCompleted()) {
+            int matchCount = matchCount(filter);
+            context.computeResourceIfAbsent(
+                           UPDATE_TASKS_KEY,
+                           () -> {
+                               List<Runnable> subscriptionQueryTasks = new ArrayList<>();
+                               context.runOnAfterCommit(c -> subscriptionQueryTasks.forEach(Runnable::run));
+                               return subscriptionQueryTasks;
+                           }
+                   )
+                   .add(() -> invokeSafely(updateTask).whenComplete((result, exception) -> {
+                       if (exception != null) {
+                           logger.warn("An error occurred while delivering a deferred subscription query update.",
+                                       exception);
+                       }
+                   }));
+            return CompletableFuture.completedFuture(OptionalInt.of(matchCount));
+        }
+        // else: context completed with an error - drop the update
+        return CompletableFuture.completedFuture(OptionalInt.empty());
+    }
+
+    /**
+     * Invokes the given {@code updateTask}, converting any exception it throws synchronously into a failed
+     * {@link CompletableFuture} rather than letting it propagate to the caller.
+     */
+    private static <T> CompletableFuture<T> invokeSafely(Supplier<CompletableFuture<T>> updateTask) {
+        try {
+            return updateTask.get();
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    private int matchCount(Predicate<QueryMessage> filter) {
+        return (int) updateRegistry.keySet()
+                                   .stream()
+                                   .filter(filter)
+                                   .count();
     }
 
     @Override
