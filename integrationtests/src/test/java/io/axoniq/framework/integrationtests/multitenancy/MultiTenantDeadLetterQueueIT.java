@@ -25,18 +25,20 @@ import io.axoniq.axonserver.grpc.event.dcb.StreamEventsResponse;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import io.axoniq.framework.messaging.deadletter.Decisions;
-import io.axoniq.framework.messaging.deadletter.InMemorySequencedDeadLetterQueue;
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
-import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
-import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
+import io.axoniq.framework.messaging.eventhandling.deadletter.jdbc.GenericDeadLetterTableFactory;
+import io.axoniq.framework.messaging.eventhandling.deadletter.jdbc.JdbcSequencedDeadLetterQueue;
+import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import io.axoniq.framework.messaging.multitenancy.deadletter.TenantAwareSequencedDeadLetterQueueFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import org.axonframework.common.configuration.AxonConfiguration;
+import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.messaging.core.QualifiedName;
@@ -44,27 +46,35 @@ import org.axonframework.messaging.core.sequencing.SequentialPolicy;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransactionalExecutorProvider;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.SimpleEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 import org.axonframework.messaging.eventhandling.processing.streaming.StreamingEventProcessor;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
+import org.h2.jdbcx.JdbcDataSource;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.extension.*;
+import org.junit.jupiter.api.io.*;
 
+import java.nio.file.Path;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+import javax.sql.DataSource;
 
-import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.ADMIN_CONTEXT;
-import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
-import static java.util.concurrent.CompletableFuture.*;
+import static java.util.concurrent.CompletableFuture.completedFuture;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 
 /**
  * Integration test for tenant-aware dead-letter queue operations against a multi-context Axon Server.
@@ -74,6 +84,8 @@ import static org.awaitility.Awaitility.await;
 @ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
 class MultiTenantDeadLetterQueueIT {
 
+    private final AtomicInteger retriedLetters = new AtomicInteger();
+
     private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
     private static final String TENANT_A = "dlq-tenant-a";
     private static final String TENANT_B = "dlq-tenant-b";
@@ -81,11 +93,10 @@ class MultiTenantDeadLetterQueueIT {
     private static final String COMPONENT_NAME = "failing-handler";
 
     private final List<String> handledTenants = new CopyOnWriteArrayList<>();
-    private final List<String> retriedTenants = new CopyOnWriteArrayList<>();
+    private final Map<String, DataSource> tenantDataSources = new ConcurrentHashMap<>();
     private final List<String> factoryTenants = new CopyOnWriteArrayList<>();
-
-    private AxonServerTestInfrastructure.ContextManager contextManager;
-    private AxonConfiguration application;
+    @TempDir
+    Path databaseDirectory;
 
     @BeforeEach
     void setUp() {
@@ -95,13 +106,13 @@ class MultiTenantDeadLetterQueueIT {
         contextManager.createContext(TENANT_A);
         contextManager.createContext(TENANT_B);
         application = buildApplication();
-        await().atMost(30, TimeUnit.SECONDS)
-               .untilAsserted(() -> assertThat(application.getComponent(TenantProvider.class).tenants())
-                       .extracting(TenantDescriptor::tenantId)
-                       .contains(TENANT_A, TENANT_B));
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+        await()
+                .untilAsserted(() -> assertThat(application.getComponent(TenantProvider.class).tenants())
+                        .extracting(TenantDescriptor::tenantId)
+                        .contains(TENANT_A, TENANT_B));
+        await().untilAsserted(() -> {
             StreamingEventProcessor processor = application.getComponents(StreamingEventProcessor.class)
-                                                          .get(PROCESSOR_NAME);
+                                                           .get(PROCESSOR_NAME);
             assertThat(processor).isNotNull();
             assertThat(processor.isRunning()).isTrue();
         });
@@ -110,6 +121,46 @@ class MultiTenantDeadLetterQueueIT {
         assertThat(((MultiTenantEventStorageEngine) eventStorageEngine).tenants())
                 .extracting(TenantDescriptor::tenantId)
                 .contains(TENANT_A, TENANT_B);
+    }
+
+    private AxonServerTestInfrastructure.ContextManager contextManager;
+    private AxonConfiguration application;
+
+    @Test
+    void routesEnqueueAndProcessingToTheTenantInTheProcessingContext() {
+        // given
+        publishEvent(TENANT_A, "event-a");
+        publishEvent(TENANT_B, "event-b");
+
+        // when
+        await().untilAsserted(() -> {
+            assertThat(firstStoredEvent(TENANT_A)).isNotNull();
+            assertThat(firstStoredEvent(TENANT_B)).isNotNull();
+        });
+        await().untilAsserted(() ->
+                                      assertThat(handledTenants).containsExactlyInAnyOrder(TENANT_A, TENANT_B)
+        );
+        await().untilAsserted(() ->
+                                      assertThat(factoryTenants).containsExactlyInAnyOrder(TENANT_A, TENANT_B)
+        );
+        await().untilAsserted(() -> {
+            assertThat(deadLetterQueue().size(contextFor(TENANT_A)).join()).isEqualTo(1L);
+            assertThat(deadLetterQueue().size(contextFor(TENANT_B)).join()).isEqualTo(1L);
+        });
+        assertThat(deadLetterCount(TENANT_A)).isEqualTo(1L);
+        assertThat(deadLetterCount(TENANT_B)).isEqualTo(1L);
+
+        deadLetterQueue().process(letter -> true, letter -> {
+            retriedLetters.incrementAndGet();
+            return completedFuture(Decisions.evict());
+        }, contextFor(TENANT_A)).join();
+
+        // then
+        assertThat(retriedLetters).hasValue(1);
+        assertThat(deadLetterQueue().size(contextFor(TENANT_A)).join()).isZero();
+        assertThat(deadLetterQueue().size(contextFor(TENANT_B)).join()).isEqualTo(1L);
+        assertThat(deadLetterCount(TENANT_A)).isZero();
+        assertThat(deadLetterCount(TENANT_B)).isEqualTo(1L);
     }
 
     @AfterEach
@@ -123,64 +174,58 @@ class MultiTenantDeadLetterQueueIT {
         INFRASTRUCTURE.stop();
     }
 
-    @Test
-    void routesEnqueueAndProcessingToTheTenantInTheProcessingContext() {
-        // given
-        publishEvent(TENANT_A, "event-a");
-        publishEvent(TENANT_B, "event-b");
-
-        // when
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(firstStoredEvent(TENANT_A)).isNotNull();
-            assertThat(firstStoredEvent(TENANT_B)).isNotNull();
-        });
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() ->
-                assertThat(handledTenants).containsExactlyInAnyOrder(TENANT_A, TENANT_B)
-        );
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() ->
-                assertThat(factoryTenants).containsExactlyInAnyOrder(TENANT_A, TENANT_B)
-        );
-        await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(deadLetterQueue().size(contextFor(TENANT_A)).join()).isEqualTo(1L);
-            assertThat(deadLetterQueue().size(contextFor(TENANT_B)).join()).isEqualTo(1L);
-        });
-
-        deadLetterQueue().process(letter -> true, letter -> {
-            retriedTenants.add(letter.context().getResource(TenantDescriptor.RESOURCE_KEY).tenantId());
-            return completedFuture(Decisions.evict());
-        }, contextFor(TENANT_A)).join();
-
-        // then
-        assertThat(retriedTenants).containsExactly(TENANT_A);
-        assertThat(deadLetterQueue().size(contextFor(TENANT_A)).join()).isZero();
-        assertThat(deadLetterQueue().size(contextFor(TENANT_B)).join()).isEqualTo(1L);
-    }
-
     private AxonConfiguration buildApplication() {
         var processor = EventProcessorModule
                 .pooledStreaming(PROCESSOR_NAME)
                 .eventHandlingComponents(components -> components.declarative(COMPONENT_NAME,
-                                                                               configuration -> failingComponent()))
+                                                                              configuration -> Fixture.failingComponent(
+                                                                                      handledTenants)))
                 // Enables DLQ support for this processor. The multi-tenancy enhancer decorates its queue factory.
                 .customized((configuration, pooled) -> pooled.extend(DeadLetterQueueConfiguration.class,
-                                                                       () -> new DeadLetterQueueConfiguration().enabled()));
+                                                                     () -> new DeadLetterQueueConfiguration().enabled()));
+
+        Consumer<ComponentRegistry> registerTenantAwareSequencedDeadLetterQueueFactory = registry -> registry.registerComponent(
+                TenantAwareSequencedDeadLetterQueueFactory.class,
+                configuration -> (tenant, processingGroup, queueConfiguration) -> {
+                    // reuses the single-per-tenant-datasource configured above
+                                                  TenantComponentProvider<DataSource> dataSourceProvider =
+                            TenantComponentProviderUtil.find(
+                                    queueConfiguration, DataSource.class
+                            ).orElseThrow();
+                                                  EventConverter eventConverter = queueConfiguration.getComponent(
+                                                          EventConverter.class
+                                                  );
+                                                  GeneralConverter generalConverter = queueConfiguration.getComponent(
+                                                          GeneralConverter.class
+                                                  );
+                    JdbcTransactionalExecutorProvider executorProvider =
+                            new JdbcTransactionalExecutorProvider(
+                                                                                                  dataSourceProvider.componentFor(tenant)
+                            );
+                    JdbcSequencedDeadLetterQueue<EventMessage> queue =
+                            JdbcSequencedDeadLetterQueue.<EventMessage>builder()
+                                                        .processingGroup(processingGroup)
+                                                        .transactionalExecutorProvider(
+                                                                ignored -> executorProvider.getTransactionalExecutor(
+                                                                        null)
+                                                        )
+                                                        .eventConverter(eventConverter)
+                                                        .genericConverter(generalConverter)
+                                                        .build();
+                    joinAndUnwrap(queue.createSchema(new GenericDeadLetterTableFactory(),
+                                                     null));
+                    factoryTenants.add(tenant.tenantId());
+                    return queue;
+                });
 
         return EventSourcingConfigurer.create()
                                       .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                                      .componentRegistry(registry -> registry.registerComponent(
-                                              TenantResolver.class, configuration -> new MetadataBasedTenantResolver()))
-                                      .componentRegistry(registry -> registry.registerComponent(
-                                              TenantConnectPredicate.class,
-                                              configuration -> tenant -> !Set.of(ADMIN_CONTEXT, DEFAULT_CONTEXT)
-                                                                              .contains(tenant.tenantId())))
-                                      .componentRegistry(registry -> registry.registerComponent(
-                                              TenantAwareSequencedDeadLetterQueueFactory.class,
-                                              configuration -> (tenant, processingGroup, queueConfiguration) -> {
-                                                  // The registry creates and caches one of these queues per tenant and
-                                                  // processing group. A real application selects tenant-specific storage here.
-                                                  factoryTenants.add(tenant.tenantId());
-                                                  return InMemorySequencedDeadLetterQueue.defaultQueue();
-                                              }))
+                                      .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
+
+                                      // The application's tenant-scoped datasource provider owns the physical storage
+                                      .componentRegistry(Fixture.registerTenantDataSourceProvider(databaseDirectory,
+                                                                                                  tenantDataSources))
+                                      .componentRegistry(registerTenantAwareSequencedDeadLetterQueueFactory)
                                       // The processor itself needs no tenant-specific configuration: DLQ operations
                                       // carry their tenant in the ProcessingContext and are routed by the registry.
                                       .messaging(messaging -> messaging.eventProcessing(
@@ -189,14 +234,19 @@ class MultiTenantDeadLetterQueueIT {
                                       .start();
     }
 
-    private SimpleEventHandlingComponent failingComponent() {
-        SimpleEventHandlingComponent component = SimpleEventHandlingComponent.create(COMPONENT_NAME,
-                                                                                       SequentialPolicy.INSTANCE);
-        component.subscribe(new QualifiedName("test", "TenantDlqEvent"), (event, context) -> {
-            handledTenants.add(TenantDescriptor.fromContext(context).orElseThrow().tenantId());
-            throw new IllegalStateException("Expected failure for event " + event.identifier());
-        });
-        return component;
+    private StreamEventsResponse firstStoredEvent(String tenantId) {
+        AxonServerConnectionManager connectionManager = application.getComponent(AxonServerConnectionManager.class);
+        try (ResultStream<StreamEventsResponse> stream = connectionManager.getConnection(tenantId)
+                                                                          .dcbEventChannel()
+                                                                          .stream(StreamEventsRequest.newBuilder()
+                                                                                                     .setFromSequence(0)
+                                                                                                     .build())) {
+            return stream.nextIfAvailable(1, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while retrieving the event stored for tenant ["
+                                                    + tenantId + "]", e);
+        }
     }
 
     private void publishEvent(String tenantId, String id) {
@@ -209,19 +259,9 @@ class MultiTenantDeadLetterQueueIT {
         unitOfWork.execute().orTimeout(15, TimeUnit.SECONDS).join();
     }
 
-    private StreamEventsResponse firstStoredEvent(String tenantId) {
-        AxonServerConnectionManager connectionManager = application.getComponent(AxonServerConnectionManager.class);
-        try (ResultStream<StreamEventsResponse> stream = connectionManager.getConnection(tenantId)
-                                                                          .dcbEventChannel()
-                                                                          .stream(StreamEventsRequest.newBuilder()
-                                                                                                      .setFromSequence(0)
-                                                                                                      .build())) {
-            return stream.nextIfAvailable(1, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while retrieving the event stored for tenant ["
-                                                    + tenantId + "]", e);
-        }
+    private ProcessingContext contextFor(String tenantId) {
+        TenantDescriptor tenant = TenantDescriptor.tenantWithId(tenantId);
+        return new StubProcessingContext().withResource(TenantDescriptor.RESOURCE_KEY, tenant);
     }
 
     @SuppressWarnings("unchecked")
@@ -236,9 +276,78 @@ class MultiTenantDeadLetterQueueIT {
                           .orElseThrow();
     }
 
-    private ProcessingContext contextFor(String tenantId) {
-        return new StubProcessingContext().withResource(TenantDescriptor.RESOURCE_KEY,
-                                                        TenantDescriptor.tenantWithId(tenantId));
+    private long deadLetterCount(String tenantId) {
+        DataSource dataSource = tenantDataSources.get(tenantId);
+        assertThat(dataSource).as("datasource for tenant %s", tenantId).isNotNull();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement("SELECT COUNT(*) FROM DeadLetterEntry");
+             ResultSet result = statement.executeQuery()) {
+            result.next();
+            return result.getLong(1);
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Failed to count dead letters for tenant [" + tenantId + "]", exception);
+        }
+    }
+
+    /**
+     * Fixture wrapping application/test specific setup created by a user of the multi-tenancy module.
+     */
+    private static final class Fixture {
+
+        /**
+         * Creates a {@link SimpleEventHandlingComponent} that subscribes to {@link TenantDlqEvent} and always fails.
+         *
+         * @param handledTenants the list of tenant IDs that have handled an event, to be updated by the component
+         * @return a {@link SimpleEventHandlingComponent} that subscribes to {@link TenantDlqEvent} and always fails
+         */
+        private static SimpleEventHandlingComponent failingComponent(List<String> handledTenants) {
+            SimpleEventHandlingComponent component = SimpleEventHandlingComponent.create(COMPONENT_NAME,
+                                                                                         SequentialPolicy.INSTANCE);
+            component.subscribe(new QualifiedName("test", "TenantDlqEvent"), (event, context) -> {
+                handledTenants.add(TenantDescriptor.fromContext(context).orElseThrow().tenantId());
+                throw new IllegalStateException("Expected failure for event " + event.identifier());
+            });
+            return component;
+        }
+
+        /**
+         * Uses {@link #createDataSource(Path, String)} to register a {@link TenantComponentProvider} for
+         * {@link DataSource} in the given registry. The provider creates a tenant-specific {@link DataSource} for the
+         * given database directory and tenant ID, and caches it in the provided map of tenant data sources.
+         *
+         * @param databaseDirectory the directory where the tenant's database file will be stored
+         * @param tenantDataSources the map of tenant data sources to cache the created {@link DataSource} for each
+         *                          tenant ID
+         * @return a {@link Consumer} that registers the {@link TenantComponentProvider} for {@link DataSource} in the
+         * given registry
+         */
+        static Consumer<ComponentRegistry> registerTenantDataSourceProvider(Path databaseDirectory,
+                                                                            Map<String, DataSource> tenantDataSources) {
+            return registry -> registry.registerComponent(
+                    TenantComponentProvider.class,
+                    configuration -> TenantComponentProvider.withFactory(
+                            DataSource.class,
+                            tenant -> tenantDataSources.computeIfAbsent(
+                                    tenant.tenantId(), tenantId -> createDataSource(databaseDirectory, tenantId)
+                            )
+                    ));
+        }
+
+        /**
+         * Creates a tenant-specific {@link DataSource} for the given database directory and tenant ID.
+         *
+         * @param databaseDirectory the directory where the tenant's database file will be stored
+         * @param tenantId          the ID of the tenant for which the {@link DataSource} is created
+         * @return the tenant-specific {@link DataSource} for the given database directory and tenant ID
+         */
+        private static DataSource createDataSource(Path databaseDirectory, String tenantId) {
+            JdbcDataSource dataSource = new JdbcDataSource();
+            dataSource.setURL("jdbc:h2:file:" + databaseDirectory.resolve(tenantId).toAbsolutePath().toString()
+                                                                 .replace('\\', '/') + ";DB_CLOSE_ON_EXIT=FALSE");
+            dataSource.setUser("sa");
+            dataSource.setPassword("");
+            return dataSource;
+        }
     }
 
     @Event(namespace = "test", name = "TenantDlqEvent", version = "1.0.0")
