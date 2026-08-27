@@ -1,10 +1,7 @@
 # ADR 006: Tenant-aware dead-letter queue integration (issue [#214](https://github.com/AxonIQ/axoniq-framework/issues/214))
 
-Date: 2026-08-19
-Status: work in progress
-
-> This ADR records the intended direction and outstanding review questions. It is subject to change and must be
-> updated as the implementation, tests, and documentation progress.
+Date: 2026-08-27
+Status: accepted
 
 ## Context
 
@@ -54,32 +51,68 @@ This reuses the established subscription lifecycle: a configuration-owned compon
 removal events, and its subscription is explicitly cancelled at application shutdown. It prevents dynamically created
 queues from subscribing in their constructors and leaving a subscription with no owner.
 
-### Registry and queue lifecycle
+### Components and their collaboration
+
+The following components have distinct responsibilities:
+
+- `DeadLetterMultiTenancyConfigurationEnhancer` is the optional integration point. When the DLQ module is present, it
+  registers the registry and replaces the processor's regular DLQ factory with the routing factory.
+- `TenantComponentProviderSubscriber` owns subscriptions of configuration-level `MultiTenantAwareComponent`s. It
+  forwards tenant registration and removal to the registry and cancels those subscriptions at shutdown.
+- `TenantRoutingSequencedDeadLetterQueueRegistry` owns tenant registrations and one `TenantScopedCache` per processing
+  group. A cache owns the concrete queues for its registered tenants and evicts them when a tenant is removed.
+- `TenantRoutingSequencedDeadLetterQueueFactory` bridges the processor-facing factory contract, which has no tenant,
+  to a routing queue.
+- `TenantRoutingSequencedDeadLetterQueue` is deliberately thin. For each DLQ operation it resolves the tenant from the
+  `ProcessingContext` and delegates to the registry; it owns neither a cache nor a tenant subscription.
+- `TenantAwareSequencedDeadLetterQueueFactory` is the application extension point. It receives the tenant, processing
+  group, and configuration, allowing it to select tenant-specific storage such as a `DataSource`.
 
 ```mermaid
-flowchart TD
-    provider[TenantProvider] -->|register tenant| registry[DLQ registry]
-    registry -->|record tenant registration| tenants[(known tenants)]
-    registry -->|register tenant in each existing cache| caches[(TenantScopedCache per queue key)]
+flowchart LR
+    subgraph Bootstrap[Configuration bootstrap]
+        enhancer[DeadLetterMultiTenancyConfigurationEnhancer]
+        subscriber[TenantComponentProviderSubscriber]
+        registry[TenantRoutingSequencedDeadLetterQueueRegistry]
+        appFactory[Application TenantAwareSequencedDeadLetterQueueFactory]
+        routingFactory[TenantRoutingSequencedDeadLetterQueueFactory]
+        processorConfig[Pooled streaming processor configuration]
 
-    operation[DLQ operation with tenant ProcessingContext] --> routing[Tenant-routing queue]
-    routing -->|resolve tenant| lookup[registry queueFor]
-    lookup --> cacheExists{Cache for processing group, configuration, and factory exists?}
-    cacheExists -->|no| createCache[Create TenantScopedCache]
-    createCache -->|register every known tenant| tenants
-    createCache --> cacheLookup[Lookup queue for tenant]
-    cacheExists -->|yes| cacheLookup
-    cacheLookup --> queueExists{Queue cached for tenant?}
-    queueExists -->|no| createQueue[Create queue with configured factory]
-    createQueue --> store[Cache queue for tenant]
-    store --> tenantQueue[Return tenant queue]
-    queueExists -->|yes| tenantQueue
+        enhancer -->|registers when DLQ module is present| registry
+        enhancer -->|decorates| processorConfig
+        subscriber -->|subscribes and owns cancellation| registry
+        appFactory --> routingFactory
+        registry --> routingFactory
+        routingFactory -->|becomes the processor DLQ factory| processorConfig
+    end
 
-    remove[Cancel tenant registration] --> unregister[Remove tenant from registry]
-    unregister --> evict[Cancel tenant registration in every cache]
-    evict --> removed[Evict cached queues for tenant]
-    removed --> readd[Later registration creates fresh queues]
+    subgraph TenantLifecycle[Tenant lifecycle]
+        provider[TenantProvider]
+        cache[TenantScopedCache per processing group]
+        concreteQueue[Concrete tenant DLQ]
+
+        provider -->|register or remove tenant| subscriber
+        registry -->|register or evict tenant| cache
+        cache -->|lazily creates and retains| concreteQueue
+    end
+
+    subgraph DlqOperation[DLQ operation]
+        context[Tenant-carrying ProcessingContext]
+        routingQueue[TenantRoutingSequencedDeadLetterQueue]
+
+        processorConfig -->|creates one per processing group| routingQueue
+        context -->|tenant| routingQueue
+        routingQueue -->|queueFor tenant and processing group| registry
+        registry --> cache
+        appFactory -->|create tenant queue on cache miss| concreteQueue
+        concreteQueue -->|enqueue, query, or process| result[DLQ result]
+    end
 ```
+
+The cache is keyed by processing group. When it is first created, the registry registers every currently known tenant
+with it before resolving the requested queue. A tenant registration is propagated to every existing cache. Removing a
+tenant cancels its registrations in every cache and evicts its concrete queues; registering it later consequently
+creates fresh queues.
 
 Alternatives considered and rejected for now:
 
@@ -94,47 +127,56 @@ Alternatives considered and rejected for now:
 Queue resolution belongs to the asynchronous DLQ API. An unresolved tenant must complete the returned
 `CompletableFuture` exceptionally instead of throwing before a future is returned.
 
-## Related streaming-processor lifecycle
+## Related streaming-processor lifecycle: the restarter is necessary, but independent
 
-The DLQ registry does not start, stop, or reconfigure event processors. That is handled separately by the
-configuration-owned `MultiTenantStreamingProcessorRestarter`, which is registered whenever multi-tenancy is enabled.
+The DLQ registry does not start, stop, or reconfigure event processors. `MultiTenantStreamingProcessorRestarter` is a
+separate, configuration-owned multi-tenancy component; it is not introduced to make tenant-aware DLQs work.
 
-A streaming processor opens a stream over the tenant set that exists at that time. Consequently, after a tenant is
-added or removed, a running processor must reopen its stream to begin consuming the added tenant or to stop consuming
-the removed one. The restarter follows the `MultiTenantEventStorageEngine`, rather than the `TenantProvider` directly:
-the routing engine announces a tenant change only after it can itself resolve that tenant's event-storage resources.
+It is required when tenants may be added or removed while streaming processors are running. A
+`MultiTenantEventStorageEngine` builds a merged stream over the tenant set at the time `stream(...)` is called. That
+open stream cannot acquire a newly added tenant, and it retains a removed tenant's stream. Queue routing cannot repair
+that: it runs only after an event has already reached a processor with a tenant-carrying `ProcessingContext`.
 
-Tenant changes are coalesced onto one restart worker. Each restart briefly pauses every running streaming processor,
-then shuts it down and starts it again. This applies to all streaming processors, including ones configured with a
-different event source; reopening such a source is harmless, while distinguishing processor source types is not part
-of the processor API. The shutdown-and-start operation has a 30-second default safety-net timeout, configurable through
-`MultiTenantStreamingProcessorRestartConfiguration`. It bounds a stalled restart; it is not a deliberate delay before
-processing resumes.
+```mermaid
+flowchart LR
+    provider[TenantProvider] --> engine[MultiTenantEventStorageEngine]
+    engine -->|announces only after its tenant set is usable| restarter[MultiTenantStreamingProcessorRestarter]
+    restarter -->|coalesced restart request| processors[Running streaming event processors]
+    processors -->|close and re-open merged stream| engine
 
-This lifecycle is independent of DLQ routing: once a processor has delivered an event with a tenant in its
-`ProcessingContext`, the tenant-routing DLQ resolves and caches that tenant's queue as described above.
+    event[Delivered event with tenant context] --> routingQueue[Tenant-routing DLQ]
+    routingQueue -. independent of .-> restarter
+```
+
+The restarter follows the routing event-storage engine rather than the `TenantProvider` directly. This is essential:
+the provider can announce a tenant before the engine has finished registering its event-storage resources; restarting
+then could reopen a stream over the old set with no later signal to correct it. The engine announces only once its own
+tenant set reflects the change.
+
+Tenant changes are coalesced onto one worker. Each cycle restarts only processors that are currently running; it pauses
+them briefly, shuts them down, and starts them again. All streaming processors are included because the processor API
+does not expose their configured event source, and reopening an unrelated source is safe. The shutdown-and-start
+operation has a 30-second default safety-net timeout, configurable through
+`MultiTenantStreamingProcessorRestartConfiguration`; this bounds a stall rather than deliberately delaying processing.
+
+For deployments with a fixed tenant set for their entire lifetime, the restarter has no runtime work to do. Removing it
+from the default multi-tenancy configuration would, however, make runtime tenant additions and removals incorrect, so
+it remains necessary for the supported dynamic-tenant lifecycle.
 
 ## Implementation status
 
 The decision is implemented by `TenantRoutingSequencedDeadLetterQueueRegistry`, the tenant-routing queue and factory,
-the DLQ configuration enhancer, and `TenantComponentProviderSubscriber`.
+`TenantAwareSequencedDeadLetterQueueFactory`, the DLQ configuration enhancer, and
+`TenantComponentProviderSubscriber`.
 
 Focused tests cover:
 
 - enhancer detection of both the present and absent optional DLQ dependency, including registration of the registry;
 - subscriber registration of the registry with the `TenantProvider`;
 - lazy cache creation after a tenant is registered and cache eviction across multiple processing groups; and
-- factory-created queues routing an operation to the queue of the tenant in the processing context.
-
-## Open question: tenant-aware queue factories
-
-The implementation deliberately leaves the factory contract unchanged and passes
-`DeadLetterQueueConfiguration#factory()` to the registry. This may be insufficient for JDBC and JPA queue factories:
-they can need a tenant-specific `DataSource`, while a shared factory has no tenant input with which to choose it.
-
-Determine an application extension point that derives a queue factory, or a queue, from the `TenantDescriptor`. The
-chosen contract must allow storage to remain physically tenant-specific and must be proven with a tenant-specific
-datasource-backed queue test.
+- factory-created queues routing an operation to the queue of the tenant in the processing context; and
+- the application-facing factory receiving tenant, processing group, and configuration when a concrete queue is
+  created.
 
 ## Consequences
 
@@ -142,12 +184,12 @@ datasource-backed queue test.
 - Applications that include both modules receive tenant-aware queue routing without duplicating tenant-context setup.
 - Tenant queue instances are evicted on removal and recreated on re-registration, rather than remaining reachable in
   a routing queue cache.
-- The current delegate factory remains shared; physical datasource isolation is pending the open factory-contract
-  decision.
+- Applications can select physically tenant-specific storage through
+  `TenantAwareSequencedDeadLetterQueueFactory`; selecting and configuring that storage remains the application's
+  responsibility.
 - Framework and application enhancers retain ordering space, so applications can override defaults when necessary.
 
 ## Follow-up work
 
-- Resolve and test the tenant-aware factory contract, including a datasource-backed queue.
 - Add Antora/AsciiDoc documentation for multi-tenancy DLQ configuration and storage.
-- Update this work-in-progress ADR if the factory contract or implementation changes.
+- Add a datasource-backed integration test demonstrating application selection of tenant-specific DLQ storage.
