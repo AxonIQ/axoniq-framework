@@ -1,5 +1,5 @@
 [.axoniq-feature]
-= Tenant-aware dead-letter queues
+= Tenant-Aware Dead-Letter Queues
 :navtitle: Tenant-aware dead-letter queues
 :reftext: Tenant-aware dead-letter queues
 
