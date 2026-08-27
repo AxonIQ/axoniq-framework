@@ -362,8 +362,7 @@ public final class TenantBankFixture {
                           .disableEnhancer(io.axoniq.license.entitlement.source.axonserver.AxonServerLicenseSourceConfigurationEnhancer.class))
                   .componentRegistry(registry -> registry.registerComponent(
                           TenantConnectPredicate.class,
-                          config -> descriptor -> !Set.of(ADMIN_CONTEXT, DEFAULT_CONTEXT)
-                                                      .contains(descriptor.tenantId())
+                          config -> descriptor -> TenantFixture.CONNECT_ONLY_CUSTOM_TENANTS.test(descriptor)
                                                   && descriptor.tenantId().startsWith(tenantPrefix)))
                   .componentRegistry(registry -> registry.registerComponent(
                           TenantComponentProvider.class,

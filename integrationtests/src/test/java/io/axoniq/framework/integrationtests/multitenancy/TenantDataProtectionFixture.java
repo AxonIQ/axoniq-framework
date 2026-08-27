@@ -94,12 +94,7 @@ final class TenantDataProtectionFixture {
 
         EventSourcingConfigurer configurer = EventSourcingConfigurer.create()
                                                                   .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                                                                  .componentRegistry(registry -> registry.registerComponent(
-                                                                          TenantConnectPredicate.class,
-                                                                          configuration -> descriptor -> !Set.of(ADMIN_CONTEXT,
-                                                                                                                   DEFAULT_CONTEXT)
-                                                                                                          .contains(descriptor.tenantId())
-                                                                  ))
+                                                                  .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
                                                                   .componentRegistry(registry -> registry.registerComponent(
                                                                           TenantComponentProvider.class,
                                                                           configuration -> TenantComponentProvider.withFactory(

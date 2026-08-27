@@ -124,9 +124,7 @@ class MultiTenantQueryHandlingIT {
                         DistributedQueryBusConfiguration.class,
                         cfg -> DistributedQueryBusConfiguration.DEFAULT
                                 .preferLocalQueryHandler(preferLocalQueryHandler)))
-                .componentRegistry(cr -> cr.registerComponent(
-                        TenantConnectPredicate.class,
-                        c -> d -> !Set.of(ADMIN_CONTEXT, DEFAULT_CONTEXT).contains(d.tenantId())))
+                .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
                 // Identity factory: the tenant-scoped component IS the resolved TenantDescriptor, so injecting it
                 // into the annotated handler below proves parameter resolution picks the dispatched tenant's instance.
                 .componentRegistry(registry -> registry.registerComponent(TenantComponentProvider.class,

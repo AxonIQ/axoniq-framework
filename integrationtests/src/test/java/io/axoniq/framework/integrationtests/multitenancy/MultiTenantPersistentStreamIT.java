@@ -154,9 +154,7 @@ class MultiTenantPersistentStreamIT {
     private AxonConfiguration buildApplication() {
         return EventSourcingConfigurer.create()
                                       .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                                      .componentRegistry(cr -> cr.registerComponent(
-                                              TenantConnectPredicate.class,
-                                              c -> d -> !Set.of(ADMIN_CONTEXT, DEFAULT_CONTEXT).contains(d.tenantId())))
+                                      .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
                                       .messaging(messaging -> messaging.eventProcessing(
                                               processing -> processing.subscribing(
                                                       subscribing -> subscribing.processor(buildProcessorModule()))))
