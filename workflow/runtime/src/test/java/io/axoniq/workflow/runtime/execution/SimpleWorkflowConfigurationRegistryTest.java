@@ -129,6 +129,48 @@ class SimpleWorkflowConfigurationRegistryTest {
     }
 
     @Test
+    void getHighestVersionConfigurationsReturnsEmptyListForUnknownEvent() {
+        assertThat(registry.getHighestVersionConfigurations(new QualifiedName("Unknown"))).isEmpty();
+    }
+
+    @Test
+    void getHighestVersionConfigurationsReturnsOnlyTheHighestRegisteredVersion() {
+        QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
+        registry.register(eventName, new VersionedStub("OrderWorkflow", "1.0.0"));
+        registry.register(eventName, new VersionedStub("OrderWorkflow", "2.0.0"));
+
+        var configs = registry.getHighestVersionConfigurations(eventName);
+        assertThat(configs).hasSize(1);
+        assertThat(configs.getFirst().configuration().workflowVersion()).isEqualTo("2.0.0");
+    }
+
+    @Test
+    void getHighestVersionConfigurationsReflectsLaterRegistrations() {
+        QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
+        registry.register(eventName, new VersionedStub("OrderWorkflow", "1.0.0"));
+        assertThat(registry.getHighestVersionConfigurations(eventName))
+                .singleElement()
+                .satisfies(c -> assertThat(c.configuration().workflowVersion()).isEqualTo("1.0.0"));
+
+        registry.register(eventName, new VersionedStub("OrderWorkflow", "2.0.0"));
+        assertThat(registry.getHighestVersionConfigurations(eventName))
+                .singleElement()
+                .satisfies(c -> assertThat(c.configuration().workflowVersion()).isEqualTo("2.0.0"));
+    }
+
+    @Test
+    void getHighestVersionConfigurationsReturnsAllConfigurationsAtTheHighestVersion() {
+        QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
+        registry.register(eventName, new VersionedStub("OrderWorkflow", "2.0.0"));
+        registry.register(eventName, new VersionedStub("OtherWorkflow", "2.0.0"));
+        registry.register(eventName, new VersionedStub("OrderWorkflow", "1.0.0"));
+
+        var configs = registry.getHighestVersionConfigurations(eventName);
+        assertThat(configs).hasSize(2);
+        assertThat(configs).allSatisfy(c -> assertThat(c.configuration().workflowVersion()).isEqualTo("2.0.0"));
+    }
+
+    @Test
     void testDescribeTo() {
         QualifiedName eventName = new QualifiedName("com.example.MyEvent");
         WorkflowDefinition<WorkflowContext> definition = mock(WorkflowDefinition.class);
@@ -169,7 +211,7 @@ class SimpleWorkflowConfigurationRegistryTest {
     @Test
     void findClosestRegisteredVersionPicksHighestBelowOrEqualToRequested() {
         // v1 = 1.0.0, v2 = 2.0.0 registered. State recorded "1.0.1" (after a ctx.migrateVersion bump that
-        // no exact sibling matches). Closest match should be v1.0.0, NOT v2.0.0 — semantically a v1
+        // no exact sibling matches). Closest match should be v1.0.0, NOT v2.0.0 - semantically a v1
         // workflow that bumped to 1.0.1 is closer to v1.0.0 than to v2.0.0.
         QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
         registry.register(eventName, new VersionedStub("OrderWorkflow", "1.0.0"));
@@ -188,7 +230,7 @@ class SimpleWorkflowConfigurationRegistryTest {
         registry.register(eventName, new VersionedStub("OrderWorkflow", "1.0.0"));
         registry.register(eventName, new VersionedStub("OrderWorkflow", "2.0.0"));
 
-        // State recorded "2.0.1" — still closest to v2.0.0 (highest <= 2.0.1).
+        // State recorded "2.0.1" - still closest to v2.0.0 (highest <= 2.0.1).
         var match = registry.findClosestRegisteredVersion("OrderWorkflow", "2.0.1");
         assertThat(match).isPresent();
         assertThat(match.get().workflowVersion()).isEqualTo("2.0.0");
@@ -197,7 +239,7 @@ class SimpleWorkflowConfigurationRegistryTest {
     @Test
     void findClosestRegisteredVersionReturnsEmptyWhenAllRegisteredAreAboveRequested() {
         // State recorded "0.5.0" but only v1.0.0 / v2.0.0 are registered. No registered version is
-        // <= 0.5.0 — return empty so the caller can fall back to its spawn-time configuration.
+        // <= 0.5.0 - return empty so the caller can fall back to its start-time configuration.
         QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
         registry.register(eventName, new VersionedStub("OrderWorkflow", "1.0.0"));
         registry.register(eventName, new VersionedStub("OrderWorkflow", "2.0.0"));
@@ -233,7 +275,7 @@ class SimpleWorkflowConfigurationRegistryTest {
 
     @Test
     void findClosestHigherRegisteredVersionReturnsEmptyWhenNothingIsAboveRequested() {
-        // All registered versions <= state — closest-higher has nothing to offer (caller falls back
+        // All registered versions <= state - closest-higher has nothing to offer (caller falls back
         // to closest-down or the WARN fallback).
         QualifiedName eventName = new QualifiedName("com.example.OrderPlaced");
         registry.register(eventName, new VersionedStub("OrderWorkflow", "1.0.0"));
@@ -256,6 +298,7 @@ class SimpleWorkflowConfigurationRegistryTest {
      * Stub with explicit workflowName + workflowVersion for {@code findClosestRegisteredVersion} tests.
      */
     private static class VersionedStub extends StubWorkflowConfiguration {
+
         private final String name;
         private final String version;
 

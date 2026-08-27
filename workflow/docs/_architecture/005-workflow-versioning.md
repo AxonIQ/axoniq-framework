@@ -33,7 +33,7 @@ namespace.
 Every event a workflow emits is constructed as `new MessageType(name, state.workflowVersion())`.
 The workflow's version travels on the event envelope's `MessageType.version()` — AF5's standard
 event-versioning channel — not as a separate metadata key. `state.workflowVersion()` is seeded
-from the spawn-time definition, then overwritten during `evolve(...)` from the started event's own
+from the start-time definition, then overwritten during `evolve(...)` from the started event's own
 `MessageType.version()` so replays adopt the version the workflow was originally launched under.
 
 ### 3. `ctx.migrateVersion(changeId, newVersion)` primitive
@@ -67,10 +67,10 @@ per-invocation `Set<String> referencedStepNames` populated by every event-emitti
 ### 4. Multi-version routing
 
 When multiple definitions share the same `(workflowName, startOnEventName, idProperty)` triple but
-differ by version, the engine: spawns new instances on the highest registered version, augments
+differ by version, the engine: starts new instances on the highest registered version, augments
 workflowIds with `#<version>` to keep two versions running in parallel for the same domain key,
 and dispatches the body of an existing instance through a four-pass lookup
-(exact-match-spawn-config → exact-match-sibling → closest-sibling ≤ recorded state →
+(exact-match-start-config → exact-match-sibling → closest-sibling ≤ recorded state →
 closest-higher-sibling > recorded state). The last tier covers the "annotation bumped past the
 version on in-flight workflows" case — single registered definition at a newer version, state still
 at the old version. Full passes and worked examples live in the

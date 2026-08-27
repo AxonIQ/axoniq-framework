@@ -27,19 +27,23 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
+import org.axonframework.common.configuration.LifecycleHandler;
+import org.axonframework.common.configuration.LifecycleRegistry;
 import org.axonframework.common.configuration.Module;
 import org.axonframework.common.configuration.OverridePolicy;
 import org.axonframework.common.configuration.SearchScope;
-import org.axonframework.common.configuration.LifecycleRegistry;
+import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.eventstore.MultiTagResolver;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests for {@link WorkflowConfigurationDefaults}.
@@ -98,9 +102,69 @@ class WorkflowConfigurationDefaultsTest {
                 });
     }
 
+    /**
+     * The engine's shutdown drops every workflow execution, which is exactly what
+     * {@code hasPendingCheckpointWork(segment)} counts. Running it in the same phase as the event processor's shutdown
+     * makes the two race: same-phase shutdown handlers are launched together and joined, so the engine can empty the
+     * repository before the processor drains. The drain then finds nothing pending and stores a token covering events
+     * whose wake was never applied, and no later claim redelivers them.
+     * <p>
+     * Shutdown handlers run from the highest phase down, so the engine must sit strictly below the processor's phase to
+     * run after it, and strictly above {@link Phase#LOCAL_MESSAGE_HANDLER_REGISTRATIONS}, where the processor's
+     * coordinator and worker executors are torn down.
+     */
+    @Test
+    void workflowEngineShutsDownAfterTheEventProcessorHasDrained() {
+        var registry = new CapturingComponentRegistry();
+
+        subject.registerWorkflowEngine(registry);
+
+        assertThat(registry.componentDefinition).as("the engine must be registered").isNotNull();
+        var shutdownPhases = registry.capturedShutdownPhases();
+        assertThat(shutdownPhases).as("the engine registers exactly one shutdown handler").hasSize(1);
+
+        assertThat(shutdownPhases.getFirst())
+                .as("""
+                            The engine's shutdown phase is %s and the PooledStreamingEventProcessor shuts down at %s. \
+                            Shutdown runs the highest phase first, so the engine must be strictly lower to run after the \
+                            processor's drain. At the same phase the two are launched together and joined, and clearing the \
+                            execution repository first makes the drain store a token whose wakes were never applied.""",
+                    shutdownPhases.getFirst(), Phase.INBOUND_EVENT_CONNECTORS)
+                .isLessThan(Phase.INBOUND_EVENT_CONNECTORS);
+    }
+
     private static final class CapturingComponentRegistry implements ComponentRegistry {
 
         private DecoratorDefinition.CompletedDecoratorDefinition<TagResolver, ? extends TagResolver> decoratorDefinition;
+        private ComponentDefinition<?> componentDefinition;
+
+        /**
+         * Phases the captured definition registers shutdown handlers at. The component is only resolved from inside the
+         * handler, so initializing the lifecycle never builds a {@code WorkflowEngine}.
+         */
+        private List<Integer> capturedShutdownPhases() {
+            var phases = new ArrayList<Integer>();
+            ((ComponentDefinition.ComponentCreator<?>) componentDefinition)
+                    .createComponent()
+                    .initLifecycle(mock(Configuration.class), new LifecycleRegistry() {
+                        @Override
+                        public LifecycleRegistry registerLifecyclePhaseTimeout(long timeout, TimeUnit timeUnit) {
+                            return this;
+                        }
+
+                        @Override
+                        public LifecycleRegistry onStart(int phase, LifecycleHandler startHandler) {
+                            return this;
+                        }
+
+                        @Override
+                        public LifecycleRegistry onShutdown(int phase, LifecycleHandler shutdownHandler) {
+                            phases.add(phase);
+                            return this;
+                        }
+                    });
+            return phases;
+        }
 
         @Override
         public <C> ComponentRegistry registerDecorator(DecoratorDefinition<C, ? extends C> decoratorDefinition) {
@@ -110,12 +174,14 @@ class WorkflowConfigurationDefaultsTest {
         }
 
         private TagResolver decorate(TagResolver delegate) {
-            var component = new StaticComponent<>(new Component.Identifier<>(TagResolver.class, "tagResolver"), delegate);
+            var component = new StaticComponent<>(new Component.Identifier<>(TagResolver.class, "tagResolver"),
+                                                  delegate);
             return decoratorDefinition.decorate(component).resolve(mock(Configuration.class));
         }
 
         @Override
         public <C> ComponentRegistry registerComponent(ComponentDefinition<? extends C> componentDefinition) {
+            this.componentDefinition = componentDefinition;
             return this;
         }
 

@@ -242,7 +242,7 @@ class WorkflowEngineReplayTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void startRestoresExecutionStateUsingSeparateSourcingAndExecutionContexts() {
+    void segmentClaimRestoresExecutionStateUsingSeparateSourcingAndExecutionContexts() {
         String workflowId = "wf-1";
         TrackingToken checkpointToken = token(30);
         ProcessingContext processingContext = processingContext(checkpointToken);
@@ -275,6 +275,7 @@ class WorkflowEngineReplayTest {
         when(contextFactory.createContext(anyMap(), eq(workflowId), any(ProcessingContext.class), eq(configuration)))
                 .thenReturn(workflowContext);
         var restoredExecution = mock(WorkflowExecution.class);
+        when(restoredExecution.workflowId()).thenReturn(workflowId);
         when(restoredExecution.state()).thenReturn(restoredState);
         when(restoredExecution.isRunning()).thenReturn(true);
         when(executionFactory.create(workflowContext)).thenReturn(restoredExecution);
@@ -282,9 +283,14 @@ class WorkflowEngineReplayTest {
         var startupUnitOfWork = mock(UnitOfWork.class);
         when(startupUnitOfWorkFactory.create("WorkflowRehydration")).thenReturn(startupUnitOfWork);
         when(startupUnitOfWork.executeWithResult(any()))
-                .thenAnswer(invocation -> invocation.<java.util.function.Function<ProcessingContext, CompletableFuture<Void>>>getArgument(0).apply(processingContext));
+                .thenAnswer(invocation -> invocation.<java.util.function.Function<ProcessingContext, CompletableFuture<Void>>>getArgument(
+                        0).apply(processingContext));
 
         workflowEngine.start(checkpointToken, false).join();
+        ProcessingContext executionContext = processingContext(checkpointToken);
+        // A single segment owns every instance, keeping this test about the two contexts rather than about ownership.
+        workflowEngine.restoreWorkflowsFor(new Segment(0, 0), checkpointToken, processingContext, executionContext)
+                      .join();
 
         verify(restoredExecution).initializeState(restoredState);
         verify(replaySupport).setCurrentTokenIfNull(checkpointToken);
@@ -313,7 +319,7 @@ class WorkflowEngineReplayTest {
         WorkflowIdProvider idProvider = event -> baseId;
         when(v2.workflowIdProvider()).thenReturn(idProvider);
         when(v2.workflowVersion()).thenReturn("2.0.0");
-        // Other lookups are exercised after disambiguation — return safe stubs.
+        // Other lookups are exercised after disambiguation - return safe stubs.
         var contextFactory = mock(io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory.class);
         var workflowContext = mock(WorkflowContext.class);
         when(contextFactory.createContext(anyMap(), anyString(), any(), any())).thenReturn(workflowContext);
@@ -325,7 +331,7 @@ class WorkflowEngineReplayTest {
         when(v2.workflowExecutionFactory()).thenReturn(executionFactory);
 
         QualifiedName eventName = new QualifiedName("OrderPlaced");
-        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(new MessageType(eventName)))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, v2)));
 
         EventMessage eventMessage = mock(EventMessage.class);
@@ -340,9 +346,9 @@ class WorkflowEngineReplayTest {
 
         workflowEngine.handle(eventMessage, processingContext);
 
-        // A v2 spawn was saved under the disambiguated id.
+        // A v2 start was saved under the disambiguated id.
         verify(workflowExecutionRepository).save(eq(baseId + "#2.0.0"), any());
-        // The base id was NOT reused — the v1 instance is untouched.
+        // The base id was NOT reused - the v1 instance is untouched.
         verify(workflowExecutionRepository, never()).save(eq(baseId), any());
     }
 
@@ -365,7 +371,7 @@ class WorkflowEngineReplayTest {
         when(v2.workflowVersion()).thenReturn("2.0.0");
 
         QualifiedName eventName = new QualifiedName("OrderPlaced");
-        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(new MessageType(eventName)))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, v2)));
 
         EventMessage eventMessage = mock(EventMessage.class);
@@ -377,7 +383,7 @@ class WorkflowEngineReplayTest {
 
         workflowEngine.handle(eventMessage, processingContext(null));
 
-        // Same-version duplicate: nothing is spawned. The v1 (and this case v2) instance stays untouched.
+        // Same-version duplicate: nothing is started. The v1 (and this case v2) instance stays untouched.
         verify(workflowExecutionRepository, never()).save(anyString(), any());
     }
 
@@ -395,15 +401,15 @@ class WorkflowEngineReplayTest {
         clearInvocations(workflowExecutionRepository);
 
         // A configuration that matches the incoming event and resolves to the same id AT THE SAME VERSION.
-        // This is the "same-version duplicate" branch of resolveWorkflowIdForNewSpawn — should be rejected.
+        // This is the "same-version duplicate" branch of resolveWorkflowIdForNewInstance - should be rejected.
         WorkflowConfiguration<?> configuration = mock(WorkflowConfiguration.class);
         WorkflowIdProvider idProvider = event -> workflowId;
         when(configuration.workflowIdProvider()).thenReturn(idProvider);
         when(configuration.workflowVersion()).thenReturn("1.0.0");
 
         QualifiedName eventName = new QualifiedName("OrderPlaced");
-        // Stub the version-aware helper that checkAndCreateNewWorkflow actually invokes.
-        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
+        // Stub the version-aware helper that checkAndCreateNewInstance actually invokes.
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(new MessageType(eventName)))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
 
         EventMessage eventMessage = mock(EventMessage.class);
@@ -446,7 +452,7 @@ class WorkflowEngineReplayTest {
                 }).get("orderId")));
         when(configuration.workflowContextFactory()).thenReturn(contextFactory);
         when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
-        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(new MessageType(eventName)))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, configuration)));
         when(contextFactory.createContext(anyMap(), anyString(), any(), eq(configuration))).thenAnswer(invocation -> {
             String workflowId = invocation.getArgument(1);
@@ -471,8 +477,8 @@ class WorkflowEngineReplayTest {
         replaySupport.setInitialEngineTokens(safePoint, tokenAtReset);
         checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
-        workflowEngine.handle(startEvent(eventName, "wf-1"), processingContext(firstReplayToken));
-        workflowEngine.handle(startEvent(eventName, "wf-2"), processingContext(secondReplayToken));
+        workflowEngine.handle(startEvent(eventName, "wf-1"), segmentedContext(firstReplayToken));
+        workflowEngine.handle(startEvent(eventName, "wf-2"), segmentedContext(secondReplayToken));
 
         verify(trigger).requestCheckpoint(token(10));
         verify(trigger).requestCheckpoint(token(15));
@@ -524,26 +530,31 @@ class WorkflowEngineReplayTest {
         replaySupport.setInitialEngineTokens(token(18), token(30));
         checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
-        checkpointingSupport.requestCheckpoint(requested);
+        checkpointingSupport.requestCheckpoint(Segment.ROOT_SEGMENT, requested);
 
         verify(trigger).requestCheckpoint(requested);
     }
 
+    /**
+     * A request made while the segment is not claimed has no trigger to reach and is dropped rather than held: the
+     * claim it was safe for is not this one, and replaying it into the next claim would advance that claim's stored
+     * token past events it has to redeliver.
+     */
     @Test
-    void checkpointRequestsAreCoalescedUntilSegmentTriggerIsAvailable() throws Exception {
+    void checkpointRequestsMadeWhileTheSegmentIsNotClaimedAreIgnored() throws Exception {
         var trigger = mock(CheckpointTrigger.class);
-        var firstRequested = token(25);
-        var secondRequested = token(27);
+        var beforeClaim = token(25);
+        var afterClaim = token(27);
         replaySupport.setInitialEngineTokens(token(18), token(30));
 
-        checkpointingSupport.requestCheckpoint(firstRequested);
-        checkpointingSupport.requestCheckpoint(secondRequested);
+        checkpointingSupport.requestCheckpoint(Segment.ROOT_SEGMENT, beforeClaim);
 
         verifyNoInteractions(trigger);
 
         checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
+        checkpointingSupport.requestCheckpoint(Segment.ROOT_SEGMENT, afterClaim);
 
-        verify(trigger).requestCheckpoint(secondRequested);
+        verify(trigger).requestCheckpoint(afterClaim);
         verifyNoMoreInteractions(trigger);
     }
 
@@ -555,8 +566,8 @@ class WorkflowEngineReplayTest {
         replaySupport.setInitialEngineTokens(token(18), token(30));
         checkpointingSupport.onSegmentClaimed(Segment.ROOT_SEGMENT, null, trigger);
 
-        checkpointingSupport.requestCheckpoint(firstRequested);
-        checkpointingSupport.requestCheckpoint(secondRequested);
+        checkpointingSupport.requestCheckpoint(Segment.ROOT_SEGMENT, firstRequested);
+        checkpointingSupport.requestCheckpoint(Segment.ROOT_SEGMENT, secondRequested);
 
         verify(trigger).requestCheckpoint(firstRequested);
         verify(trigger).requestCheckpoint(secondRequested);
@@ -610,6 +621,15 @@ class WorkflowEngineReplayTest {
         return new GlobalSequenceTrackingToken(globalIndex);
     }
 
+    /**
+     * A processor batch context: it carries the segment being handled, exactly as a work package's context does.
+     */
+    private ProcessingContext segmentedContext(TrackingToken token) {
+        ProcessingContext processingContext = processingContext(token);
+        when(processingContext.getResource(Segment.RESOURCE_KEY)).thenReturn(Segment.ROOT_SEGMENT);
+        return processingContext;
+    }
+
     private ProcessingContext processingContext(TrackingToken token) {
         ProcessingContext processingContext = mock(ProcessingContext.class);
         Map<Context.ResourceKey<?>, Object> resources = new HashMap<>();
@@ -655,11 +675,15 @@ class WorkflowEngineReplayTest {
                 mock(WorkflowContext.class)
         );
         when(executionFactory.create(any())).thenReturn(execution);
-        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName)).thenReturn(
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(new MessageType(eventName))).thenReturn(
                 List.of(new PredicatedWorkflowConfiguration((event, context) -> true, configuration))
         );
 
         workflowEngine.handle(startEvent(eventName, execution.workflowId()), processingContext(null));
+        // The same delivery also reaches the instance it just started, which queues the wait-condition match because
+        // its body has not started. Draining it here leaves a quiescent instance, so each test below controls exactly
+        // what sits in the queue.
+        drainAllTasks(execution);
     }
 
     private SimpleWorkflowExecution simpleExecution(
@@ -771,7 +795,7 @@ class WorkflowEngineReplayTest {
         when(v2.workflowVersion()).thenReturn("2.0.0");
 
         QualifiedName eventName = new QualifiedName("OrderPlaced");
-        when(workflowConfigurationRegistry.getHighestVersionConfigurations(eventName))
+        when(workflowConfigurationRegistry.getHighestVersionConfigurations(new MessageType(eventName)))
                 .thenReturn(List.of(new PredicatedWorkflowConfiguration((e, pc) -> true, v2)));
 
         EventMessage eventMessage = mock(EventMessage.class);
@@ -783,7 +807,7 @@ class WorkflowEngineReplayTest {
 
         workflowEngine.handle(eventMessage, processingContext(null));
 
-        // Even the disambiguated id is taken — nothing new is spawned.
+        // Even the disambiguated id is taken - nothing new is started.
         verify(workflowExecutionRepository, never()).save(anyString(), any());
     }
 

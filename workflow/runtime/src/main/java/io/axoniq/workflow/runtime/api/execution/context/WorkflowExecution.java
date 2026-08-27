@@ -115,7 +115,8 @@ public interface WorkflowExecution extends DescribableComponent {
 
 
     /**
-     * Adds a {@code latch} task to this {@code WorkflowExecution} representing a point in time when a checkpoint can be made.
+     * Adds a {@code latch} task to this {@code WorkflowExecution} representing a point in time when a checkpoint can be
+     * made.
      *
      * @param latch the latch to run when reached in this {@code WorkflowExecution's} task queue
      */

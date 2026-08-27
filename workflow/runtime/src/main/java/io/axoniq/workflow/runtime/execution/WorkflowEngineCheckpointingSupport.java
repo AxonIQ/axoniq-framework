@@ -28,7 +28,9 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.Objects.requireNonNull;
 
@@ -42,11 +44,13 @@ import static java.util.Objects.requireNonNull;
  * {@link org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler replay progress or decide when the
  * engine should switch to live mode}.
  * <p>
- * The checkpoint trigger and pending checkpoint token are coordinated through this instance's monitor. Their updates
- * are deliberately small and never invoke processor or workflow callbacks while the monitor is held. The coordinator
- * callback supplied to {@link #onCheckpointAdvanced(Segment, TrackingToken)} runs outside that monitor and re-enters
- * the support only after all the {@link WorkflowExecution} latches (attached by the {@link CheckpointLatchCoordinator})
- * have been crossed.
+ * Everything here is kept <em>per segment</em>. The processor hands out one {@link CheckpointTrigger} per claimed
+ * segment, a request through it advances only that segment's stored token, and it is inert once that claim ends.
+ * <p>
+ * The trigger map is concurrent, and its updates are deliberately small: they never invoke processor or workflow
+ * callbacks while a claim is being recorded or dropped. The coordinator callback supplied to
+ * {@link #onCheckpointAdvanced(Segment, TrackingToken)} re-enters the support only after all the
+ * {@link WorkflowExecution} latches (attached by the {@link CheckpointLatchCoordinator}) have been crossed.
  *
  * @author Simon Zambrovski
  * @author Steven van Beelen
@@ -56,10 +60,7 @@ import static java.util.Objects.requireNonNull;
 public class WorkflowEngineCheckpointingSupport implements Checkpointing {
 
     private final CheckpointLatchCoordinator checkpointLatchCoordinator;
-    @Nullable
-    private CheckpointTrigger checkpointTrigger;
-    @Nullable
-    private TrackingToken pendingCheckpointToken;
+    private final Map<Integer, CheckpointTrigger> segmentIdToTrigger = new ConcurrentHashMap<>();
 
     /**
      * Creates checkpointing support for a {@link WorkflowEngine} using the given {@code checkpointLatchCoordinator}.
@@ -77,7 +78,7 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     public void onSegmentClaimed(@NonNull Segment segment,
                                  @Nullable TrackingToken from,
                                  @NonNull CheckpointTrigger trigger) {
-        setTriggerAndFlush(trigger);
+        segmentIdToTrigger.put(segment.getSegmentId(), trigger);
     }
 
     @NonNull
@@ -85,12 +86,12 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     public CompletableFuture<TrackingToken> onCheckpointAdvanced(@NonNull Segment segment,
                                                                  @NonNull TrackingToken requested) {
         CompletableFuture<TrackingToken> result = new CompletableFuture<>();
-        if (!checkpointLatchCoordinator.hasUnsafeCheckpointWork()) {
+        if (!checkpointLatchCoordinator.hasUnsafeCheckpointWork(segment)) {
             result.complete(requested);
             return result;
         }
 
-        checkpointLatchCoordinator.addCheckpointLatch(() -> {
+        checkpointLatchCoordinator.addCheckpointLatch(segment, () -> {
             if (result.isDone()) {
                 return;
             }
@@ -110,58 +111,46 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     public CompletableFuture<TrackingToken> onSegmentReleased(@NonNull Segment segment,
                                                               @NonNull TrackingToken requested) {
         return onCheckpointAdvanced(segment, requested)
-                .whenComplete((ignored, cause) -> clearCheckpointTrigger());
-    }
-
-    private synchronized void clearCheckpointTrigger() {
-        checkpointTrigger = null;
+                // Only this segment's trigger dies with its claim; the segments still held keep checkpointing.
+                .whenComplete((ignored, cause) -> segmentIdToTrigger.remove(segment.getSegmentId()));
     }
 
     /**
      * Get and sets the {@link CheckpointTrigger} from the given {@code context}.
      * <p>
-     * If the {@code context} already holds a {@link CheckpointTrigger}, this method registers it so pending checkpoint
-     * requests can be forwarded immediately.
+     * A batch context carries both the segment being handled and that segment's {@link CheckpointTrigger}, so this
+     * registers the trigger under its own segment even when the claim callback was missed.
      *
      * @param context the current processor context
      */
     void getAndSetTriggerFrom(@NonNull ProcessingContext context) {
-        CheckpointTrigger.fromContext(context)
-                         .ifPresent(this::setTriggerAndFlush);
-    }
-
-    private synchronized void setTriggerAndFlush(@NonNull CheckpointTrigger trigger) {
-        checkpointTrigger = trigger;
-        flushPendingCheckpointRequest();
+        Segment.fromContext(context).ifPresent(
+                segment -> CheckpointTrigger.fromContext(context)
+                                            .ifPresent(trigger -> onSegmentClaimed(segment, null, trigger))
+        );
     }
 
     /**
-     * Requests a checkpoint to be made at the given {@code token}.
+     * Requests a checkpoint of the given {@code segment} to be made at the given {@code token}.
      * <p>
-     * Until a {@link CheckpointTrigger} is available, requests are coalesced to their upper bound. Once the trigger is
-     * present, requests are forwarded immediately.
+     * The request is dropped when this node does not currently hold the segment, which includes a request without a
+     * segment to attribute it to. The trigger of a segment that is not claimed is inert and ignores requests anyway;
+     * pushing the token through any other segment's trigger would advance that segment past events it never handled. A
+     * request can also arrive for a segment this node holds whose trigger has not been registered yet, and is dropped
+     * the same way. That is safe: the stored token merely stays behind, so the events are re-processed after a restart
+     * instead of being skipped.
      *
-     * @param token the token to request, ignored when {@code null}
+     * @param segment the segment the requested position belongs to, ignored when {@code null}
+     * @param token   the token to request, ignored when {@code null}
      */
-    synchronized void requestCheckpoint(@Nullable TrackingToken token) {
-        if (token == null) {
+    void requestCheckpoint(@Nullable Segment segment, @Nullable TrackingToken token) {
+        if (segment == null || token == null) {
             return;
         }
-        pendingCheckpointToken = pendingCheckpointToken == null ? token : pendingCheckpointToken.upperBound(token);
-        flushPendingCheckpointRequest();
-    }
-
-    private void flushPendingCheckpointRequest() {
-        var trigger = checkpointTrigger;
-        if (trigger == null) {
-            return;
+        var trigger = segmentIdToTrigger.get(segment.getSegmentId());
+        if (trigger != null) {
+            trigger.requestCheckpoint(token);
         }
-        var requested = pendingCheckpointToken;
-        if (requested == null) {
-            return;
-        }
-        trigger.requestCheckpoint(requested);
-        pendingCheckpointToken = null;
     }
 
     /**
@@ -171,23 +160,25 @@ public class WorkflowEngineCheckpointingSupport implements Checkpointing {
     public interface CheckpointLatchCoordinator {
 
         /**
-         * Returns whether any owned {@link WorkflowExecution WorkflowExecutions} still makes checkpoint advancement
-         * unsafe.
+         * Returns whether any {@link WorkflowExecution WorkflowExecutions} owned by the given {@code segment} still
+         * makes checkpoint advancement unsafe.
          *
+         * @param segment the segment whose checkpoint is being advanced
          * @return {@code true} when checkpoint advancement must wait, {@code false} otherwise
          */
-        boolean hasUnsafeCheckpointWork();
+        boolean hasUnsafeCheckpointWork(@NonNull Segment segment);
 
         /**
-         * Adds a checkpoint latch across the current set of {@link WorkflowExecution WorkflowExecutions} that are still
-         * performing tasks for the supported {@link WorkflowEngine}.
+         * Adds a checkpoint latch across the current set of {@link WorkflowExecution WorkflowExecutions} owned by the
+         * given {@code segment} that are still performing tasks for the supported {@link WorkflowEngine}.
          * <p>
          * The given {@code latch} should be attached to all {@code WorkflowExecutions} that still have tasks to
          * perform. Or in other terms, executions that are "unsafe" to checkpoint on
          *
-         * @param latch the latch to invoke after all unsafe {@link WorkflowExecution WorkflowExecutions} have reached
-         *              it
+         * @param segment the segment whose checkpoint is being advanced
+         * @param latch   the latch to invoke after all unsafe {@link WorkflowExecution WorkflowExecutions} have reached
+         *                it
          */
-        void addCheckpointLatch(@NonNull Runnable latch);
+        void addCheckpointLatch(@NonNull Segment segment, @NonNull Runnable latch);
     }
 }

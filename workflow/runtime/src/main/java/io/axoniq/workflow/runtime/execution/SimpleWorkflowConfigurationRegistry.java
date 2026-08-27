@@ -24,6 +24,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 
 import java.util.List;
@@ -43,6 +44,14 @@ public class SimpleWorkflowConfigurationRegistry
 
     private final ConcurrentHashMap<QualifiedName, List<PredicatedWorkflowConfiguration>> workflowsConfigurations = new ConcurrentHashMap<>();
 
+    /**
+     * Highest-version configurations per start-event name, recomputed on registration. The lookup runs for every
+     * streamed event (see {@link WorkflowEngineSequencingPolicy} and {@code WorkflowEngine}), so it must not re-derive
+     * version ordering per call; events without a registered start condition resolve to an empty list without creating
+     * an entry.
+     */
+    private final ConcurrentHashMap<QualifiedName, List<PredicatedWorkflowConfiguration>> highestVersionConfigurations = new ConcurrentHashMap<>();
+
     @Override
     @Nonnull
     public SimpleWorkflowConfigurationRegistry register(
@@ -52,7 +61,7 @@ public class SimpleWorkflowConfigurationRegistry
         Objects.requireNonNull(workflowConfiguration, "The given workflow configuration cannot be null.");
         Objects.requireNonNull(eventCondition, "The given event condition cannot be null.");
 
-        // Fail fast: reject unparseable semver at registration rather than at spawn time.
+        // Fail fast: reject unparseable semver at registration rather than at start time.
         Version.validate(workflowConfiguration.workflowVersion());
 
         workflowsConfigurations.compute(eventCondition.qualifiedName(), (q, workflowConfigurations) -> {
@@ -63,8 +72,31 @@ public class SimpleWorkflowConfigurationRegistry
                                                                            workflowConfiguration));
             return workflowConfigurations;
         });
+        highestVersionConfigurations.put(
+                eventCondition.qualifiedName(),
+                WorkflowConfigurationRegistry.super.getHighestVersionConfigurations(eventCondition.qualifiedName())
+        );
 
         return this;
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * The memoized lookup is keyed by {@link MessageType#qualifiedName()}, as the event's version does not select a
+     * configuration yet. Taking the whole type here keeps {@link MessageType#version()} in reach of the lookup for when
+     * it does.
+     */
+    @Nonnull
+    @Override
+    public List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(@Nonnull MessageType type) {
+        return getHighestVersionConfigurations(type.qualifiedName());
+    }
+
+    @Nonnull
+    @Override
+    public List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(@Nonnull QualifiedName qualifiedName) {
+        return highestVersionConfigurations.getOrDefault(qualifiedName, List.of());
     }
 
     @Override

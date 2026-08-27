@@ -191,12 +191,20 @@ final class WorkflowExecutionCheckpointingSupport {
      * @return {@code true} if checkpoint advancement must still wait, otherwise {@code false}
      */
     public boolean hasUnsafeCheckpointWork() {
-        if (!executionTaskQueue.isRunning()) {
-            return false;
-        }
         synchronized (this) {
-            return taskActive.get() || executionTaskQueue.hasQueuedTasks() || latchQueued;
+            return unsafe();
         }
+    }
+
+    /**
+     * Whether this execution currently makes checkpoint advancement unsafe.
+     * <p>
+     * Deliberately independent of whether the body is running: a materialized but not started execution accumulates
+     * queued work that nothing drains until its body starts, and excusing it would let the segment token pass an event
+     * whose effect is still sitting in that queue.
+     */
+    private boolean unsafe() {
+        return taskActive.get() || executionTaskQueue.hasQueuedTasks() || latchQueued;
     }
 
     /**
@@ -207,8 +215,7 @@ final class WorkflowExecutionCheckpointingSupport {
      */
     public synchronized void registerListener(CheckpointWorkStateListener listener) {
         checkpointWorkStateListener = requireNonNull(listener, "Checkpoint work state listener must not be null");
-        checkpointWorkUnsafe = executionTaskQueue.isRunning()
-                && (taskActive.get() || executionTaskQueue.hasQueuedTasks() || latchQueued);
+        checkpointWorkUnsafe = unsafe();
         if (checkpointWorkUnsafe) {
             checkpointWorkStateListener.onMarkedUnsafe();
         } else {
@@ -233,7 +240,7 @@ final class WorkflowExecutionCheckpointingSupport {
     }
 
     private void reportCheckpointWorkUnsafe() {
-        if (!executionTaskQueue.isRunning() || checkpointWorkUnsafe) {
+        if (checkpointWorkUnsafe) {
             return;
         }
         checkpointWorkUnsafe = true;
@@ -275,8 +282,7 @@ final class WorkflowExecutionCheckpointingSupport {
     }
 
     private void reportCheckpointWorkState() {
-        var unsafe = executionTaskQueue.isRunning()
-                && (taskActive.get() || executionTaskQueue.hasQueuedTasks() || latchQueued);
+        var unsafe = unsafe();
         if (unsafe == checkpointWorkUnsafe) {
             return;
         }
