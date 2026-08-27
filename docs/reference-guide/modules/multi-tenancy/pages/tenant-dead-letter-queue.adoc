@@ -1,0 +1,69 @@
+[.axoniq-feature]
+= Tenant-aware dead-letter queues
+:navtitle: Tenant-aware dead-letter queues
+:reftext: Tenant-aware dead-letter queues
+
+The dead-letter queue is tenant-aware when multi-tenancy is enabled. The framework provides one routing queue and registry; each operation resolves the tenant from its `ProcessingContext` and delegates to that tenant's concrete queue.
+
+Enable the dead-letter queue for the processor as described in xref:dead-letter-queue:index.adoc[Dead-Letter Queue]. Then provide a `TenantAwareSequencedDeadLetterQueueFactory` that creates the concrete JPA, JDBC, or in-memory queue for a tenant. The factory should obtain tenant-specific persistence resources from your application's xref:multi-tenancy:tenant-scoped-components.adoc[tenant-scoped components].
+
+The ordinary `SequencedDeadLetterQueueFactory` is not replaced by your application code. Multi-tenancy installs the routing adapter automatically via enhancer and uses the tenant-aware factory you configure.
+
+In Spring Boot, register the `TenantAwareSequencedDeadLetterQueueFactory` as a bean and enable the processor's DLQ property. The bean is the only additional multi-tenancy DLQ integration point; your factory implementation still needs access to the tenant-specific datasource or entity manager it uses.
+
+The following examples configure a JDBC queue. They assume that the application already registers a tenant-scoped `DataSource` provider as described in xref:multi-tenancy:tenant-scoped-components.adoc[Tenant-scoped components].
+
+[tabs]
+====
+Declarative configuration::
++
+--
+[source,java]
+----
+configurer.componentRegistry(registry -> registry.registerComponent(
+        TenantAwareSequencedDeadLetterQueueFactory.class,
+        configuration -> (tenant, processingGroup, queueConfiguration) -> {
+            TenantComponentProvider<DataSource> dataSourceProvider =
+                    TenantComponentProviderUtil.find(queueConfiguration, DataSource.class)
+                                                 .orElseThrow(); // resolves the tenant's configured datasource
+            EventConverter eventConverter = queueConfiguration.getComponent(EventConverter.class);
+            GeneralConverter generalConverter = queueConfiguration.getComponent(GeneralConverter.class);
+            JdbcTransactionalExecutorProvider executor =
+                    new JdbcTransactionalExecutorProvider(dataSourceProvider.componentFor(tenant));
+            return JdbcSequencedDeadLetterQueue.<EventMessage>builder()
+                    .processingGroup(processingGroup)
+                    .transactionalExecutorProvider(ignored -> executor.getTransactionalExecutor(null))
+                    .eventConverter(eventConverter)
+                    .genericConverter(generalConverter)
+                    .build();
+        }
+));
+----
+--
+
+Spring Boot::
++
+--
+[source,java]
+----
+@Bean
+TenantAwareSequencedDeadLetterQueueFactory tenantAwareDeadLetterQueueFactory() {
+    return (tenant, processingGroup, queueConfiguration) -> {
+        TenantComponentProvider<DataSource> dataSourceProvider =
+                TenantComponentProviderUtil.find(queueConfiguration, DataSource.class)
+                                             .orElseThrow(); // resolves the tenant's configured datasource
+        EventConverter eventConverter = queueConfiguration.getComponent(EventConverter.class);
+        GeneralConverter generalConverter = queueConfiguration.getComponent(GeneralConverter.class);
+        JdbcTransactionalExecutorProvider executor =
+                new JdbcTransactionalExecutorProvider(dataSourceProvider.componentFor(tenant));
+        return JdbcSequencedDeadLetterQueue.<EventMessage>builder()
+                .processingGroup(processingGroup)
+                .transactionalExecutorProvider(ignored -> executor.getTransactionalExecutor(null))
+                .eventConverter(eventConverter)
+                .genericConverter(generalConverter)
+                .build();
+    };
+}
+----
+--
+====

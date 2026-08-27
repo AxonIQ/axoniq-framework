@@ -114,7 +114,7 @@ with it before resolving the requested queue. A tenant registration is propagate
 tenant cancels its registrations in every cache and evicts its concrete queues; registering it later consequently
 creates fresh queues.
 
-Alternatives considered and rejected for now:
+Alternatives considered and rejected:
 
 - **Self-subscribing routing queues:** small implementation, but each dynamically created queue owns no retained
   registration and has no explicit cancellation path.
@@ -177,6 +177,8 @@ Focused tests cover:
 - factory-created queues routing an operation to the queue of the tenant in the processing context; and
 - the application-facing factory receiving tenant, processing group, and configuration when a concrete queue is
   created.
+- the multi-tenant integration test verifying physical JDBC routing, including tenant-specific persistence and
+  processing isolation.
 
 ## Consequences
 
@@ -188,8 +190,3 @@ Focused tests cover:
   `TenantAwareSequencedDeadLetterQueueFactory`; selecting and configuring that storage remains the application's
   responsibility.
 - Framework and application enhancers retain ordering space, so applications can override defaults when necessary.
-
-## Follow-up work
-
-- Add Antora/AsciiDoc documentation for multi-tenancy DLQ configuration and storage.
-- Add a datasource-backed integration test demonstrating application selection of tenant-specific DLQ storage.
