@@ -24,7 +24,6 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.command.AxonServerCommandBusConnector;
 import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
 import io.axoniq.framework.axonserver.connector.event.EventProcessorControlService;
-import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
 import io.axoniq.framework.messaging.queryhandling.distributed.PayloadConvertingQueryBusConnector;
@@ -79,11 +78,12 @@ class AxonServerConfigurationEnhancerTest {
         assertThat(serverConfig.getComponentName()).contains(serverConfig.getClientId());
         assertThat(result.getComponent(AxonServerConnectionManager.class)).isNotNull();
         assertThat(result.getComponent(ManagedChannelCustomizer.class)).isInstanceOf(ManagedChannelCustomizer.class);
-        assertThat(result.getComponent(EventStorageEngine.class)).extracting("delegate")
-                                                                 .isInstanceOf(AxonServerEventStorageEngine.class);
+        assertThat(result.getComponent(EventStorageEngine.class)).isInstanceOf(AxonServerEventStorageEngine.class);
+        // The AxonServerEventStorageEngine is both the EventStorageEngine and SnapshotStore
+        assertThat(result.getComponent(SnapshotStore.class)).isInstanceOf(AxonServerEventStorageEngine.class);
+        assertThat(result.getComponent(SnapshotStore.class)).isSameAs(result.getComponent(EventStorageEngine.class));
         assertThat(result.getComponent(CommandBusConnector.class)).isInstanceOf(PayloadConvertingCommandBusConnector.class);
         assertThat(result.getComponent(QueryBusConnector.class)).isInstanceOf(PayloadConvertingQueryBusConnector.class);
-        assertThat(result.getComponent(SnapshotStore.class)).isInstanceOf(AxonServerSnapshotStore.class);
     }
 
     @Test

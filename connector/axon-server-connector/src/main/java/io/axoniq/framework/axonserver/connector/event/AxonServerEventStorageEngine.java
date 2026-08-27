@@ -23,10 +23,13 @@ import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.ResultStream;
 import io.axoniq.axonserver.connector.event.DcbEventChannel;
 import io.axoniq.axonserver.grpc.event.dcb.AppendEventsResponse;
+import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceEventsResponse;
+import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceRequest;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsResponse;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsResponse;
+import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
 import io.grpc.Status;
 import org.axonframework.common.ExceptionUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -38,10 +41,17 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.EventStoreException;
 import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexConsistencyMarker;
+import org.axonframework.eventsourcing.eventstore.Position;
+import org.axonframework.eventsourcing.eventstore.SnapshotEventMessage;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
+import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
+import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
+import org.axonframework.messaging.core.DelayedMessageStream;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -62,18 +72,24 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
- * An {@link EventStorageEngine} implementation using Axon Server through the {@code axonserver-connector-java}
- * project.
+ * An {@link EventStorageEngine} and {@link SnapshotStore} implementation using Axon Server through the
+ * {@code axonserver-connector-java} project.
+ * <p>
+ * As it's both an {@code EventStorageEngine} and {@code SnapshotStore},
+ * {@link #source(SourcingCondition, ProcessingContext)} operations will be optimized to carry the snapshot when present
+ * as the first entry of the resulting {@link MessageStream}.
  *
  * @author Steven van Beelen
  * @since 5.0.0
  */
-public class AxonServerEventStorageEngine implements EventStorageEngine {
+public class AxonServerEventStorageEngine implements EventStorageEngine, SnapshotStore {
 
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     private final AxonServerConnection connection;
     private final TaggedEventConverter converter;
+    private final EventConverter eventConverter;
+    private final AxonServerSnapshotStore snapshotStore;
 
     /**
      * Constructs an {@code AxonServerEventStorageEngine} with the given {@code connection} and {@code converter}, using
@@ -104,7 +120,10 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
                                         EventConverter converter,
                                         EventTypeResolver eventTypeResolver) {
         this.connection = Objects.requireNonNull(connection, "The Axon Server connection cannot be null.");
+        this.eventConverter = Objects.requireNonNull(converter, "The EventConverter cannot be null.");
+        ;
         this.converter = new TaggedEventConverter(converter, eventTypeResolver);
+        this.snapshotStore = new AxonServerSnapshotStore(connection, converter);
     }
 
     @Override
@@ -137,9 +156,55 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
             logger.debug("Start sourcing events with condition [{}].", condition);
         }
 
+        if (condition.strategy() instanceof SourcingStrategy.Snapshot snapshotStrategy) {
+            return snapshotStrategy.maximumPosition() == null
+                    ? sourceWithSnapshot(condition, snapshotStrategy)
+                    : sourceWithBoundedSnapshot(condition, snapshotStrategy, context);
+        }
+
+        return sourceEvents(condition);
+    }
+
+    private MessageStream<EventMessage> sourceWithSnapshot(SourcingCondition condition,
+                                                           SourcingStrategy.Snapshot snapshotStrategy) {
+        SnapshottedSourceRequest sourcingRequest = ConditionConverter.convertSnapshottedSourcingCondition(
+                condition, eventConverter, snapshotStrategy.qualifiedName(), snapshotStrategy.identifier()
+        );
+        ResultStream<SnapshottedSourceEventsResponse> sourcingStream = eventChannel().source(sourcingRequest);
+        return new SnapshottedSourcingEventMessageStream(sourcingStream, converter);
+    }
+
+    @SuppressWarnings("DataFlowIssue") // Suppressing since maximumPosition is checked to be non-null before this method
+    private MessageStream<EventMessage> sourceWithBoundedSnapshot(SourcingCondition condition,
+                                                                  SourcingStrategy.Snapshot snapshotStrategy,
+                                                                  @Nullable ProcessingContext context) {
+        Position maximumPosition = snapshotStrategy.maximumPosition();
+        return DelayedMessageStream.create(
+                load(snapshotStrategy.qualifiedName(), snapshotStrategy.identifier(), context)
+                        .thenApply(snapshot -> buildBoundedSnapshotStream(snapshot, condition, maximumPosition))
+        );
+    }
+
+    private MessageStream<EventMessage> buildBoundedSnapshotStream(@Nullable Snapshot snapshot,
+                                                                   SourcingCondition condition,
+                                                                   Position maximumPosition) {
+        if (snapshot == null || isAfter(snapshot.position(), maximumPosition)) {
+            return sourceEvents(SourcingCondition.conditionFor(Position.START, condition.criteria()));
+        }
+        return MessageStream.<EventMessage>just(new SnapshotEventMessage(snapshot))
+                            .concatWith(sourceEvents(
+                                    SourcingCondition.conditionFor(snapshot.position(), condition.criteria())
+                            ));
+    }
+
+    private MessageStream<EventMessage> sourceEvents(SourcingCondition condition) {
         SourceEventsRequest sourcingRequest = ConditionConverter.convertSourcingCondition(condition);
         ResultStream<SourceEventsResponse> sourcingStream = eventChannel().source(sourcingRequest);
         return new SourcingEventMessageStream(sourcingStream, converter);
+    }
+
+    private static boolean isAfter(Position position, Position maximumPosition) {
+        return !position.min(maximumPosition).equals(position);
     }
 
     @Override
@@ -188,9 +253,22 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
     }
 
     @Override
+    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
+                                         @Nullable ProcessingContext context) {
+        return snapshotStore.store(qualifiedName, identifier, snapshot, context);
+    }
+
+    @Override
+    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
+                                                      @Nullable ProcessingContext context) {
+        return snapshotStore.load(qualifiedName, identifier, context);
+    }
+
+    @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("connection", connection);
         descriptor.describeProperty("converter", converter);
+        descriptor.describeProperty("snapshotStore", snapshotStore);
     }
 
     private record AxonServerAppendTransaction(

@@ -22,9 +22,14 @@ package io.axoniq.framework.axonserver.connector.event;
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.ResultStream;
 import io.axoniq.axonserver.connector.event.DcbEventChannel;
+import io.axoniq.axonserver.connector.event.SnapshotChannel;
+import io.axoniq.axonserver.grpc.event.dcb.AddSnapshotResponse;
 import io.axoniq.axonserver.grpc.event.dcb.AppendEventsResponse;
 import io.axoniq.axonserver.grpc.event.dcb.Event;
+import io.axoniq.axonserver.grpc.event.dcb.GetLastSnapshotResponse;
 import io.axoniq.axonserver.grpc.event.dcb.SequencedEvent;
+import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceEventsResponse;
+import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceRequest;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsResponse;
 import io.grpc.Status;
@@ -35,19 +40,26 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.EventStoreException;
 import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
+import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
+import org.axonframework.eventsourcing.eventstore.Position;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
+import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
+import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.messaging.core.FluxUtils;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.junit.jupiter.api.*;
+import org.mockito.*;
 import reactor.test.StepVerifier;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -71,6 +83,7 @@ class AxonServerEventStorageEngineTest {
 
     private ResultStream<SourceEventsResponse> sourcingStream;
     private DcbEventChannel dcbEventChannel;
+    private SnapshotChannel snapshotChannel;
 
     private AxonServerEventStorageEngine testSubject;
 
@@ -80,8 +93,10 @@ class AxonServerEventStorageEngineTest {
         AxonServerConnection connection = mock(AxonServerConnection.class);
         dcbEventChannel = mock(DcbEventChannel.class);
         sourcingStream = mock(ResultStream.class);
+        snapshotChannel = mock(SnapshotChannel.class);
 
         when(connection.dcbEventChannel()).thenReturn(dcbEventChannel);
+        when(connection.snapshotChannel()).thenReturn(snapshotChannel);
         when(dcbEventChannel.source(any(SourceEventsRequest.class))).thenReturn(sourcingStream);
         when(sourcingStream.getError()).thenReturn(java.util.Optional.empty());
         when(sourcingStream.isClosed()).thenReturn(true);
@@ -125,6 +140,107 @@ class AxonServerEventStorageEngineTest {
                     })
                     .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
                     .verifyComplete();
+    }
+
+    @Nested
+    class SnapshotSupport {
+
+        private final QualifiedName qualifiedName = new QualifiedName("test-entity");
+        private final String identifier = "entity-id";
+
+        @Test
+        void storeDelegatesToTheInternalSnapshotStore() {
+            // given
+            when(snapshotChannel.addSnapshot(any()))
+                    .thenReturn(CompletableFuture.completedFuture(AddSnapshotResponse.newBuilder().build()));
+            Snapshot snapshot = new Snapshot(
+                    new GlobalIndexPosition(4L), "0.0.1", "payload", Instant.now(), Map.of()
+            );
+
+            // when
+            testSubject.store(qualifiedName, identifier, snapshot, null).orTimeout(5, TimeUnit.SECONDS).join();
+
+            // then
+            verify(snapshotChannel).addSnapshot(any());
+        }
+
+        @Test
+        void loadDelegatesToTheInternalSnapshotStore() {
+            // given
+            io.axoniq.axonserver.grpc.event.dcb.Snapshot storedSnapshot =
+                    io.axoniq.axonserver.grpc.event.dcb.Snapshot.newBuilder()
+                                                                .setName(qualifiedName.fullName())
+                                                                .setVersion("0.0.1")
+                                                                .setTimestamp(Instant.now().toEpochMilli())
+                                                                .putMetadata("__AxonFramework__:Position-Type", "GIP")
+                                                                .build();
+            when(snapshotChannel.getLastSnapshot(any())).thenReturn(CompletableFuture.completedFuture(
+                    GetLastSnapshotResponse.newBuilder().setSnapshot(storedSnapshot).setSequence(42L).build()
+            ));
+
+            // when
+            Snapshot result = testSubject.load(qualifiedName, identifier, null)
+                                         .orTimeout(5, TimeUnit.SECONDS)
+                                         .join();
+
+            // then
+            assertThat(result).isNotNull();
+            assertThat(result.position()).isEqualTo(new GlobalIndexPosition(42L));
+            verify(snapshotChannel).getLastSnapshot(any());
+        }
+
+        @Test
+        @SuppressWarnings("unchecked")
+        void sourceWithUnboundedSnapshotStrategyUsesTheSingleRoundTripPath() {
+            // given
+            ResultStream<SnapshottedSourceEventsResponse> snapshottedStream = mock(ResultStream.class);
+            when(snapshottedStream.getError()).thenReturn(java.util.Optional.empty());
+            when(snapshottedStream.isClosed()).thenReturn(true);
+            when(snapshottedStream.nextIfAvailable()).thenReturn(
+                    SnapshottedSourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null
+            );
+            when(dcbEventChannel.source(any(SnapshottedSourceRequest.class))).thenReturn(snapshottedStream);
+
+            SourcingCondition condition = SourcingCondition.conditionFor(
+                    new SourcingStrategy.Snapshot(qualifiedName, identifier, null),
+                    EventCriteria.havingTags("AGGREGATE_TYPE", identifier)
+            );
+
+            // when / then
+            StepVerifier.create(FluxUtils.of(testSubject.source(condition, null)))
+                        .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
+                        .verifyComplete();
+
+            verify(dcbEventChannel).source(any(SnapshottedSourceRequest.class));
+            verify(dcbEventChannel, never()).source(any(SourceEventsRequest.class));
+        }
+
+        @Test
+        void sourceWithBoundedSnapshotStrategyFallsBackToLoadingSeparately() {
+            // given no snapshot exists, simulated the way AxonServerSnapshotStore.load() recognises "not found"
+            when(snapshotChannel.getLastSnapshot(any()))
+                    .thenReturn(CompletableFuture.failedFuture(Status.NOT_FOUND.asRuntimeException()));
+            when(sourcingStream.nextIfAvailable())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null);
+            when(sourcingStream.peek())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null);
+
+            SourcingCondition condition = SourcingCondition.conditionFor(
+                    new SourcingStrategy.Snapshot(qualifiedName, identifier, new GlobalIndexPosition(100L)),
+                    EventCriteria.havingTags("AGGREGATE_TYPE", identifier)
+            );
+
+            // when / then falls back to sourcing from the very beginning, through the plain (non-snapshotted) RPC
+            StepVerifier.create(FluxUtils.of(testSubject.source(condition, null)))
+                        .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
+                        .verifyComplete();
+
+            verify(snapshotChannel).getLastSnapshot(any());
+            ArgumentCaptor<SourceEventsRequest> captor = ArgumentCaptor.forClass(SourceEventsRequest.class);
+            verify(dcbEventChannel).source(captor.capture());
+            assertThat(captor.getValue().getFromSequence()).isEqualTo(GlobalIndexPosition.toIndex(Position.START));
+            verify(dcbEventChannel, never()).source(any(SnapshottedSourceRequest.class));
+        }
     }
 
     @Nested
