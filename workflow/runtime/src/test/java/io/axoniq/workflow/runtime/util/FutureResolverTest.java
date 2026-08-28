@@ -18,18 +18,15 @@
  */
 package io.axoniq.workflow.runtime.util;
 
+import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.same;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests for {@link FutureResolver}.
@@ -40,22 +37,19 @@ class FutureResolverTest {
 
     @Test
     void defaultResolverWaitsForPublicationToComplete() {
-        var resolver = new DefaultFutureResolver();
+        var resolver = new DefaultTimeoutFutureResolver();
         var publication = CompletableFuture.completedFuture(null);
-
         resolver.resolve(publication);
-
         assertThat(publication).isCompleted();
     }
 
     @Test
     void defaultResolverPropagatesPublicationFailure() {
-        var resolver = new DefaultFutureResolver();
+        var resolver = new DefaultTimeoutFutureResolver();
         var failure = new IllegalStateException("publication failed");
-
         assertThatThrownBy(() -> resolver.resolve(CompletableFuture.failedFuture(failure)))
-                .isInstanceOf(CompletionException.class)
-                .satisfies(exception -> assertThat(exception.getCause()).isSameAs(failure));
+                .isInstanceOf(IllegalStateException.class)
+                .satisfies(exception -> assertThat(exception).isSameAs(failure));
     }
 
     @Test
@@ -64,14 +58,22 @@ class FutureResolverTest {
         var resolver = mock(FutureResolver.class);
         var publication = new CompletableFuture<Void>();
         when(context.component(FutureResolver.class)).thenReturn(resolver);
-
         FutureResolver.resolve(context, publication);
-
         verify(resolver).resolve(same(publication));
     }
 
     @Test
+    void resolvesPublicationWhenComponentNotFoundInProcessingContext() {
+        var context = mock(ProcessingContext.class);
+        var publication = CompletableFuture.completedFuture(null);
+        when(context.component(FutureResolver.class)).thenThrow(new ComponentNotFoundException(FutureResolver.class,
+                                                                                               "name"));
+        FutureResolver.resolve(context, publication);
+        assertThat(publication).isCompleted();
+    }
+
+    @Test
     void serviceLoadedResolverFallsBackToDefaultImplementation() {
-        assertThat(FutureResolver.getInstance()).isInstanceOf(DefaultFutureResolver.class);
+        assertThat(FutureResolver.getInstance()).isInstanceOf(DefaultTimeoutFutureResolver.class);
     }
 }

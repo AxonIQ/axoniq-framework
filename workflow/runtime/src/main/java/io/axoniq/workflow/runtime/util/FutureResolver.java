@@ -18,7 +18,9 @@
  */
 package io.axoniq.workflow.runtime.util;
 
+import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,7 +34,7 @@ import java.util.concurrent.CompletableFuture;
  * <p>
  * Applications can provide one implementation through Java's {@link ServiceLoader} mechanism. The selected resolver is
  * registered as a configuration component and is used wherever workflow code waits for a future. When no service is
- * present, the default resolver waits infinitely without a deadline.
+ * present, the default resolver waits its default timeout and throws an exception if the future has not completed.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
@@ -49,12 +51,13 @@ public abstract class FutureResolver {
         }
         if (resolver == null) {
             logger.debug("Using the default future resolver.");
-            return new DefaultFutureResolver();
+            return new DefaultTimeoutFutureResolver();
         }
         logger.info("Found custom future resolver: {}", resolver.getClass().getName());
         return resolver;
     }
 
+    @Nullable
     private static FutureResolver findResolver(ClassLoader classLoader, String classLoaderName) {
         Iterator<FutureResolver> resolvers = ServiceLoader.load(FutureResolver.class, classLoader).iterator();
         if (!resolvers.hasNext()) {
@@ -90,8 +93,16 @@ public abstract class FutureResolver {
                                CompletableFuture<?> future) {
         Objects.requireNonNull(processingContext, "Processing context must not be null");
         Objects.requireNonNull(future, "Future must not be null");
-        var resolver = processingContext.component(FutureResolver.class);
-        (resolver != null ? resolver : getInstance()).resolve(future);
+        try {
+            var resolver = processingContext.component(FutureResolver.class);
+            if (resolver == null) { // defensive access to simplify testing with process context double
+                getInstance().resolve(future);
+            } else {
+                resolver.resolve(future);
+            }
+        } catch (ComponentNotFoundException cnfe) {
+            getInstance().resolve(future);
+        }
     }
 
     /**
