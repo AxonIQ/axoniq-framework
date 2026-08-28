@@ -40,6 +40,7 @@ import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowScheduler;
 import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
+import io.axoniq.workflow.runtime.util.FutureResolver;
 import io.axoniq.workflow.runtime.execution.WorkflowStore;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import org.axonframework.common.ClockUtils;
@@ -109,6 +110,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
         registerPayloadReducerRegistry(componentRegistry);
+        registerFutureResolver(componentRegistry);
         registerEventNameCustomizer(componentRegistry);
         registerClock(componentRegistry);
         decorateTagResolver(componentRegistry);
@@ -131,6 +133,10 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
 
     private void registerPayloadReducerRegistry(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(PayloadReducerRegistry.class, cfg -> new PayloadReducerRegistry());
+    }
+
+    void registerFutureResolver(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(FutureResolver.class, cfg -> FutureResolver.getInstance());
     }
 
     void registerEventNameCustomizer(ComponentRegistry componentRegistry) {

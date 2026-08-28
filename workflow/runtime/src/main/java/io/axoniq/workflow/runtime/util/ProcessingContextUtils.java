@@ -107,12 +107,10 @@ public class ProcessingContextUtils {
             @Nonnull ExecutorService executorService,
             @Nonnull ProcessingContext parentContext,
             @Nonnull Function<ProcessingContext, CompletableFuture<R>> action) {
-        executorService.execute(() -> executeWithResult(id,
-                                                        unitOfWorkFactory,
-                                                        executorService,
-                                                        parentContext,
-                                                        action).join() // FIXME join without timeout
-        );
+        executorService.execute(() -> FutureResolver.resolve(
+                parentContext,
+                executeWithResult(id, unitOfWorkFactory, executorService, parentContext, action)
+        ));
     }
 
 

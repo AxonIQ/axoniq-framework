@@ -124,11 +124,13 @@ class ProcessingContextUtilsTest {
     @Test
     void testExecuteWithResultInSeparateThread() {
         ExecutorService executorService = mock(ExecutorService.class);
+        FutureResolver futureResolver = mock(FutureResolver.class);
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(0);
             runnable.run();
             return null;
         }).when(executorService).execute(any(Runnable.class));
+        when(parentContext.component(FutureResolver.class)).thenReturn(futureResolver);
 
         Function<ProcessingContext, CompletableFuture<String>> action = ctx -> CompletableFuture.completedFuture("completion");
 
@@ -138,5 +140,6 @@ class ProcessingContextUtilsTest {
 
         verify(executorService).execute(any(Runnable.class));
         verify(unitOfWorkFactory).create(anyString(), any(Function.class));
+        verify(futureResolver).resolve(any(CompletableFuture.class));
     }
 }

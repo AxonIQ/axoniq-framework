@@ -29,6 +29,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionCheckpointingSupport.ExecutionTaskQueue;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
+import io.axoniq.workflow.runtime.util.FutureResolver;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -245,11 +246,13 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private void publishStartWorkflow(@Nonnull ProcessingContext ctx) {
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         if (this.state().workflowStatus() == WorkflowStatus.NONE) {
-            // FIXME join without timeout?
-            sendWorkflowEvent(startedWorkflow(this.workflowContext(),
-                                              workflowName,
-                                              workflowState.workflowDefinitionId(),
-                                              eventNameCustomizer), ctx).join();
+            FutureResolver.resolve(
+                    ctx,
+                    sendWorkflowEvent(startedWorkflow(this.workflowContext(),
+                                                      workflowName,
+                                                      workflowState.workflowDefinitionId(),
+                                                      eventNameCustomizer), ctx)
+            );
             try {
                 awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
             } catch (Exception e) {
@@ -285,10 +288,13 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         }
         if (!this.state().workflowStatus().isTerminal()) {
             terminalTransition.transition(() -> {
-                sendWorkflowEvent(
-                        completedWorkflow(this.workflowContext(), workflowName, workflowState.workflowDefinitionId(),
-                                          eventNameCustomizer), ctx
-                ).join(); // FIXME join without timeout
+                FutureResolver.resolve(
+                        ctx,
+                        sendWorkflowEvent(
+                                completedWorkflow(this.workflowContext(), workflowName,
+                                                  workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
+                        )
+                );
             });
         }
         logger.info("Workflow executed. Resulting workflow payload {}.", this.workflowContext().workflowPayload());
@@ -310,10 +316,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 // if events are already sent by WorkflowLifecycleControlDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
-                        sendWorkflowEvent(failedWorkflow(
-                                this.workflowContext(), workflowName, wfe,
-                                workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
-                        ).join(); // FIXME join without timeout
+                        FutureResolver.resolve(
+                                ctx,
+                                sendWorkflowEvent(failedWorkflow(
+                                        this.workflowContext(), workflowName, wfe,
+                                        workflowState.workflowDefinitionId(), eventNameCustomizer), ctx)
+                        );
                     });
                 }
             }
@@ -321,20 +329,24 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 // if events are already sent by WorkflowLifecycleControlDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
-                        sendWorkflowEvent(cancelledWorkflow(
-                                this.workflowContext(), workflowName, wce,
-                                workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
-                        ).join(); // FIXME join without timeout
+                        FutureResolver.resolve(
+                                ctx,
+                                sendWorkflowEvent(cancelledWorkflow(
+                                        this.workflowContext(), workflowName, wce,
+                                        workflowState.workflowDefinitionId(), eventNameCustomizer), ctx)
+                        );
                     });
                 }
             }
             case TimeoutException te -> {
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
-                        sendWorkflowEvent(timeoutWorkflow(
-                                this.workflowContext(), workflowName, contextDelegate.clock().instant(),
-                                workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
-                        ).join(); // FIXME join without timeout
+                        FutureResolver.resolve(
+                                ctx,
+                                sendWorkflowEvent(timeoutWorkflow(
+                                        this.workflowContext(), workflowName, contextDelegate.clock().instant(),
+                                        workflowState.workflowDefinitionId(), eventNameCustomizer), ctx)
+                        );
                     });
                 }
             }
@@ -351,26 +363,30 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 Thread.currentThread().interrupt();
         /*
                 // we agreed not to drive the workflow to terminal state on interrupted exception
-                sendWorkflowEvent(
-                    cancelledWorkflow(this.workflowContext(),
-                                      workflowName,
-                                      eventNameCustomizer),
-                    ctx
-                ).join(); // FIXME join without timeout
-
+                FutureResolver.resolve(
+                    this.workflowContext(),
+                    sendWorkflowEvent(
+                        cancelledWorkflow(this.workflowContext(),
+                                          workflowName,
+                                          eventNameCustomizer),
+                        ctx
+                    )
+                );
          */
             }
             default -> {
                 logger.error("Error occurred in workflow {}", workflowId, exception);
                 // we agreed not to drive the workflow to terminal state on any other exception
                 /*
-                sendWorkflowEvent(failedWorkflow(
-                                          this.workflowContext(),
-                                          workflowName,
-                                          exception instanceof Exception ? (Exception) exception : new RuntimeException(exception),
-                                          eventNameCustomizer),
-                                  ctx).join(); // FIXME join without timeout
-
+                FutureResolver.resolve(
+                    this.workflowContext(),
+                    sendWorkflowEvent(failedWorkflow(
+                                              this.workflowContext(),
+                                              workflowName,
+                                              exception instanceof Exception ? (Exception) exception : new RuntimeException(exception),
+                                              eventNameCustomizer),
+                                      ctx)
+                );
                  */
             }
         }
@@ -394,10 +410,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         }
         Thread.interrupted();
         terminalTransition.transition(() -> {
-            sendWorkflowEvent(cancelledWorkflow(
-                    this.workflowContext(), workflowName, cancellation.cause(),
-                    workflowState.workflowDefinitionId(), workflowConfiguration.eventNameCustomizer()), ctx
-            ).join();
+            FutureResolver.resolve(
+                    ctx,
+                    sendWorkflowEvent(cancelledWorkflow(
+                            this.workflowContext(), workflowName, cancellation.cause(),
+                            workflowState.workflowDefinitionId(), workflowConfiguration.eventNameCustomizer()), ctx)
+            );
         });
         cancellation.callback().complete(null);
         return true;

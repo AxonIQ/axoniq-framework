@@ -26,6 +26,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
+import io.axoniq.workflow.runtime.util.FutureResolver;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -144,13 +145,16 @@ public class VersionDelegate implements VersionPrimitive {
                                                            requestedRaw,
                                                            eventNameCustomizer);
 
-        workflowExecution.appendTask(e -> ProcessingContextUtils.executeWithResult(
-                workflowExecution.workflowId(),
-                unitOfWorkFactory,
-                executor,
+        workflowExecution.appendTask(e -> FutureResolver.resolve(
                 workflowExecution.processingContext(),
-                ctx -> eventSink.publish(ctx, event)
-        ).join());
+                ProcessingContextUtils.executeWithResult(
+                        workflowExecution.workflowId(),
+                        unitOfWorkFactory,
+                        executor,
+                        workflowExecution.processingContext(),
+                        ctx -> eventSink.publish(ctx, event)
+                )
+        ));
 
         try {
             workflowExecution.awaitStateChange(s -> s.hasVersionMigrationStep(stepName));
