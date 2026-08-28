@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.messaging.multitenancy.deadletter;
 
+import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import org.axonframework.common.Registration;
 import org.axonframework.common.configuration.Configuration;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.*;
 
 import static io.axoniq.framework.messaging.multitenancy.util.TestFixtures.TENANT_A;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -44,6 +46,14 @@ class TenantRoutingSequencedDeadLetterQueueRegistryTest {
 
     @Nested
     class QueueFor {
+
+        @Test
+        void rejectsAnUnregisteredTenant() {
+            TenantAwareSequencedDeadLetterQueueFactory factory = mock(TenantAwareSequencedDeadLetterQueueFactory.class);
+
+            assertThatThrownBy(() -> testSubject.queueFor("first", configuration, factory, TENANT_A))
+                    .isInstanceOf(TenantNotResolvedException.class);
+        }
 
         @Test
         void createsAQueueForATenantRegisteredBeforeTheQueueCacheExists() {

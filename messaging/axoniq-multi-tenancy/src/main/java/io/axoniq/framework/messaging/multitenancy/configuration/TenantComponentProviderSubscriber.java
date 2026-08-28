@@ -56,6 +56,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 class TenantComponentProviderSubscriber {
 
     private static final Logger logger = LoggerFactory.getLogger(TenantComponentProviderSubscriber.class);
+
     private final Configuration configuration;
     private final List<Registration> subscriptions = new CopyOnWriteArrayList<>();
 

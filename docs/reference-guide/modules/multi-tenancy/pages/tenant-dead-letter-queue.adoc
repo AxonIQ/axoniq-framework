@@ -20,24 +20,7 @@ Declarative configuration::
 --
 [source,java]
 ----
-configurer.componentRegistry(registry -> registry.registerComponent(
-        TenantAwareSequencedDeadLetterQueueFactory.class,
-        configuration -> (tenant, processingGroup, queueConfiguration) -> {
-            TenantComponentProvider<DataSource> dataSourceProvider =
-                    TenantComponentProviderUtil.find(queueConfiguration, DataSource.class)
-                                                 .orElseThrow(); // resolves the tenant's configured datasource
-            EventConverter eventConverter = queueConfiguration.getComponent(EventConverter.class);
-            GeneralConverter generalConverter = queueConfiguration.getComponent(GeneralConverter.class);
-            JdbcTransactionalExecutorProvider executor =
-                    new JdbcTransactionalExecutorProvider(dataSourceProvider.componentFor(tenant));
-            return JdbcSequencedDeadLetterQueue.<EventMessage>builder()
-                    .processingGroup(processingGroup)
-                    .transactionalExecutorProvider(ignored -> executor.getTransactionalExecutor(null))
-                    .eventConverter(eventConverter)
-                    .genericConverter(generalConverter)
-                    .build();
-        }
-));
+include::example$multitenancy/deadletter/DeclarativeTenantDeadLetterQueueConfiguration.java[tag=factory]
 ----
 --
 
@@ -46,24 +29,7 @@ Spring Boot::
 --
 [source,java]
 ----
-@Bean
-TenantAwareSequencedDeadLetterQueueFactory tenantAwareDeadLetterQueueFactory() {
-    return (tenant, processingGroup, queueConfiguration) -> {
-        TenantComponentProvider<DataSource> dataSourceProvider =
-                TenantComponentProviderUtil.find(queueConfiguration, DataSource.class)
-                                             .orElseThrow(); // resolves the tenant's configured datasource
-        EventConverter eventConverter = queueConfiguration.getComponent(EventConverter.class);
-        GeneralConverter generalConverter = queueConfiguration.getComponent(GeneralConverter.class);
-        JdbcTransactionalExecutorProvider executor =
-                new JdbcTransactionalExecutorProvider(dataSourceProvider.componentFor(tenant));
-        return JdbcSequencedDeadLetterQueue.<EventMessage>builder()
-                .processingGroup(processingGroup)
-                .transactionalExecutorProvider(ignored -> executor.getTransactionalExecutor(null))
-                .eventConverter(eventConverter)
-                .genericConverter(generalConverter)
-                .build();
-    };
-}
+include::example$multitenancy/deadletter/SpringTenantDeadLetterQueueConfiguration.java[tag=factory]
 ----
 --
 ====

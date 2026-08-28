@@ -51,7 +51,7 @@ class TenantRoutingSequencedDeadLetterQueueTest {
         SequencedDeadLetterQueue<EventMessage> tenantQueue = mock(SequencedDeadLetterQueue.class);
         @SuppressWarnings("unchecked")
         DeadLetter<EventMessage> letter = mock(DeadLetter.class);
-        TenantAwareSequencedDeadLetterQueueFactory factory = (tenant, processingGroup, ignored) -> tenantQueue;
+        TenantAwareSequencedDeadLetterQueueFactory factory = (tenant, processorName, ignored) -> tenantQueue;
         when(context.getResource(TenantDescriptor.RESOURCE_KEY)).thenReturn(TENANT_A);
         when(tenantQueue.enqueue(any(), any(), any())).thenReturn(CompletableFuture.completedFuture(null));
         TenantRoutingSequencedDeadLetterQueueRegistry registry = new TenantRoutingSequencedDeadLetterQueueRegistry();
@@ -69,7 +69,7 @@ class TenantRoutingSequencedDeadLetterQueueTest {
     @Test
     void rejectsProcessingWithoutATenantCarryingContext() {
         TenantRoutingSequencedDeadLetterQueue testSubject = new TenantRoutingSequencedDeadLetterQueue(
-                "DeadLetterQueue[projection]", mock(Configuration.class), (tenant, processingGroup, configuration) -> null,
+                "DeadLetterQueue[projection]", mock(Configuration.class), (tenant, processorName, configuration) -> null,
                 new TenantRoutingSequencedDeadLetterQueueRegistry()
         );
 
@@ -93,7 +93,7 @@ class TenantRoutingSequencedDeadLetterQueueTest {
         @SuppressWarnings("unchecked")
         SequencedDeadLetterQueue<EventMessage> reAddedTenantQueue = mock(SequencedDeadLetterQueue.class);
         AtomicInteger creations = new AtomicInteger();
-        TenantAwareSequencedDeadLetterQueueFactory factory = (tenant, processingGroup, ignored) ->
+        TenantAwareSequencedDeadLetterQueueFactory factory = (tenant, processorName, ignored) ->
                 creations.getAndIncrement() == 0 ? firstQueue : reAddedTenantQueue;
         when(context.getResource(TenantDescriptor.RESOURCE_KEY)).thenReturn(TENANT_A);
         when(firstQueue.size(context)).thenReturn(CompletableFuture.completedFuture(1L));

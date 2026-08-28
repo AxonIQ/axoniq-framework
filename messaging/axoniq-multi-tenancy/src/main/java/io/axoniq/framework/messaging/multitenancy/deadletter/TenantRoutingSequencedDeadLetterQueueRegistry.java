@@ -64,23 +64,23 @@ public class TenantRoutingSequencedDeadLetterQueueRegistry implements MultiTenan
      * Cache creation is synchronized with tenant registration and removal, so a new cache cannot escape a concurrent
      * tenant removal. The tenant-specific lookup itself remains concurrent.
      *
-     * @param processingGroup the processing group owning the queue
+     * @param processorName the processor owning the queue
      * @param configuration   the configuration passed to the delegate factory
      * @param factory         the factory creating a tenant's underlying queue
      * @param tenant          the registered tenant whose queue to return
      * @return the tenant's queue
      */
-    public SequencedDeadLetterQueue<EventMessage> queueFor(String processingGroup,
+    public SequencedDeadLetterQueue<EventMessage> queueFor(String processorName,
                                                            Configuration configuration,
                                                            TenantAwareSequencedDeadLetterQueueFactory factory,
                                                            TenantDescriptor tenant) {
         TenantScopedCache<SequencedDeadLetterQueue<EventMessage>> queueCache;
         synchronized (registryLock) {
             queueCache = queues.computeIfAbsent(
-                    processingGroup,
+                    processorName,
                     ignored -> registerKnownTenants(new TenantScopedCache<>(
-                            descriptor -> factory.create(descriptor, processingGroup, configuration),
-                            "the tenant-routing dead-letter queue [" + processingGroup + "]"
+                            descriptor -> factory.create(descriptor, processorName, configuration),
+                            "the tenant-routing dead-letter queue [" + processorName + "]"
                     ))
             );
         }

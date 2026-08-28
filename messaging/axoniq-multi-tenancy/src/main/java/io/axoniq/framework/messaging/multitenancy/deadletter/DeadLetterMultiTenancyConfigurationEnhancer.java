@@ -21,6 +21,7 @@ package io.axoniq.framework.messaging.multitenancy.deadletter;
 
 import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
@@ -60,10 +61,19 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
                                                                 processorConfiguration.extension(
                                                                         DeadLetterQueueConfiguration.class);
                                                         if (dlqConfig != null && dlqConfig.isEnabled()) {
+                                                            TenantAwareSequencedDeadLetterQueueFactory tenantFactory;
+                                                            try {
+                                                                tenantFactory = configuration.getComponent(
+                                                                        TenantAwareSequencedDeadLetterQueueFactory.class
+                                                                );
+                                                            } catch (RuntimeException e) {
+                                                                throw new AxonConfigurationException(
+                                                                        "A TenantAwareSequencedDeadLetterQueueFactory must be configured when multi-tenancy and the dead-letter queue are enabled.",
+                                                                        e
+                                                                );
+                                                            }
                                                             dlqConfig.factory(new TenantRoutingSequencedDeadLetterQueueFactory(
-                                                                    configuration.getComponent(
-                                                                            TenantAwareSequencedDeadLetterQueueFactory.class
-                                                                    ),
+                                                                    tenantFactory,
                                                                     configuration.getComponent(
                                                                             TenantRoutingSequencedDeadLetterQueueRegistry.class
                                                                     )
@@ -73,6 +83,12 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
                                                     }));
     }
 
+    /**
+     * Checks whether the optional dead-letter queue module is available to the supplied class loader.
+     *
+     * @param classLoader the class loader to inspect
+     * @return {@code true} when dead-letter queue support is available
+     */
     public static boolean isDeadLetterQueuePresent(ClassLoader classLoader) {
         try {
             Class.forName(DEAD_LETTER_QUEUE_CONFIGURATION, false, classLoader);

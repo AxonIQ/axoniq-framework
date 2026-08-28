@@ -49,16 +49,16 @@ import static java.util.Objects.requireNonNull;
 @Internal
 public class TenantRoutingSequencedDeadLetterQueue implements SequencedDeadLetterQueue<EventMessage> {
 
-    private final String processingGroup;
+    private final String processorName;
     private final Configuration configuration;
     private final TenantAwareSequencedDeadLetterQueueFactory factory;
     private final TenantRoutingSequencedDeadLetterQueueRegistry registry;
 
-    TenantRoutingSequencedDeadLetterQueue(String processingGroup,
+    TenantRoutingSequencedDeadLetterQueue(String processorName,
                                           Configuration configuration,
                                           TenantAwareSequencedDeadLetterQueueFactory factory,
                                           TenantRoutingSequencedDeadLetterQueueRegistry registry) {
-        this.processingGroup = requireNonNull(processingGroup, "The processing group must not be null");
+        this.processorName = requireNonNull(processorName, "The processor name must not be null");
         this.configuration = requireNonNull(configuration, "The configuration must not be null");
         this.factory = requireNonNull(factory, "The factory must not be null");
         this.registry = requireNonNull(registry, "The registry must not be null");
@@ -150,7 +150,7 @@ public class TenantRoutingSequencedDeadLetterQueue implements SequencedDeadLette
                     "Dead-letter queue operations require a tenant-carrying processing context"));
         }
         try {
-            return CompletableFuture.completedFuture(registry.queueFor(processingGroup, configuration, factory, tenant));
+            return CompletableFuture.completedFuture(registry.queueFor(processorName, configuration, factory, tenant));
         } catch (TenantNotResolvedException exception) {
             return CompletableFuture.failedFuture(exception);
         }

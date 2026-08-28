@@ -186,16 +186,16 @@ class MultiTenantDeadLetterQueueIT {
 
         Consumer<ComponentRegistry> registerTenantAwareSequencedDeadLetterQueueFactory = registry -> registry.registerComponent(
                 TenantAwareSequencedDeadLetterQueueFactory.class,
-                configuration -> (tenant, processingGroup, queueConfiguration) -> {
+                configuration -> (tenant, processorName, queueConfiguration) -> {
                     // reuses the single-per-tenant-datasource configured above
-                                                  TenantComponentProvider<DataSource> dataSourceProvider =
+                    TenantComponentProvider<DataSource> dataSourceProvider =
                             TenantComponentProviderUtil.find(
                                     queueConfiguration, DataSource.class
                             ).orElseThrow();
-                                                  EventConverter eventConverter = queueConfiguration.getComponent(
+                    EventConverter eventConverter = queueConfiguration.getComponent(
                                                           EventConverter.class
                                                   );
-                                                  GeneralConverter generalConverter = queueConfiguration.getComponent(
+                    GeneralConverter generalConverter = queueConfiguration.getComponent(
                                                           GeneralConverter.class
                                                   );
                     JdbcTransactionalExecutorProvider executorProvider =
@@ -204,7 +204,7 @@ class MultiTenantDeadLetterQueueIT {
                             );
                     JdbcSequencedDeadLetterQueue<EventMessage> queue =
                             JdbcSequencedDeadLetterQueue.<EventMessage>builder()
-                                                        .processingGroup(processingGroup)
+                                                        .processingGroup(processorName)
                                                         .transactionalExecutorProvider(
                                                                 ignored -> executorProvider.getTransactionalExecutor(
                                                                         null)

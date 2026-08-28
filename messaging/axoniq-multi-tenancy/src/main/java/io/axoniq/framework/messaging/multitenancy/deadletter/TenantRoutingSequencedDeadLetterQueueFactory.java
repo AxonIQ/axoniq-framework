@@ -43,7 +43,7 @@ import static java.util.Objects.requireNonNull;
  * @since 5.4.0
  */
 @Internal
-public class TenantRoutingSequencedDeadLetterQueueFactory implements SequencedDeadLetterQueueFactory {
+class TenantRoutingSequencedDeadLetterQueueFactory implements SequencedDeadLetterQueueFactory {
 
     private final TenantAwareSequencedDeadLetterQueueFactory delegate;
     private final TenantRoutingSequencedDeadLetterQueueRegistry registry;
@@ -61,7 +61,7 @@ public class TenantRoutingSequencedDeadLetterQueueFactory implements SequencedDe
     }
 
     @Override
-    public SequencedDeadLetterQueue<EventMessage> create(String processingGroup, Configuration configuration) {
-        return new TenantRoutingSequencedDeadLetterQueue(processingGroup, configuration, delegate, registry);
+    public SequencedDeadLetterQueue<EventMessage> create(String processorName, Configuration configuration) {
+        return new TenantRoutingSequencedDeadLetterQueue(processorName, configuration, delegate, registry);
     }
 }

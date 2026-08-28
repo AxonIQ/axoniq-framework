@@ -60,7 +60,7 @@ class DeadLetterMultiTenancyConfigurationEnhancerTest {
                                                                          config -> new StubTenantProvider()))
                                               .componentRegistry(registry -> registry.registerComponent(
                                                       TenantAwareSequencedDeadLetterQueueFactory.class,
-                                                      config -> (tenant, processingGroup, ignored) -> null
+                                                      config -> (tenant, processorName, ignored) -> null
                                               ))
                                               .eventProcessing(eventProcessing -> eventProcessing.pooledStreaming(
                                                       pooledStreaming -> pooledStreaming.processor(module)
