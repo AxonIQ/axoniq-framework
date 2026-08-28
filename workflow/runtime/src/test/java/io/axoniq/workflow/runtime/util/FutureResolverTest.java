@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.util;
 
+import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.Test;
 
@@ -40,7 +41,7 @@ class FutureResolverTest {
 
     @Test
     void defaultResolverWaitsForPublicationToComplete() {
-        var resolver = new DefaultFutureResolver();
+        var resolver = new DefaultTimeoutFutureResolver();
         var publication = CompletableFuture.completedFuture(null);
 
         resolver.resolve(publication);
@@ -50,12 +51,12 @@ class FutureResolverTest {
 
     @Test
     void defaultResolverPropagatesPublicationFailure() {
-        var resolver = new DefaultFutureResolver();
+        var resolver = new DefaultTimeoutFutureResolver();
         var failure = new IllegalStateException("publication failed");
 
         assertThatThrownBy(() -> resolver.resolve(CompletableFuture.failedFuture(failure)))
-                .isInstanceOf(CompletionException.class)
-                .satisfies(exception -> assertThat(exception.getCause()).isSameAs(failure));
+                .isInstanceOf(IllegalStateException.class)
+                .satisfies(exception -> assertThat(exception).isSameAs(failure));
     }
 
     @Test
@@ -71,7 +72,18 @@ class FutureResolverTest {
     }
 
     @Test
+    void resolvesPublicationWhenComponentNotFoundInProcessingContext() {
+        var context = mock(ProcessingContext.class);
+        var publication = CompletableFuture.completedFuture(null);
+        when(context.component(FutureResolver.class)).thenThrow(new ComponentNotFoundException(FutureResolver.class, "name"));
+
+        FutureResolver.resolve(context, publication);
+
+        assertThat(publication).isCompleted();
+    }
+
+    @Test
     void serviceLoadedResolverFallsBackToDefaultImplementation() {
-        assertThat(FutureResolver.getInstance()).isInstanceOf(DefaultFutureResolver.class);
+        assertThat(FutureResolver.getInstance()).isInstanceOf(DefaultTimeoutFutureResolver.class);
     }
 }
