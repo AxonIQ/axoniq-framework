@@ -29,6 +29,7 @@ import io.axoniq.framework.springcloud.transport.SpringCloudCommandController;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import org.springframework.cloud.client.DefaultServiceInstance;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
@@ -50,11 +51,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class SpringCloudAutoConfigurationTest {
 
-    private ApplicationContextRunner contextRunner;
+    private WebApplicationContextRunner contextRunner;
 
     @BeforeEach
     void setUp() {
-        contextRunner = new ApplicationContextRunner()
+        // A web application, as members reach each other over HTTP and the connector refuses to start without one.
+        contextRunner = new WebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
                 .withUserConfiguration(DiscoveryConfiguration.class);
     }
@@ -143,7 +145,7 @@ class SpringCloudAutoConfigurationTest {
             // The beans a discovery implementation supplies are resolved as the connector is built, not through a
             // bean-presence condition, so an application missing one is told what to add rather than left with
             // commands that are silently never distributed.
-            new ApplicationContextRunner()
+            new WebApplicationContextRunner()
                     .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
                     .run(context -> assertThat(context)
                             .hasFailed()
@@ -163,6 +165,39 @@ class SpringCloudAutoConfigurationTest {
                     .run(context -> assertThat(context)
                             .hasNotFailed()
                             .doesNotHaveBean(SpringCloudMemberRegistry.class));
+        }
+    }
+
+    @Nested
+    class WithoutAWebApplication {
+
+        @Test
+        void refusesToStartRatherThanJoiningTheClusterUnreachable() {
+            // Without a web application there is nothing to map the endpoints onto, while this member would still
+            // register with discovery and publish its capabilities, leaving other members routing commands to an
+            // address that refuses every connection.
+            new ApplicationContextRunner()
+                    .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
+                    .withUserConfiguration(DiscoveryConfiguration.class)
+                    .run(context -> assertThat(context)
+                            .hasFailed()
+                            .getFailure()
+                            .rootCause()
+                            .isInstanceOf(IllegalStateException.class)
+                            .hasMessageContaining("not a web application")
+                            .hasMessageContaining("axon.springcloud.enabled=false"));
+        }
+
+        @Test
+        void startsFineWhenTheConnectorIsSwitchedOff() {
+            new ApplicationContextRunner()
+                    .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
+                    .withUserConfiguration(DiscoveryConfiguration.class)
+                    .withPropertyValues("axon.springcloud.enabled=false")
+                    .run(context -> assertThat(context)
+                            .hasNotFailed()
+                            .doesNotHaveBean(SpringCloudCommandController.class)
+                            .doesNotHaveBean(MemberCapabilitiesController.class));
         }
     }
 

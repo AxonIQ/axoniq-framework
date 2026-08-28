@@ -39,7 +39,9 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnNotWebApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.cloud.client.serviceregistry.Registration;
@@ -65,7 +67,8 @@ import java.util.concurrent.Executors;
  * <p>
  * Activates when a Spring Cloud {@link DiscoveryClient} and a {@link Registration} are available — that is, when the
  * application has chosen a discovery implementation of its own — and can be switched off with
- * {@code axon.springcloud.enabled=false}.
+ * {@code axon.springcloud.enabled=false}. As members reach each other over HTTP, it also requires a web application;
+ * see {@link NonWebApplicationGuard}.
  *
  * @author Allard Buijze
  * @since 5.4.0
@@ -109,6 +112,39 @@ public class SpringCloudAutoConfiguration {
                 return Integer.MIN_VALUE;
             }
         };
+    }
+
+    /**
+     * Rejects an application that distributes commands over Spring Cloud without being able to receive any.
+     * <p>
+     * Members reach each other over HTTP, so a member is only reachable if it serves the connector's two endpoints.
+     * Without a web application context there is nothing to map them onto, while this member still registers with
+     * discovery and publishes its capabilities — leaving the other members routing commands to an address that
+     * refuses every connection. Failing at start-up says so, rather than leaving a share of the cluster's commands
+     * to time out for as long as this member is a member.
+     *
+     * @author Allard Buijze
+     * @since 5.4.0
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnProperty(name = "axon.springcloud.enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnNotWebApplication
+    public static class NonWebApplicationGuard {
+
+        /**
+         * Constructs a {@code NonWebApplicationGuard}, which is only ever reached when the connector is enabled in an
+         * application that cannot serve its endpoints.
+         *
+         * @throws IllegalStateException always, as reaching this constructor is the misconfiguration it reports
+         */
+        public NonWebApplicationGuard() {
+            throw new IllegalStateException(
+                    "The Spring Cloud connector distributes commands over HTTP, but this application is not a web "
+                            + "application, so other members cannot reach it. Add a web starter, such as "
+                            + "spring-boot-starter-web or spring-boot-starter-webflux, or set "
+                            + "axon.springcloud.enabled=false to handle commands locally instead."
+            );
+        }
     }
 
     /**
@@ -252,6 +288,7 @@ public class SpringCloudAutoConfiguration {
          */
         @Bean
         @ConditionalOnMissingBean
+        @ConditionalOnWebApplication
         public SpringCloudCommandController axoniqSpringCloudCommandController(IncomingCommandGateway gateway) {
             return new SpringCloudCommandController(gateway);
         }
@@ -264,6 +301,7 @@ public class SpringCloudAutoConfiguration {
          */
         @Bean
         @ConditionalOnMissingBean
+        @ConditionalOnWebApplication
         public MemberCapabilitiesController axoniqSpringCloudMemberCapabilitiesController(
                 CapabilityDiscoveryMode discoveryMode
         ) {
