@@ -80,6 +80,7 @@ An application that adds the starter without a discovery implementation says so 
 The same holds for an application without a servlet web stack, which could not serve the endpoints other nodes reach it on.
 Set `axon.springcloud.enabled=false` to handle commands locally instead.
 
+The same starter also carries the xref:distributed-query-bus.adoc#SpringCloudQueryBusConnector[`SpringCloudQueryBusConnector`], which distributes queries over the same discovery and the same ring.
 
 Applications wiring Axon without Spring Boot, or preferring to wire these beans themselves, can depend on `axoniq-springcloud-discovery` alone.
 Each Spring Cloud component Axoniq Framework supports has a module of its own, so an application takes only the ones it uses.
@@ -97,17 +98,18 @@ A licence read directly by the instances carries no message throughput limit.
 
 ==== Publishing what a node handles
 
-A node's command handlers are not known when it registers with the discovery registry, and change as it starts up.
+A node's message handlers are not known when it registers with the discovery registry, and change as it starts up.
 Service instance metadata is fixed at registration time, several discovery implementations, Kubernetes among them, silently ignore attempts to change it, so the connector serves each node's capabilities over an endpoint of its own instead.
 Every node polls its peers' endpoints on each discovery heartbeat, which makes the heartbeat interval the speed at which topology changes propagate.
 
 The response carries an `ETag`, and a polling node sends its last-seen tag as `If-None-Match`, so an unchanged node answers `304 Not Modified` with no body.
 
-Two paths have to be the same on every node of a cluster, since they are how nodes reach each other:
+Three paths have to be the same on every node of a cluster, since they are how nodes reach each other:
 
 [source,properties]
 ----
 axon.springcloud.command-endpoint=/axoniq-springcloud/command
+axon.springcloud.query-endpoint=/axoniq-springcloud/query
 axon.springcloud.capabilities-endpoint=/axoniq-springcloud/member-capabilities
 ----
 
@@ -125,6 +127,7 @@ axon.springcloud.ignore-listing-expire-threshold=1m
 axon.springcloud.context-root-metadata-property-name=contextRoot
 ----
 
+The properties governing how queries are answered are described with the xref:distributed-query-bus.adoc#SpringCloudQueryBusConnector[query connector].
 
 The command load factor is not among them: it belongs to the distributed command bus as a whole and is set through `DistributedCommandBusConfiguration`.
 A node with twice the load factor of another claims twice as many positions on the ring, and so receives roughly twice the commands.

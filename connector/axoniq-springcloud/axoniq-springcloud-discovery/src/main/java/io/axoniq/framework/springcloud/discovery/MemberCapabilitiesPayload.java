@@ -38,8 +38,8 @@ import java.util.stream.Collectors;
  * {@code QualifiedName} itself. Fields are ordered lists rather than sets purely so that the serialized bytes of
  * unchanged capabilities are themselves unchanged, which is what makes the {@code ETag} on the endpoint meaningful.
  * <p>
- * The {@code queries} field is part of the shape from the first release, and is served empty for as long as this
- * connector distributes commands only. Members reading it must tolerate an absent or empty list.
+ * The {@code queries} field may be absent from a member running a version that predates query distribution, so
+ * members reading it must tolerate an absent or empty list.
  *
  * @param loadFactor the relative share of command load the member asks for
  * @param commands   the {@link QualifiedName#name() names} of the commands the member subscribed to, sorted

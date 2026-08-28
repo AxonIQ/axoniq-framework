@@ -20,5 +20,7 @@
 /**
  * Spring Boot autoconfiguration for the Axoniq Framework Spring Cloud modules.
  */
-@org.jspecify.annotations.NullMarked
+@NullMarked
 package io.axoniq.framework.springboot.springcloud.autoconfig;
+
+import org.jspecify.annotations.NullMarked;

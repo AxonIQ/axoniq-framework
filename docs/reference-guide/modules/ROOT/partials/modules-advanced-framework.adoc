@@ -55,7 +55,7 @@ See the xref:message-transformation:index.adoc[event transformation reference] t
 
 === Axoniq connector for Spring Cloud
 
-This module distributes commands between application instances over HTTP, using a Spring Cloud `DiscoveryClient` to find them, without an Axon Server in between.
+This module distributes commands and queries between application instances over HTTP, using a Spring Cloud `DiscoveryClient` to find them, without an Axon Server in between.
 Spring Boot applications depend on `axoniq-springcloud-spring-boot-starter`, which brings the connector, its autoconfiguration, and the servlet web stack it serves its endpoints on.
 
 === Axoniq multi-tenancy

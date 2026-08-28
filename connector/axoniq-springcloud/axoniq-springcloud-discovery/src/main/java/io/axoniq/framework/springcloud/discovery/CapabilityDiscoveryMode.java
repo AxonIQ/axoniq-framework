@@ -44,7 +44,7 @@ public interface CapabilityDiscoveryMode {
      * Publishes the given {@code capabilities} as those of the given {@code localInstance}, replacing whatever was
      * published before.
      * <p>
-     * Called whenever a command handler is subscribed to, or unsubscribed from, this application's connector.
+     * Called whenever a command or query handler is subscribed to, or unsubscribed from, this application's connector.
      *
      * @param localInstance the {@link ServiceInstance} representing this application
      * @param capabilities  the messages this application handles, and the command load it asks for

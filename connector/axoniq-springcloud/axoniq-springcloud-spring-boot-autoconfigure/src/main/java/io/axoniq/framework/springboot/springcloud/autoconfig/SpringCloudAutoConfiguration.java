@@ -19,6 +19,9 @@
 
 package io.axoniq.framework.springboot.springcloud.autoconfig;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import io.axoniq.framework.springboot.springcloud.SpringCloudProperties;
 import io.axoniq.framework.springcloud.SpringCloudCommandBusConnector;
 import io.axoniq.framework.springcloud.SpringCloudConfigurationEnhancer;
@@ -27,10 +30,14 @@ import io.axoniq.framework.springcloud.discovery.CapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.discovery.IgnoreListingDiscoveryMode;
 import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesController;
 import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
-import io.axoniq.framework.springcloud.transport.IncomingCommandGateway;
 import io.axoniq.framework.springcloud.transport.HttpRemoteCommandDispatcher;
+import io.axoniq.framework.springcloud.transport.HttpRemoteQueryDispatcher;
+import io.axoniq.framework.springcloud.transport.IncomingCommandGateway;
+import io.axoniq.framework.springcloud.transport.IncomingQueryGateway;
 import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
+import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.transport.SpringCloudCommandController;
+import io.axoniq.framework.springcloud.transport.SpringCloudQueryController;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.core.conversion.MessageConverter;
@@ -41,6 +48,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnNotWebApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
@@ -52,13 +60,15 @@ import org.springframework.web.client.RestClient;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 /**
  * Autoconfiguration for the Axoniq Framework Spring Cloud connector.
  * <p>
  * Registers the collaborators the connector needs, after which the service-loaded
- * {@link SpringCloudConfigurationEnhancer} registers the connector itself and the framework decorates the configured
- * {@code CommandBus} into a {@code DistributedCommandBus}.
+ * {@link SpringCloudConfigurationEnhancer} registers the connectors themselves and the framework decorates the
+ * configured {@code CommandBus} and {@code QueryBus} into their distributed counterparts.
  * <p>
  * These beans live here rather than in the {@code ConfigurationEnhancer} because two of them only work as Spring
  * beans. {@link SpringCloudMemberRegistry} learns about the cluster through {@code @EventListener} methods, which
@@ -84,9 +94,19 @@ public class SpringCloudAutoConfiguration {
     public static final String REST_CLIENT_BEAN = "axoniqSpringCloudRestClient";
 
     /**
-     * The name of the {@link Executor} bean inter-member command dispatches run on.
+     * The name of the {@link Executor} bean inter-member command and query dispatches run on.
      */
     public static final String DISPATCH_EXECUTOR_BEAN = "axoniqSpringCloudDispatchExecutor";
+
+    /**
+     * The name of the {@link ObjectMapper} bean the events of a query's response stream are written and read with.
+     */
+    public static final String OBJECT_MAPPER_BEAN = "axoniqSpringCloudObjectMapper";
+
+    /**
+     * The name of the {@link ScheduledExecutorService} bean the deadline of each dispatched query runs on.
+     */
+    public static final String DEADLINE_SCHEDULER_BEAN = "axoniqSpringCloudDeadlineScheduler";
 
     /**
      * Bean creation method for a {@link ConfigurationEnhancer} that disables the
@@ -115,13 +135,17 @@ public class SpringCloudAutoConfiguration {
     }
 
     /**
-     * Rejects an application that distributes commands over Spring Cloud without being able to receive any.
+     * Rejects an application that distributes messages over Spring Cloud without being able to receive any.
      * <p>
-     * Members reach each other over HTTP, so a member is only reachable if it serves the connector's two endpoints.
-     * Without a web application context there is nothing to map them onto, while this member still registers with
-     * discovery and publishes its capabilities — leaving the other members routing commands to an address that
-     * refuses every connection. Failing at start-up says so, rather than leaving a share of the cluster's commands
-     * to time out for as long as this member is a member.
+     * Members reach each other over HTTP, so a member is only reachable if it serves the connector's endpoints. With
+     * no servlet web application there is nothing to map them onto, while this member still registers with discovery
+     * and publishes its capabilities — leaving the other members routing their share of the messages to an address
+     * that cannot answer. Failing at start-up says so, rather than leaving those messages to time out for as long as
+     * this member is a member.
+     * <p>
+     * Two conditions are needed to cover that, because "not a servlet web application" is both the application with
+     * no web stack at all, guarded here, and the one built on WebFlux, guarded by
+     * {@link ReactiveWebApplicationGuard}.
      *
      * @author Allard Buijze
      * @since 5.4.0
@@ -138,13 +162,49 @@ public class SpringCloudAutoConfiguration {
          * @throws IllegalStateException always, as reaching this constructor is the misconfiguration it reports
          */
         public NonWebApplicationGuard() {
-            throw new IllegalStateException(
-                    "The Spring Cloud connector distributes commands over HTTP, but this application is not a web "
-                            + "application, so other members cannot reach it. Add a web starter, such as "
-                            + "spring-boot-starter-web or spring-boot-starter-webflux, or set "
-                            + "axon.springcloud.enabled=false to handle commands locally instead."
-            );
+            throw unreachableMember("this application is not a web application");
         }
+    }
+
+    /**
+     * Rejects an application that distributes messages over Spring Cloud from a WebFlux stack.
+     * <p>
+     * The endpoints members reach each other on are Spring MVC endpoints, and a query's responses are streamed with
+     * an {@code SseEmitter}, which a reactive stack does not map. Such an application would register with discovery
+     * and advertise what it handles while answering nothing, so it is rejected for the same reason an application
+     * with no web stack is; see {@link NonWebApplicationGuard}.
+     *
+     * @author Allard Buijze
+     * @since 5.4.0
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnProperty(name = "axon.springcloud.enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnWebApplication(type = Type.REACTIVE)
+    public static class ReactiveWebApplicationGuard {
+
+        /**
+         * Constructs a {@code ReactiveWebApplicationGuard}, which is only ever reached when the connector is enabled
+         * in an application whose web stack cannot serve its endpoints.
+         *
+         * @throws IllegalStateException always, as reaching this constructor is the misconfiguration it reports
+         */
+        public ReactiveWebApplicationGuard() {
+            throw unreachableMember("this application is built on WebFlux, whose stack does not serve them");
+        }
+    }
+
+    /**
+     * Returns the failure reported when this application would join the cluster unable to answer anything.
+     *
+     * @param reason what about this application leaves it unable to serve the connector's endpoints
+     * @return the failure to report
+     */
+    private static IllegalStateException unreachableMember(String reason) {
+        return new IllegalStateException(
+                ("The Spring Cloud connector distributes messages over HTTP endpoints, but %s, so other members "
+                        + "cannot reach it. Add spring-boot-starter-web, or set axon.springcloud.enabled=false to "
+                        + "handle messages locally instead.").formatted(reason)
+        );
     }
 
     /**
@@ -168,7 +228,7 @@ public class SpringCloudAutoConfiguration {
          * Built from the application's own {@link RestClient.Builder} when it has one, so that whatever it configured
          * there — a load balancer, authentication, timeouts — applies to inter-member traffic as well.
          *
-         * @param builderProvider Provides the application's {@link RestClient.Builder}, if it has one.
+         * @param builderProvider provides the application's {@link RestClient.Builder}, if it has one
          * @return the client used to reach other members of the cluster
          */
         @Bean(REST_CLIENT_BEAN)
@@ -178,14 +238,38 @@ public class SpringCloudAutoConfiguration {
         }
 
         /**
+         * Bean creation method for the {@link ObjectMapper} the events of a query's response stream are written and
+         * read with.
+         * <p>
+         * Deliberately not the application's own {@code ObjectMapper}. What members write to each other is this
+         * connector's format, not the application's, and an application that customises its mapper -- a naming
+         * strategy, a visibility rule -- would otherwise stop understanding members that customise theirs differently
+         * or not at all.
+         * <p>
+         * Unknown properties are ignored, and an unrecognised enum value reads as {@code null}, so that members running
+         * different versions of the connector still read each other: neither a field nor an error code one of them
+         * does not know about is a reason to fail the query.
+         *
+         * @return the mapper the events of a query's response stream are written and read with
+         */
+        @Bean(OBJECT_MAPPER_BEAN)
+        @ConditionalOnMissingBean(name = OBJECT_MAPPER_BEAN)
+        public ObjectMapper axoniqSpringCloudObjectMapper() {
+            return JsonMapper.builder()
+                             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                             .enable(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_AS_NULL)
+                             .build();
+        }
+
+        /**
          * Bean creation method for the {@link CapabilityDiscoveryMode} used to learn what each discovered instance
          * handles.
          * <p>
          * Combines the REST mode — the only way capabilities can travel, since service instance metadata is fixed at
          * registration time — with the ignore list that keeps unrelated services from being asked on every heartbeat.
          *
-         * @param restClient The client used to reach other members.
-         * @param properties The connector's properties.
+         * @param restClient the client used to reach other members
+         * @param properties the connector's properties
          * @return the mode used to discover the capabilities of other members
          */
         @Bean
@@ -203,10 +287,10 @@ public class SpringCloudAutoConfiguration {
         /**
          * Bean creation method for the {@link SpringCloudMemberRegistry} maintaining the routing ring.
          *
-         * @param discoveryClientProvider Provides the client reporting the service instances making up the cluster.
-         * @param registrationProvider    Provides the registration representing this application.
-         * @param discoveryMode           The mode used to discover the capabilities of other members.
-         * @param properties              The connector's properties.
+         * @param discoveryClientProvider provides the client reporting the service instances making up the cluster
+         * @param registrationProvider    provides the registration representing this application
+         * @param discoveryMode           the mode used to discover the capabilities of other members
+         * @param properties              the connector's properties
          * @return the registry maintaining the routing ring
          */
         @Bean
@@ -225,17 +309,20 @@ public class SpringCloudAutoConfiguration {
         }
 
         /**
-         * Bean creation method for the {@link Executor} the blocking HTTP round trips to other members run on.
+         * Bean creation method for the {@link Executor} the blocking HTTP exchanges with other members run on.
          * <p>
          * A virtual-thread-per-task executor, because the work on it is a blocking HTTP call and nothing else. Sizing
-         * a platform thread pool for that would cap the commands this member can have in flight for no reason other
+         * a platform thread pool for that would cap the messages this member can have in flight for no reason other
          * than the pool's own size.
          * <p>
          * Shut down with {@code shutdownNow} rather than the destroy method Spring would infer. That would be
-         * {@link ExecutorService#close()}, which waits for every task to finish, and the connector's own shutdown has
-         * already waited for the commands still in flight.
+         * {@link ExecutorService#close()}, which waits for every task to finish — and a task here is the reading of a
+         * query's response stream, which lasts as long as the answering member keeps it open. Shutting down the
+         * application would then wait on members it is no longer talking to. The connector's own shutdown already
+         * waits for queries still in flight, in the {@code OUTBOUND_QUERY_CONNECTORS} phase, so by the time this runs
+         * the threads left are the ones nothing is waiting for.
          *
-         * @return the executor inter-member command dispatches run on
+         * @return the executor inter-member dispatches run on
          */
         @Bean(destroyMethod = "shutdownNow", name = DISPATCH_EXECUTOR_BEAN)
         @ConditionalOnMissingBean(name = DISPATCH_EXECUTOR_BEAN)
@@ -244,12 +331,33 @@ public class SpringCloudAutoConfiguration {
         }
 
         /**
+         * Bean creation method for the {@link ScheduledExecutorService} the deadline of each dispatched query runs
+         * on.
+         * <p>
+         * A cancelled deadline is removed from its queue rather than left to elapse, so a query answered promptly
+         * does not keep its responses reachable until the deadline would have fired.
+         *
+         * @return the scheduler query deadlines run on
+         */
+        @Bean(destroyMethod = "shutdownNow", name = DEADLINE_SCHEDULER_BEAN)
+        @ConditionalOnMissingBean(name = DEADLINE_SCHEDULER_BEAN)
+        public ScheduledExecutorService axoniqSpringCloudDeadlineScheduler() {
+            ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(1, task -> {
+                Thread thread = new Thread(task, "axoniq-springcloud-deadline");
+                thread.setDaemon(true);
+                return thread;
+            });
+            scheduler.setRemoveOnCancelPolicy(true);
+            return scheduler;
+        }
+
+        /**
          * Bean creation method for the {@link RemoteCommandDispatcher} sending commands to other members.
          *
-         * @param restClient        The client used to reach other members.
-         * @param executor          The executor the blocking HTTP round trips run on.
-         * @param properties        The connector's properties.
-         * @param converterProvider Provides the {@link MessageConverter}, if one is available.
+         * @param restClient        the client used to reach other members
+         * @param executor          the executor the blocking HTTP exchanges run on
+         * @param properties        the connector's properties
+         * @param converterProvider provides the {@link MessageConverter}, if one is available
          * @return the dispatcher sending commands to other members
          */
         @Bean
@@ -287,25 +395,92 @@ public class SpringCloudAutoConfiguration {
         /**
          * Bean creation method for the controller receiving commands from other members.
          *
-         * @param gateway The gateway handling commands sent by other members.
+         * @param gateway the gateway handling commands sent by other members
          * @return the controller receiving commands from other members
          */
         @Bean
         @ConditionalOnMissingBean
-        @ConditionalOnWebApplication
+        @ConditionalOnWebApplication(type = Type.SERVLET)
         public SpringCloudCommandController axoniqSpringCloudCommandController(IncomingCommandGateway gateway) {
             return new SpringCloudCommandController(gateway);
         }
 
         /**
+         * Bean creation method for the {@link IncomingQueryGateway} answering queries sent by other members.
+         *
+         * @param registry          the registry naming this member in the failures the gateway reports
+         * @param converterProvider provides the {@link MessageConverter}, if one is available
+         * @return the gateway answering queries sent by other members
+         */
+        @Bean
+        @ConditionalOnMissingBean
+        public IncomingQueryGateway axoniqSpringCloudIncomingQueryGateway(
+                SpringCloudMemberRegistry registry,
+                ObjectProvider<MessageConverter> converterProvider
+        ) {
+            return new IncomingQueryGateway(() -> registry.localMember().name(),
+                                            converterProvider.getIfAvailable());
+        }
+
+        /**
+         * Bean creation method for the {@link RemoteQueryDispatcher} sending queries to other members.
+         *
+         * @param restClient        the client sending the queries
+         * @param objectMapper      the mapper reading the data of each response event
+         * @param executor          the executor each query's response stream is read on
+         * @param scheduler         the scheduler each query's deadline runs on
+         * @param converterProvider provides the {@link MessageConverter}, if one is available
+         * @param properties        the connector's properties
+         * @return the dispatcher sending queries to other members
+         */
+        @Bean
+        @ConditionalOnMissingBean
+        public RemoteQueryDispatcher axoniqSpringCloudRemoteQueryDispatcher(
+                @Qualifier(REST_CLIENT_BEAN) RestClient restClient,
+                @Qualifier(OBJECT_MAPPER_BEAN) ObjectMapper objectMapper,
+                @Qualifier(DISPATCH_EXECUTOR_BEAN) Executor executor,
+                @Qualifier(DEADLINE_SCHEDULER_BEAN) ScheduledExecutorService scheduler,
+                ObjectProvider<MessageConverter> converterProvider,
+                SpringCloudProperties properties
+        ) {
+            return new HttpRemoteQueryDispatcher(restClient,
+                                                 objectMapper,
+                                                 properties.getQueryEndpoint(),
+                                                 executor,
+                                                 converterProvider.getIfAvailable(),
+                                                 properties.getQueryBufferSize(),
+                                                 properties.getQueryResponseTimeout(),
+                                                 scheduler);
+        }
+
+        /**
+         * Bean creation method for the controller answering queries from other members.
+         *
+         * @param gateway      the gateway answering queries sent by other members
+         * @param objectMapper the mapper writing the data of each response event
+         * @param properties   the connector's properties
+         * @return the controller answering queries from other members
+         */
+        @Bean
+        @ConditionalOnMissingBean
+        @ConditionalOnWebApplication(type = Type.SERVLET)
+        public SpringCloudQueryController axoniqSpringCloudQueryController(
+                IncomingQueryGateway gateway,
+                @Qualifier(OBJECT_MAPPER_BEAN) ObjectMapper objectMapper,
+                SpringCloudProperties properties
+        ) {
+            return new SpringCloudQueryController(gateway, objectMapper, properties.getQueryTimeout());
+        }
+
+        /**
          * Bean creation method for the controller serving this application's capabilities to other members.
          *
-         * @param discoveryMode The mode holding this application's own capabilities.
+         * @param discoveryMode the mode holding this application's own capabilities
          * @return the controller serving this application's capabilities
          */
         @Bean
         @ConditionalOnMissingBean
-        @ConditionalOnWebApplication
+        @ConditionalOnWebApplication(type = Type.SERVLET)
         public MemberCapabilitiesController axoniqSpringCloudMemberCapabilitiesController(
                 CapabilityDiscoveryMode discoveryMode
         ) {
@@ -321,11 +496,11 @@ public class SpringCloudAutoConfiguration {
          * autoconfiguration order, so a discovery implementation whose autoconfiguration happens to run after this one
          * would leave the condition unmet and this connector quietly absent. Resolving at construction is independent
          * of that order, and an application missing a discovery implementation is told so rather than left with
-         * commands that are never distributed.
+         * messages that are never distributed.
          *
-         * @param provider The provider of the required bean.
-         * @param type     The type of the required bean, named in the failure when it is absent.
-         * @param <B>      The type of the required bean.
+         * @param provider the provider of the required bean
+         * @param type     the type of the required bean, named in the failure when it is absent
+         * @param <B>      the type of the required bean
          * @return the bean the given {@code provider} supplies
          * @throws IllegalStateException when the given {@code provider} supplies no bean
          */

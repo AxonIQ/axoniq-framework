@@ -21,7 +21,9 @@ package io.axoniq.framework.springboot.springcloud;
 
 import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.transport.HttpRemoteCommandDispatcher;
+import io.axoniq.framework.springcloud.transport.HttpRemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.transport.SpringCloudCommandController;
+import io.axoniq.framework.springcloud.transport.SpringCloudQueryController;
 import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -45,8 +47,8 @@ public class SpringCloudProperties {
     /**
      * Whether the Spring Cloud connector is enabled.
      * <p>
-     * When set to {@code false}, no connector is registered and commands are not distributed through Spring Cloud.
-     * Defaults to {@code true}.
+     * When set to {@code false}, no connector is registered and neither commands nor queries are distributed through
+     * Spring Cloud. Defaults to {@code true}.
      */
     private boolean enabled = true;
 
@@ -54,7 +56,7 @@ public class SpringCloudProperties {
      * The path this application receives commands from other members under.
      * <p>
      * Must match {@link #capabilitiesEndpoint} in one respect: every member of the cluster has to agree on it.
-     * Defaults to {@code /axoniq-springcloud/command}.
+     * Defaults to {@link SpringCloudCommandController#DEFAULT_COMMAND_ENDPOINT}.
      */
     private String commandEndpoint = SpringCloudCommandController.DEFAULT_COMMAND_ENDPOINT;
 
@@ -62,9 +64,17 @@ public class SpringCloudProperties {
      * The path this application serves its command handling capabilities under.
      * <p>
      * Every member of the cluster has to agree on it. Defaults to
-     * {@code /axoniq-springcloud/member-capabilities}.
+     * {@link RestCapabilityDiscoveryMode#DEFAULT_CAPABILITIES_ENDPOINT}.
      */
     private String capabilitiesEndpoint = RestCapabilityDiscoveryMode.DEFAULT_CAPABILITIES_ENDPOINT;
+
+    /**
+     * The path this application receives queries from other members under, and expects to reach them on.
+     * <p>
+     * Every member must agree on this path, as it is how they reach each other. Defaults to
+     * {@link SpringCloudQueryController#DEFAULT_QUERY_ENDPOINT}.
+     */
+    private String queryEndpoint = SpringCloudQueryController.DEFAULT_QUERY_ENDPOINT;
 
     /**
      * How long a member is given to answer a command before it is treated as unreachable.
@@ -75,6 +85,34 @@ public class SpringCloudProperties {
      * {@link HttpRemoteCommandDispatcher#DEFAULT_REPLY_TIMEOUT}.
      */
     private Duration commandReplyTimeout = HttpRemoteCommandDispatcher.DEFAULT_REPLY_TIMEOUT;
+
+    /**
+     * How long a query's response stream may stay open before the container closes it.
+     * <p>
+     * A query still being answered when this elapses is reported to the member that asked as a failed stream, so this
+     * should exceed the time the slowest query legitimately takes to answer. Defaults to five minutes.
+     */
+    private Duration queryTimeout = Duration.ofMinutes(5);
+
+    /**
+     * How long this application waits for the responses to a query it dispatched, before giving up on it.
+     * <p>
+     * A backstop rather than the usual way a query ends: the answering member closes its own stream first, on
+     * {@link #queryTimeout}. This one covers the member that stops answering without saying so — one that was killed,
+     * or partitioned away — whose socket would otherwise never report anything. Keep it above {@code queryTimeout},
+     * so that a member which is merely slow ends the query itself. Defaults to
+     * {@link HttpRemoteQueryDispatcher#DEFAULT_RESPONSE_TIMEOUT}.
+     */
+    private Duration queryResponseTimeout = HttpRemoteQueryDispatcher.DEFAULT_RESPONSE_TIMEOUT;
+
+    /**
+     * How many responses to a single query this application buffers while consuming them.
+     * <p>
+     * A member answering faster than this application consumes fills the buffer, and the query then fails rather than
+     * growing the buffer until memory runs out. Defaults to
+     * {@link HttpRemoteQueryDispatcher#DEFAULT_BUFFER_SIZE}.
+     */
+    private int queryBufferSize = HttpRemoteQueryDispatcher.DEFAULT_BUFFER_SIZE;
 
     /**
      * How long a service instance is left alone after answering a capabilities request with a client error.
@@ -89,7 +127,7 @@ public class SpringCloudProperties {
     /**
      * The service instance metadata property holding an instance's context root, appended to its URI when reaching it.
      * <p>
-     * Leave unset when services are served from the root, which is the default.
+     * Leave unset when services are served from the root, which is the default and is what {@code null} means here.
      */
     private @Nullable String contextRootMetadataPropertyName;
 
@@ -148,6 +186,24 @@ public class SpringCloudProperties {
     }
 
     /**
+     * Returns the path this application receives queries from other members under.
+     *
+     * @return the path this application receives queries under
+     */
+    public String getQueryEndpoint() {
+        return queryEndpoint;
+    }
+
+    /**
+     * Sets the path this application receives queries from other members under.
+     *
+     * @param queryEndpoint the path this application receives queries under
+     */
+    public void setQueryEndpoint(String queryEndpoint) {
+        this.queryEndpoint = queryEndpoint;
+    }
+
+    /**
      * Returns how long a member is given to answer a command.
      *
      * @return how long a member is given to answer a command
@@ -163,6 +219,60 @@ public class SpringCloudProperties {
      */
     public void setCommandReplyTimeout(Duration commandReplyTimeout) {
         this.commandReplyTimeout = commandReplyTimeout;
+    }
+
+    /**
+     * Returns how long a query's response stream may stay open.
+     *
+     * @return how long a query's response stream may stay open
+     */
+    public Duration getQueryTimeout() {
+        return queryTimeout;
+    }
+
+    /**
+     * Sets how long a query's response stream may stay open.
+     *
+     * @param queryTimeout how long a query's response stream may stay open
+     */
+    public void setQueryTimeout(Duration queryTimeout) {
+        this.queryTimeout = queryTimeout;
+    }
+
+    /**
+     * Returns how long this application waits for the responses to a query it dispatched.
+     *
+     * @return how long the responses to a dispatched query are waited for
+     */
+    public Duration getQueryResponseTimeout() {
+        return queryResponseTimeout;
+    }
+
+    /**
+     * Sets how long this application waits for the responses to a query it dispatched.
+     *
+     * @param queryResponseTimeout how long the responses to a dispatched query are waited for
+     */
+    public void setQueryResponseTimeout(Duration queryResponseTimeout) {
+        this.queryResponseTimeout = queryResponseTimeout;
+    }
+
+    /**
+     * Returns how many responses to a single query this application buffers.
+     *
+     * @return how many responses to a single query this application buffers
+     */
+    public int getQueryBufferSize() {
+        return queryBufferSize;
+    }
+
+    /**
+     * Sets how many responses to a single query this application buffers.
+     *
+     * @param queryBufferSize how many responses to a single query this application buffers
+     */
+    public void setQueryBufferSize(int queryBufferSize) {
+        this.queryBufferSize = queryBufferSize;
     }
 
     /**
