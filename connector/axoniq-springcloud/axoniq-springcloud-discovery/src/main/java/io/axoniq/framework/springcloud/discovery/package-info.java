@@ -28,5 +28,7 @@
  * io.axoniq.framework.springcloud.discovery.IgnoreListingDiscoveryMode} keeps instances that answer with a client
  * error out of the way for a while.
  */
-@org.jspecify.annotations.NullMarked
+@NullMarked
 package io.axoniq.framework.springcloud.discovery;
+
+import org.jspecify.annotations.NullMarked;

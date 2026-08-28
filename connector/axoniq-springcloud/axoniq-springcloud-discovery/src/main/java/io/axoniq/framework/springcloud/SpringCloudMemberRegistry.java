@@ -41,10 +41,15 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -60,8 +65,8 @@ import java.util.stream.Collectors;
  * and Spring only publishes events to beans it manages. It is registered by the Spring Boot autoconfiguration.
  * <p>
  * In Axon Framework 4 this work sat in a {@code CommandRouter} alongside the connector. That split is gone — a
- * {@code CommandBusConnector} now owns routing as well as transport — so this registry is the connector's own
- * collaborator rather than a component of the bus.
+ * connector now owns routing as well as transport — so this registry is the connector's own collaborator rather than
+ * a component of the bus.
  *
  * @author Allard Buijze
  * @since 5.4.0
@@ -80,13 +85,22 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
     private volatile MemberCapabilities localCapabilities = MemberCapabilities.INCAPABLE;
     private volatile boolean registered = false;
 
+    // The parts of this member's capabilities are held separately because a connector only knows its own: publishing
+    // the whole record from either would erase what the other had published.
+    private volatile int localLoadFactor = 0;
+    private volatile Set<QualifiedName> localCommands = Set.of();
+    // Served empty until a query connector publishes into it; the capability shape carries the field from the
+    // first release so that members of differing versions still read each other.
+    private volatile Set<QualifiedName> localQueries = Set.of();
+
+
     /**
      * Constructs a {@code SpringCloudMemberRegistry} discovering members through the given {@code discoveryClient}.
      *
-     * @param discoveryClient   The client reporting the service instances making up the cluster.
-     * @param localRegistration The registration representing this application, used to tell this application's own
+     * @param discoveryClient   the client reporting the service instances making up the cluster
+     * @param localRegistration the registration representing this application, used to tell this application's own
      *                          instance apart from the others.
-     * @param discoveryMode     The mode used to learn what each discovered instance handles.
+     * @param discoveryMode     the mode used to learn what each discovered instance handles
      */
     public SpringCloudMemberRegistry(DiscoveryClient discoveryClient,
                                      Registration localRegistration,
@@ -97,15 +111,15 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
     /**
      * Constructs a {@code SpringCloudMemberRegistry} discovering members through the given {@code discoveryClient}.
      *
-     * @param discoveryClient                 The client reporting the service instances making up the cluster.
-     * @param localRegistration               The registration representing this application, used to tell this
+     * @param discoveryClient                 the client reporting the service instances making up the cluster
+     * @param localRegistration               the registration representing this application, used to tell this
      *                                        application's own instance apart from the others.
-     * @param discoveryMode                   The mode used to learn what each discovered instance handles.
-     * @param serviceInstanceFilter           Decides which discovered instances are considered at all. Instances
+     * @param discoveryMode                   the mode used to learn what each discovered instance handles
+     * @param serviceInstanceFilter           decides which discovered instances are considered at all. Instances
      *                                        rejected here are never asked for their capabilities, which is cheaper
      *                                        than relying on the ignore list when whole services can be excluded up
      *                                        front.
-     * @param contextRootMetadataPropertyName The {@link ServiceInstance#getMetadata() metadata} key holding an
+     * @param contextRootMetadataPropertyName the {@link ServiceInstance#getMetadata() metadata} key holding an
      *                                        instance's context root, to be appended to its URI, or {@code null} when
      *                                        instances are served from the root.
      */
@@ -114,11 +128,11 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
                                      CapabilityDiscoveryMode discoveryMode,
                                      Predicate<ServiceInstance> serviceInstanceFilter,
                                      @Nullable String contextRootMetadataPropertyName) {
-        this.discoveryClient = Objects.requireNonNull(discoveryClient, "The discoveryClient cannot be null.");
-        this.localRegistration = Objects.requireNonNull(localRegistration, "The localRegistration cannot be null.");
-        this.discoveryMode = Objects.requireNonNull(discoveryMode, "The discoveryMode cannot be null.");
+        this.discoveryClient = Objects.requireNonNull(discoveryClient, "The discoveryClient must not be null.");
+        this.localRegistration = Objects.requireNonNull(localRegistration, "The localRegistration must not be null.");
+        this.discoveryMode = Objects.requireNonNull(discoveryMode, "The discoveryMode must not be null.");
         this.serviceInstanceFilter = Objects.requireNonNull(serviceInstanceFilter,
-                                                            "The serviceInstanceFilter cannot be null.");
+                                                            "The serviceInstanceFilter must not be null.");
         this.contextRootMetadataPropertyName = contextRootMetadataPropertyName;
         // Publishing the (empty) local capabilities up front means the discovery mode recognises this application's
         // own instance from the first discovery round, rather than asking this application for its capabilities over
@@ -130,31 +144,67 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
      * Resolves the member a command of the given {@code commandName} carrying the given {@code routingKey} should be
      * handled by.
      *
-     * @param routingKey  The routing key of the command to resolve a member for.
-     * @param commandName The {@link QualifiedName} of the command to resolve a member for.
+     * @param routingKey  the routing key of the command to resolve a member for
+     * @param commandName the {@link QualifiedName} of the command to resolve a member for
      * @return the member that should handle the command, or {@link Optional#empty()} when no known member handles
      * commands of the given {@code commandName}
      */
-    public Optional<Member> findDestination(String routingKey, QualifiedName commandName) {
+    public Optional<Member> findCommandDestination(String routingKey, QualifiedName commandName) {
+        Objects.requireNonNull(routingKey, "The routingKey must not be null.");
+        Objects.requireNonNull(commandName, "The commandName must not be null.");
         return ring.getMember(routingKey, commandName);
     }
 
+
+
     /**
-     * Publishes the given {@code capabilities} as this application's own, making them visible to other members on
-     * their next discovery round, and reflecting them in this application's own ring right away.
+     * Publishes the given {@code commands} as the commands this application handles, asking for the given
+     * {@code loadFactor} worth of the command load.
      *
-     * @param capabilities The messages this application handles, and the command load it asks for.
+     * @param loadFactor the share of the command load this application asks for
+     * @param commands   the names of the commands this application handles
      */
-    public void publishLocalCapabilities(MemberCapabilities capabilities) {
-        Objects.requireNonNull(capabilities, "The capabilities cannot be null.");
+    public void publishLocalCommands(int loadFactor, Set<QualifiedName> commands) {
+        if (loadFactor < 0) {
+            throw new IllegalArgumentException("The load factor cannot be negative, but was [" + loadFactor + "].");
+        }
+        Objects.requireNonNull(commands, "The commands must not be null.");
+        this.localLoadFactor = loadFactor;
+        this.localCommands = Set.copyOf(commands);
+        republishLocalCapabilities();
+    }
+
+
+    /**
+     * Makes this application's capabilities visible to other members on their next discovery round, and reflects them
+     * in this application's own ring right away.
+     * <p>
+     * Composed from the parts each connector published, so that a connector publishing what it handles leaves what the
+     * other publishes untouched.
+     */
+    private void republishLocalCapabilities() {
+        MemberCapabilities capabilities = currentLocalCapabilities();
         this.localCapabilities = capabilities;
         discoveryMode.updateLocalCapabilities(localRegistration, capabilities);
-        // Updating the local member immediately, rather than waiting for the next heartbeat, means a command
+        // Updating the local member immediately, rather than waiting for the next heartbeat, means a message
         // dispatched right after its handler subscribed can already be routed to this member.
         synchronized (this) {
-            ring = ring.with(localMember(), capabilities);
+            ring = ring.with(localMember(), currentLocalCapabilities());
         }
         logger.debug("Published local capabilities [{}]; ring is now [{}]", capabilities, ring);
+    }
+
+    /**
+     * Composes this member's capabilities from the parts each connector published.
+     * <p>
+     * Read again inside the lock wherever the ring is updated, rather than passed in: a capability published while a
+     * ring was being rebuilt would otherwise be overwritten by the rebuild, and stay invisible until the next
+     * heartbeat.
+     *
+     * @return the capabilities this member currently has
+     */
+    private MemberCapabilities currentLocalCapabilities() {
+        return new MemberCapabilities(localLoadFactor, localCommands, localQueries);
     }
 
     /**
@@ -164,17 +214,17 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
      * member that is currently unreachable. It does not weaken any consistency guarantee: routing a command to one
      * member is a matter of locality, while consistency is enforced where the events are appended.
      *
-     * @param member The member that could not be reached.
+     * @param member the member that could not be reached
      */
     public void suspect(Member member) {
-        Objects.requireNonNull(member, "The member cannot be null.");
+        Objects.requireNonNull(member, "The member must not be null.");
         synchronized (this) {
             ConsistentHash updated = ring.without(member);
             if (updated != ring) {
                 logger.info("Removing member [{}] from the ring, as it could not be reached. It returns on the next "
                                     + "discovery round if it answers again.", member);
                 ring = updated;
-            }
+                }
         }
     }
 
@@ -185,7 +235,7 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
      * under a provisional name and without an endpoint. This event is the point at which its real name and URI become
      * known.
      *
-     * @param event The event signalling that registration completed. Serves only as a trigger.
+     * @param event the event signalling that registration completed. Serves only as a trigger
      */
     @EventListener
     public void onInstanceRegistered(InstanceRegisteredEvent<?> event) {
@@ -197,7 +247,7 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
     /**
      * Rebuilds the ring from the instances discovery currently reports.
      *
-     * @param event The heartbeat signalling that discovery may have new information. Serves only as a trigger.
+     * @param event the heartbeat signalling that discovery may have new information. Serves only as a trigger
      */
     @EventListener
     public void onHeartbeat(HeartbeatEvent event) {
@@ -223,7 +273,14 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
                                           .map(ServiceInstanceKey::of)
                                           .collect(Collectors.toUnmodifiableSet()));
         synchronized (this) {
-            ring = rebuilt;
+            // Re-applying this member's own capabilities, rather than trusting the rebuild to carry them: the rebuild
+            // read them before taking the lock, so a handler that subscribed in between would be lost until the next
+            // heartbeat. Only refreshed where the rebuild already placed this member, so that a member discovery left
+            // out stays out.
+            Member local = localMember();
+            ring = rebuilt.capabilitiesOf(local).isPresent()
+                    ? rebuilt.with(local, currentLocalCapabilities())
+                    : rebuilt;
         }
         logger.debug("Rebuilt the ring from [{}] discovered instances: [{}]", instances.size(), rebuilt);
     }
@@ -260,7 +317,7 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
      */
     public Member localMember() {
         if (!registered) {
-            return Member.unregisteredLocalMember(localRegistration.getServiceId().toUpperCase() + "[LOCAL]");
+            return Member.unregisteredLocalMember(provisionalName(localRegistration));
         }
         return buildMember(localRegistration);
     }
@@ -280,9 +337,33 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
         if (endpoint == null) {
             // Only reachable for this application's own instance before registration completed; a remote instance
             // without a URI was already filtered out by its capabilities request failing.
-            return Member.unregisteredLocalMember(instance.getServiceId().toUpperCase() + "[LOCAL]");
+            return Member.unregisteredLocalMember(provisionalName(instance));
         }
-        return new Member(instance.getServiceId().toUpperCase() + "[" + endpoint + "]", endpoint, local);
+        return new Member(serviceName(instance) + "[" + endpoint + "]", endpoint, local);
+    }
+
+    /**
+     * Returns the name a member goes by before its endpoint is known.
+     *
+     * @param instance the instance to name
+     * @return the provisional name of the given {@code instance}
+     */
+    private static String provisionalName(ServiceInstance instance) {
+        return serviceName(instance) + "[LOCAL]";
+    }
+
+    /**
+     * Returns the service id of the given {@code instance}, upper-cased in a locale-independent way.
+     * <p>
+     * Member names are the ring's keys and travel between members, so they must not depend on the default locale of
+     * the JVM that produced them: under a Turkish locale {@code toUpperCase()} maps {@code i} to a dotted capital,
+     * which would give one member a different name on every other member of the cluster.
+     *
+     * @param instance the instance to name
+     * @return the locale-independent upper-cased service id of the given {@code instance}
+     */
+    private static String serviceName(ServiceInstance instance) {
+        return instance.getServiceId().toUpperCase(Locale.ROOT);
     }
 
     private boolean isLocal(ServiceInstance instance) {
@@ -315,7 +396,7 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
      * Several Spring Cloud Discovery implementations throw rather than return {@code null} when an instance's URI is
      * requested before it has registered, so the exception is what "no URI yet" looks like in practice.
      *
-     * @param instance The instance to read the URI of.
+     * @param instance the instance to read the URI of
      * @return the URI of the given {@code instance}, or {@code null} when it does not have one
      */
     private static @Nullable URI uriOf(ServiceInstance instance) {

@@ -230,10 +230,14 @@ public class SpringCloudAutoConfiguration {
          * A virtual-thread-per-task executor, because the work on it is a blocking HTTP call and nothing else. Sizing
          * a platform thread pool for that would cap the commands this member can have in flight for no reason other
          * than the pool's own size.
+         * <p>
+         * Shut down with {@code shutdownNow} rather than the destroy method Spring would infer. That would be
+         * {@link ExecutorService#close()}, which waits for every task to finish, and the connector's own shutdown has
+         * already waited for the commands still in flight.
          *
          * @return the executor inter-member command dispatches run on
          */
-        @Bean(DISPATCH_EXECUTOR_BEAN)
+        @Bean(destroyMethod = "shutdownNow", name = DISPATCH_EXECUTOR_BEAN)
         @ConditionalOnMissingBean(name = DISPATCH_EXECUTOR_BEAN)
         public ExecutorService axoniqSpringCloudDispatchExecutor() {
             return Executors.newVirtualThreadPerTaskExecutor();
@@ -259,24 +263,24 @@ public class SpringCloudAutoConfiguration {
             return new HttpRemoteCommandDispatcher(restClient,
                                                    properties.getCommandEndpoint(),
                                                    executor,
-                                                   converterProvider.getIfAvailable());
+                                                   converterProvider.getIfAvailable(),
+                                                   properties.getCommandReplyTimeout());
         }
 
         /**
          * Bean creation method for the {@link IncomingCommandGateway} handling commands sent by other members.
          *
-         * @param registrationProvider Provides the registration representing this application, whose service id
-         *                             names this member in the failures it reports.
-         * @param converterProvider    Provides the {@link MessageConverter}, if one is available.
+         * @param registry          the registry naming this member in the failures the gateway reports
+         * @param converterProvider provides the {@link MessageConverter}, if one is available
          * @return the gateway handling commands sent by other members
          */
         @Bean
         @ConditionalOnMissingBean
         public IncomingCommandGateway axoniqSpringCloudIncomingCommandGateway(
-                ObjectProvider<Registration> registrationProvider,
+                SpringCloudMemberRegistry registry,
                 ObjectProvider<MessageConverter> converterProvider
         ) {
-            return new IncomingCommandGateway(required(registrationProvider, Registration.class).getServiceId(),
+            return new IncomingCommandGateway(() -> registry.localMember().name(),
                                               converterProvider.getIfAvailable());
         }
 
@@ -329,9 +333,9 @@ public class SpringCloudAutoConfiguration {
             B bean = provider.getIfAvailable();
             if (bean == null) {
                 throw new IllegalStateException(
-                        ("No %s bean is available, so the Spring Cloud connector cannot distribute commands. Add a "
+                        ("No %s bean is available, so the Spring Cloud connector cannot distribute messages. Add a "
                                 + "Spring Cloud Discovery implementation, such as Eureka, Consul or Kubernetes, or "
-                                + "set axon.springcloud.enabled=false to handle commands locally instead.")
+                                + "set axon.springcloud.enabled=false to handle messages locally instead.")
                                 .formatted(type.getSimpleName())
                 );
             }

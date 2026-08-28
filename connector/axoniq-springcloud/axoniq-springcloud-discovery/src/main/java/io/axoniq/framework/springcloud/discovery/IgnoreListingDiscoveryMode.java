@@ -70,7 +70,7 @@ public class IgnoreListingDiscoveryMode implements CapabilityDiscoveryMode {
      * Constructs an {@code IgnoreListingDiscoveryMode} around the given {@code delegate}, ignoring instances that
      * answer with a client error for {@link #DEFAULT_EXPIRE_THRESHOLD}.
      *
-     * @param delegate The mode to delegate capability discovery to.
+     * @param delegate the mode to delegate capability discovery to
      */
     public IgnoreListingDiscoveryMode(CapabilityDiscoveryMode delegate) {
         this(delegate, DEFAULT_EXPIRE_THRESHOLD, Clock.systemUTC());
@@ -80,8 +80,8 @@ public class IgnoreListingDiscoveryMode implements CapabilityDiscoveryMode {
      * Constructs an {@code IgnoreListingDiscoveryMode} around the given {@code delegate}, ignoring instances that
      * answer with a client error for the given {@code expireThreshold}.
      *
-     * @param delegate        The mode to delegate capability discovery to.
-     * @param expireThreshold The period an instance is ignored for after answering with a client error. Must be
+     * @param delegate        the mode to delegate capability discovery to
+     * @param expireThreshold the period an instance is ignored for after answering with a client error. Must be
      *                        strictly positive.
      */
     public IgnoreListingDiscoveryMode(CapabilityDiscoveryMode delegate, Duration expireThreshold) {
@@ -92,15 +92,15 @@ public class IgnoreListingDiscoveryMode implements CapabilityDiscoveryMode {
      * Constructs an {@code IgnoreListingDiscoveryMode} around the given {@code delegate}, ignoring instances that
      * answer with a client error for the given {@code expireThreshold} as measured by the given {@code clock}.
      *
-     * @param delegate        The mode to delegate capability discovery to.
-     * @param expireThreshold The period an instance is ignored for after answering with a client error. Must be
+     * @param delegate        the mode to delegate capability discovery to
+     * @param expireThreshold the period an instance is ignored for after answering with a client error. Must be
      *                        strictly positive.
-     * @param clock           The clock measuring when an ignored instance may be tried again.
+     * @param clock           the clock measuring when an ignored instance may be tried again
      */
     public IgnoreListingDiscoveryMode(CapabilityDiscoveryMode delegate, Duration expireThreshold, Clock clock) {
-        this.delegate = Objects.requireNonNull(delegate, "The delegate cannot be null.");
-        this.expireThreshold = Objects.requireNonNull(expireThreshold, "The expireThreshold cannot be null.");
-        this.clock = Objects.requireNonNull(clock, "The clock cannot be null.");
+        this.delegate = Objects.requireNonNull(delegate, "The delegate must not be null.");
+        this.expireThreshold = Objects.requireNonNull(expireThreshold, "The expireThreshold must not be null.");
+        this.clock = Objects.requireNonNull(clock, "The clock must not be null.");
         if (expireThreshold.isNegative() || expireThreshold.isZero()) {
             throw new IllegalArgumentException(
                     "The expireThreshold must be strictly positive, but was [" + expireThreshold + "]."
@@ -136,16 +136,23 @@ public class IgnoreListingDiscoveryMode implements CapabilityDiscoveryMode {
     }
 
     private boolean isIgnored(ServiceInstanceKey key) {
-        Instant now = clock.instant();
-        // Expiry is evaluated per entry on lookup, so an entry whose threshold has passed is removed and retried in
-        // the same discovery round rather than waiting for a sweep.
-        ignoredUntil.values().removeIf(expiry -> !expiry.isAfter(now));
-        return ignoredUntil.containsKey(key);
+        // Evaluated per entry rather than by sweeping the map, so that a discovery round over n instances stays
+        // linear in n: it is called once per instance, and a sweep would make each call linear in its own right.
+        Instant expiry = ignoredUntil.get(key);
+        if (expiry == null) {
+            return false;
+        }
+        if (expiry.isAfter(clock.instant())) {
+            return true;
+        }
+        // The threshold passed, so the instance is retried in this very round rather than waiting for the next.
+        ignoredUntil.remove(key, expiry);
+        return false;
     }
 
     @Override
     public void retainOnly(Set<ServiceInstanceKey> knownInstances) {
-        Objects.requireNonNull(knownInstances, "The knownInstances cannot be null.");
+        Objects.requireNonNull(knownInstances, "The knownInstances must not be null.");
         ignoredUntil.keySet().retainAll(knownInstances);
         delegate.retainOnly(knownInstances);
     }

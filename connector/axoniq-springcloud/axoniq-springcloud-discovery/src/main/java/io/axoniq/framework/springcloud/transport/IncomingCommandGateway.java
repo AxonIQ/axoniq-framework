@@ -19,12 +19,12 @@
 
 package io.axoniq.framework.springcloud.transport;
 
-import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector.Handler;
+import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import org.axonframework.messaging.commandhandling.CommandDispatchException;
 import org.axonframework.messaging.commandhandling.CommandMessage;
-import org.axonframework.messaging.commandhandling.NoHandlerForCommandException;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
+import org.axonframework.messaging.commandhandling.NoHandlerForCommandException;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 /**
  * Turns a {@link CommandDispatchRequest} received from another member into an invocation of this application's local
@@ -58,21 +59,25 @@ public class IncomingCommandGateway {
 
     private static final Logger logger = LoggerFactory.getLogger(IncomingCommandGateway.class);
 
-    private final String memberName;
+    private final Supplier<String> memberName;
     private final @Nullable MessageConverter converter;
     private final AtomicReference<@Nullable Handler> handler = new AtomicReference<>();
 
     /**
-     * Constructs an {@code IncomingCommandGateway} reporting failures as originating from the given
-     * {@code memberName}.
+     * Constructs an {@code IncomingCommandGateway} reporting failures as originating from the member the given
+     * {@code memberName} supplies.
+     * <p>
+     * Taken as a supplier because a member is not named until it has registered with discovery, which happens after
+     * this gateway is built. Resolving it per failure reports the name this member is actually known by, rather than
+     * the provisional one it had at start-up.
      *
-     * @param memberName The name identifying this application in replies it sends, used to point at the member a
-     *                   failure originated on.
-     * @param converter  The converter attached to received commands for inline payload conversion, and used to
+     * @param memberName supplies the name identifying this application in replies it sends, used to point at the
+     *                   member a failure originated on.
+     * @param converter  the converter attached to received commands for inline payload conversion, and used to
      *                   serialize application-specific exception details, or {@code null} when none is available.
      */
-    public IncomingCommandGateway(String memberName, @Nullable MessageConverter converter) {
-        this.memberName = Objects.requireNonNull(memberName, "The memberName cannot be null.");
+    public IncomingCommandGateway(Supplier<String> memberName, @Nullable MessageConverter converter) {
+        this.memberName = Objects.requireNonNull(memberName, "The memberName must not be null.");
         this.converter = converter;
     }
 
@@ -82,10 +87,10 @@ public class IncomingCommandGateway {
      * Called by the connector when {@code DistributedCommandBus} registers its handler through
      * {@link CommandBusConnector#onIncomingCommand(CommandBusConnector.Handler)}.
      *
-     * @param handler The handler to invoke incoming commands on.
+     * @param handler the handler to invoke incoming commands on
      */
     public void bind(CommandBusConnector.Handler handler) {
-        this.handler.set(Objects.requireNonNull(handler, "The handler cannot be null."));
+        this.handler.set(Objects.requireNonNull(handler, "The handler must not be null."));
     }
 
     /**
@@ -94,11 +99,11 @@ public class IncomingCommandGateway {
      * The returned future always completes successfully: a failure while handling the command is reported <em>in</em>
      * the reply, not as a failed future, so the controller can answer with it.
      *
-     * @param request The request received from another member.
+     * @param request the request received from another member
      * @return a future completing with the reply to send back
      */
     public CompletableFuture<CommandDispatchReply> handle(CommandDispatchRequest request) {
-        Objects.requireNonNull(request, "The request cannot be null.");
+        Objects.requireNonNull(request, "The request must not be null.");
         Handler boundHandler = handler.get();
         if (boundHandler == null) {
             logger.info("Received command [{}] before a handler was registered on this member. Reporting it as "
@@ -108,7 +113,7 @@ public class IncomingCommandGateway {
                             "This member has not registered a command handler yet, as it is still starting up."
                     ),
                     request.identifier(),
-                    memberName,
+                    memberName.get(),
                     converter
             ));
         }
@@ -125,7 +130,7 @@ public class IncomingCommandGateway {
                     new CommandDispatchException(
                             "Could not read incoming command of type [" + request.type() + "].", e
                     ),
-                    request.identifier(), memberName, converter
+                    request.identifier(), memberName.get(), converter
             ));
         }
 
@@ -134,7 +139,7 @@ public class IncomingCommandGateway {
             boundHandler.handle(command, new ReplyingResultCallback(reply, request.identifier()));
         } catch (Exception e) {
             logger.warn("Could not hand incoming command [{}] to the local handler.", command.type(), e);
-            reply.complete(CommandConverter.convertErrorResult(e, request.identifier(), memberName, converter));
+            reply.complete(CommandConverter.convertErrorResult(e, request.identifier(), memberName.get(), converter));
         }
         return reply;
     }
@@ -155,13 +160,13 @@ public class IncomingCommandGateway {
                 reply.complete(CommandConverter.convertResultMessage(resultMessage, requestIdentifier));
             } catch (Exception e) {
                 logger.warn("Could not write the result of command [{}] to a reply.", requestIdentifier, e);
-                reply.complete(CommandConverter.convertErrorResult(e, requestIdentifier, memberName, converter));
+                reply.complete(CommandConverter.convertErrorResult(e, requestIdentifier, memberName.get(), converter));
             }
         }
 
         @Override
         public void onError(Throwable cause) {
-            reply.complete(CommandConverter.convertErrorResult(cause, requestIdentifier, memberName, converter));
+            reply.complete(CommandConverter.convertErrorResult(cause, requestIdentifier, memberName.get(), converter));
         }
     }
 }

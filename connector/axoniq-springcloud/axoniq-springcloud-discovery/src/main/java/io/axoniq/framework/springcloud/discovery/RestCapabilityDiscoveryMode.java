@@ -85,7 +85,7 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
      * Constructs a {@code RestCapabilityDiscoveryMode} requesting capabilities with the given {@code restClient} from
      * the {@link #DEFAULT_CAPABILITIES_ENDPOINT}.
      *
-     * @param restClient The client used to request the capabilities of other members.
+     * @param restClient the client used to request the capabilities of other members
      */
     public RestCapabilityDiscoveryMode(RestClient restClient) {
         this(restClient, DEFAULT_CAPABILITIES_ENDPOINT);
@@ -98,25 +98,25 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
      * The {@code capabilitiesEndpoint} must match the path {@link MemberCapabilitiesController} is mapped to on every
      * member of the cluster.
      *
-     * @param restClient           The client used to request the capabilities of other members.
-     * @param capabilitiesEndpoint The path, relative to a member's base URI, the capabilities endpoint is served
+     * @param restClient           the client used to request the capabilities of other members
+     * @param capabilitiesEndpoint the path, relative to a member's base URI, the capabilities endpoint is served
      *                             under.
      */
     public RestCapabilityDiscoveryMode(RestClient restClient, String capabilitiesEndpoint) {
-        this.restClient = Objects.requireNonNull(restClient, "The restClient cannot be null.");
+        this.restClient = Objects.requireNonNull(restClient, "The restClient must not be null.");
         this.capabilitiesEndpoint = Objects.requireNonNull(capabilitiesEndpoint,
-                                                           "The capabilitiesEndpoint cannot be null.");
+                                                           "The capabilitiesEndpoint must not be null.");
     }
 
     @Override
     public void updateLocalCapabilities(ServiceInstance localInstance, MemberCapabilities capabilities) {
-        this.localInstance.set(Objects.requireNonNull(localInstance, "The localInstance cannot be null."));
-        this.localCapabilities.set(Objects.requireNonNull(capabilities, "The capabilities cannot be null."));
+        this.localInstance.set(Objects.requireNonNull(localInstance, "The localInstance must not be null."));
+        this.localCapabilities.set(Objects.requireNonNull(capabilities, "The capabilities must not be null."));
     }
 
     @Override
     public Optional<MemberCapabilities> capabilities(ServiceInstance serviceInstance) {
-        Objects.requireNonNull(serviceInstance, "The serviceInstance cannot be null.");
+        Objects.requireNonNull(serviceInstance, "The serviceInstance must not be null.");
         if (isLocal(serviceInstance)) {
             return Optional.of(localCapabilities.get());
         }
@@ -126,11 +126,13 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
     private MemberCapabilities requestCapabilities(ServiceInstance serviceInstance) {
         ServiceInstanceKey key = ServiceInstanceKey.of(serviceInstance);
         CachedCapabilities cached = cache.get(key);
-        URI destination = UriComponentsBuilder.fromUri(serviceInstance.getUri())
-                                              .path(capabilitiesEndpoint)
-                                              .build()
-                                              .toUri();
         try {
+            // Inside the try because several Spring Cloud Discovery implementations throw from getUri() for an
+            // instance that has not registered yet, and that is a member this round cannot reach like any other.
+            URI destination = UriComponentsBuilder.fromUri(serviceInstance.getUri())
+                                                  .path(capabilitiesEndpoint)
+                                                  .build()
+                                                  .toUri();
             ResponseEntity<MemberCapabilitiesPayload> response =
                     restClient.get()
                               .uri(destination)
@@ -177,8 +179,8 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
             cache.remove(key);
             throw e;
         } catch (Exception e) {
-            logger.info("Could not retrieve the capabilities of ServiceInstance [{}] at [{}]. Treating it as handling "
-                                + "nothing until the next discovery round.", key, destination);
+            logger.info("Could not retrieve the capabilities of ServiceInstance [{}]. Treating it as handling "
+                                + "nothing until the next discovery round.", key);
             logger.debug("ServiceInstance [{}] is reported as handling nothing due to the following exception:",
                          key, e);
             cache.remove(key);
@@ -188,7 +190,7 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
 
     @Override
     public void retainOnly(Set<ServiceInstanceKey> knownInstances) {
-        Objects.requireNonNull(knownInstances, "The knownInstances cannot be null.");
+        Objects.requireNonNull(knownInstances, "The knownInstances must not be null.");
         cache.keySet().retainAll(knownInstances);
     }
 
@@ -202,8 +204,21 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
         if (local == null) {
             return false;
         }
-        return Objects.equals(ServiceInstanceKey.of(serviceInstance), ServiceInstanceKey.of(local))
-                || Objects.equals(serviceInstance.getUri(), local.getUri());
+        if (Objects.equals(ServiceInstanceKey.of(serviceInstance), ServiceInstanceKey.of(local))) {
+            return true;
+        }
+        // Guarded for the same reason requestCapabilities guards it: an unregistered instance throws rather than
+        // reporting no URI, and an instance that cannot say where it is is not this one.
+        try {
+            return Objects.equals(serviceInstance.getUri(), local.getUri());
+        } catch (Exception e) {
+            logger.debug("Could not compare the URI of ServiceInstance [{}] with this application's own.", key(serviceInstance), e);
+            return false;
+        }
+    }
+
+    private static String key(ServiceInstance serviceInstance) {
+        return ServiceInstanceKey.of(serviceInstance).toString();
     }
 
     private record CachedCapabilities(String entityTag, MemberCapabilities capabilities) {

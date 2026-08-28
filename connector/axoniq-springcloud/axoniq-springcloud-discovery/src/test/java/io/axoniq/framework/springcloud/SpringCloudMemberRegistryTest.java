@@ -23,14 +23,15 @@ import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMod
 import io.axoniq.framework.springcloud.discovery.ServiceInstanceKey;
 import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
-import io.axoniq.framework.springcloud.utils.RecordingDiscoveryClient;
-import io.axoniq.framework.springcloud.utils.TestServiceInstance;
+import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
+import io.axoniq.framework.springcloud.util.TestServiceInstance;
 import org.axonframework.messaging.core.QualifiedName;
+import org.junit.jupiter.api.*;
 import org.springframework.cloud.client.discovery.event.HeartbeatEvent;
 import org.springframework.cloud.client.discovery.event.InstanceRegisteredEvent;
-import org.junit.jupiter.api.*;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -46,6 +47,7 @@ class SpringCloudMemberRegistryTest {
 
     private static final QualifiedName CREATE_COURSE = new QualifiedName("university.CreateCourse");
     private static final QualifiedName RENAME_COURSE = new QualifiedName("university.RenameCourse");
+    private static final QualifiedName FIND_COURSE = new QualifiedName("university.FindCourse");
     private static final MemberCapabilities HANDLES_CREATE =
             new MemberCapabilities(100, Set.of(CREATE_COURSE), Set.of());
     private static final MemberCapabilities HANDLES_RENAME =
@@ -129,13 +131,13 @@ class SpringCloudMemberRegistryTest {
         void keepsThisApplicationInItsOwnRingWhenDiscoveryReportsNothing() {
             // given — discovery may not have anything to report yet
             discoveryClient.deregisterAll();
-            testSubject.publishLocalCapabilities(HANDLES_CREATE);
+            testSubject.publishLocalCommands(100, Set.of(CREATE_COURSE));
 
             // when
             testSubject.updateMemberships();
 
             // then — falling out of its own ring would leave an application unable to handle its own commands
-            assertThat(testSubject.findDestination("course-1", CREATE_COURSE)).isPresent();
+            assertThat(testSubject.findCommandDestination("course-1", CREATE_COURSE)).isPresent();
         }
 
         @Test
@@ -185,10 +187,10 @@ class SpringCloudMemberRegistryTest {
         @Test
         void makesThisApplicationRoutableImmediately() {
             // when — a command may be dispatched right after its handler subscribed, before any heartbeat
-            testSubject.publishLocalCapabilities(HANDLES_CREATE);
+            testSubject.publishLocalCommands(100, Set.of(CREATE_COURSE));
 
             // then
-            Optional<Member> destination = testSubject.findDestination("course-1", CREATE_COURSE);
+            Optional<Member> destination = testSubject.findCommandDestination("course-1", CREATE_COURSE);
             assertThat(destination).isPresent();
             assertThat(destination.get().local()).isTrue();
         }
@@ -196,7 +198,7 @@ class SpringCloudMemberRegistryTest {
         @Test
         void publishesThemToTheDiscoveryMode() {
             // when
-            testSubject.publishLocalCapabilities(HANDLES_CREATE);
+            testSubject.publishLocalCommands(100, Set.of(CREATE_COURSE));
 
             // then — this is what other members read from the capabilities endpoint
             assertThat(discoveryMode.localCapabilities()).isEqualTo(HANDLES_CREATE);
@@ -205,21 +207,29 @@ class SpringCloudMemberRegistryTest {
         @Test
         void replacesWhatWasPublishedBefore() {
             // given
-            testSubject.publishLocalCapabilities(HANDLES_CREATE);
+            testSubject.publishLocalCommands(100, Set.of(CREATE_COURSE));
 
             // when
-            testSubject.publishLocalCapabilities(HANDLES_RENAME);
+            testSubject.publishLocalCommands(100, Set.of(RENAME_COURSE));
 
             // then
-            assertThat(testSubject.findDestination("course-1", CREATE_COURSE)).isEmpty();
-            assertThat(testSubject.findDestination("course-1", RENAME_COURSE)).isPresent();
+            assertThat(testSubject.findCommandDestination("course-1", CREATE_COURSE)).isEmpty();
+            assertThat(testSubject.findCommandDestination("course-1", RENAME_COURSE)).isPresent();
         }
 
         @Test
-        void rejectsNullCapabilities() {
+        void rejectsNullCommands() {
             // when / then
-            assertThatThrownBy(() -> testSubject.publishLocalCapabilities(null))
+            assertThatThrownBy(() -> testSubject.publishLocalCommands(100, null))
                     .isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
+        void rejectsANegativeLoadFactor() {
+            // when / then
+            assertThatThrownBy(() -> testSubject.publishLocalCommands(-1, Set.of(CREATE_COURSE)))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("load factor");
         }
     }
 

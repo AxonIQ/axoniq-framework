@@ -38,14 +38,14 @@ import java.util.Objects;
  * {@code PayloadConvertingCommandBusConnector} wrapped around the connector, and is carried Base64-encoded so it
  * survives JSON.
  *
- * @param identifier The {@link CommandMessage#identifier() identifier} of the command.
- * @param type       The {@link MessageType#toString() string form} of the command's {@link CommandMessage#type()
+ * @param identifier the {@link CommandMessage#identifier() identifier} of the command
+ * @param type       the {@link MessageType#toString() string form} of the command's {@link CommandMessage#type()
  *                   type}, carrying both qualified name and version.
- * @param payload    The Base64-encoded {@code byte[]} payload of the command, or {@code null} when it has none.
- * @param metadata   The {@link CommandMessage#metadata() metadata} of the command.
- * @param routingKey The {@link CommandMessage#routingKey() routing key} of the command, or {@code null} when it has
+ * @param payload    the Base64-encoded {@code byte[]} payload of the command, or {@code null} when it has none
+ * @param metadata   the {@link CommandMessage#metadata() metadata} of the command
+ * @param routingKey the {@link CommandMessage#routingKey() routing key} of the command, or {@code null} when it has
  *                   none.
- * @param priority   The {@link CommandMessage#priority() priority} of the command, or {@code null} when it has none.
+ * @param priority   the {@link CommandMessage#priority() priority} of the command, or {@code null} when it has none
  * @author Allard Buijze
  * @since 5.4.0
  */
@@ -64,8 +64,9 @@ public record CommandDispatchRequest(
      */
     @SuppressWarnings("MissingJavadoc")
     public CommandDispatchRequest {
-        Objects.requireNonNull(identifier, "The command identifier cannot be null.");
-        Objects.requireNonNull(type, "The command type cannot be null.");
-        metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+        Objects.requireNonNull(identifier, "The command identifier must not be null.");
+        Objects.requireNonNull(type, "The command type must not be null.");
+        // WireCodec rather than Map.copyOf: metadata permits null values, which Map.copyOf rejects.
+        metadata = WireCodec.copyOf(metadata);
     }
 }

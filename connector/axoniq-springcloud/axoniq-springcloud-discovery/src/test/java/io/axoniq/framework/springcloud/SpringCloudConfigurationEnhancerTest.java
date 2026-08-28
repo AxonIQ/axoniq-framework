@@ -24,8 +24,8 @@ import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMod
 import io.axoniq.framework.springcloud.transport.IncomingCommandGateway;
 import io.axoniq.framework.springcloud.transport.RecordingRemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
-import io.axoniq.framework.springcloud.utils.RecordingDiscoveryClient;
-import io.axoniq.framework.springcloud.utils.TestServiceInstance;
+import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
+import io.axoniq.framework.springcloud.util.TestServiceInstance;
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -59,7 +59,7 @@ class SpringCloudConfigurationEnhancerTest {
         registry = new SpringCloudMemberRegistry(new RecordingDiscoveryClient().register("university", localInstance),
                                                  localInstance,
                                                  new RecordingCapabilityDiscoveryMode());
-        gateway = new IncomingCommandGateway("node-a", null);
+        gateway = new IncomingCommandGateway(() -> "node-a", null);
         dispatcher = new RecordingRemoteCommandDispatcher();
     }
 

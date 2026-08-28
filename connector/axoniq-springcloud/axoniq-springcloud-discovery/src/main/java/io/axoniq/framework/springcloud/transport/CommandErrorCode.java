@@ -73,7 +73,7 @@ public enum CommandErrorCode {
      * handler exists yet, and the command never reached a handler at all. Only what is left is an execution failure,
      * split by whether the application declared it worth retrying.
      *
-     * @param cause The exception raised while receiving or handling a command.
+     * @param cause the exception raised while receiving or handling a command
      * @return {@link #NO_HANDLER_FOR_COMMAND} when no handler was found, {@link #COMMAND_DISPATCH_ERROR} when the
      * command never reached a handler, {@link #COMMAND_EXECUTION_NON_TRANSIENT_ERROR} when the given {@code cause} is
      * explicitly non-transient, and {@link #COMMAND_EXECUTION_ERROR} otherwise

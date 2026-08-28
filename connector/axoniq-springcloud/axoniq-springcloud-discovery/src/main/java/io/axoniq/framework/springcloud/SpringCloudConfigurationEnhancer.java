@@ -74,6 +74,10 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
         if (!registry.hasComponent(SpringCloudMemberRegistry.class, SearchScope.ALL)) {
             return;
         }
+        registerCommandConnector(registry);
+    }
+
+    private static void registerCommandConnector(ComponentRegistry registry) {
         if (registry.hasComponent(CommandBusConnector.class, SearchScope.ALL)) {
             // A connector is already configured here or in an enclosing scope, so none is added. This deliberately
             // does not report a conflict: enhancers are invoked again for each nested registry, and by then the
@@ -85,8 +89,11 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
             return;
         }
         registry.registerComponent(commandBusConnectorDefinition())
-                .registerDecorator(CommandBusConnector.class, 0, payloadConvertingDecorator());
+                .registerDecorator(CommandBusConnector.class, 0, payloadConvertingCommandDecorator());
     }
+
+
+
 
     private static ComponentDefinition<CommandBusConnector> commandBusConnectorDefinition() {
         return ComponentDefinition.ofType(CommandBusConnector.class)
@@ -108,7 +115,7 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
     }
 
     private static ComponentDecorator<CommandBusConnector, PayloadConvertingCommandBusConnector>
-    payloadConvertingDecorator() {
+    payloadConvertingCommandDecorator() {
         return (config, name, delegate) -> new PayloadConvertingCommandBusConnector(
                 delegate,
                 config.getComponent(MessageConverter.class),

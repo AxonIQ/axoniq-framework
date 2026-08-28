@@ -55,7 +55,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Allard Buijze
  */
-class SpringCloudCommandDistributionIntegrationTest {
+class SpringCloudCommandDistributionIT {
 
     private static final String NODE_A = "node-a";
     private static final String NODE_B = "node-b";

@@ -42,7 +42,7 @@ public class ServiceInstanceClientException extends AxonException {
     /**
      * Initializes a {@code ServiceInstanceClientException} using the given {@code message}.
      *
-     * @param message The message describing the exception.
+     * @param message the message describing the exception
      */
     public ServiceInstanceClientException(String message) {
         super(message);
@@ -51,8 +51,8 @@ public class ServiceInstanceClientException extends AxonException {
     /**
      * Initializes a {@code ServiceInstanceClientException} using the given {@code message} and {@code cause}.
      *
-     * @param message The message describing the exception.
-     * @param cause   The client error that led to this exception.
+     * @param message the message describing the exception
+     * @param cause   the client error that led to this exception
      */
     public ServiceInstanceClientException(String message, Throwable cause) {
         super(message, cause);

@@ -47,8 +47,8 @@ public interface RemoteCommandDispatcher {
     /**
      * Sends the given {@code command} to the given {@code member} and completes with the outcome of handling it there.
      *
-     * @param member  The member to send the command to. Never {@link Member#local() local}.
-     * @param command The command to send.
+     * @param member  the member to send the command to. Never {@link Member#local() local}
+     * @param command the command to send
      * @return a future completing with the result of handling the command on the given {@code member}, with
      * {@code null} when its handler returned none; completing exceptionally with a
      * {@link CommandDispatchException} when the member could not be reached, and with the handler's own failure when

@@ -20,13 +20,17 @@
 package io.axoniq.framework.springboot.springcloud.autoconfig;
 
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
+import io.axoniq.framework.springboot.springcloud.SpringCloudProperties;
 import io.axoniq.framework.springcloud.SpringCloudMemberRegistry;
 import io.axoniq.framework.springcloud.discovery.CapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesController;
+import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.transport.IncomingCommandGateway;
 import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.transport.SpringCloudCommandController;
 import org.junit.jupiter.api.*;
+
+import java.time.Duration;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
@@ -59,6 +63,52 @@ class SpringCloudAutoConfigurationTest {
         contextRunner = new WebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
                 .withUserConfiguration(DiscoveryConfiguration.class);
+    }
+
+    @Nested
+    class BindingProperties {
+
+        @Test
+        void bindsEveryPropertyTheConnectorExposes() {
+            // given every property set away from its default
+            contextRunner.withPropertyValues("axon.springcloud.command-endpoint=/custom/command",
+                                             "axon.springcloud.capabilities-endpoint=/custom/capabilities",
+                                             "axon.springcloud.command-reply-timeout=11s",
+                                             "axon.springcloud.ignore-listing-expire-threshold=14s",
+                                             "axon.springcloud.context-root-metadata-property-name=root")
+                         // when / then each one reaches the properties the components are built from
+                         .run(context -> {
+                             SpringCloudProperties properties = context.getBean(SpringCloudProperties.class);
+                             assertThat(properties.getCommandEndpoint()).isEqualTo("/custom/command");
+                             assertThat(properties.getCapabilitiesEndpoint()).isEqualTo("/custom/capabilities");
+                             assertThat(properties.getCommandReplyTimeout()).isEqualTo(Duration.ofSeconds(11));
+                             assertThat(properties.getIgnoreListingExpireThreshold())
+                                     .isEqualTo(Duration.ofSeconds(14));
+                             assertThat(properties.getContextRootMetadataPropertyName()).isEqualTo("root");
+                         });
+        }
+
+        @Test
+        void defaultsTheEndpointsToWhatTheControllersServe() {
+            // when nothing is configured
+            contextRunner.run(context -> {
+                SpringCloudProperties properties = context.getBean(SpringCloudProperties.class);
+
+                // then the defaults are the paths the endpoints are actually mapped to, since members reaching each
+                // other depends on the two agreeing
+                assertThat(properties.getCommandEndpoint())
+                        .isEqualTo(SpringCloudCommandController.DEFAULT_COMMAND_ENDPOINT);
+                assertThat(properties.getCapabilitiesEndpoint())
+                        .isEqualTo(RestCapabilityDiscoveryMode.DEFAULT_CAPABILITIES_ENDPOINT);
+            });
+        }
+
+        @Test
+        void servesInstancesFromTheRootWhenNoContextRootPropertyIsNamed() {
+            // when
+            contextRunner.run(context -> assertThat(context.getBean(SpringCloudProperties.class)
+                                                           .getContextRootMetadataPropertyName()).isNull());
+        }
     }
 
     @Nested

@@ -45,14 +45,17 @@ To disable Axon Server and use local command bus instead:
 axon.axonserver.enabled=false
 ----
 
+[.axoniq-feature]
+[[SpringCloudCommandBusConnector]]
 === `SpringCloudCommandBusConnector`
 
 The `SpringCloudCommandBusConnector` distributes commands over HTTP between the nodes reported by a Spring Cloud `DiscoveryClient`, without an Axon Server in between.
-It suits deployments that already run a service registry — Eureka, Consul, or Kubernetes — and would rather route commands through it than add another component.
+It suits deployments that already run a service registry, Eureka, Consul, or Kubernetes, and would rather route commands through it than add another component.
 
 Because there is no server to route on the cluster's behalf, this connector routes itself.
 Every node maintains a consistent-hash ring of the other nodes and the commands each of them handles, and resolves each command's routing key onto that ring.
-A command that lands on the local node is handled there; one that lands elsewhere is sent to that node over HTTP.
+A command that lands on the local node is handled there.
+One that lands elsewhere is sent to that node over HTTP.
 
 Add the starter alongside a discovery implementation of your choosing:
 
@@ -74,7 +77,9 @@ The discovery implementation stays your choice, and is what supplies the `Discov
 No configuration of the connector itself is needed.
 
 An application that adds the starter without a discovery implementation says so on start-up rather than starting with commands that are never distributed.
+The same holds for an application without a servlet web stack, which could not serve the endpoints other nodes reach it on.
 Set `axon.springcloud.enabled=false` to handle commands locally instead.
+
 
 Applications wiring Axon without Spring Boot, or preferring to wire these beans themselves, can depend on `axoniq-springcloud-discovery` alone.
 Each Spring Cloud component Axoniq Framework supports has a module of its own, so an application takes only the ones it uses.
@@ -87,12 +92,13 @@ An application that leaves both enabled distributes commands through Axon Server
 ====
 
 Command throughput is claimed against your Axoniq licence.
-Without Axon Server there to supply it, the licence comes from AxonIQ Platform or from a licence the application instances can read themselves; a licence read directly by the instances carries no message throughput limit.
+Without Axon Server there to supply it, the licence comes from Axoniq Platform or from a licence the application instances can read themselves.
+A licence read directly by the instances carries no message throughput limit.
 
 ==== Publishing what a node handles
 
 A node's command handlers are not known when it registers with the discovery registry, and change as it starts up.
-Service instance metadata is fixed at registration time — several discovery implementations, Kubernetes among them, silently ignore attempts to change it — so the connector serves each node's capabilities over an endpoint of its own instead.
+Service instance metadata is fixed at registration time, several discovery implementations, Kubernetes among them, silently ignore attempts to change it, so the connector serves each node's capabilities over an endpoint of its own instead.
 Every node polls its peers' endpoints on each discovery heartbeat, which makes the heartbeat interval the speed at which topology changes propagate.
 
 The response carries an `ETag`, and a polling node sends its last-seen tag as `If-None-Match`, so an unchanged node answers `304 Not Modified` with no body.
@@ -109,13 +115,16 @@ The remaining properties rarely need changing:
 
 [source,properties]
 ----
-# Set to false to distribute commands some other way, or not at all.
+# Set to false to distribute messages some other way, or not at all.
 axon.springcloud.enabled=true
+# How long a node is given to answer a command before it is treated as unreachable.
+axon.springcloud.command-reply-timeout=30s
 # How long a service instance is left alone after answering the capabilities endpoint with a client error.
 axon.springcloud.ignore-listing-expire-threshold=1m
 # The service instance metadata property holding a node's context root, when nodes are not served from the root.
 axon.springcloud.context-root-metadata-property-name=contextRoot
 ----
+
 
 The command load factor is not among them: it belongs to the distributed command bus as a whole and is set through `DistributedCommandBusConfiguration`.
 A node with twice the load factor of another claims twice as many positions on the ring, and so receives roughly twice the commands.
@@ -125,11 +134,6 @@ A node with twice the load factor of another claims twice as many positions on t
 A discovery registry reports every service registered with it, not only those running this connector.
 A service that answers the capabilities endpoint with a client error is left alone for `ignore-listing-expire-threshold` before being tried again, rather than being polled on every heartbeat.
 ====
-
-==== What this connector distributes
-
-Commands only.
-Queries continue to be handled locally, and a `QueryBus` is not distributed by this connector.
 
 === Routing strategy
 

@@ -78,11 +78,11 @@ public final class ConsistentHash {
      * Every member of the cluster must use the same hash function, or they will disagree on where commands belong.
      * Register members through {@link #with(Member, MemberCapabilities)}.
      *
-     * @param hashFunction The function hashing a routing key, or a member's ring position, onto the ring. Must be
+     * @param hashFunction the function hashing a routing key, or a member's ring position, onto the ring. Must be
      *                     deterministic, and must order its output consistently for all members of the cluster.
      */
     public ConsistentHash(Function<String, String> hashFunction) {
-        this.hashFunction = Objects.requireNonNull(hashFunction, "The hashFunction cannot be null.");
+        this.hashFunction = Objects.requireNonNull(hashFunction, "The hashFunction must not be null.");
         this.members = Collections.emptyMap();
         this.hashToMember = Collections.emptySortedMap();
         this.version = 0;
@@ -103,14 +103,14 @@ public final class ConsistentHash {
      * Returns a {@code ConsistentHash} with the given {@code member} registered under the given
      * {@code capabilities}, replacing any earlier registration of a member with the same {@link Member#name() name}.
      *
-     * @param member       The member to register.
-     * @param capabilities The messages the given {@code member} handles, and the command load it asks for.
+     * @param member       the member to register
+     * @param capabilities the messages the given {@code member} handles, and the command load it asks for
      * @return a {@code ConsistentHash} including the given {@code member}, or {@code this} when the given
      * {@code member} was already registered with identical {@code capabilities}
      */
     public ConsistentHash with(Member member, MemberCapabilities capabilities) {
-        Objects.requireNonNull(member, "The member cannot be null.");
-        Objects.requireNonNull(capabilities, "The capabilities cannot be null.");
+        Objects.requireNonNull(member, "The member must not be null.");
+        Objects.requireNonNull(capabilities, "The capabilities must not be null.");
 
         RingMember updated = new RingMember(member, capabilities, hashFunction);
         if (updated.equals(members.get(member.name()))) {
@@ -125,12 +125,12 @@ public final class ConsistentHash {
     /**
      * Returns a {@code ConsistentHash} without the given {@code member}.
      *
-     * @param member The member to deregister.
+     * @param member the member to deregister
      * @return a {@code ConsistentHash} excluding the given {@code member}, or {@code this} when the given
      * {@code member} was not registered
      */
     public ConsistentHash without(Member member) {
-        Objects.requireNonNull(member, "The member cannot be null.");
+        Objects.requireNonNull(member, "The member must not be null.");
         if (!members.containsKey(member.name())) {
             return this;
         }
@@ -144,15 +144,15 @@ public final class ConsistentHash {
      * Resolves the {@link Member} that should handle a command of the given {@code commandName} carrying the given
      * {@code routingKey}.
      *
-     * @param routingKey  The routing key of the command to resolve a member for.
-     * @param commandName The {@link QualifiedName} of the command to resolve a member for. Only members that
+     * @param routingKey  the routing key of the command to resolve a member for
+     * @param commandName the {@link QualifiedName} of the command to resolve a member for. Only members that
      *                    subscribed to this name are considered.
      * @return the member that should handle the command, or {@link Optional#empty()} when no registered member
      * handles commands of the given {@code commandName}
      */
     public Optional<Member> getMember(String routingKey, QualifiedName commandName) {
-        Objects.requireNonNull(routingKey, "The routingKey cannot be null.");
-        Objects.requireNonNull(commandName, "The commandName cannot be null.");
+        Objects.requireNonNull(routingKey, "The routingKey must not be null.");
+        Objects.requireNonNull(commandName, "The commandName must not be null.");
 
         String hash = hashFunction.apply(routingKey);
         // Walking the tail first and wrapping around to the head is what makes the ring a ring: the first suitable
@@ -180,11 +180,11 @@ public final class ConsistentHash {
     /**
      * Returns the {@link MemberCapabilities} the given {@code member} is registered under.
      *
-     * @param member The member to look up the capabilities of.
+     * @param member the member to look up the capabilities of
      * @return the capabilities of the given {@code member}, or {@link Optional#empty()} when it is not registered
      */
     public Optional<MemberCapabilities> capabilitiesOf(Member member) {
-        Objects.requireNonNull(member, "The member cannot be null.");
+        Objects.requireNonNull(member, "The member must not be null.");
         return Optional.ofNullable(members.get(member.name())).map(RingMember::capabilities);
     }
 
@@ -230,9 +230,9 @@ public final class ConsistentHash {
      * The positions are computed once, on construction, because a ring is rebuilt on every discovery heartbeat and
      * recomputing a hash per position per lookup would dominate the cost of routing a command.
      *
-     * @param member       The member registered with the ring.
-     * @param capabilities The messages the {@code member} handles, and the command load it asks for.
-     * @param hashes       The positions the {@code member} claims on the ring.
+     * @param member       the member registered with the ring
+     * @param capabilities the messages the {@code member} handles, and the command load it asks for
+     * @param hashes       the positions the {@code member} claims on the ring
      */
     private record RingMember(Member member, MemberCapabilities capabilities, Set<String> hashes) {
 

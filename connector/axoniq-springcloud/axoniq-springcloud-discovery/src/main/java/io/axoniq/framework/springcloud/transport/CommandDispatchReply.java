@@ -43,22 +43,22 @@ import java.util.Objects;
  * delivered and handled; that its handler threw is an application outcome, and conflating it with a transport failure
  * would lose the distinction the dispatching member needs to decide whether retrying can help.
  *
- * @param identifier        The identifier of this reply message.
- * @param requestIdentifier The {@link CommandDispatchRequest#identifier() identifier} of the command this replies to.
- * @param type              The {@link MessageType#toString() string form} of the result's
+ * @param identifier        the identifier of this reply message
+ * @param requestIdentifier the {@link CommandDispatchRequest#identifier() identifier} of the command this replies to
+ * @param type              the {@link MessageType#toString() string form} of the result's
  *                          {@link CommandResultMessage#type() type}, or {@code null} when there is no result.
- * @param payload           The Base64-encoded {@code byte[]} payload of the result, or {@code null} when there is
+ * @param payload           the Base64-encoded {@code byte[]} payload of the result, or {@code null} when there is
  *                          none.
- * @param metadata          The {@link CommandResultMessage#metadata() metadata} of the result.
- * @param errorCode         The kind of failure that occurred, or {@code null} when handling succeeded.
- * @param errorMessage      A description of the failure, or {@code null} when handling succeeded.
- * @param errorDetails      The messages found down the failure's cause chain, outermost first, for diagnostics. Empty
+ * @param metadata          the {@link CommandResultMessage#metadata() metadata} of the result
+ * @param errorCode         the kind of failure that occurred, or {@code null} when handling succeeded
+ * @param errorMessage      a description of the failure, or {@code null} when handling succeeded
+ * @param errorDetails      the messages found down the failure's cause chain, outermost first, for diagnostics. Empty
  *                          when handling succeeded.
- * @param errorOrigin       The name of the member the failure originated on, or {@code null} when handling succeeded.
- * @param errorDetailsType  The runtime class name of the application-specific details carried by the failure, or
+ * @param errorOrigin       the name of the member the failure originated on, or {@code null} when handling succeeded
+ * @param errorDetailsType  the runtime class name of the application-specific details carried by the failure, or
  *                          {@code null} when it carries none. Present for wire-level observability only; the
  *                          receiving member reconstructs details as the type its own code asks for.
- * @param errorDetailsPayload The Base64-encoded serialized application-specific details carried by the failure, or
+ * @param errorDetailsPayload the Base64-encoded serialized application-specific details carried by the failure, or
  *                          {@code null} when it carries none.
  * @author Allard Buijze
  * @since 5.4.0
@@ -83,9 +83,10 @@ public record CommandDispatchReply(
      */
     @SuppressWarnings("MissingJavadoc")
     public CommandDispatchReply {
-        Objects.requireNonNull(identifier, "The reply identifier cannot be null.");
-        Objects.requireNonNull(requestIdentifier, "The request identifier cannot be null.");
-        metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+        Objects.requireNonNull(identifier, "The reply identifier must not be null.");
+        Objects.requireNonNull(requestIdentifier, "The request identifier must not be null.");
+        // WireCodec rather than Map.copyOf: metadata permits null values, which Map.copyOf rejects.
+        metadata = WireCodec.copyOf(metadata);
         errorDetails = errorDetails == null ? List.of() : List.copyOf(errorDetails);
     }
 

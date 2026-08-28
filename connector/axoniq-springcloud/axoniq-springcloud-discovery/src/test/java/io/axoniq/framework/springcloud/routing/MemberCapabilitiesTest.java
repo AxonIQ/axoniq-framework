@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests the construction rules and command membership test of {@link MemberCapabilities}.
+ * Tests the construction rules of {@link MemberCapabilities}, and the membership tests routing relies on.
  *
  * @author Allard Buijze
  */
@@ -37,51 +37,79 @@ class MemberCapabilitiesTest {
 
     private static final QualifiedName CREATE_COURSE = new QualifiedName("university.CreateCourse");
     private static final QualifiedName RENAME_COURSE = new QualifiedName("university.RenameCourse");
+    private static final QualifiedName FIND_COURSE = new QualifiedName("university.FindCourse");
+    private static final QualifiedName LIST_COURSES = new QualifiedName("university.ListCourses");
 
-    @Test
-    void reportsWhetherACommandIsHandled() {
-        // given
-        MemberCapabilities capabilities = new MemberCapabilities(100, Set.of(CREATE_COURSE), Set.of());
+    @Nested
+    class ReportingWhatIsHandled {
 
-        // when / then
-        assertThat(capabilities.handlesCommand(CREATE_COURSE)).isTrue();
-        assertThat(capabilities.handlesCommand(RENAME_COURSE)).isFalse();
-    }
+        @Test
+        void reportsWhetherAQueryIsHandled() {
+            // given a member handling one query and not another
+            MemberCapabilities capabilities = new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE));
 
-    @Test
-    void handlesNothingWhenIncapable() {
-        // when / then
-        assertThat(MemberCapabilities.INCAPABLE.handlesCommand(CREATE_COURSE)).isFalse();
-        assertThat(MemberCapabilities.INCAPABLE.loadFactor()).isZero();
-    }
+            // when / then this is what every query dispatch routes on
+            assertThat(capabilities.handlesQuery(FIND_COURSE)).isTrue();
+            assertThat(capabilities.handlesQuery(LIST_COURSES)).isFalse();
+        }
 
-    @Test
-    void copiesTheGivenNameSets() {
-        // given
-        Set<QualifiedName> commands = new HashSet<>(Set.of(CREATE_COURSE));
+        @Test
+        void keepsCommandAndQueryNamesApart() {
+            // given the same name subscribed as a command only
+            MemberCapabilities capabilities = new MemberCapabilities(100, Set.of(CREATE_COURSE), Set.of(FIND_COURSE));
 
-        // when
-        MemberCapabilities capabilities = new MemberCapabilities(100, commands, Set.of());
-        commands.add(RENAME_COURSE);
+            // when / then a command name must not make the member a candidate for a query of that name
+            assertThat(capabilities.handlesCommand(CREATE_COURSE)).isTrue();
+            assertThat(capabilities.handlesQuery(CREATE_COURSE)).isFalse();
+            assertThat(capabilities.handlesQuery(FIND_COURSE)).isTrue();
+            assertThat(capabilities.handlesCommand(FIND_COURSE)).isFalse();
+        }
 
-        // then — a caller mutating its set afterwards must not change what this member advertises
-        assertThat(capabilities.handlesCommand(RENAME_COURSE)).isFalse();
-    }
+        @Test
+        void reportsWhetherACommandIsHandled() {
+            // given
+            MemberCapabilities capabilities = new MemberCapabilities(100, Set.of(CREATE_COURSE), Set.of());
 
-    @Test
-    void rejectsANegativeLoadFactor() {
-        // when / then
-        assertThatThrownBy(() -> new MemberCapabilities(-1, Set.of(), Set.of()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("load factor");
-    }
+            // when / then
+            assertThat(capabilities.handlesCommand(CREATE_COURSE)).isTrue();
+            assertThat(capabilities.handlesCommand(RENAME_COURSE)).isFalse();
+        }
 
-    @Test
-    void rejectsNullNameSets() {
-        // when / then
-        assertThatThrownBy(() -> new MemberCapabilities(100, null, Set.of()))
-                .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new MemberCapabilities(100, Set.of(), null))
-                .isInstanceOf(NullPointerException.class);
+        @Test
+        void handlesNothingWhenIncapable() {
+            // when / then
+            assertThat(MemberCapabilities.INCAPABLE.handlesCommand(CREATE_COURSE)).isFalse();
+            assertThat(MemberCapabilities.INCAPABLE.loadFactor()).isZero();
+        }
+
+        @Test
+        void copiesTheGivenNameSets() {
+            // given
+            Set<QualifiedName> commands = new HashSet<>(Set.of(CREATE_COURSE));
+
+            // when
+            MemberCapabilities capabilities = new MemberCapabilities(100, commands, Set.of());
+            commands.add(RENAME_COURSE);
+
+            // then — a caller mutating its set afterwards must not change what this member advertises
+            assertThat(capabilities.handlesCommand(RENAME_COURSE)).isFalse();
+        }
+
+        @Test
+        void rejectsANegativeLoadFactor() {
+            // when / then
+            assertThatThrownBy(() -> new MemberCapabilities(-1, Set.of(), Set.of()))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("load factor");
+        }
+
+        @Test
+        void rejectsNullNameSets() {
+            // when / then
+            assertThatThrownBy(() -> new MemberCapabilities(100, null, Set.of()))
+                    .isInstanceOf(NullPointerException.class);
+            assertThatThrownBy(() -> new MemberCapabilities(100, Set.of(), null))
+                    .isInstanceOf(NullPointerException.class);
+        }
     }
 }

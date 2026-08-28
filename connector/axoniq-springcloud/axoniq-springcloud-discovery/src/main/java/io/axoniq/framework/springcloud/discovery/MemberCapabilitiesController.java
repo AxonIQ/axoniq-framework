@@ -61,17 +61,17 @@ public class MemberCapabilitiesController {
      * Constructs a {@code MemberCapabilitiesController} serving the capabilities published to the given
      * {@code discoveryMode}.
      *
-     * @param discoveryMode The mode holding this application's own capabilities.
+     * @param discoveryMode the mode holding this application's own capabilities
      */
     public MemberCapabilitiesController(CapabilityDiscoveryMode discoveryMode) {
-        this.discoveryMode = Objects.requireNonNull(discoveryMode, "The discoveryMode cannot be null.");
+        this.discoveryMode = Objects.requireNonNull(discoveryMode, "The discoveryMode must not be null.");
     }
 
     /**
      * Returns this application's own capabilities, or {@code 304 Not Modified} when the given {@code ifNoneMatch}
      * already identifies them.
      *
-     * @param ifNoneMatch The {@code If-None-Match} header of the request, carrying the entity tag the requesting
+     * @param ifNoneMatch the {@code If-None-Match} header of the request, carrying the entity tag the requesting
      *                    member last saw, or {@code null} when it has not seen these capabilities before.
      * @return this application's capabilities with their entity tag, or an empty {@code 304 Not Modified} response
      */

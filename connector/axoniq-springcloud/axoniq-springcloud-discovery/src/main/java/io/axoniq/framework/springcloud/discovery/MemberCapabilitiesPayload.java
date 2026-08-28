@@ -41,9 +41,9 @@ import java.util.stream.Collectors;
  * The {@code queries} field is part of the shape from the first release, and is served empty for as long as this
  * connector distributes commands only. Members reading it must tolerate an absent or empty list.
  *
- * @param loadFactor The relative share of command load the member asks for.
- * @param commands   The {@link QualifiedName#name() names} of the commands the member subscribed to, sorted.
- * @param queries    The {@link QualifiedName#name() names} of the queries the member subscribed to, sorted.
+ * @param loadFactor the relative share of command load the member asks for
+ * @param commands   the {@link QualifiedName#name() names} of the commands the member subscribed to, sorted
+ * @param queries    the {@link QualifiedName#name() names} of the queries the member subscribed to, sorted
  * @author Allard Buijze
  * @since 5.4.0
  */
@@ -62,11 +62,11 @@ public record MemberCapabilitiesPayload(int loadFactor, List<String> commands, L
     /**
      * Converts the given {@code capabilities} into their wire representation.
      *
-     * @param capabilities The capabilities to represent on the wire.
+     * @param capabilities the capabilities to represent on the wire
      * @return the wire representation of the given {@code capabilities}
      */
     public static MemberCapabilitiesPayload from(MemberCapabilities capabilities) {
-        Objects.requireNonNull(capabilities, "The capabilities cannot be null.");
+        Objects.requireNonNull(capabilities, "The capabilities must not be null.");
         return new MemberCapabilitiesPayload(capabilities.loadFactor(),
                                              sortedNames(capabilities.commands()),
                                              sortedNames(capabilities.queries()));

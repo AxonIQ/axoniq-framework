@@ -113,7 +113,7 @@ final class SpringCloudNodes {
         /**
          * Keeps the licence source from reaching for an Axon Server that is not part of this test.
          * <p>
-         * A Spring Cloud deployment takes its licence from AxonIQ Platform or from a licence the instances read
+         * A Spring Cloud deployment takes its licence from Axoniq Platform or from a licence the instances read
          * themselves, never from Axon Server. This module carries the Axon Server connector on its classpath though,
          * so without this the licence source spends the test connecting to port 8124 and logging that it cannot.
          * Entitlement claiming itself is left alone, so the connector claims commands here as it does in production.

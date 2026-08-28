@@ -46,8 +46,8 @@ public interface CapabilityDiscoveryMode {
      * <p>
      * Called whenever a command handler is subscribed to, or unsubscribed from, this application's connector.
      *
-     * @param localInstance The {@link ServiceInstance} representing this application.
-     * @param capabilities  The messages this application handles, and the command load it asks for.
+     * @param localInstance the {@link ServiceInstance} representing this application
+     * @param capabilities  the messages this application handles, and the command load it asks for
      */
     void updateLocalCapabilities(ServiceInstance localInstance, MemberCapabilities capabilities);
 
@@ -58,7 +58,7 @@ public interface CapabilityDiscoveryMode {
      * member of this cluster, or is not currently answering for one. That differs from returning
      * {@link MemberCapabilities#INCAPABLE}, which keeps the instance in the ring as a member that handles nothing.
      *
-     * @param serviceInstance The instance to discover the capabilities of.
+     * @param serviceInstance the instance to discover the capabilities of
      * @return the capabilities of the given {@code serviceInstance}, or {@link Optional#empty()} when it should not be
      * part of the routing ring
      * @throws ServiceInstanceClientException when the given {@code serviceInstance} answers with a client error,
@@ -86,7 +86,7 @@ public interface CapabilityDiscoveryMode {
      * Called at the end of each discovery round. Implementations that keep no per-instance state need not do anything,
      * which is what this default implementation does.
      *
-     * @param knownInstances The keys of every instance the current discovery round reported.
+     * @param knownInstances the keys of every instance the current discovery round reported
      */
     default void retainOnly(Set<ServiceInstanceKey> knownInstances) {
         // No per-instance state to discard.

@@ -27,5 +27,7 @@
  * io.axoniq.framework.springcloud.transport.IncomingCommandGateway} turns a received request into an invocation of
  * the local command handler and its result back into a reply.
  */
-@org.jspecify.annotations.NullMarked
+@NullMarked
 package io.axoniq.framework.springcloud.transport;
+
+import org.jspecify.annotations.NullMarked;

@@ -33,12 +33,12 @@ import java.util.Set;
  * The {@code loadFactor} applies to {@link #commands() commands} only. Query subscriptions carry no load factor, as
  * a query name is served by whichever member advertises it rather than being hashed onto a ring position.
  *
- * @param loadFactor The relative share of command load this member asks for. A member with twice the load factor of
+ * @param loadFactor the relative share of command load this member asks for. A member with twice the load factor of
  *                   another claims twice as many positions on the {@link ConsistentHash} ring, and so receives
  *                   roughly twice as many commands. Must not be negative; a load factor of {@code 0} keeps the
  *                   member off the ring entirely.
- * @param commands   The {@link QualifiedName names} of the commands this member subscribed to.
- * @param queries    The {@link QualifiedName names} of the queries this member subscribed to.
+ * @param commands   the {@link QualifiedName names} of the commands this member subscribed to
+ * @param queries    the {@link QualifiedName names} of the queries this member subscribed to
  * @author Allard Buijze
  * @since 5.4.0
  */
@@ -63,19 +63,29 @@ public record MemberCapabilities(int loadFactor, Set<QualifiedName> commands, Se
         if (loadFactor < 0) {
             throw new IllegalArgumentException("The load factor cannot be negative, but was [" + loadFactor + "].");
         }
-        commands = Set.copyOf(Objects.requireNonNull(commands, "The commands cannot be null."));
-        queries = Set.copyOf(Objects.requireNonNull(queries, "The queries cannot be null."));
+        commands = Set.copyOf(Objects.requireNonNull(commands, "The commands must not be null."));
+        queries = Set.copyOf(Objects.requireNonNull(queries, "The queries must not be null."));
     }
 
     /**
      * Indicates whether the member holding these capabilities subscribed to a command with the given
      * {@code commandName}.
      *
-     * @param commandName The {@link QualifiedName} of the command to check for.
+     * @param commandName the {@link QualifiedName} of the command to check for
      * @return {@code true} when this member handles commands of the given {@code commandName}, {@code false}
      * otherwise
      */
     public boolean handlesCommand(QualifiedName commandName) {
         return commands.contains(commandName);
+    }
+
+    /**
+     * Indicates whether the member handles queries by the given {@code queryName}.
+     *
+     * @param queryName the name of the query to check for
+     * @return {@code true} when the member handles queries by the given {@code queryName}, {@code false} otherwise
+     */
+    public boolean handlesQuery(QualifiedName queryName) {
+        return queries.contains(queryName);
     }
 }

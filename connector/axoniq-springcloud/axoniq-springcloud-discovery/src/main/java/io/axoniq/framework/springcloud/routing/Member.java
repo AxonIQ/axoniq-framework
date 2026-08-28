@@ -39,8 +39,8 @@ import java.util.Objects;
  * point. A local member is therefore allowed to exist without an endpoint, since it is never reached over HTTP
  * anyway. A remote member without an endpoint cannot be reached at all, and is rejected on construction.
  *
- * @param name     The unique name of this member within the cluster, derived from its service id and URI.
- * @param endpoint The base {@link URI} to reach this member over HTTP, or {@code null} for a
+ * @param name     the unique name of this member within the cluster, derived from its service id and URI
+ * @param endpoint the base {@link URI} to reach this member over HTTP, or {@code null} for a
  *                 {@link #local() local} member whose URI is not yet known.
  * @param local    {@code true} when this member represents the application it is constructed in, {@code false}
  *                 when it represents another node.
@@ -55,7 +55,7 @@ public record Member(String name, @Nullable URI endpoint, boolean local) {
      */
     @SuppressWarnings("MissingJavadoc")
     public Member {
-        Objects.requireNonNull(name, "The member name cannot be null.");
+        Objects.requireNonNull(name, "The member name must not be null.");
         if (!local && endpoint == null) {
             throw new IllegalArgumentException(
                     "A remote member requires an endpoint to reach it at, but none was given for [" + name + "]."
@@ -69,7 +69,7 @@ public record Member(String name, @Nullable URI endpoint, boolean local) {
      * Intended for the window between application start-up and completed discovery registration, during which this
      * application's own URI is not yet available.
      *
-     * @param name The unique name of this member within the cluster.
+     * @param name the unique name of this member within the cluster
      * @return a local {@code Member} without an endpoint
      */
     public static Member unregisteredLocalMember(String name) {

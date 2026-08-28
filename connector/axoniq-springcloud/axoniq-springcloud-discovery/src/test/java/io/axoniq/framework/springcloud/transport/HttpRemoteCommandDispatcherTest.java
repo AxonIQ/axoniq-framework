@@ -20,7 +20,7 @@
 package io.axoniq.framework.springcloud.transport;
 
 import io.axoniq.framework.springcloud.routing.Member;
-import io.axoniq.framework.springcloud.utils.StubClientHttpRequestFactory;
+import io.axoniq.framework.springcloud.util.StubClientHttpRequestFactory;
 import org.axonframework.messaging.commandhandling.CommandDispatchException;
 import org.axonframework.messaging.commandhandling.CommandExecutionException;
 import org.axonframework.messaging.commandhandling.CommandMessage;

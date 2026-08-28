@@ -20,7 +20,7 @@
 package io.axoniq.framework.springcloud.discovery;
 
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
-import io.axoniq.framework.springcloud.utils.TestServiceInstance;
+import io.axoniq.framework.springcloud.util.TestServiceInstance;
 import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.*;
 

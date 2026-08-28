@@ -62,6 +62,11 @@
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
             <artifactId>spring-context</artifactId>
             <optional>true</optional>
         </dependency>
@@ -77,12 +82,23 @@
             <artifactId>spring-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <!-- Test-only: lets MockMvc drive the query endpoint, so what a member actually writes to the wire can
+                 be read back and checked. -->
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <version>6.1.0</version>
+            <scope>test</scope>
+        </dependency>
         <!-- The RestClient needs a JSON message converter to read and write the wire format. Applications get one
              from spring-boot-starter-web; the tests bring their own. -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <scope>test</scope>
+            <!-- Optional, like the Spring dependencies: members exchange query responses as JSON events, which this
+                 reads and writes directly rather than through content negotiation. Any Spring Boot web application
+                 already has it. -->
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.axonframework</groupId>

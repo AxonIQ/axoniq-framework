@@ -19,6 +19,10 @@
 
 package io.axoniq.framework.springboot.springcloud;
 
+import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
+import io.axoniq.framework.springcloud.transport.HttpRemoteCommandDispatcher;
+import io.axoniq.framework.springcloud.transport.SpringCloudCommandController;
+import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
@@ -52,7 +56,7 @@ public class SpringCloudProperties {
      * Must match {@link #capabilitiesEndpoint} in one respect: every member of the cluster has to agree on it.
      * Defaults to {@code /axoniq-springcloud/command}.
      */
-    private String commandEndpoint = "/axoniq-springcloud/command";
+    private String commandEndpoint = SpringCloudCommandController.DEFAULT_COMMAND_ENDPOINT;
 
     /**
      * The path this application serves its command handling capabilities under.
@@ -60,7 +64,17 @@ public class SpringCloudProperties {
      * Every member of the cluster has to agree on it. Defaults to
      * {@code /axoniq-springcloud/member-capabilities}.
      */
-    private String capabilitiesEndpoint = "/axoniq-springcloud/member-capabilities";
+    private String capabilitiesEndpoint = RestCapabilityDiscoveryMode.DEFAULT_CAPABILITIES_ENDPOINT;
+
+    /**
+     * How long a member is given to answer a command before it is treated as unreachable.
+     * <p>
+     * A member that was killed or partitioned away leaves a socket that reports nothing, which would otherwise hold
+     * the dispatch unresolved indefinitely. Reaching this deadline is reported as a failure to reach the member, so
+     * the member is taken out of the routing ring until the next discovery round. Defaults to
+     * {@link HttpRemoteCommandDispatcher#DEFAULT_REPLY_TIMEOUT}.
+     */
+    private Duration commandReplyTimeout = HttpRemoteCommandDispatcher.DEFAULT_REPLY_TIMEOUT;
 
     /**
      * How long a service instance is left alone after answering a capabilities request with a client error.
@@ -77,7 +91,7 @@ public class SpringCloudProperties {
      * <p>
      * Leave unset when services are served from the root, which is the default.
      */
-    private String contextRootMetadataPropertyName;
+    private @Nullable String contextRootMetadataPropertyName;
 
     /**
      * Returns whether the Spring Cloud connector is enabled.
@@ -134,6 +148,24 @@ public class SpringCloudProperties {
     }
 
     /**
+     * Returns how long a member is given to answer a command.
+     *
+     * @return how long a member is given to answer a command
+     */
+    public Duration getCommandReplyTimeout() {
+        return commandReplyTimeout;
+    }
+
+    /**
+     * Sets how long a member is given to answer a command.
+     *
+     * @param commandReplyTimeout how long a member is given to answer a command
+     */
+    public void setCommandReplyTimeout(Duration commandReplyTimeout) {
+        this.commandReplyTimeout = commandReplyTimeout;
+    }
+
+    /**
      * Returns how long a service instance is left alone after answering a capabilities request with a client error.
      *
      * @return the period an instance answering with a client error is ignored for
@@ -157,7 +189,7 @@ public class SpringCloudProperties {
      * @return the metadata property holding an instance's context root, or {@code null} when services are served from
      * the root
      */
-    public String getContextRootMetadataPropertyName() {
+    public @Nullable String getContextRootMetadataPropertyName() {
         return contextRootMetadataPropertyName;
     }
 
@@ -166,7 +198,7 @@ public class SpringCloudProperties {
      *
      * @param contextRootMetadataPropertyName the metadata property holding an instance's context root
      */
-    public void setContextRootMetadataPropertyName(String contextRootMetadataPropertyName) {
+    public void setContextRootMetadataPropertyName(@Nullable String contextRootMetadataPropertyName) {
         this.contextRootMetadataPropertyName = contextRootMetadataPropertyName;
     }
 }

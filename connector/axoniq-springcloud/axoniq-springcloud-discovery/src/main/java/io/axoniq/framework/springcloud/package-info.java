@@ -29,5 +29,7 @@
  * The pieces live in sub-packages by concern: {@code routing} holds the ring and its members, {@code discovery} learns
  * what each member handles, and {@code transport} carries commands between them over HTTP.
  */
-@org.jspecify.annotations.NullMarked
+@NullMarked
 package io.axoniq.framework.springcloud;
+
+import org.jspecify.annotations.NullMarked;

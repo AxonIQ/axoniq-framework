@@ -31,9 +31,9 @@ import java.util.Objects;
  * objects that are unequal, which quietly breaks any bookkeeping keyed on the instance itself. This record pins the
  * identity down to the three fields every implementation populates: the service id, host and port.
  *
- * @param serviceId The {@link ServiceInstance#getServiceId() service id} of the instance.
- * @param host      The {@link ServiceInstance#getHost() host} of the instance.
- * @param port      The {@link ServiceInstance#getPort() port} of the instance.
+ * @param serviceId the {@link ServiceInstance#getServiceId() service id} of the instance
+ * @param host      the {@link ServiceInstance#getHost() host} of the instance
+ * @param port      the {@link ServiceInstance#getPort() port} of the instance
  * @author Allard Buijze
  * @since 5.4.0
  */
@@ -42,11 +42,11 @@ public record ServiceInstanceKey(String serviceId, String host, int port) {
     /**
      * Derives the {@code ServiceInstanceKey} of the given {@code instance}.
      *
-     * @param instance The instance to derive a key for.
+     * @param instance the instance to derive a key for
      * @return the key identifying the given {@code instance}
      */
     public static ServiceInstanceKey of(ServiceInstance instance) {
-        Objects.requireNonNull(instance, "The instance cannot be null.");
+        Objects.requireNonNull(instance, "The instance must not be null.");
         return new ServiceInstanceKey(String.valueOf(instance.getServiceId()),
                                       String.valueOf(instance.getHost()),
                                       instance.getPort());

@@ -21,7 +21,6 @@ package io.axoniq.framework.springcloud;
 
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.springcloud.routing.Member;
-import io.axoniq.framework.springcloud.routing.MemberCapabilities;
 import io.axoniq.framework.springcloud.transport.IncomingCommandGateway;
 import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
 import io.axoniq.license.entitlement.EntitlementManager;
@@ -50,8 +49,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A {@link CommandBusConnector} distributing commands across the nodes discovered through Spring Cloud Discovery,
@@ -99,10 +98,10 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
     /**
      * Constructs a {@code SpringCloudCommandBusConnector} routing with the given {@code registry}.
      *
-     * @param registry   The registry holding the consistent-hash ring commands are routed with.
-     * @param gateway    The gateway commands arriving from other members are handled through.
-     * @param dispatcher The dispatcher sending commands to other members.
-     * @param converter  The converter attached to commands routed to this application, so that a locally routed
+     * @param registry   the registry holding the consistent-hash ring commands are routed with
+     * @param gateway    the gateway commands arriving from other members are handled through
+     * @param dispatcher the dispatcher sending commands to other members
+     * @param converter  the converter attached to commands routed to this application, so that a locally routed
      *                   command carries the same conversion capability as one that travelled over the wire, or
      *                   {@code null} when none is available.
      */
@@ -122,12 +121,12 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
      * RemoteCommandDispatcher, MessageConverter)}, which registers the addon and claims against
      * {@link EntitlementManager#INSTANCE}. This constructor exists so tests need not touch that singleton.
      *
-     * @param registry           The registry holding the consistent-hash ring commands are routed with.
-     * @param gateway            The gateway commands arriving from other members are handled through.
-     * @param dispatcher         The dispatcher sending commands to other members.
-     * @param converter          The converter attached to commands routed to this application, or {@code null} when
+     * @param registry           the registry holding the consistent-hash ring commands are routed with
+     * @param gateway            the gateway commands arriving from other members are handled through
+     * @param dispatcher         the dispatcher sending commands to other members
+     * @param converter          the converter attached to commands routed to this application, or {@code null} when
      *                           none is available.
-     * @param entitlementManager The entitlement manager dispatched commands are claimed against.
+     * @param entitlementManager the entitlement manager dispatched commands are claimed against
      */
     @Internal
     SpringCloudCommandBusConnector(SpringCloudMemberRegistry registry,
@@ -135,12 +134,12 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
                                    RemoteCommandDispatcher dispatcher,
                                    @Nullable MessageConverter converter,
                                    EntitlementManager entitlementManager) {
-        this.registry = Objects.requireNonNull(registry, "The registry cannot be null.");
-        this.gateway = Objects.requireNonNull(gateway, "The gateway cannot be null.");
-        this.dispatcher = Objects.requireNonNull(dispatcher, "The dispatcher cannot be null.");
+        this.registry = Objects.requireNonNull(registry, "The registry must not be null.");
+        this.gateway = Objects.requireNonNull(gateway, "The gateway must not be null.");
+        this.dispatcher = Objects.requireNonNull(dispatcher, "The dispatcher must not be null.");
         this.converter = converter;
         this.entitlementManager = Objects.requireNonNull(entitlementManager,
-                                                         "The entitlementManager cannot be null.");
+                                                         "The entitlementManager must not be null.");
     }
 
     /**
@@ -156,7 +155,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
     @Override
     public CompletableFuture<CommandResultMessage> dispatch(CommandMessage command,
                                                             @Nullable ProcessingContext processingContext) {
-        Objects.requireNonNull(command, "The command cannot be null.");
+        Objects.requireNonNull(command, "The command must not be null.");
         shutdownLatch.ifShuttingDown("Cannot dispatch new commands as this connector is shutting down.");
 
         QualifiedName commandName = command.type().qualifiedName();
@@ -164,7 +163,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
         // member, which is the correct behaviour for a command that declared no entity to be routed by.
         String routingKey = command.routingKey().orElseGet(command::identifier);
 
-        Optional<Member> destination = registry.findDestination(routingKey, commandName);
+        Optional<Member> destination = registry.findCommandDestination(routingKey, commandName);
         if (destination.isEmpty()) {
             return CompletableFuture.failedFuture(new NoHandlerForCommandException(command));
         }
@@ -225,7 +224,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
      * Only the former says anything about the member's availability. A handler that threw is an application outcome,
      * and taking a member out of the ring for it would move a failing command onto every other member in turn.
      *
-     * @param cause The failure that completed a remote dispatch.
+     * @param cause the failure that completed a remote dispatch
      * @return {@code true} when the member could not be reached, {@code false} otherwise
      */
     private static boolean isUnreachable(Throwable cause) {
@@ -243,7 +242,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
      * otherwise arrive without one, making the behaviour of a handler depend on where routing happened to land. This
      * closes that gap.
      *
-     * @param command The command routed to this application.
+     * @param command the command routed to this application
      * @return the given {@code command} with this connector's converter attached
      */
     private CommandMessage withConverterAttached(CommandMessage command) {
@@ -259,7 +258,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
 
     @Override
     public CompletableFuture<Void> subscribe(QualifiedName commandName, int loadFactor) {
-        Objects.requireNonNull(commandName, "The commandName cannot be null.");
+        Objects.requireNonNull(commandName, "The commandName must not be null.");
         if (loadFactor < 0) {
             throw new IllegalArgumentException("The load factor cannot be negative, but was [" + loadFactor + "].");
         }
@@ -271,7 +270,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
 
     @Override
     public boolean unsubscribe(QualifiedName commandName) {
-        Objects.requireNonNull(commandName, "The commandName cannot be null.");
+        Objects.requireNonNull(commandName, "The commandName must not be null.");
         if (subscriptions.remove(commandName) == null) {
             return false;
         }
@@ -291,25 +290,25 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
     private void publishCapabilities() {
         Set<QualifiedName> commands = Set.copyOf(subscriptions.keySet());
         int loadFactor = subscriptions.values().stream().max(Comparator.naturalOrder()).orElse(0);
-        registry.publishLocalCapabilities(new MemberCapabilities(loadFactor, commands, Set.of()));
+        registry.publishLocalCommands(loadFactor, commands);
     }
 
     @Override
     public void onIncomingCommand(Handler handler) {
-        Objects.requireNonNull(handler, "The handler cannot be null.");
+        Objects.requireNonNull(handler, "The handler must not be null.");
         this.incomingHandler = handler;
         gateway.bind(handler);
     }
 
     /**
-     * Stops accepting commands from other members, and waits for the ones already being handled to finish.
+     * Stops advertising the commands this member handles, so that other members stop routing them here.
      * <p>
      * Performed in the {@link Phase#INBOUND_COMMAND_CONNECTOR} phase. Incoming commands arrive over HTTP, so it is the
      * web container's own graceful shutdown that stops new requests; this connector's part is to publish empty
      * capabilities, so that members still running route around it on their next discovery round rather than sending
      * commands into a closing container.
      *
-     * @return a future that completes once other members have been told this one handles nothing
+     * @return a future that completes once this member no longer advertises any command
      */
     public CompletableFuture<Void> disconnect() {
         logger.debug("Disconnecting the SpringCloudCommandBusConnector.");
@@ -333,8 +332,9 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("registry", registry);
+        descriptor.describeProperty("dispatcher", dispatcher);
         descriptor.describeProperty("subscriptions", subscriptions.keySet().stream()
-                                                                 .map(QualifiedName::name)
+                                                                 .map(QualifiedName::toString)
                                                                  .sorted()
                                                                  .toList());
     }

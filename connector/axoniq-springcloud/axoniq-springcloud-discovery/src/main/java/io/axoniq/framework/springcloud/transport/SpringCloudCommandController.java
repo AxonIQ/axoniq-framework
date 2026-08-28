@@ -55,10 +55,10 @@ public class SpringCloudCommandController {
     /**
      * Constructs a {@code SpringCloudCommandController} handing received commands to the given {@code gateway}.
      *
-     * @param gateway The gateway invoking this application's local command handler.
+     * @param gateway the gateway invoking this application's local command handler
      */
     public SpringCloudCommandController(IncomingCommandGateway gateway) {
-        this.gateway = Objects.requireNonNull(gateway, "The gateway cannot be null.");
+        this.gateway = Objects.requireNonNull(gateway, "The gateway must not be null.");
     }
 
     /**
@@ -67,7 +67,7 @@ public class SpringCloudCommandController {
      * Answers with {@code 200 OK} whether handling succeeded or failed; a failure is reported in the body of the
      * reply. See {@link CommandDispatchReply} for why.
      *
-     * @param request The command sent by another member.
+     * @param request the command sent by another member
      * @return a future completing with the outcome of handling the command
      */
     @PostMapping

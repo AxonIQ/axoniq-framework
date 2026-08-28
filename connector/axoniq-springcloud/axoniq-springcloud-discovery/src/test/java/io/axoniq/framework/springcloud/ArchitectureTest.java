@@ -17,16 +17,13 @@
  *  https://www.axoniq.io/pricing
  */
 
-/**
- * Routing primitives for the Spring Cloud connector: the cluster {@link
- * io.axoniq.framework.springcloud.routing.Member members}, their {@link
- * io.axoniq.framework.springcloud.routing.MemberCapabilities capabilities}, and the {@link
- * io.axoniq.framework.springcloud.routing.ConsistentHash} ring that picks one for a given routing key.
- * <p>
- * These types carry no transport or discovery concerns, and depend on nothing beyond
- * {@link org.axonframework.messaging.core.QualifiedName}.
- */
-@NullMarked
-package io.axoniq.framework.springcloud.routing;
+package io.axoniq.framework.springcloud;
 
-import org.jspecify.annotations.NullMarked;
+import com.tngtech.archunit.core.importer.ImportOption.DoNotIncludeTests;
+import com.tngtech.archunit.junit.AnalyzeClasses;
+import org.axonframework.common.archunit.MainArchUnitConventions;
+
+@AnalyzeClasses(packages = ArchUnitPackageRulesTest.BASE_PACKAGE_NAME, importOptions = DoNotIncludeTests.class)
+class ArchitectureTest implements MainArchUnitConventions {
+
+}

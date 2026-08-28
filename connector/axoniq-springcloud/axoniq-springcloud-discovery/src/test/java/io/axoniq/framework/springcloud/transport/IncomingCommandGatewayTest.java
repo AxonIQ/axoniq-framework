@@ -19,7 +19,7 @@
 
 package io.axoniq.framework.springcloud.transport;
 
-import io.axoniq.framework.springcloud.utils.RecordingCommandHandler;
+import io.axoniq.framework.springcloud.util.RecordingCommandHandler;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.GenericCommandMessage;
 import org.axonframework.messaging.commandhandling.GenericCommandResultMessage;
@@ -54,7 +54,7 @@ class IncomingCommandGatewayTest {
     @BeforeEach
     void setUp() {
         handler = new RecordingCommandHandler();
-        testSubject = new IncomingCommandGateway("node-b", null);
+        testSubject = new IncomingCommandGateway(() -> "node-b", null);
     }
 
     private static CommandDispatchRequest request() {

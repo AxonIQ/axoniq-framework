@@ -23,11 +23,11 @@ import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMod
 import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
 import io.axoniq.framework.springcloud.transport.IncomingCommandGateway;
-import io.axoniq.framework.springcloud.utils.RecordingCommandHandler;
-import io.axoniq.framework.springcloud.utils.RecordingDiscoveryClient;
-import io.axoniq.framework.springcloud.utils.RecordingEntitlementManager;
 import io.axoniq.framework.springcloud.transport.RecordingRemoteCommandDispatcher;
-import io.axoniq.framework.springcloud.utils.TestServiceInstance;
+import io.axoniq.framework.springcloud.util.RecordingCommandHandler;
+import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
+import io.axoniq.framework.springcloud.util.RecordingEntitlementManager;
+import io.axoniq.framework.springcloud.util.TestServiceInstance;
 import io.axoniq.license.entitlement.EntitlementMessageType;
 import org.axonframework.messaging.commandhandling.CommandDispatchException;
 import org.axonframework.messaging.commandhandling.CommandMessage;
@@ -85,7 +85,7 @@ class SpringCloudCommandBusConnectorTest {
         dispatcher = new RecordingRemoteCommandDispatcher();
         entitlementManager = new RecordingEntitlementManager();
         testSubject = new SpringCloudCommandBusConnector(registry,
-                                                         new IncomingCommandGateway("node-a", null),
+                                                         new IncomingCommandGateway(() -> "node-a", null),
                                                          dispatcher,
                                                          null,
                                                          entitlementManager);
@@ -467,7 +467,7 @@ class SpringCloudCommandBusConnectorTest {
         @Test
         void rejectsNullCollaborators() {
             // given
-            IncomingCommandGateway gateway = new IncomingCommandGateway("node-a", null);
+            IncomingCommandGateway gateway = new IncomingCommandGateway(() -> "node-a", null);
 
             // when / then
             assertThatThrownBy(() -> new SpringCloudCommandBusConnector(
