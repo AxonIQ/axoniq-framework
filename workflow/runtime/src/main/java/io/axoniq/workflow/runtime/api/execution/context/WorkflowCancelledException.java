@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import jakarta.annotation.Nonnull;
 
 /**
  * Exception thrown when a workflow is cancelled via the terminate primitive.
@@ -33,7 +32,7 @@ public class WorkflowCancelledException extends RuntimeException {
      *
      * @param message message describing the cancellation reason.
      */
-    public WorkflowCancelledException(@Nonnull String message) {
+    public WorkflowCancelledException(String message) {
         super(message);
     }
 
@@ -43,7 +42,7 @@ public class WorkflowCancelledException extends RuntimeException {
      * @param message message describing the cancellation reason.
      * @param cause   cause of the cancellation.
      */
-    public WorkflowCancelledException(@Nonnull String message, Throwable cause) {
+    public WorkflowCancelledException(String message, Throwable cause) {
         super(message, cause);
     }
 
@@ -52,7 +51,7 @@ public class WorkflowCancelledException extends RuntimeException {
      *
      * @param cause cause of the cancellation.
      */
-    public WorkflowCancelledException(@Nonnull Throwable cause) {
+    public WorkflowCancelledException(Throwable cause) {
         super(cause);
     }
 }

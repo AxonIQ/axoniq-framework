@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
@@ -115,12 +117,12 @@ class PayloadDelegateTest {
     @SuppressWarnings("unchecked")
     void modifyPayloadAppendsTaskAndPublishesEvent() {
         String stepName = "testStep";
-        Map<String, Object> currentPayload = new HashMap<>();
+        Map<String, @Nullable Object> currentPayload = new HashMap<>();
         currentPayload.put("key1", "value1");
         when(workflowContext.workflowPayload()).thenReturn(currentPayload);
 
         PayloadModification modification = p -> {
-            Map<String, Object> next = new HashMap<>(p);
+            Map<String, @Nullable Object> next = new HashMap<>(p);
             next.put("key2", "value2");
             return next;
         };
@@ -144,7 +146,7 @@ class PayloadDelegateTest {
         verify(eventSink).publish(eq(processingContext), eventCaptor.capture());
 
         EventMessage event = eventCaptor.getValue();
-        Map<String, Object> eventPayload = (Map<String, Object>) event.payload();
+        Map<String, @Nullable Object> eventPayload = (Map<String, @Nullable Object>) event.payload();
         assertThat(eventPayload).containsEntry("key1", "value1");
         assertThat(eventPayload).containsEntry("key2", "value2");
     }

@@ -19,8 +19,7 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
@@ -45,9 +44,8 @@ public class WorkflowStepResults {
      * @param payload payload of the result, might be null.
      * @return completed step result.
      */
-    @Nonnull
-    public static WorkflowStepResult completed(@Nonnull String stepName, @Nullable Object payload,
-                                               @Nonnull EventConverter converter) {
+    public static WorkflowStepResult completed(String stepName, @Nullable Object payload,
+                                               EventConverter converter) {
         return new CompletedWorkflowStepResult(stepName, payload, null, null, false, converter);
     }
 
@@ -58,8 +56,7 @@ public class WorkflowStepResults {
      *
      * @return completed step result.
      */
-    @Nonnull
-    public static WorkflowStepResult completed(@Nonnull String stepName) {
+    public static WorkflowStepResult completed(String stepName) {
         return new CompletedWorkflowStepResult(stepName, null, null, null, false, null);
     }
 
@@ -69,8 +66,7 @@ public class WorkflowStepResults {
      * @param error failure causing error.
      * @return failed result.
      */
-    @Nonnull
-    public static WorkflowStepResult failed(@Nonnull String stepName, @Nonnull Throwable error) {
+    public static WorkflowStepResult failed(String stepName, Throwable error) {
         return new CompletedWorkflowStepResult(stepName,
                                                null,
                                                Objects.requireNonNull(error, "Error must be provided"),
@@ -84,8 +80,7 @@ public class WorkflowStepResults {
      *
      * @return cancelled result.
      */
-    @Nonnull
-    public static WorkflowStepResult canceled(@Nonnull String stepName) {
+    public static WorkflowStepResult canceled(String stepName) {
         return new CompletedWorkflowStepResult(stepName, null, null, null, true, null);
     }
 
@@ -95,8 +90,7 @@ public class WorkflowStepResults {
      * @param timeout timeout duration.
      * @return timed out result.
      */
-    @Nonnull
-    public static WorkflowStepResult timeout(@Nonnull String stepName, @Nonnull Duration timeout) {
+    public static WorkflowStepResult timeout(String stepName, Duration timeout) {
         return new CompletedWorkflowStepResult(stepName,
                                                null,
                                                null,

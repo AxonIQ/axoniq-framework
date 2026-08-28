@@ -38,7 +38,6 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
@@ -515,12 +514,12 @@ class NewInstanceCandidateRoutingTest {
 
         registry.register(new EventCondition() {
             @Override
-            public @NonNull BiPredicate<EventMessage, ProcessingContext> predicate() {
+            public BiPredicate<EventMessage, ProcessingContext> predicate() {
                 return startCondition;
             }
 
             @Override
-            public @NonNull QualifiedName qualifiedName() {
+            public QualifiedName qualifiedName() {
                 return START_EVENT;
             }
         }, configuration);

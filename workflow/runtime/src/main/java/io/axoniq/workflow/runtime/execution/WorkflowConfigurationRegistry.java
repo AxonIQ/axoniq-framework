@@ -22,7 +22,6 @@ import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.context.Version;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageType;
@@ -51,25 +50,21 @@ import java.util.stream.Collectors;
 public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRegistry<W>>
         extends DescribableComponent {
 
-    @Nonnull
     default W register(
-            @Nonnull QualifiedName qualifiedName,
-            @Nonnull WorkflowConfiguration<?> workflowConfiguration
+            QualifiedName qualifiedName,
+            WorkflowConfiguration<?> workflowConfiguration
     ) {
         return register(EventConditions.fromQualifiedName(qualifiedName), workflowConfiguration);
     }
 
-    @Nonnull
     W register(
-            @Nonnull EventCondition eventCondition,
-            @Nonnull WorkflowConfiguration<?> workflowConfiguration
+            EventCondition eventCondition,
+            WorkflowConfiguration<?> workflowConfiguration
     );
 
-    @Nonnull
     Set<QualifiedName> supportedEvents();
 
-    @Nonnull
-    List<PredicatedWorkflowConfiguration> getWorkflowsConfigurations(@Nonnull QualifiedName qualifiedName);
+    List<PredicatedWorkflowConfiguration> getWorkflowsConfigurations(QualifiedName qualifiedName);
 
     /**
      * Returns the configurations registered for the given event {@code type} whose
@@ -80,8 +75,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * decided on {@link MessageType#qualifiedName()} alone, and taking the full type keeps
      * {@link MessageType#version()} in reach for when it participates in the decision.
      */
-    @Nonnull
-    default List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(@Nonnull MessageType type) {
+    default List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(MessageType type) {
         return getHighestVersionConfigurations(type.qualifiedName());
     }
 
@@ -93,9 +87,8 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * Event-driven callers should use {@link #getHighestVersionConfigurations(MessageType)}; this variant serves
      * registration-time recomputation, where only a {@link QualifiedName} exists.
      */
-    @Nonnull
     default List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(
-            @Nonnull QualifiedName qualifiedName) {
+            QualifiedName qualifiedName) {
         var all = getWorkflowsConfigurations(qualifiedName);
         if (all.isEmpty()) {
             return List.of();
@@ -121,9 +114,8 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * {@link WorkflowConfiguration#workflowVersion()} equals {@code version} (semver-equal). If multiple are registered
      * at that version, returns the first.
      */
-    @Nonnull
-    default Optional<WorkflowConfiguration<?>> getByVersion(@Nonnull QualifiedName qualifiedName,
-                                                            @Nonnull String version) {
+    default Optional<WorkflowConfiguration<?>> getByVersion(QualifiedName qualifiedName,
+                                                            String version) {
         return Version.tryOf(version).flatMap(
                 target -> getWorkflowsConfigurations(qualifiedName).stream()
                                                                    .map(PredicatedWorkflowConfiguration::configuration)
@@ -143,9 +135,8 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * @param version      semver version string to match against {@link WorkflowConfiguration#workflowVersion()}.
      * @return matching configuration, or empty if none registered.
      */
-    @Nonnull
-    default Optional<WorkflowConfiguration<?>> findByWorkflowNameAndVersion(@Nonnull String workflowName,
-                                                                            @Nonnull String version) {
+    default Optional<WorkflowConfiguration<?>> findByWorkflowNameAndVersion(String workflowName,
+                                                                            String version) {
         return Version.tryOf(version).map(target -> parsedVersionsFor(workflowName).get(target));
     }
 
@@ -155,9 +146,8 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * @param workflowDefinitionId workflow definition reference to resolve
      * @return matching configuration, or empty if none registered
      */
-    @Nonnull
     default Optional<WorkflowConfiguration<?>> getWorkflowConfiguration(
-            @Nonnull MessageType workflowDefinitionId
+            MessageType workflowDefinitionId
     ) {
         return findByWorkflowNameAndVersion(
                 workflowDefinitionId.qualifiedName().toString(),
@@ -179,9 +169,8 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * @param version      semver state version to route against.
      * @return the closest matching configuration, or empty if none qualifies.
      */
-    @Nonnull
-    default Optional<WorkflowConfiguration<?>> findClosestRegisteredVersion(@Nonnull String workflowName,
-                                                                            @Nonnull String version) {
+    default Optional<WorkflowConfiguration<?>> findClosestRegisteredVersion(String workflowName,
+                                                                            String version) {
         var parsed = parsedVersionsFor(workflowName);
         return Version.tryOf(version).flatMap(
                 target -> Version.closestNotGreaterThan(parsed.keySet(), target)
@@ -203,9 +192,8 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * @param version      semver state version to route against.
      * @return the closest matching higher configuration, or empty if none qualifies.
      */
-    @Nonnull
-    default Optional<WorkflowConfiguration<?>> findClosestHigherRegisteredVersion(@Nonnull String workflowName,
-                                                                                  @Nonnull String version) {
+    default Optional<WorkflowConfiguration<?>> findClosestHigherRegisteredVersion(String workflowName,
+                                                                                  String version) {
         var parsed = parsedVersionsFor(workflowName);
         return Version.tryOf(version).flatMap(
                 target -> Version.closestHigherThan(parsed.keySet(), target)
@@ -218,8 +206,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * version strings (legacy streams) are filtered out. The keys are the source of truth used by
      * {@link Version#closestNotGreaterThan} and {@link Version#closestHigherThan} when routing.
      */
-    @Nonnull
-    private Map<Version, WorkflowConfiguration<?>> parsedVersionsFor(@Nonnull String workflowName) {
+    private Map<Version, WorkflowConfiguration<?>> parsedVersionsFor(String workflowName) {
         return supportedEvents().stream()
                                 .flatMap(qn -> getWorkflowsConfigurations(qn).stream())
                                 .map(PredicatedWorkflowConfiguration::configuration)
@@ -258,8 +245,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * Returns all workflow versions registered under {@code workflowName} in semver ascending order. Used for
      * routing-decision logs.
      */
-    @Nonnull
-    default List<String> registeredVersions(@Nonnull String workflowName) {
+    default List<String> registeredVersions(String workflowName) {
         return supportedEvents().stream()
                                 .flatMap(qn -> getWorkflowsConfigurations(qn).stream())
                                 .map(PredicatedWorkflowConfiguration::configuration)
@@ -296,12 +282,11 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * Unparseable state versions (legacy streams) short-circuit to the start config. Every dispatch
      * decision is logged at INFO; the fallback path logs at WARN.
      */
-    @Nonnull
     default WorkflowConfiguration<?> resolveDefinitionForReplay(
-            @Nonnull String workflowName,
-            @Nonnull String workflowId,
-            @Nonnull String stateVersion,
-            @Nonnull WorkflowConfiguration<?> startConfig
+            String workflowName,
+            String workflowId,
+            String stateVersion,
+            WorkflowConfiguration<?> startConfig
     ) {
         var configVersion = startConfig.workflowVersion();
         var registered = registeredVersions(workflowName);
@@ -360,13 +345,12 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * the execution directly without a registry component), logs a {@code [registry-missing]} routing line and falls
      * back to {@code startConfig}.
      */
-    @Nonnull
     static WorkflowConfiguration<?> resolveOrFallback(
-            @Nonnull ProcessingContext ctx,
-            @Nonnull String workflowName,
-            @Nonnull String workflowId,
-            @Nonnull String stateVersion,
-            @Nonnull WorkflowConfiguration<?> startConfig
+            ProcessingContext ctx,
+            String workflowName,
+            String workflowId,
+            String stateVersion,
+            WorkflowConfiguration<?> startConfig
     ) {
         WorkflowConfigurationRegistry<?> registry = ctx.component(WorkflowConfigurationRegistry.class);
         if (registry == null) {

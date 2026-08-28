@@ -18,9 +18,10 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
 
 import java.util.Map;
@@ -42,9 +43,8 @@ public interface EventNameCustomizer {
      * @param stepStatus the status of the step
      * @return the customized event name.
      */
-    @Nonnull
-    QualifiedName getEventName(@Nonnull String stepName, @Nonnull Map<String, Object> parameters,
-                               @Nonnull StepStatus stepStatus);
+    QualifiedName getEventName(String stepName, Map<String, @Nullable Object> parameters,
+                               StepStatus stepStatus);
 
     /**
      * Returns a customized event name based on the provided step name, parameters, and workflow status.
@@ -54,9 +54,8 @@ public interface EventNameCustomizer {
      * @param stepStatus the status of the step
      * @return the customized event name.
      */
-    @Nonnull
-    QualifiedName getEventName(@Nonnull String stepName, @Nonnull Map<String, Object> parameters,
-                               @Nonnull WorkflowStatus stepStatus);
+    QualifiedName getEventName(String stepName, Map<String, @Nullable Object> parameters,
+                               WorkflowStatus stepStatus);
 
     /**
      * Returns a customized event name for a migration step produced by
@@ -75,9 +74,8 @@ public interface EventNameCustomizer {
      * @param parameters parameters associated with the event.
      * @return the customized event name.
      */
-    @Nonnull
-    default QualifiedName versionMigrationEventName(@Nonnull String changeId,
-                                             @Nonnull Map<String, Object> parameters) {
+    default QualifiedName versionMigrationEventName(String changeId,
+                                             Map<String, @Nullable Object> parameters) {
         var completed = getEventName(changeId, parameters, StepStatus.COMPLETED);
         return new QualifiedName(completed.namespace(), completed.localName() + ".Versioned");
     }
@@ -87,6 +85,5 @@ public interface EventNameCustomizer {
      *
      * @return event name customizer that will use the namespace of the parent step.
      */
-    @Nonnull
     EventNameCustomizer forStepInheritance();
 }

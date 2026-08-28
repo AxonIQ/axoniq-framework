@@ -18,8 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
@@ -93,14 +92,13 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      *
      * @param liveModeCallback the workflow-engine callback invoked when live mode starts
      */
-    public WorkflowEngineReplaySupport(@Nonnull LiveModeActivatedCallback liveModeCallback) {
+    public WorkflowEngineReplaySupport(LiveModeActivatedCallback liveModeCallback) {
         this.liveModeCallback = requireNonNull(liveModeCallback, "The LiveModeActivatedCallback must not be null");
     }
 
-    @Nonnull
     @Override
-    public MessageStream.Empty<Message> handle(@Nonnull ReplayStatusChanged statusChange,
-                                               @Nonnull ProcessingContext context) {
+    public MessageStream.Empty<Message> handle(ReplayStatusChanged statusChange,
+                                               ProcessingContext context) {
         getAndSetTokenFrom(context);
         logger.debug("Replay status changed from [{}] to [{}].",
                      statusChange.status(), context.resources().get(TrackingToken.RESOURCE_KEY));
@@ -123,7 +121,7 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      * @return the normalized current {@link TrackingToken} of the handling segment, if present
      */
     @Nullable
-    TrackingToken getAndSetTokenFrom(@Nonnull ProcessingContext context) {
+    TrackingToken getAndSetTokenFrom(ProcessingContext context) {
         var segment = Segment.fromContext(context).orElse(null);
         TrackingToken.fromContext(context)
                      .ifPresent(token -> {
@@ -172,7 +170,7 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      *
      * @return {@code true} if this call performed the transition, otherwise {@code false}
      */
-    public boolean switchToLiveMode(@Nonnull ProcessingContext processingContext) {
+    public boolean switchToLiveMode(ProcessingContext processingContext) {
         var segment = Segment.fromContext(processingContext).orElse(null);
         if (segment == null) {
             if (!inLiveMode.compareAndSet(false, true)) {
@@ -223,7 +221,7 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      * @param claimedFrom the stored position the segment resumes from, or {@code null} when it has consumed nothing
      * @return {@code true} when an observed position of this segment is behind the startup latest token
      */
-    public boolean isReplaying(@Nonnull Segment segment, @Nullable TrackingToken claimedFrom) {
+    public boolean isReplaying(Segment segment, @Nullable TrackingToken claimedFrom) {
         var latest = startupLatestToken;
         var observed = segmentIdToToken.get(segment.getSegmentId());
         return latest != null && observed != null && !inLiveMode(segment) && !covers(observed, latest);
@@ -258,7 +256,7 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      */
     public void initializeRestoreProcessingContext(@Nullable Segment segment,
                                                    @Nullable TrackingToken claimedFrom,
-                                                   @Nonnull ProcessingContext processingContext) {
+                                                   ProcessingContext processingContext) {
         var processorToken = claimedFrom != null ? claimedFrom : currentToken(segment);
         if (processorToken != null && !processingContext.resources().containsKey(TrackingToken.RESOURCE_KEY)) {
             processingContext.putResource(TrackingToken.RESOURCE_KEY, processorToken);
@@ -277,7 +275,7 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
      * @param context the context used to {@link #switchToLiveMode(ProcessingContext) switch to live mode with}
      */
     void validateIfReplayFinished(@Nullable TrackingToken token,
-                                  @Nonnull ProcessingContext context) {
+                                  ProcessingContext context) {
         var latest = startupLatestToken;
         if (!inLiveMode(Segment.fromContext(context).orElse(null))
                 && (latest == null || token != null && token.covers(latest))) {
@@ -285,7 +283,7 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
         }
     }
 
-    private static boolean covers(@Nullable TrackingToken token, @Nonnull TrackingToken other) {
+    private static boolean covers(@Nullable TrackingToken token, TrackingToken other) {
         return token != null && token.covers(other);
     }
 
@@ -301,6 +299,6 @@ public class WorkflowEngineReplaySupport implements ReplayStatusChangedHandler {
          *
          * @param context the current processor context
          */
-        void invoke(@Nonnull ProcessingContext context);
+        void invoke(ProcessingContext context);
     }
 }

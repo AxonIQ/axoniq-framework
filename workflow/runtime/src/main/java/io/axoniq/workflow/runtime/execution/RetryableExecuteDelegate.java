@@ -30,8 +30,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -73,17 +72,17 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
      */
     @Internal
     public RetryableExecuteDelegate(
-            @Nonnull ExecuteDelegate delegate,
-            @Nonnull WorkflowContext workflowContext,
-            @Nonnull WorkflowExecution workflowExecution,
-            @Nonnull RunningSteps runningSteps,
-            @Nonnull ReachedSteps reachedSteps,
-            @Nonnull EventNameCustomizer parentEventNameCustomizer,
-            @Nonnull Clock clock,
-            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
-            @Nonnull EventSink eventSink,
-            @Nonnull ExecutorService executor,
-            @Nonnull WorkflowScheduler timeoutScheduler
+            ExecuteDelegate delegate,
+            WorkflowContext workflowContext,
+            WorkflowExecution workflowExecution,
+            RunningSteps runningSteps,
+            ReachedSteps reachedSteps,
+            EventNameCustomizer parentEventNameCustomizer,
+            Clock clock,
+            UnitOfWorkFactory unitOfWorkFactory,
+            EventSink eventSink,
+            ExecutorService executor,
+            WorkflowScheduler timeoutScheduler
     ) {
         super(workflowContext,
               workflowExecution,
@@ -99,9 +98,8 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
         this.delegate = delegate;
     }
 
-    @Nonnull
     @Override
-    public WorkflowStepResult execute(@Nonnull ExecutePrimitive.ExecuteCommand command) {
+    public WorkflowStepResult execute(ExecutePrimitive.ExecuteCommand command) {
         var retryPolicy = command.retryPolicy();
         if (retryPolicy == RetryPolicy.NONE || retryPolicy.maxRetries() <= 0) {
             return delegate.execute(command);
@@ -125,7 +123,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
 
     // ---- Core retry logic ----
 
-    private WorkflowStepResult launchWithRetry(@Nonnull ExecutePrimitive.ExecuteCommand command, int attempt) {
+    private WorkflowStepResult launchWithRetry(ExecutePrimitive.ExecuteCommand command, int attempt) {
         FailureHandler failureHandler = (name, error, enc) ->
                 handleAttemptFailure(command, name, error, false, enc, attempt);
 
@@ -142,11 +140,11 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
 
 
     private void handleAttemptFailure(
-            @Nonnull ExecutePrimitive.ExecuteCommand command,
-            @Nonnull String stepName,
-            @Nonnull Throwable error,
+            ExecutePrimitive.ExecuteCommand command,
+            String stepName,
+            Throwable error,
             boolean isTimeout,
-            @Nonnull EventNameCustomizer eventNameCustomizer,
+            EventNameCustomizer eventNameCustomizer,
             int attempt
     ) {
         var retryPolicy = command.retryPolicy();
@@ -191,8 +189,8 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
     // ---- Backoff computation ----
 
     @Nullable
-    private Instant computeRetryReadyAt(@Nonnull RetryPolicy retryPolicy, int attempt,
-                                        @Nonnull Instant attemptStartTime) {
+    private Instant computeRetryReadyAt(RetryPolicy retryPolicy, int attempt,
+                                        Instant attemptStartTime) {
         Duration backoffDelay = retryPolicy.backoffStrategy().delay(attempt);
         return (backoffDelay.isZero() || backoffDelay.isNegative())
                 ? null
@@ -202,7 +200,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
     // ---- Delayed retry scheduling ----
 
     private void scheduleRetryAttempt(
-            @Nonnull ExecutePrimitive.ExecuteCommand command,
+            ExecutePrimitive.ExecuteCommand command,
             int nextAttempt,
             @Nullable Instant retryReadyAt
     ) {

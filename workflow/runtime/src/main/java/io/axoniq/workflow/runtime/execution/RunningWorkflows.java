@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.Set;
@@ -37,7 +36,6 @@ public interface RunningWorkflows {
      *
      * @return immutable set of workflow identifiers
      */
-    @Nonnull
     Set<String> workflowIds();
 
     /**
@@ -46,5 +44,5 @@ public interface RunningWorkflows {
      * @param workflowId workflow identifier to inspect
      * @return {@code true} if the workflow is running
      */
-    boolean contains(@Nonnull String workflowId);
+    boolean contains(String workflowId);
 }

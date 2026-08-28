@@ -20,8 +20,7 @@ package io.axoniq.workflow.runtime.api.execution.context;
 
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -51,14 +50,13 @@ public interface WorkflowExecution extends DescribableComponent {
      * @param terminationHandler termination handler, which is executed after the execution has reached a terminal
      *                           {@link WorkflowStatus}
      */
-    void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler);
+    void execute(Consumer<WorkflowExecution> terminationHandler);
 
     /**
      * Returns the workflow context of the current execution.
      *
      * @return workflow context facing the user
      */
-    @Nonnull
     WorkflowContext workflowContext();
 
     /**
@@ -67,7 +65,7 @@ public interface WorkflowExecution extends DescribableComponent {
      * @param condition condition on the workflow state
      * @throws InterruptedException if interrupted while waiting
      */
-    void awaitStateChange(@Nonnull Predicate<WorkflowState> condition) throws InterruptedException;
+    void awaitStateChange(Predicate<WorkflowState> condition) throws InterruptedException;
 
     /**
      * Delivers an event to the workflow execution.
@@ -75,14 +73,14 @@ public interface WorkflowExecution extends DescribableComponent {
      * @param eventMessage      event message to deliver
      * @param processingContext processing context of the delivered event
      */
-    void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext);
+    void onEvent(EventMessage eventMessage, ProcessingContext processingContext);
 
     /**
      * Appends a task for execution by the workflow control thread.
      *
      * @param task task to execute
      */
-    void appendTask(@Nonnull Consumer<WorkflowExecution> task);
+    void appendTask(Consumer<WorkflowExecution> task);
 
     /**
      * Interrupts the workflow driver so it can re-evaluate pending external control requests.
@@ -120,7 +118,7 @@ public interface WorkflowExecution extends DescribableComponent {
      *
      * @param latch the latch to run when reached in this {@code WorkflowExecution's} task queue
      */
-    void addCheckpointLatch(@Nonnull Runnable latch);
+    void addCheckpointLatch(Runnable latch);
 
     /**
      * Checks whether checkpoint advancement is unsafe because workflow work is active, queued, or blocked through a
@@ -135,7 +133,7 @@ public interface WorkflowExecution extends DescribableComponent {
      *
      * @param listener listener to notify when checkpoint work becomes safe or unsafe
      */
-    void registerCheckpointWorkStateListener(@Nonnull CheckpointWorkStateListener listener);
+    void registerCheckpointWorkStateListener(CheckpointWorkStateListener listener);
 
     /**
      * Receives transitions of checkpoint-relevant workflow work.
@@ -184,7 +182,6 @@ public interface WorkflowExecution extends DescribableComponent {
      *
      * @return workflow state
      */
-    @Nonnull
     WorkflowState state();
 
     /**
@@ -192,14 +189,13 @@ public interface WorkflowExecution extends DescribableComponent {
      *
      * @param state workflow state loaded from a repository
      */
-    void initializeState(@Nonnull WorkflowState state);
+    void initializeState(WorkflowState state);
 
     /**
      * Returns the processing context of the workflow execution.
      *
      * @return processing context
      */
-    @Nonnull
     ProcessingContext processingContext();
 
     /**
@@ -207,7 +203,6 @@ public interface WorkflowExecution extends DescribableComponent {
      *
      * @return returns the human-readable name of the workflow
      */
-    @Nonnull
     String workflowName();
 
     /**
@@ -215,7 +210,6 @@ public interface WorkflowExecution extends DescribableComponent {
      *
      * @return unique workflow execution identifier
      */
-    @Nonnull
     String workflowId();
 
     /**
@@ -223,6 +217,5 @@ public interface WorkflowExecution extends DescribableComponent {
      *
      * @return workflow configuration
      */
-    @Nonnull
     WorkflowConfiguration<?> workflowConfiguration();
 }

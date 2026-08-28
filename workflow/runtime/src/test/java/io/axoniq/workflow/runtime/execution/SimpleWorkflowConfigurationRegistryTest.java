@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
@@ -30,12 +32,10 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -309,12 +309,12 @@ class SimpleWorkflowConfigurationRegistryTest {
         }
 
         @Override
-        public @NonNull String workflowName() {
+        public String workflowName() {
             return name;
         }
 
         @Override
-        public @NonNull String workflowVersion() {
+        public String workflowVersion() {
             return version;
         }
     }
@@ -325,12 +325,12 @@ class SimpleWorkflowConfigurationRegistryTest {
     ) {
         return new EventCondition() {
             @Override
-            public @NonNull BiPredicate<EventMessage, ProcessingContext> predicate() {
+            public BiPredicate<EventMessage, ProcessingContext> predicate() {
                 return predicate;
             }
 
             @Override
-            public @NonNull QualifiedName qualifiedName() {
+            public QualifiedName qualifiedName() {
                 return eventName;
             }
         };
@@ -353,49 +353,46 @@ class SimpleWorkflowConfigurationRegistryTest {
             return WorkflowContext.class;
         }
 
-        @Nonnull
         @Override
         public WorkflowDefinition<WorkflowContext> workflowDefinition() {
             return definition;
         }
 
-        @Nonnull
         @Override
         public WorkflowContextFactory<WorkflowContext> workflowContextFactory() {
             return new WorkflowContextFactory<>() {
                 @Override
-                public @NonNull WorkflowContext createContext(@NonNull Map<String, Object> initialPayload,
-                                                              @NonNull String workflowId,
-                                                              @NonNull ProcessingContext processingContext,
-                                                              @NonNull WorkflowConfiguration<?> workflowConfiguration) {
+                public WorkflowContext createContext(Map<String, @Nullable Object> initialPayload,
+                                                              String workflowId,
+                                                              ProcessingContext processingContext,
+                                                              WorkflowConfiguration<?> workflowConfiguration) {
                     throw new UnsupportedOperationException("Stub factory can't create contexts");
                 }
             };
         }
 
-        @Nonnull
         @Override
         public WorkflowExecutionFactory workflowExecutionFactory() {
             return new DSLAdoptingExecutionFactory<>(getWorkflowContextType());
         }
 
         @Override
-        public @NonNull WorkflowIdProvider workflowIdProvider() {
+        public WorkflowIdProvider workflowIdProvider() {
             return new MessageWorkflowIdProvider();
         }
 
         @Override
-        public @NonNull String workflowName() {
+        public String workflowName() {
             return WorkflowConfiguration.super.workflowName();
         }
 
         @Override
-        public @NonNull EventNameCustomizer eventNameCustomizer() {
+        public EventNameCustomizer eventNameCustomizer() {
             return defaults();
         }
 
         @Override
-        public @NonNull Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners() {
+        public Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners() {
             return WorkflowConfiguration.super.workflowStatusChangeListeners();
         }
     }

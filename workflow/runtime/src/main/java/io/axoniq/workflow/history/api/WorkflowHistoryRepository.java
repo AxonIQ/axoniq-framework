@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.history.api;
 
-import jakarta.annotation.Nonnull;
 
 import java.util.List;
 import java.util.Optional;
@@ -36,7 +35,6 @@ public interface WorkflowHistoryRepository {
      *
      * @return an unmodifiable collection of all workflow history entries.
      */
-    @Nonnull
     List<WorkflowHistory> findAll();
 
 
@@ -46,6 +44,5 @@ public interface WorkflowHistoryRepository {
      * @param workflowId the id of the workflow to retrieve history for.
      * @return a workflow history or null, if no history exists for the given workflow id.
      */
-    @Nonnull
-    Optional<WorkflowHistory> findById(@Nonnull String workflowId);
+    Optional<WorkflowHistory> findById(String workflowId);
 }

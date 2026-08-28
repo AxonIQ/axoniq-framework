@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowExecutionException;
@@ -182,10 +184,10 @@ class EventSourcedWorkflowStateTest {
     @Test
     void evolveStepCompletedAndEvolvePayload() {
         String stepName = "testStep";
-        Map<String, Object> initialPayload = Map.of("key1", "value1");
+        Map<String, @Nullable Object> initialPayload = Map.of("key1", "value1");
         state = new EventSourcedWorkflowState(WORKFLOW_ID, initialPayload, DEFINITION_ID);
 
-        Map<String, Object> stepResult = Map.of("key2", "value2");
+        Map<String, @Nullable Object> stepResult = Map.of("key2", "value2");
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.COMPLETED)
                                          .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
                                            NAME);
@@ -207,7 +209,7 @@ class EventSourcedWorkflowStateTest {
     @Test
     void evolvePayloadConvertsNonMapPayloadsToMaps() {
         String stepName = "testStep";
-        Map<String, Object> stepResult = Map.of("key", "value");
+        Map<String, @Nullable Object> stepResult = Map.of("key", "value");
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.COMPLETED)
                                          .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD, NAME);
         EventMessage eventMessage = mock(EventMessage.class);

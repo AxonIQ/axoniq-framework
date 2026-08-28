@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 /**
@@ -39,5 +38,5 @@ interface WorkflowTerminalTransition {
      *
      * @param terminalEventPublication action that publishes and applies the workflow terminal event
      */
-    void transition(@Nonnull Runnable terminalEventPublication);
+    void transition(Runnable terminalEventPublication);
 }

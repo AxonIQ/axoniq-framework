@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.test.fixture;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.history.api.WorkflowHistory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
@@ -123,7 +125,7 @@ class WorkflowEngineTestingStateTest {
                                   step("createUser", StepStatus.COMPLETED),
                                   step("activateUser2", StepStatus.STARTED));
         AtomicReference<WorkflowStep> capturedStep = new AtomicReference<>();
-        AtomicReference<Map<String, Object>> capturedPayload = new AtomicReference<>();
+        AtomicReference<Map<String, @Nullable Object>> capturedPayload = new AtomicReference<>();
         AtomicReference<WorkflowState> capturedState = new AtomicReference<>();
 
         state.stepSatisfies(step -> step.stepName().equals("activateUser2"), capturedStep::set);
@@ -283,7 +285,7 @@ class WorkflowEngineTestingStateTest {
     }
 
     private WorkflowEngineTestingState workflowState(List<String> stepNames,
-                                                     Map<String, Object> payload,
+                                                     Map<String, @Nullable Object> payload,
                                                      WorkflowStep... steps) {
         WorkflowState state = mock(WorkflowState.class);
         when(state.workflowStepNames()).thenReturn(stepNames);

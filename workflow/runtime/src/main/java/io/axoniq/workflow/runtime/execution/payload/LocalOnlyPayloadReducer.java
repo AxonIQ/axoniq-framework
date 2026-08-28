@@ -18,9 +18,9 @@
  */
 package io.axoniq.workflow.runtime.execution.payload;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
-import jakarta.annotation.Nonnull;
-import org.jspecify.annotations.NonNull;
 
 import java.util.Map;
 
@@ -44,13 +44,13 @@ public class LocalOnlyPayloadReducer implements PayloadReducer {
     public static final LocalOnlyPayloadReducer INSTANCE = new LocalOnlyPayloadReducer();
 
     @Override
-    public Map<String, Object> apply(@NonNull Map<String, Object> global,
-                                     @Nonnull Map<String, Object> local) {
+    public Map<String, @Nullable Object> apply(Map<String, @Nullable Object> global,
+                                     Map<String, @Nullable Object> local) {
         return local;
     }
 
     @Override
-    public @NonNull String name() {
+    public String name() {
         return NAME;
     }
 }

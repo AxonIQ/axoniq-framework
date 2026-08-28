@@ -24,7 +24,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.execution.ExecuteStepActionResolver;
-import jakarta.annotation.Nonnull;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -49,11 +48,10 @@ public class ManualExecuteStepActionResolver implements ExecuteStepActionResolve
      * @param command           execute command
      * @return payload processor to execute
      */
-    @Nonnull
     @Override
-    public PayloadProcessor resolve(@Nonnull WorkflowContext workflowContext,
-                                    @Nonnull WorkflowExecution workflowExecution,
-                                    @Nonnull ExecutePrimitive.ExecuteCommand command) {
+    public PayloadProcessor resolve(WorkflowContext workflowContext,
+                                    WorkflowExecution workflowExecution,
+                                    ExecutePrimitive.ExecuteCommand command) {
         var actionFactory = actions.computeIfAbsent(command.stepName(), ignored -> new CompletableFuture<>());
         try {
             return actionFactory.get().apply(command);
@@ -72,7 +70,7 @@ public class ManualExecuteStepActionResolver implements ExecuteStepActionResolve
      * @param stepName step name
      * @param action   action to apply
      */
-    public void applyAction(@Nonnull String stepName, @Nonnull PayloadProcessor action) {
+    public void applyAction(String stepName, PayloadProcessor action) {
         complete(stepName, ignored -> action);
     }
 
@@ -81,12 +79,12 @@ public class ManualExecuteStepActionResolver implements ExecuteStepActionResolve
      *
      * @param stepName step name
      */
-    public void applyOriginalAction(@Nonnull String stepName) {
+    public void applyOriginalAction(String stepName) {
         complete(stepName, ExecutePrimitive.ExecuteCommand::action);
     }
 
-    private void complete(@Nonnull String stepName,
-                          @Nonnull Function<ExecutePrimitive.ExecuteCommand, PayloadProcessor> actionFactory) {
+    private void complete(String stepName,
+                          Function<ExecutePrimitive.ExecuteCommand, PayloadProcessor> actionFactory) {
         actions.computeIfAbsent(stepName, ignored -> new CompletableFuture<>()).complete(actionFactory);
     }
 }

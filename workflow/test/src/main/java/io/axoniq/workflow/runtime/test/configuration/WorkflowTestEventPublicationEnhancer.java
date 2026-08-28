@@ -23,7 +23,6 @@ import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
 import io.axoniq.workflow.runtime.test.utils.IdGenerator;
 import io.axoniq.workflow.runtime.test.utils.RecordingIdGenerator;
 import io.axoniq.workflow.runtime.test.utils.TestEventPublisher;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.messaging.core.MessageTypeResolver;
@@ -57,7 +56,7 @@ import java.util.concurrent.Executor;
 public class WorkflowTestEventPublicationEnhancer implements ConfigurationEnhancer {
 
     @Override
-    public void enhance(@Nonnull ComponentRegistry registry) {
+    public void enhance(ComponentRegistry registry) {
         registry
                 .registerComponent(IdGenerator.class, cfg -> new RecordingIdGenerator() {
                 })

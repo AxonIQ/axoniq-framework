@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.util;
 
-import jakarta.annotation.Nonnull;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -37,7 +36,7 @@ public class DefaultFutureResolver extends FutureResolver {
      * @param future future to resolve
      */
     @Override
-    public void resolve(@Nonnull CompletableFuture<?> future) {
+    public void resolve(CompletableFuture<?> future) {
         Objects.requireNonNull(future, "Future must not be null").join();
     }
 }

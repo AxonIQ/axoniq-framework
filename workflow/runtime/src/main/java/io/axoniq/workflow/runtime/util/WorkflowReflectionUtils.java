@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.util;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 import java.lang.reflect.InvocationTargetException;
@@ -62,8 +61,7 @@ public class WorkflowReflectionUtils {
      * @param clazz    class to check.
      * @return provided class.
      */
-    @Nonnull
-    public static <C> Class<C> requireIsAssignableFrom(@Nonnull Class<?> expected, @Nonnull Class<C> clazz) {
+    public static <C> Class<C> requireIsAssignableFrom(Class<?> expected, Class<C> clazz) {
         if (!expected.isAssignableFrom(clazz)) {
             throw new IllegalArgumentException(String.format(
                     "Provided type %s must be instance of WorkflowState, but it was not.",
@@ -80,7 +78,7 @@ public class WorkflowReflectionUtils {
      * @param args     args of the method.
      * @return result of invocation.
      */
-    public static Object invoke(@Nonnull Object instance, @Nonnull Method method, Object... args) {
+    public static Object invoke(Object instance, Method method, Object... args) {
         try {
             return method.invoke(instance, args);
         } catch (InvocationTargetException e) {

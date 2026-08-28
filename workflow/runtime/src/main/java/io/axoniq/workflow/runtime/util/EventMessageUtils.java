@@ -25,8 +25,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
@@ -58,15 +57,15 @@ public class EventMessageUtils {
      * Reads the workflow's current definition version from {@code context}, falling back to
      * {@link MessageType#DEFAULT_VERSION} when the context returns null (e.g. unit-test mocks with no stub).
      */
-    private static String versionOf(@Nonnull WorkflowContext context) {
+    private static String versionOf(WorkflowContext context) {
         var v = context.workflowVersion();
         return (v == null || v.isBlank()) ? MessageType.DEFAULT_VERSION : v;
     }
 
-    private static EventMessage eventMessage(@Nonnull WorkflowContext context,
-                                             @Nonnull MessageType type,
+    private static EventMessage eventMessage(WorkflowContext context,
+                                             MessageType type,
                                              @Nullable Object payload,
-                                             @Nonnull Metadata metadata) {
+                                             Metadata metadata) {
         return new GenericEventMessage(type, payload, metadata)
                 .withConverter(context.processingContext().component(EventConverter.class));
     }
@@ -77,7 +76,7 @@ public class EventMessageUtils {
      * @param workflowId ID of the workflow.
      * @return predicate filtering event messages by workflow ID.
      */
-    public static Predicate<EventMessage> workflowIdFilter(@Nonnull String workflowId) {
+    public static Predicate<EventMessage> workflowIdFilter(String workflowId) {
         return m -> MetadataUtils.workflowIdFilter(workflowId).test(m.metadata());
     }
 
@@ -89,11 +88,10 @@ public class EventMessageUtils {
      * @param customizer   event name customizer.
      * @return event message.
      */
-    @Nonnull
-    public static EventMessage startedWorkflow(@Nonnull WorkflowContext context,
-                                               @Nonnull String workflowName,
-                                               @Nonnull MessageType workflowDefinitionId,
-                                               @Nonnull EventNameCustomizer customizer) {
+    public static EventMessage startedWorkflow(WorkflowContext context,
+                                               String workflowName,
+                                               MessageType workflowDefinitionId,
+                                               EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.STARTED);
         return eventMessage(context, new MessageType(name, versionOf(context)), context.workflowPayload(),
                             MetadataUtils.create(context.workflowId(),
@@ -112,11 +110,10 @@ public class EventMessageUtils {
      * @param customizer   event name customizer.
      * @return event message.
      */
-    @Nonnull
-    public static EventMessage completedWorkflow(@Nonnull WorkflowContext context,
-                                                 @Nonnull String workflowName,
-                                                 @Nonnull MessageType workflowDefinitionId,
-                                                 @Nonnull EventNameCustomizer customizer) {
+    public static EventMessage completedWorkflow(WorkflowContext context,
+                                                 String workflowName,
+                                                 MessageType workflowDefinitionId,
+                                                 EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.COMPLETED);
         return eventMessage(context, new MessageType(name, versionOf(context)), Map.of(),
                             MetadataUtils.create(context.workflowId(),
@@ -134,12 +131,11 @@ public class EventMessageUtils {
      * @param customizer   event name customizer.
      * @return event message.
      */
-    @Nonnull
-    public static EventMessage failedWorkflow(@Nonnull WorkflowContext context,
-                                              @Nonnull String workflowName,
-                                              @Nonnull Exception exception,
-                                              @Nonnull MessageType workflowDefinitionId,
-                                              @Nonnull EventNameCustomizer customizer) {
+    public static EventMessage failedWorkflow(WorkflowContext context,
+                                              String workflowName,
+                                              Exception exception,
+                                              MessageType workflowDefinitionId,
+                                              EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.FAILED);
         return eventMessage(context, new MessageType(name, versionOf(context)), WorkflowError.from(exception),
                             MetadataUtils.create(context.workflowId(),
@@ -157,12 +153,11 @@ public class EventMessageUtils {
      * @param customizer   event name customizer.
      * @return event message.
      */
-    @Nonnull
-    public static EventMessage timeoutWorkflow(@Nonnull WorkflowContext context,
-                                               @Nonnull String workflowName,
-                                               @Nonnull Instant time,
-                                               @Nonnull MessageType workflowDefinitionId,
-                                               @Nonnull EventNameCustomizer customizer) {
+    public static EventMessage timeoutWorkflow(WorkflowContext context,
+                                               String workflowName,
+                                               Instant time,
+                                               MessageType workflowDefinitionId,
+                                               EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.TIMED_OUT);
         return eventMessage(context, new MessageType(name, versionOf(context)), time,
                             MetadataUtils.create(context.workflowId(),
@@ -179,20 +174,18 @@ public class EventMessageUtils {
      * @param customizer   event name customizer.
      * @return event message.
      */
-    @Nonnull
-    public static EventMessage cancelledWorkflow(@Nonnull WorkflowContext context,
-                                                 @Nonnull String workflowName,
-                                                 @Nonnull MessageType workflowDefinitionId,
-                                                 @Nonnull EventNameCustomizer customizer) {
+    public static EventMessage cancelledWorkflow(WorkflowContext context,
+                                                 String workflowName,
+                                                 MessageType workflowDefinitionId,
+                                                 EventNameCustomizer customizer) {
         return cancelledWorkflow(context, workflowName, null, workflowDefinitionId, customizer);
     }
 
-    @Nonnull
-    public static EventMessage cancelledWorkflow(@Nonnull WorkflowContext context,
-                                                 @Nonnull String workflowName,
+    public static EventMessage cancelledWorkflow(WorkflowContext context,
+                                                 String workflowName,
                                                  @Nullable Throwable cause,
-                                                 @Nonnull MessageType workflowDefinitionId,
-                                                 @Nonnull EventNameCustomizer customizer) {
+                                                 MessageType workflowDefinitionId,
+                                                 EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.CANCELLED);
         return eventMessage(context, new MessageType(name, versionOf(context)),
                             cause != null ? WorkflowError.from(cause) : Map.of(),
@@ -211,11 +204,10 @@ public class EventMessageUtils {
      * @param customizer event name customizer.
      * @return event message.
      */
-    @Nonnull
-    public static EventMessage startedStep(@Nonnull WorkflowContext context,
-                                           @Nonnull String stepName,
-                                           @Nonnull Map<String, Object> local,
-                                           @Nonnull EventNameCustomizer customizer) {
+    public static EventMessage startedStep(WorkflowContext context,
+                                           String stepName,
+                                           Map<String, @Nullable Object> local,
+                                           EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, local, StepStatus.STARTED);
         return eventMessage(context, new MessageType(name, versionOf(context)), local,
                             MetadataUtils.create(context.workflowId(), stepName, StepStatus.STARTED)
@@ -230,11 +222,10 @@ public class EventMessageUtils {
      * @param local      local data
      * @param customizer customizer for event name
      */
-    @Nonnull
-    public static EventMessage startedWaitForEventStep(@Nonnull WorkflowContext context,
-                                                       @Nonnull String stepName,
-                                                       @Nonnull Map<String, Object> local,
-                                                       @Nonnull EventNameCustomizer customizer) {
+    public static EventMessage startedWaitForEventStep(WorkflowContext context,
+                                                       String stepName,
+                                                       Map<String, @Nullable Object> local,
+                                                       EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, local, StepStatus.STARTED);
         return eventMessage(context,
                             new MessageType(name, versionOf(context)),
@@ -259,12 +250,11 @@ public class EventMessageUtils {
      * @param customizer               event name customizer.
      * @return event message.
      */
-    @Nonnull
-    public static EventMessage completedStep(@Nonnull WorkflowContext context,
-                                             @Nonnull String stepName,
-                                             @Nonnull Map<String, Object> result,
+    public static EventMessage completedStep(WorkflowContext context,
+                                             String stepName,
+                                             Map<String, @Nullable Object> result,
                                              @Nullable String resultPayloadReducerName,
-                                             @Nonnull EventNameCustomizer customizer) {
+                                             EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, result, StepStatus.COMPLETED);
         var meta = MetadataUtils.create(context.workflowId(), stepName, StepStatus.COMPLETED);
         if (resultPayloadReducerName != null) {
@@ -276,12 +266,11 @@ public class EventMessageUtils {
     /**
      * Creates a completed event for a wait-for-event step.
      */
-    @Nonnull
-    public static EventMessage completedWaitForEventStep(@Nonnull WorkflowContext context,
-                                                         @Nonnull String stepName,
-                                                         @Nonnull Map<String, Object> result,
+    public static EventMessage completedWaitForEventStep(WorkflowContext context,
+                                                         String stepName,
+                                                         Map<String, @Nullable Object> result,
                                                          @Nullable String resultPayloadReducerName,
-                                                         @Nonnull EventNameCustomizer customizer) {
+                                                         EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, result, StepStatus.COMPLETED);
         var meta = MetadataUtils.markWaitForEventStep(
                 MetadataUtils.create(context.workflowId(), stepName, StepStatus.COMPLETED)
@@ -301,11 +290,10 @@ public class EventMessageUtils {
      * @param customizer event name customizer.
      * @return event message.
      */
-    @Nonnull
-    public static EventMessage failStep(@Nonnull WorkflowContext context,
-                                        @Nonnull String stepName,
-                                        @Nonnull Throwable exception,
-                                        @Nonnull EventNameCustomizer customizer) {
+    public static EventMessage failStep(WorkflowContext context,
+                                        String stepName,
+                                        Throwable exception,
+                                        EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.FAILED);
         return eventMessage(context, new MessageType(name, versionOf(context)), WorkflowError.from(exception),
                             MetadataUtils.create(context.workflowId(), stepName, StepStatus.FAILED)
@@ -320,10 +308,9 @@ public class EventMessageUtils {
      * @param customizer event name customizer.
      * @return event message.
      */
-    @Nonnull
-    public static EventMessage cancelledStep(@Nonnull WorkflowContext context,
-                                             @Nonnull String stepName,
-                                             @Nonnull EventNameCustomizer customizer) {
+    public static EventMessage cancelledStep(WorkflowContext context,
+                                             String stepName,
+                                             EventNameCustomizer customizer) {
         return cancelledStep(context, stepName, null, customizer);
     }
 
@@ -336,11 +323,10 @@ public class EventMessageUtils {
      * @param customizer event name customizer.
      * @return event message.
      */
-    @Nonnull
-    public static EventMessage cancelledStep(@Nonnull WorkflowContext context,
-                                             @Nonnull String stepName,
+    public static EventMessage cancelledStep(WorkflowContext context,
+                                             String stepName,
                                              @Nullable Throwable cause,
-                                             @Nonnull EventNameCustomizer customizer) {
+                                             EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.CANCELLED);
         Object payload = cause != null ? WorkflowError.from(cause) : Map.of();
         return eventMessage(context, new MessageType(name, versionOf(context)), payload,
@@ -351,11 +337,10 @@ public class EventMessageUtils {
     /**
      * Creates a cancelled event for a wait-for-event step.
      */
-    @Nonnull
-    public static EventMessage cancelledWaitForEventStep(@Nonnull WorkflowContext context,
-                                                         @Nonnull String stepName,
+    public static EventMessage cancelledWaitForEventStep(WorkflowContext context,
+                                                         String stepName,
                                                          @Nullable Throwable cause,
-                                                         @Nonnull EventNameCustomizer customizer) {
+                                                         EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.CANCELLED);
         Object payload = cause != null ? WorkflowError.from(cause) : Map.of();
         return eventMessage(context,
@@ -376,11 +361,10 @@ public class EventMessageUtils {
      * @param customizer event name customizer.
      * @return event message.
      */
-    @Nonnull
-    public static EventMessage retryingStep(@Nonnull WorkflowContext context,
-                                            @Nonnull String stepName,
-                                            @Nonnull StepRetryInfo retryInfo,
-                                            @Nonnull EventNameCustomizer customizer) {
+    public static EventMessage retryingStep(WorkflowContext context,
+                                            String stepName,
+                                            StepRetryInfo retryInfo,
+                                            EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.RETRYING);
         return eventMessage(context, new MessageType(name, versionOf(context)), retryInfo,
                             MetadataUtils.create(context.workflowId(), stepName, StepStatus.RETRYING)
@@ -396,11 +380,10 @@ public class EventMessageUtils {
      * @param customizer event name customizer.
      * @return event message.
      */
-    @Nonnull
-    public static EventMessage timeoutStep(@Nonnull WorkflowContext context,
-                                           @Nonnull String stepName,
-                                           @Nonnull Instant time,
-                                           @Nonnull EventNameCustomizer customizer) {
+    public static EventMessage timeoutStep(WorkflowContext context,
+                                           String stepName,
+                                           Instant time,
+                                           EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.TIMED_OUT);
         return eventMessage(context, new MessageType(name, versionOf(context)), time,
                             MetadataUtils.create(context.workflowId(), stepName, StepStatus.TIMED_OUT)
@@ -410,11 +393,10 @@ public class EventMessageUtils {
     /**
      * Creates a timed-out event for a wait-for-event step.
      */
-    @Nonnull
-    public static EventMessage timeoutWaitForEventStep(@Nonnull WorkflowContext context,
-                                                       @Nonnull String stepName,
-                                                       @Nonnull Instant time,
-                                                       @Nonnull EventNameCustomizer customizer) {
+    public static EventMessage timeoutWaitForEventStep(WorkflowContext context,
+                                                       String stepName,
+                                                       Instant time,
+                                                       EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.TIMED_OUT);
         return eventMessage(context,
                             new MessageType(name, versionOf(context)),
@@ -439,12 +421,11 @@ public class EventMessageUtils {
      * @param customizer event name customizer.
      * @return event message.
      */
-    @Nonnull
-    public static EventMessage versionMigrationStep(@Nonnull WorkflowContext context,
-                                                    @Nonnull String changeId,
-                                                    @Nonnull String version,
-                                                    @Nonnull EventNameCustomizer customizer) {
-        Map<String, Object> payload = Map.of(
+    public static EventMessage versionMigrationStep(WorkflowContext context,
+                                                    String changeId,
+                                                    String version,
+                                                    EventNameCustomizer customizer) {
+        Map<String, @Nullable Object> payload = Map.of(
                 "changeId", changeId,
                 "version", version
         );

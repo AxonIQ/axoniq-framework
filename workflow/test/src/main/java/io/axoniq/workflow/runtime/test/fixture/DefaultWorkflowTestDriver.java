@@ -23,7 +23,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.StepFailedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
-import jakarta.annotation.Nonnull;
 import org.awaitility.core.ThrowingRunnable;
 import org.axonframework.common.annotation.Internal;
 
@@ -54,9 +53,9 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
      * @param assertionFailureHandler handler responsible for handling assertion failures
      * @param steppingMode            whether the test driver is in stepping mode
      */
-    DefaultWorkflowTestDriver(@Nonnull WorkflowTestServices workflowTestServices,
-                              @Nonnull MutableWorkflowEngineTestingState testingState,
-                              @Nonnull AssertionFailureHandler assertionFailureHandler,
+    DefaultWorkflowTestDriver(WorkflowTestServices workflowTestServices,
+                              MutableWorkflowEngineTestingState testingState,
+                              AssertionFailureHandler assertionFailureHandler,
                               boolean steppingMode) {
         this.workflowTestServices =
                 Objects.requireNonNull(workflowTestServices, "Workflow test services must not be null");
@@ -67,19 +66,16 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
     }
 
     @Override
-    @Nonnull
     public WorkflowTestServices workflowTestServices() {
         return workflowTestServices;
     }
 
     @Override
-    @Nonnull
     public WorkflowEngineTestingState testingState() {
         return testingState;
     }
 
     @Override
-    @Nonnull
     public AssertionFailureHandler assertionFailureHandler() {
         return assertionFailureHandler;
     }
@@ -95,7 +91,7 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
     }
 
     @Override
-    public WorkflowExecution executionMatches(@Nonnull Predicate<WorkflowExecution> predicate) {
+    public WorkflowExecution executionMatches(Predicate<WorkflowExecution> predicate) {
         Objects.requireNonNull(predicate, "Predicate must not be null");
         awaitEventually("Expected an active workflow execution matching the given predicate to appear",
                         () -> {
@@ -118,7 +114,7 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
     }
 
     @Override
-    public void executionSatisfies(@Nonnull Consumer<WorkflowExecution> executionConsumer) {
+    public void executionSatisfies(Consumer<WorkflowExecution> executionConsumer) {
         Objects.requireNonNull(executionConsumer, "Execution consumer must not be null");
         executionConsumer.accept(executionExists());
     }
@@ -140,7 +136,7 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
     }
 
     @Override
-    public WorkflowHistory historyMatches(@Nonnull Predicate<WorkflowHistory> predicate) {
+    public WorkflowHistory historyMatches(Predicate<WorkflowHistory> predicate) {
         Objects.requireNonNull(predicate, "Predicate must not be null");
         awaitEventually("Expected a workflow history entry matching the given predicate to appear",
                         () -> {
@@ -166,7 +162,7 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
     }
 
     @Override
-    public void historySatisfies(@Nonnull Consumer<WorkflowHistory> historyConsumer) {
+    public void historySatisfies(Consumer<WorkflowHistory> historyConsumer) {
         Objects.requireNonNull(historyConsumer, "History consumer must not be null");
         historyConsumer.accept(historyExists());
     }
@@ -184,13 +180,13 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
     }
 
     @Override
-    public void publishEvent(@Nonnull Object event) {
+    public void publishEvent(Object event) {
         Objects.requireNonNull(event, "Event must not be null");
         this.workflowTestServices.eventPublisher().publish(event).join();
     }
 
     @Override
-    public void timePasses(@Nonnull Duration duration) {
+    public void timePasses(Duration duration) {
         Objects.requireNonNull(duration, "Duration must not be null");
         if (!steppingMode) {
             throw new IllegalStateException(
@@ -205,7 +201,7 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
     }
 
     @Override
-    public void executeStep(@Nonnull String stepName) {
+    public void executeStep(String stepName) {
         Objects.requireNonNull(stepName, "Step name must not be null");
         if (!steppingMode) {
             throw new IllegalStateException(
@@ -224,7 +220,7 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
     }
 
     @Override
-    public void executeStep(@Nonnull String stepName, @Nonnull PayloadProcessor payloadProcessor) {
+    public void executeStep(String stepName, PayloadProcessor payloadProcessor) {
         Objects.requireNonNull(stepName, "Step name must not be null");
         Objects.requireNonNull(payloadProcessor, "Payload processor must not be null");
         if (!steppingMode) {
@@ -243,7 +239,7 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
     }
 
     @Override
-    public void executeStepFailing(@Nonnull String stepName, @Nonnull StepFailedException exception) {
+    public void executeStepFailing(String stepName, StepFailedException exception) {
         Objects.requireNonNull(stepName, "Step name must not be null");
         Objects.requireNonNull(exception, "Exception must not be null");
         if (!steppingMode) {
@@ -261,8 +257,8 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
     }
 
     @Override
-    public void awaitEventually(@Nonnull String description,
-                                @Nonnull ThrowingRunnable assertion) {
+    public void awaitEventually(String description,
+                                ThrowingRunnable assertion) {
         MutableWorkflowEngineTestingState.awaitEventually(this.assertionFailureHandler, description, assertion);
     }
 
@@ -270,7 +266,7 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
         return testingState;
     }
 
-    private void assertStepReachedTerminalState(@Nonnull String stepName, @Nonnull String actionDescription) {
+    private void assertStepReachedTerminalState(String stepName, String actionDescription) {
         var state = this.testingState.state();
         if (!state.containsStep(stepName)) {
             throw new AssertionError(
@@ -291,8 +287,7 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
         }
     }
 
-    @Nonnull
-    private static String formatWaitingSteps(@Nonnull WorkflowState state) {
+    private static String formatWaitingSteps(WorkflowState state) {
         var waitingSteps = state.workflowStepNames().stream()
                                 .filter(name -> !state.getStep(name).status().isTerminal())
                                 .toList();
@@ -304,8 +299,7 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
                 : "steps %s".formatted(waitingSteps);
     }
 
-    @Nonnull
-    private static String formatFinishedSteps(@Nonnull WorkflowState state) {
+    private static String formatFinishedSteps(WorkflowState state) {
         var finishedSteps = state.workflowStepNames().stream()
                                  .filter(name -> state.getStep(name).status().isTerminal())
                                  .toList();

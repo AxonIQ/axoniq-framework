@@ -19,8 +19,7 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.Objects;
@@ -51,8 +50,7 @@ public interface WorkflowCancellation {
      * @return a future completing with {@code true} when a terminal step cancellation was recorded, or {@code false}
      * when the step was unknown or already terminal
      */
-    @Nonnull
-    CompletableFuture<Boolean> requestStepCancellation(@Nonnull String stepName, @Nullable Throwable cause);
+    CompletableFuture<Boolean> requestStepCancellation(String stepName, @Nullable Throwable cause);
 
     /**
      * Requests cooperative cancellation of every currently-running workflow step without terminating the workflow.
@@ -60,7 +58,6 @@ public interface WorkflowCancellation {
      * @param cause optional reason for the cancellation
      * @return a future completing with the number of steps for which terminal cancellation was recorded
      */
-    @Nonnull
     CompletableFuture<Integer> requestCancellationOfAllSteps(@Nullable Throwable cause);
 
     /**
@@ -69,7 +66,6 @@ public interface WorkflowCancellation {
      * @param cause optional reason for the cancellation
      * @return a future completing after the workflow cancellation event is durable and the workflow body was woken
      */
-    @Nonnull
     CompletableFuture<Void> requestWorkflowCancellation(@Nullable Throwable cause);
 
     /**
@@ -100,7 +96,7 @@ public interface WorkflowCancellation {
          *
          * @param reason reason the cancellation can no longer be performed
          */
-        void abortPendingWorkflowCancellation(@Nonnull CancellationException reason);
+        void abortPendingWorkflowCancellation(CancellationException reason);
     }
 
     /**
@@ -109,8 +105,8 @@ public interface WorkflowCancellation {
      * @param cause cancellation cause to record durably
      * @param callback future completed after the workflow driver performs the terminal transition
      */
-    record PendingRequest(@Nonnull WorkflowCancelledException cause,
-                          @Nonnull CompletableFuture<Void> callback) {
+    record PendingRequest(WorkflowCancelledException cause,
+                          CompletableFuture<Void> callback) {
         public PendingRequest {
             Objects.requireNonNull(cause, "Cancellation cause must not be null");
             Objects.requireNonNull(callback, "Completion future must not be null");

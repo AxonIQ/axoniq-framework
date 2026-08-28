@@ -44,7 +44,7 @@ class RetryWorkflowTest : AbstractWorkflowTestBase<WorkflowKontext>(
 ) {
     private lateinit var workflow: KotlinRetryWorkflow
 
-    override fun configure(): UnaryOperator<WorkflowConfigurer?> =
+    override fun configure(): UnaryOperator<WorkflowConfigurer> =
         super.configure().apply {
             workflow = KotlinRetryWorkflow()
         }

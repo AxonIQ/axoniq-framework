@@ -18,9 +18,9 @@
  */
 package io.axoniq.workflow.runtime.execution.payload;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
-import jakarta.annotation.Nonnull;
-import org.jspecify.annotations.NonNull;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -47,15 +47,15 @@ public class CombineGlobalAndLocalPayloadReducer implements PayloadReducer {
     public static final CombineGlobalAndLocalPayloadReducer INSTANCE = new CombineGlobalAndLocalPayloadReducer();
 
     @Override
-    public Map<String, Object> apply(@Nonnull Map<String, Object> global,
-                                     @Nonnull Map<String, Object> local) {
+    public Map<String, @Nullable Object> apply(Map<String, @Nullable Object> global,
+                                     Map<String, @Nullable Object> local) {
         var result = new HashMap<>(global);
         result.putAll(local);
         return result;
     }
 
     @Override
-    public @NonNull String name() {
+    public String name() {
         return NAME;
     }
 }

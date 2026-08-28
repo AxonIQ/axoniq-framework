@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import jakarta.annotation.Nonnull;
 
 /**
  * Provides the cancellation coordinator associated with a running workflow implementation.
@@ -39,6 +38,5 @@ interface WorkflowCancellationProvider {
      *
      * @return cancellation coordinator for the workflow execution
      */
-    @Nonnull
     WorkflowCancellation workflowCancellation();
 }

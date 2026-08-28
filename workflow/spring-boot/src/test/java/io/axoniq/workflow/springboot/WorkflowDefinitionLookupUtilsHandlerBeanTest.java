@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.springboot;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
@@ -84,7 +86,7 @@ public class WorkflowDefinitionLookupUtilsHandlerBeanTest {
 
     static class MyWorkflowContext extends AbstractDSLWorkflowContext {
 
-        public MyWorkflowContext(String workflowId, Map<String, Object> payload, ProcessingContext processingContext,
+        public MyWorkflowContext(String workflowId, Map<String, @Nullable Object> payload, ProcessingContext processingContext,
                                  WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
         }
@@ -92,7 +94,7 @@ public class WorkflowDefinitionLookupUtilsHandlerBeanTest {
 
     static class OtherWorkflowContext extends AbstractDSLWorkflowContext {
 
-        public OtherWorkflowContext(String workflowId, Map<String, Object> payload, ProcessingContext processingContext,
+        public OtherWorkflowContext(String workflowId, Map<String, @Nullable Object> payload, ProcessingContext processingContext,
                                     WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
         }

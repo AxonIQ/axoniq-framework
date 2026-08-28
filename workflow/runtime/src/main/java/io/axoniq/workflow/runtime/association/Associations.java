@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.association;
 
-import jakarta.annotation.Nonnull;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -67,8 +66,8 @@ import java.util.stream.Collectors;
  * @since 1.0.0
  */
 public record Associations(
-        @Nonnull ValueComparisonOperatorRegistry registry,
-        @Nonnull Set<String> criteria
+        ValueComparisonOperatorRegistry registry,
+        Set<String> criteria
 ) {
 
     /**
@@ -91,9 +90,9 @@ public record Associations(
      * @return an association upon which can be build further, for fluent interface.
      */
     public static Associations associate(
-            @Nonnull ValueRetriever retriever,
-            @Nonnull String operator,
-            @Nonnull Object value
+            ValueRetriever retriever,
+            String operator,
+            Object value
     ) {
         return new Associations(
                 new ValueComparisonOperatorRegistry(),
@@ -108,8 +107,8 @@ public record Associations(
      * @param matcher   variable matcher, see {@link Matcher} for example.
      * @return an association upon which can be build further, for fluent interface
      */
-    public static Associations associate(@Nonnull ValueRetriever retriever,
-                                         @Nonnull Matcher matcher) {
+    public static Associations associate(ValueRetriever retriever,
+                                         Matcher matcher) {
         return Associations.associate(
                 retriever,
                 matcher.operator,
@@ -125,7 +124,7 @@ public record Associations(
      * @return associations instance
      */
     public static Associations parse(
-            @Nonnull ValueComparisonOperatorRegistry registry, String... associations) {
+            ValueComparisonOperatorRegistry registry, String... associations) {
         return new Associations(registry, normalizeAssociations(registry, associations));
     }
 
@@ -138,9 +137,9 @@ public record Associations(
      * @param value     right side of comparison
      * @return new associations containing old associations and new one
      */
-    public Associations and(@Nonnull ValueRetriever retriever,
-                            @Nonnull String operator,
-                            @Nonnull Object value) {
+    public Associations and(ValueRetriever retriever,
+                            String operator,
+                            Object value) {
         var newValues = new HashSet<>(this.criteria);
         newValues.add(SerializedAssociation.from(retriever, operator, value).serialize());
         return new Associations(this.registry, newValues);
@@ -154,8 +153,8 @@ public record Associations(
      * @param matcher value matcher including operator and value for comparison
      * @return new associations containing old associations and new one
      */
-    public Associations and(@Nonnull ValueRetriever retriever,
-                            @Nonnull Matcher matcher) {
+    public Associations and(ValueRetriever retriever,
+                            Matcher matcher) {
         return and(retriever, matcher.operator, matcher.value);
     }
 
@@ -168,14 +167,13 @@ public record Associations(
      * @since 1.0.0
      */
     public record Matcher(
-            @Nonnull String operator,
-            @Nonnull Object value) {
+            String operator,
+            Object value) {
 
     }
 
 
-    @Nonnull
-    private static Set<String> normalizeAssociations(@Nonnull ValueComparisonOperatorRegistry registry,
+    private static Set<String> normalizeAssociations(ValueComparisonOperatorRegistry registry,
                                                      String... associations) {
         return Arrays.stream(associations)
                      .map(conditionString -> SerializedAssociation.parse(registry, conditionString).serialize())

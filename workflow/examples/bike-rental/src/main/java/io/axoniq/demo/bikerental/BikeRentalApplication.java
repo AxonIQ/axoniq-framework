@@ -18,7 +18,6 @@
  */
 package io.axoniq.demo.bikerental;
 
-import jakarta.annotation.Nonnull;
 import jakarta.persistence.EntityManagerFactory;
 import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.messaging.core.unitofwork.transaction.jpa.JpaTransactionalExecutorProvider;
@@ -46,8 +45,8 @@ public class BikeRentalApplication {
     @Bean
     @Primary
     public TokenStore tokenStore(
-            @Nonnull GeneralConverter converter,
-            @Nonnull EntityManagerFactory entityManagerFactory) {
+            GeneralConverter converter,
+            EntityManagerFactory entityManagerFactory) {
         return new JpaTokenStore(
                 new JpaTransactionalExecutorProvider(entityManagerFactory),
                 converter,

@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.util;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
@@ -51,14 +53,14 @@ import static org.mockito.Mockito.*;
  */
 class EventMessageUtilsTest {
 
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    private static final TypeReference<Map<String, @Nullable Object>> MAP_TYPE = new TypeReference<>() {
     };
 
     private WorkflowContext context;
     private EventNameCustomizer customizer;
     private MessageType workflowDefinitionId;
     private final String workflowId = "wf123";
-    private final Map<String, Object> payload = Map.of("key", "value");
+    private final Map<String, @Nullable Object> payload = Map.of("key", "value");
 
     @BeforeEach
     void setUp() {
@@ -230,7 +232,7 @@ class EventMessageUtilsTest {
 
     @Test
     void startedStep() {
-        Map<String, Object> local = Map.of("localKey", "localVal");
+        Map<String, @Nullable Object> local = Map.of("localKey", "localVal");
         EventMessage message = EventMessageUtils.startedStep(context, "step1", local, customizer);
         assertThat(message.type().toString()).startsWith("step1.STARTED");
         assertThat(message.payload()).isEqualTo(local);
@@ -241,7 +243,7 @@ class EventMessageUtilsTest {
 
     @Test
     void startedWaitForEventStep() {
-        Map<String, Object> local = Map.of("localKey", "localVal");
+        Map<String, @Nullable Object> local = Map.of("localKey", "localVal");
         EventMessage message = EventMessageUtils.startedWaitForEventStep(context, "step1", local, customizer);
         assertThat(message.type().toString()).startsWith("step1.STARTED");
         assertThat(message.payload()).isEqualTo(local);
@@ -253,7 +255,7 @@ class EventMessageUtilsTest {
 
     @Test
     void completedStep() {
-        Map<String, Object> result = Map.of("res", "val");
+        Map<String, @Nullable Object> result = Map.of("res", "val");
         EventMessage message = EventMessageUtils.completedStep(context, "step1", result, "myReducer", customizer);
         assertThat(message.type().toString()).startsWith("step1.COMPLETED");
         assertThat(message.payload()).isEqualTo(result);
@@ -265,7 +267,7 @@ class EventMessageUtilsTest {
 
     @Test
     void completedWaitForEventStep() {
-        Map<String, Object> result = Map.of("res", "val");
+        Map<String, @Nullable Object> result = Map.of("res", "val");
         EventMessage message = EventMessageUtils.completedWaitForEventStep(context, "step1", result, "myReducer",
                                                                            customizer);
         assertThat(message.type().toString()).startsWith("step1.COMPLETED");
@@ -279,14 +281,14 @@ class EventMessageUtilsTest {
 
     @Test
     void completedStepNoReducer() {
-        Map<String, Object> result = Map.of("res", "val");
+        Map<String, @Nullable Object> result = Map.of("res", "val");
         EventMessage message = EventMessageUtils.completedStep(context, "step1", result, null, customizer);
         assertThat(MetadataUtils.payloadReducer(message.metadata())).isEmpty();
     }
 
     @Test
     void completedWaitForEventStepNoReducer() {
-        Map<String, Object> result = Map.of("res", "val");
+        Map<String, @Nullable Object> result = Map.of("res", "val");
         EventMessage message = EventMessageUtils.completedWaitForEventStep(context, "step1", result, null,
                                                                            customizer);
         assertThat(MetadataUtils.payloadReducer(message.metadata())).isEmpty();

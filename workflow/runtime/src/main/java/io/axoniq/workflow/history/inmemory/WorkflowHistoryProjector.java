@@ -22,7 +22,6 @@ import io.axoniq.workflow.history.api.WorkflowHistory;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
@@ -56,13 +55,12 @@ public class WorkflowHistoryProjector implements EventHandler {
      *
      * @param historyRepository the history repository to use.
      */
-    public WorkflowHistoryProjector(@Nonnull MutableWorkflowHistoryRepository historyRepository) {
+    public WorkflowHistoryProjector(MutableWorkflowHistoryRepository historyRepository) {
         this.historyRepository = requireNonNull(historyRepository, "The WorkflowHistoryRepository must not be null.");
     }
 
-    @Nonnull
     @Override
-    public MessageStream.Empty<Message> handle(@Nonnull EventMessage event, @Nonnull ProcessingContext context) {
+    public MessageStream.Empty<Message> handle(EventMessage event, ProcessingContext context) {
         if (!MetadataUtils.hasWorkflowId().test(event.metadata())) {
             return MessageStream.empty();
         }

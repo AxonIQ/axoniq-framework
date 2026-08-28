@@ -28,7 +28,6 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.workflow.runtime.test.utils.PrettyPrintingRecordingEventStore;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
@@ -106,7 +105,7 @@ class FailWithCatchWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowCon
                 idProperty = "id",
                 startOnEventClass = RegistrationReceivedEvent.class
         )
-        public void execute(@Nonnull BaseWorkflowContext ctx) {
+        public void execute(BaseWorkflowContext ctx) {
             logger.info("FailWithCatch workflow started for {}", ctx.workflowPayload());
 
             ctx.awaitExecute("stepA", Map.of(), (c, p) -> Map.of("result", "done"));

@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.itest;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
 import io.axoniq.workflow.configuration.WorkflowModule;
@@ -223,8 +225,8 @@ class WorkflowReplayPreparedStateTest {
         }
     }
 
-    private static Map<String, Object> payload(String id, String mode) {
-        var payload = new LinkedHashMap<String, Object>();
+    private static Map<String, @Nullable Object> payload(String id, String mode) {
+        var payload = new LinkedHashMap<String, @Nullable Object>();
         payload.put("id", id);
         payload.put("mode", mode);
         return payload;
@@ -251,12 +253,12 @@ class WorkflowReplayPreparedStateTest {
             appendTypedPayloadEvent(ResumeReplayWorkflowEvent.class, Map.of("id", id));
         }
 
-        private void appendTypedPayloadEvent(Class<?> payloadType, Map<String, Object> payload) {
+        private void appendTypedPayloadEvent(Class<?> payloadType, Map<String, @Nullable Object> payload) {
             appendEvent(new GenericEventMessage(new MessageType(payloadType), payload)
                                 .withConverter(eventConverter));
         }
 
-        private void appendWorkflowStarted(String workflowId, Map<String, Object> payload) {
+        private void appendWorkflowStarted(String workflowId, Map<String, @Nullable Object> payload) {
             appendEvent(new GenericEventMessage(
                     new MessageType("ReplayAwareWorkflowStarted"),
                     payload,
@@ -432,7 +434,7 @@ class WorkflowReplayPreparedStateTest {
                     throw t;
                 }
                 ctx.awaitModifyPayload("markResumed", payload -> {
-                    Map<String, Object> updated = new LinkedHashMap<>(payload);
+                    Map<String, @Nullable Object> updated = new LinkedHashMap<>(payload);
                     updated.put("resumed", true);
                     return updated;
                 });
@@ -440,7 +442,7 @@ class WorkflowReplayPreparedStateTest {
             }
 
             ctx.awaitModifyPayload("completeImmediately", payload -> {
-                Map<String, Object> updated = new LinkedHashMap<>(payload);
+                Map<String, @Nullable Object> updated = new LinkedHashMap<>(payload);
                 updated.put("completed", true);
                 return updated;
             });

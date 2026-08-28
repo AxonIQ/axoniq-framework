@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.test.utils;
 
 import io.axoniq.workflow.runtime.execution.WorkflowScheduler;
-import jakarta.annotation.Nonnull;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -43,9 +42,8 @@ public class ManualWorkflowScheduler implements WorkflowScheduler {
      * @param deadline deadline according to fixture-controlled time
      * @return scheduled task handle
      */
-    @Nonnull
     @Override
-    public ScheduledTask schedule(@Nonnull Instant deadline) {
+    public ScheduledTask schedule(Instant deadline) {
         var scheduledTask = new ManualScheduledTask();
         tasks.compute(deadline, (ignored, existing) -> {
             var updated = existing == null ? new ArrayList<ManualScheduledTask>() : new ArrayList<>(existing);
@@ -60,7 +58,7 @@ public class ManualWorkflowScheduler implements WorkflowScheduler {
      *
      * @param now current fixture time
      */
-    public void runDueTasks(@Nonnull Instant now) {
+    public void runDueTasks(Instant now) {
         while (!tasks.isEmpty() && !tasks.firstKey().isAfter(now)) {
             var due = tasks.pollFirstEntry();
             if (due != null) {
@@ -81,7 +79,6 @@ public class ManualWorkflowScheduler implements WorkflowScheduler {
          *
          * @return completion future
          */
-        @Nonnull
         @Override
         public CompletableFuture<Void> completion() {
             return completion;

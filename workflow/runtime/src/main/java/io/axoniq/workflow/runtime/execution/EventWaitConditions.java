@@ -22,8 +22,7 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
@@ -55,9 +54,9 @@ final class EventWaitConditions implements DescribableComponent {
      */
     @Internal
     record EventConditionWithStepNameCustomizer(
-            @Nonnull EventCondition eventCondition,
-            @Nonnull PayloadReducer resultPayloadReducer,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            EventCondition eventCondition,
+            PayloadReducer resultPayloadReducer,
+            EventNameCustomizer eventNameCustomizer
     ) {
 
     }
@@ -71,9 +70,9 @@ final class EventWaitConditions implements DescribableComponent {
      *                             the workflow payload.
      * @param eventCondition       await condition
      */
-    public void add(@Nonnull String stepName,
-                    @Nonnull EventCondition eventCondition,
-                    @Nonnull PayloadReducer resultPayloadReducer,
+    public void add(String stepName,
+                    EventCondition eventCondition,
+                    PayloadReducer resultPayloadReducer,
                     @Nullable EventNameCustomizer eventNameCustomizer) {
         waitConditions.put(stepName,
                            new EventConditionWithStepNameCustomizer(eventCondition,
@@ -87,7 +86,7 @@ final class EventWaitConditions implements DescribableComponent {
      *
      * @param stepName step name waiting for event.
      */
-    public void remove(@Nonnull String stepName) {
+    public void remove(String stepName) {
         waitConditions.remove(stepName);
     }
 
@@ -104,9 +103,9 @@ final class EventWaitConditions implements DescribableComponent {
      * @param action            the action executed on an event message, step name and condition, when it is met
      *
      */
-    public void evaluateAndApply(@Nonnull EventMessage eventMessage,
-                                 @Nonnull ProcessingContext processingContext,
-                                 @Nonnull Consumer<Awaited> action) {
+    public void evaluateAndApply(EventMessage eventMessage,
+                                 ProcessingContext processingContext,
+                                 Consumer<Awaited> action) {
         // TODO synchronized ?
         for (var entry : waitConditions.entrySet()) {
             var condition = entry.getValue().eventCondition;
@@ -136,11 +135,11 @@ final class EventWaitConditions implements DescribableComponent {
      * @param eventNameCustomizer event name customizer.
      */
     public record Awaited(
-            @Nonnull EventMessage eventMessage,
-            @Nonnull ProcessingContext processingContext,
-            @Nonnull String stepName,
-            @Nonnull PayloadReducer payloadReducer,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            EventMessage eventMessage,
+            ProcessingContext processingContext,
+            String stepName,
+            PayloadReducer payloadReducer,
+            EventNameCustomizer eventNameCustomizer
     ) {
 
     }
@@ -154,7 +153,7 @@ final class EventWaitConditions implements DescribableComponent {
 
 
     @Override
-    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+    public void describeTo(ComponentDescriptor descriptor) {
         var conditions = waitConditions.entrySet().stream()
                                        .map(e -> new EventWaitConditionDescriptor(e.getKey(),
                                                                                   e.getValue().eventCondition))
@@ -167,7 +166,7 @@ final class EventWaitConditions implements DescribableComponent {
             implements DescribableComponent {
 
         @Override
-        public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+        public void describeTo(ComponentDescriptor descriptor) {
             var description = condition.qualifiedName().toString();
             if (!condition.associations().isEmpty()) {
                 description += " where " + String.join(" && ", condition.associations());

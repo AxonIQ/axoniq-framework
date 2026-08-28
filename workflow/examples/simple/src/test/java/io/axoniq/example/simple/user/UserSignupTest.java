@@ -28,7 +28,6 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.workflow.runtime.test.fixture.WorkflowTestDriver;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
-import jakarta.annotation.Nonnull;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
@@ -123,8 +122,8 @@ class UserSignupTest {
                                                                   new WorkflowStatusChangeListener() {
                                                                       @Override
                                                                       public <C extends WorkflowContext> void onWorkflowStatus(
-                                                                              @Nonnull WorkflowStatus state,
-                                                                              @Nonnull C context) {
+                                                                              WorkflowStatus state,
+                                                                              C context) {
                                                                           new UserSignupWorkflow().onFinish(state,
                                                                                                             (SimpleWorkflowContext) context);
                                                                       }

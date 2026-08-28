@@ -25,7 +25,6 @@ import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.transaction.Transaction;
 import org.axonframework.messaging.core.unitofwork.transaction.TransactionManager;
 import org.axonframework.messaging.eventhandling.annotation.Event;
@@ -126,7 +125,7 @@ class TransactionScopeWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkfl
                 idProperty = "id",
                 startOnEventClass = RegistrationReceivedEvent.class
         )
-        public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        public void execute(SimpleWorkflowContext ctx) {
             ctx.awaitExecute("prepare", Boolean.class, () -> true);
             // Park with a generous timeout: the test asserts the parked steady state before waking it.
             ctx.awaitEvent("waitForMagicToHappen",

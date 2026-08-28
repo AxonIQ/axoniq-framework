@@ -22,7 +22,6 @@ import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.annotation.WorkflowCompletedHandler;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,7 +50,7 @@ public class UserSignupWorkflow {
             workflowNamespace = "io.axoniq.dsl.wf.workflow"
     )
     public void execute(
-            @Nonnull SimpleWorkflowContext ctx
+            SimpleWorkflowContext ctx
     ) {
 
         logger.info("User signup workflow started at {} for {}", Instant.now(), ctx.workflowPayload());
@@ -95,8 +94,8 @@ public class UserSignupWorkflow {
 
     @WorkflowCompletedHandler
     public void onFinish(
-            @Nonnull WorkflowStatus workflowStatus,
-            @Nonnull SimpleWorkflowContext ctx
+            WorkflowStatus workflowStatus,
+            SimpleWorkflowContext ctx
     ) {
         logger.info("User signup workflow {} at {} for {}", workflowStatus, Instant.now(), ctx.workflowPayload());
     }

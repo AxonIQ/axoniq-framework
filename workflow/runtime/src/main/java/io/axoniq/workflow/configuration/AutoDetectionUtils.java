@@ -32,7 +32,7 @@ import io.axoniq.workflow.runtime.association.ValueComparisonOperatorRegistry;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.runtime.util.WorkflowReflectionUtils;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
@@ -81,7 +81,7 @@ public class AutoDetectionUtils {
      */
     public record MethodWithWorkflowAttributes(
             Method method,
-            Map<String, Object> attributes,
+            Map<String, @Nullable Object> attributes,
             Class<? extends WorkflowContext> workflowContextType
     ) {
 
@@ -204,7 +204,7 @@ public class AutoDetectionUtils {
      * @param attributes attributes parsed from method annotation.
      * @return component builder for event condition.
      */
-    static ComponentBuilder<EventCondition> eventConditionComponentBuilder(Map<String, Object> attributes) {
+    static ComponentBuilder<EventCondition> eventConditionComponentBuilder(Map<String, @Nullable Object> attributes) {
         return c ->
         {
             var opRegistry = c.getComponent(ValueComparisonOperatorRegistry.class,
@@ -234,7 +234,7 @@ public class AutoDetectionUtils {
      * @return component builder for workflow id provider.
      */
     static ComponentBuilder<WorkflowIdProvider> workflowIdProviderComponentBuilder(
-            Map<String, Object> attributes) {
+            Map<String, @Nullable Object> attributes) {
         return c ->
                 getIfNotDefault(attributes, ATTR_ID_PROPERTY_PROVIDER, PayloadPropertyWorkflowIdProvider.class)
                         .flatMap(WorkflowReflectionUtils::createDefaultInstance) // FIXME -> HACK -> Ask Steven
@@ -253,7 +253,7 @@ public class AutoDetectionUtils {
      * @param <T>        type of workflow class.
      * @return default namespace.
      */
-    static <T> DefaultEventNameCustomizer namespace(Class<T> type, Map<String, Object> attributes) {
+    static <T> DefaultEventNameCustomizer namespace(Class<T> type, Map<String, @Nullable Object> attributes) {
         return DefaultEventNameCustomizer.Builder.namespace(
                 getIfNotDefault(attributes, ATTR_WORKFLOW_NAMESPACE, "").orElse(
                         type.getPackageName()
@@ -270,7 +270,7 @@ public class AutoDetectionUtils {
      * @param <T>        type of workflow class.
      * @return workflow name.
      */
-    static <T> String workflowName(Class<T> type, Map<String, Object> attributes,
+    static <T> String workflowName(Class<T> type, Map<String, @Nullable Object> attributes,
                                    Method method) {
         return getIfNotDefault(attributes, ATTR_WORKFLOW_NAME, "").orElse(
                 type.getSimpleName() + "#" + StringUtils.capitalize(method.getName())
@@ -284,7 +284,7 @@ public class AutoDetectionUtils {
      * @param attributes attributes parsed from method annotation.
      * @return workflow version, validated as a semver string.
      */
-    static String workflowVersion(Map<String, Object> attributes) {
+    static String workflowVersion(Map<String, @Nullable Object> attributes) {
         var version = AutoDetectionUtils.<String>getIfNotDefault(attributes, ATTR_WORKFLOW_VERSION,
                                                                  MessageType.DEFAULT_VERSION)
                                         .orElse(MessageType.DEFAULT_VERSION);
@@ -453,7 +453,7 @@ public class AutoDetectionUtils {
      * @param method     method the annotation was read of.
      * @param type       class the method was present from which the annotation was read of.
      */
-    public static void validateAttributes(Map<String, Object> attributes,
+    public static void validateAttributes(Map<String, @Nullable Object> attributes,
                                           Class<?> type,
                                           Method method) {
         if (!attributes.containsKey(ATTR_ID_PROPERTY_PROVIDER) || WorkflowIdProvider.class.equals(attributes.get(
@@ -498,7 +498,7 @@ public class AutoDetectionUtils {
      * @return optional with value if present and not equals to given, empty otherwise.
      */
     public static <T> Optional<T> getIfNotDefault(
-            Map<String, Object> attributes,
+            Map<String, @Nullable Object> attributes,
             String attributeName,
             T defaultValue
     ) {

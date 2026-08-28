@@ -18,8 +18,9 @@
  */
 package io.axoniq.workflow.runtime.association;
 
+import org.jspecify.annotations.Nullable;
+
 import com.fasterxml.jackson.core.type.TypeReference;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -38,7 +39,7 @@ public class PayloadPropertyValueRetriever implements ValueRetriever {
     /**
      * Map type reference for easy access.
      */
-    public static final TypeReference<Map<String, Object>> PAYLOAD_TYPE = new TypeReference<>() {
+    public static final TypeReference<Map<String, @Nullable Object>> PAYLOAD_TYPE = new TypeReference<>() {
     };
     /**
      * Qualifier for the association schema.
@@ -53,7 +54,7 @@ public class PayloadPropertyValueRetriever implements ValueRetriever {
      * @param payloadPropertyName property to read from the message payload.
      * @return value retriever.
      */
-    public static ValueRetriever payloadProperty(@Nonnull String payloadPropertyName) {
+    public static ValueRetriever payloadProperty(String payloadPropertyName) {
         return new PayloadPropertyValueRetriever(payloadPropertyName);
     }
 
@@ -63,24 +64,24 @@ public class PayloadPropertyValueRetriever implements ValueRetriever {
      * @param payloadPropertyName property to read from the message payload.
      */
     @Internal
-    public PayloadPropertyValueRetriever(@Nonnull String payloadPropertyName) {
+    public PayloadPropertyValueRetriever(String payloadPropertyName) {
         this.payloadPropertyName = Objects.requireNonNull(payloadPropertyName,
                                                           "Payload property name must not be null");
     }
 
     @Override
-    public Object apply(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
-        Map<String, Object> payloadMap = eventMessage.payloadAs(Map.class);
+    public Object apply(EventMessage eventMessage, ProcessingContext processingContext) {
+        Map<String, @Nullable Object> payloadMap = eventMessage.payloadAs(Map.class);
         return Objects.requireNonNull(payloadMap).get(payloadPropertyName);
     }
 
     @Override
-    public @Nonnull String qualifier() {
+    public String qualifier() {
         return QUALIFIER;
     }
 
     @Override
-    public @Nonnull String path() {
+    public String path() {
         return payloadPropertyName;
     }
 }

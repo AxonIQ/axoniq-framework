@@ -18,8 +18,7 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Specification for terminating a single step with cancellation.
@@ -30,7 +29,7 @@ import jakarta.annotation.Nullable;
  * @since 1.0.0
  */
 public record CancelStepDefinition(
-        @Nonnull PrimitiveMetadata primitiveMetadata,
+        PrimitiveMetadata primitiveMetadata,
         @Nullable Throwable cause
 ) {
 
@@ -40,7 +39,7 @@ public record CancelStepDefinition(
      * @param primitiveMetadata metadata containing the step to cancel
      * @return copied step definition with updated metadata
      */
-    public CancelStepDefinition primitiveMetadata(@Nonnull PrimitiveMetadata primitiveMetadata) {
+    public CancelStepDefinition primitiveMetadata(PrimitiveMetadata primitiveMetadata) {
         return new CancelStepDefinition(primitiveMetadata, cause);
     }
 
@@ -50,7 +49,7 @@ public record CancelStepDefinition(
      * @param eventNameCustomizer customizer for published event names
      * @return copied step definition with updated event naming
      */
-    public CancelStepDefinition eventNameCustomizer(@Nonnull EventNameCustomizer eventNameCustomizer) {
+    public CancelStepDefinition eventNameCustomizer(EventNameCustomizer eventNameCustomizer) {
         return primitiveMetadata(primitiveMetadata.eventNameCustomizer(eventNameCustomizer));
     }
 

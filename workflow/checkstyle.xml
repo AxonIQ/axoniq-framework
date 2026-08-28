@@ -28,18 +28,19 @@
 
     <module name="TreeWalker">
         <!-- Enforce JSpecify as the single nullness annotation system. -->
-        <!-- TODO as part of #115 activate those -->
-        <!--
         <module name="IllegalImport">
             <property name="illegalClasses"
                       value="jakarta.annotation.Nonnull,
                              jakarta.annotation.Nullable,
+                             javax.annotation.Nonnull,
+                             javax.annotation.Nullable,
                              org.jetbrains.annotations.NotNull,
                              org.jetbrains.annotations.Nullable,
-                             org.springframework.lang.NonNull"
+                             org.springframework.lang.NonNull,
+                             org.springframework.lang.Nullable,
+                             org.jspecify.annotations.NonNull"
             />
         </module>
-        -->
         <module name="RegexpSinglelineJava">
             <property name="format"
                       value="import\s+static\s+org\.junit\.jupiter\.api\.Assertions\..*"/>

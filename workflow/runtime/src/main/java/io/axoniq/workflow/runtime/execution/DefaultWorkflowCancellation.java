@@ -22,8 +22,7 @@ import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -57,17 +56,16 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
      * @param workflowContext   workflow context delegating terminal primitive operations
      * @param runningSteps      registry of active asynchronous step executions
      */
-    DefaultWorkflowCancellation(@Nonnull WorkflowExecution workflowExecution,
-                                @Nonnull WorkflowContextDelegation workflowContext,
-                                @Nonnull RunningSteps runningSteps) {
+    DefaultWorkflowCancellation(WorkflowExecution workflowExecution,
+                                WorkflowContextDelegation workflowContext,
+                                RunningSteps runningSteps) {
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow execution is mandatory");
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
     }
 
-    @Nonnull
     @Override
-    public CompletableFuture<Boolean> requestStepCancellation(@Nonnull String stepName, @Nullable Throwable cause) {
+    public CompletableFuture<Boolean> requestStepCancellation(String stepName, @Nullable Throwable cause) {
         if (!WorkflowStateUtils.isStepActive(workflowExecution.state(), stepName)) {
             return CompletableFuture.completedFuture(false);
         }
@@ -84,7 +82,6 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
         return done;
     }
 
-    @Nonnull
     @Override
     public CompletableFuture<Integer> requestCancellationOfAllSteps(@Nullable Throwable cause) {
         var stepNames = runningSteps.stepNames();
@@ -110,7 +107,6 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
         return done;
     }
 
-    @Nonnull
     @Override
     public CompletableFuture<Void> requestWorkflowCancellation(@Nullable Throwable cause) {
         var cancellationCause = cancellationCause(cause);
@@ -139,9 +135,8 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
         }
     }
 
-    @Nullable
     @Override
-    public WorkflowCancellation.PendingRequest consumeWorkflowCancellation() {
+    public WorkflowCancellation.@Nullable PendingRequest consumeWorkflowCancellation() {
         synchronized (workflowCancellationMonitor) {
             var cancellation = pendingWorkflowCancellation.get();
             return cancellation != null && workflowCancellationConsumed.compareAndSet(false, true)
@@ -151,7 +146,7 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
     }
 
     @Override
-    public void abortPendingWorkflowCancellation(@Nonnull CancellationException reason) {
+    public void abortPendingWorkflowCancellation(CancellationException reason) {
         Objects.requireNonNull(reason, "Cancellation reason is mandatory");
         WorkflowCancellation.PendingRequest pending;
         synchronized (workflowCancellationMonitor) {
@@ -163,7 +158,6 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
         pending.callback().completeExceptionally(reason);
     }
 
-    @Nonnull
     private WorkflowCancelledException cancellationCause(@Nullable Throwable cause) {
         if (cause instanceof WorkflowCancelledException cancelled) {
             return cancelled;

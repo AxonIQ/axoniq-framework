@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
@@ -80,7 +82,7 @@ class TerminalStateGuardTest {
                   executor, new ControllableWorkflowScheduler());
         }
 
-        CompletableFuture<Void> testCompleted(String stepName, Map<String, Object> payload,
+        CompletableFuture<Void> testCompleted(String stepName, Map<String, @Nullable Object> payload,
                                               EventNameCustomizer eventNameCustomizer) {
             return completed(stepName, payload, eventNameCustomizer);
         }
@@ -90,7 +92,7 @@ class TerminalStateGuardTest {
             return failed(stepName, ex, eventNameCustomizer);
         }
 
-        CompletableFuture<Void> testStarted(String stepName, Map<String, Object> payload,
+        CompletableFuture<Void> testStarted(String stepName, Map<String, @Nullable Object> payload,
                                             EventNameCustomizer eventNameCustomizer) {
             return started(stepName, payload, eventNameCustomizer);
         }

@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
-import jakarta.annotation.Nonnull;
 
 import java.util.List;
 
@@ -98,7 +97,6 @@ public interface CombinatorWorkflowStepResult extends WorkflowStepResult {
      *
      * @return an unmodifiable list of matching sub-results, sorted by event-sourced timestamp.
      */
-    @Nonnull
     List<WorkflowStepResult> matched();
 
     /**
@@ -113,6 +111,5 @@ public interface CombinatorWorkflowStepResult extends WorkflowStepResult {
      *
      * @return an unmodifiable list of non-matching sub-results.
      */
-    @Nonnull
     List<WorkflowStepResult> unmatched();
 }

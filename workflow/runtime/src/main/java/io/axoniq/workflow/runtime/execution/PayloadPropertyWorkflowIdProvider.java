@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
@@ -42,9 +41,9 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
     private final Function<String, String> idProcessor;
 
     public static PayloadPropertyWorkflowIdProvider fromPayloadAttribute(
-            @Nonnull Configuration configuration,
-            @Nonnull String attributeName,
-            @Nonnull UnaryOperator<String> customizer) {
+            Configuration configuration,
+            String attributeName,
+            UnaryOperator<String> customizer) {
         return new PayloadPropertyWorkflowIdProvider(
                 attributeName,
                 customizer
@@ -57,7 +56,7 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
      * @param attributeName name of the payload attribute.
      */
     public PayloadPropertyWorkflowIdProvider(
-            @Nonnull String attributeName) {
+            String attributeName) {
         this(attributeName, UnaryOperator.identity());
     }
 
@@ -68,15 +67,15 @@ public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
      * @param idProcessor   processor called on the result of attribute extractor.
      */
     public PayloadPropertyWorkflowIdProvider(
-            @Nonnull String attributeName,
-            @Nonnull UnaryOperator<String> idProcessor
+            String attributeName,
+            UnaryOperator<String> idProcessor
     ) {
         this.attributeName = Objects.requireNonNull(attributeName, "Attribute name must not be null");
         this.idProcessor = idProcessor;
     }
 
     @Override
-    public String apply(@Nonnull EventMessage eventMessage) {
+    public String apply(EventMessage eventMessage) {
         return idProcessor
                 .apply(Optional.ofNullable(eventMessage.payloadAs(PAYLOAD_TYPE))
                                .flatMap(p -> Optional.ofNullable(p.get(attributeName)))

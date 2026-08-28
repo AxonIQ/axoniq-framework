@@ -18,7 +18,7 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import jakarta.annotation.Nonnull;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.util.Map;
@@ -43,11 +43,10 @@ public interface WorkflowContextFactory<T extends WorkflowContext> {
      * @param workflowConfiguration workflow configuration.
      * @return workflow context.
      */
-    @Nonnull
     T createContext(
-            @Nonnull Map<String, Object> initialPayload,
-            @Nonnull String workflowId,
-            @Nonnull ProcessingContext processingContext,
-            @Nonnull WorkflowConfiguration<?> workflowConfiguration
+            Map<String, @Nullable Object> initialPayload,
+            String workflowId,
+            ProcessingContext processingContext,
+            WorkflowConfiguration<?> workflowConfiguration
     );
 }

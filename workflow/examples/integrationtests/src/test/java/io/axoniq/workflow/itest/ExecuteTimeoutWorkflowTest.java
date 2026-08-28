@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.itest;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
@@ -27,7 +29,6 @@ import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -121,11 +122,11 @@ class ExecuteTimeoutWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflow
                 idProperty = "id",
                 startOnEventClass = RegistrationReceivedEvent.class
         )
-        public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        public void execute(SimpleWorkflowContext ctx) {
             logger.info("ExecuteTimeoutWorkflow started for {}", ctx.workflowPayload());
 
             try {
-                Map<String, Object> result = ctx.awaitExecute(
+                Map<String, @Nullable Object> result = ctx.awaitExecute(
                         "slowStep",
                         Map.of(),
                         (pc, payload) -> {

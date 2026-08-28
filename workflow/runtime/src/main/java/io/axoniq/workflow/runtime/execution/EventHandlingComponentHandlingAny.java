@@ -36,7 +36,6 @@ import org.axonframework.messaging.eventhandling.processing.streaming.segmenting
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
 import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
-import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,9 +90,9 @@ public class EventHandlingComponentHandlingAny implements EventHandlingComponent
      * @param replayStatusChangedHandler handler to notify when replay status changes
      * @param checkpointingHandler       handler to notify when checkpointing is required
      */
-    public EventHandlingComponentHandlingAny(@NonNull WorkflowEngine workflowEngine,
-                                             @NonNull ReplayStatusChangedHandler replayStatusChangedHandler,
-                                             @NonNull Checkpointing checkpointingHandler) {
+    public EventHandlingComponentHandlingAny(WorkflowEngine workflowEngine,
+                                             ReplayStatusChangedHandler replayStatusChangedHandler,
+                                             Checkpointing checkpointingHandler) {
         this.eventHandler = requireNonNull(workflowEngine, "Workflow engine handler must not be null");
         this.sequencingPolicy = new HierarchicalSequencingPolicy<>(
                 SequentialPerAggregatePolicy.INSTANCE,
@@ -105,59 +104,55 @@ public class EventHandlingComponentHandlingAny implements EventHandlingComponent
     }
 
     @Override
-    public MessageStream.Empty<Message> handle(@NonNull EventMessage event, @NonNull ProcessingContext context) {
+    public MessageStream.Empty<Message> handle(EventMessage event, ProcessingContext context) {
         logger.debug("Handling event {}", event);
         return eventHandler.handle(event, context);
     }
 
-    @NonNull
     @Override
     public Set<QualifiedName> supportedEvents() {
         return Set.of();
     }
 
     @Override
-    public boolean supports(@NonNull QualifiedName eventName) {
+    public boolean supports(QualifiedName eventName) {
         return ANY_EVENT;
     }
 
-    @NonNull
     @Override
-    public Object sequenceIdentifierFor(@NonNull EventMessage event,
-                                        @NonNull ProcessingContext context) {
+    public Object sequenceIdentifierFor(EventMessage event,
+                                        ProcessingContext context) {
         return sequencingPolicy.sequenceIdentifierFor(event, context);
     }
 
     @Override
-    public MessageStream.Empty<Message> handle(@NonNull ReplayStatusChanged statusChange,
-                                               @NonNull ProcessingContext context) {
+    public MessageStream.Empty<Message> handle(ReplayStatusChanged statusChange,
+                                               ProcessingContext context) {
         return replayStatusChangedHandler != null
                 ? replayStatusChangedHandler.handle(statusChange, context)
                 : MessageStream.empty();
     }
 
-    @NonNull
     @Override
-    public CompletableFuture<TrackingToken> onCheckpointAdvanced(@NonNull Segment segment,
-                                                                 @NonNull TrackingToken requested) {
+    public CompletableFuture<TrackingToken> onCheckpointAdvanced(Segment segment,
+                                                                 TrackingToken requested) {
         return checkpointingHandler != null
                 ? checkpointingHandler.onCheckpointAdvanced(segment, requested)
                 : CompletableFuture.completedFuture(requested);
     }
 
     @Override
-    public void onSegmentClaimed(@NonNull Segment segment,
+    public void onSegmentClaimed(Segment segment,
                                  @Nullable TrackingToken from,
-                                 @NonNull CheckpointTrigger trigger) {
+                                 CheckpointTrigger trigger) {
         if (checkpointingHandler != null) {
             checkpointingHandler.onSegmentClaimed(segment, from, trigger);
         }
     }
 
-    @NonNull
     @Override
-    public CompletableFuture<TrackingToken> onSegmentReleased(@NonNull Segment segment,
-                                                              @NonNull TrackingToken requested) {
+    public CompletableFuture<TrackingToken> onSegmentReleased(Segment segment,
+                                                              TrackingToken requested) {
         if (checkpointingHandler != null) {
             return checkpointingHandler.onSegmentReleased(segment, requested);
         }

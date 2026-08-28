@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.test.fixture;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.history.api.WorkflowHistory;
 import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
@@ -179,7 +181,7 @@ class ThenTest {
                               Map.of("id", "2"),
                               step("createUser", StepStatus.COMPLETED))
         );
-        AtomicReference<Map<String, Object>> captured = new AtomicReference<>();
+        AtomicReference<Map<String, @Nullable Object>> captured = new AtomicReference<>();
 
         assertThat(phase.payloadSatisfies(captured::set)).isSameAs(phase);
         assertThat(captured.get()).isEqualTo(Map.of("id", "2"));
@@ -280,7 +282,7 @@ class ThenTest {
     }
 
     private WorkflowState workflowState(List<String> stepNames,
-                                        Map<String, Object> payload,
+                                        Map<String, @Nullable Object> payload,
                                         WorkflowStep... steps) {
         WorkflowState state = mock(WorkflowState.class);
         when(state.workflowStepNames()).thenReturn(stepNames);

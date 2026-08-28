@@ -30,7 +30,6 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.workflow.runtime.test.utils.SleepUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -114,7 +113,7 @@ class CancelWorkflowInterruptsStepWithCatchableExceptionTest extends AbstractWor
         assertThat(history.state().getStep("stepA").status()).isEqualTo(StepStatus.STARTED);
     }
 
-    private void awaitParked(@Nonnull String workflowId) {
+    private void awaitParked(String workflowId) {
         var executionRepository = configuration.getComponent(WorkflowExecutionRepository.class);
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var execution = executionRepository.findById(workflowId);
@@ -139,7 +138,7 @@ class CancelWorkflowInterruptsStepWithCatchableExceptionTest extends AbstractWor
                 idProperty = "id",
                 startOnEventClass = StartParkedStepEvent.class
         )
-        public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        public void execute(SimpleWorkflowContext ctx) {
             log.info("ParkedStepWorkflow started for {}", ctx.workflowPayload());
 
             try {

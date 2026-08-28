@@ -19,8 +19,7 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
@@ -48,7 +47,7 @@ public class RunningSteps implements DescribableComponent {
      * @param stepName step name.
      * @param future   future to register.
      */
-    public void register(@Nonnull String stepName, @Nonnull CompletableFuture<?> future) {
+    public void register(String stepName, CompletableFuture<?> future) {
         runningFutures.put(stepName, future);
     }
 
@@ -57,7 +56,7 @@ public class RunningSteps implements DescribableComponent {
      *
      * @param stepName step name.
      */
-    public void remove(@Nonnull String stepName) {
+    public void remove(String stepName) {
         runningFutures.remove(stepName);
     }
 
@@ -66,7 +65,6 @@ public class RunningSteps implements DescribableComponent {
      *
      * @return a snapshot set of the running step names.
      */
-    @Nonnull
     public Set<String> stepNames() {
         return new HashSet<>(runningFutures.keySet());
     }
@@ -77,7 +75,7 @@ public class RunningSteps implements DescribableComponent {
      * @param stepName              step name.
      * @param mayInterruptIfRunning whether to interrupt the step if it is running.
      */
-    public void cancelAndRemove(@Nonnull String stepName, boolean mayInterruptIfRunning) {
+    public void cancelAndRemove(String stepName, boolean mayInterruptIfRunning) {
         var future = runningFutures.remove(stepName);
         if (future != null) {
             future.cancel(mayInterruptIfRunning);
@@ -91,7 +89,7 @@ public class RunningSteps implements DescribableComponent {
      * @param cause    a cause for the cancellation.
      * @return true, if the future was cancelled successfully.
      */
-    public boolean cancelWithCause(@Nonnull String stepName, @Nullable Throwable cause) {
+    public boolean cancelWithCause(String stepName, @Nullable Throwable cause) {
         var future = runningFutures.remove(stepName);
         if (future == null) {
             return false;
@@ -107,7 +105,7 @@ public class RunningSteps implements DescribableComponent {
      * @param cause            the cause of the cancellation.
      * @param awaitTermination consumer of cancelled step names.
      */
-    public void cancelAll(@Nullable Throwable cause, @Nonnull Consumer<Set<String>> awaitTermination) {
+    public void cancelAll(@Nullable Throwable cause, Consumer<Set<String>> awaitTermination) {
         var stepNames = new HashSet<>(runningFutures.keySet());
         var ex = cause != null ? cause : new StepCancellationException("Workflow terminated");
         runningFutures.values().forEach(f -> f.completeExceptionally(ex));
@@ -116,7 +114,7 @@ public class RunningSteps implements DescribableComponent {
     }
 
     @Override
-    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+    public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("runningSteps", runningFutures.keySet().stream().toList());
     }
 }

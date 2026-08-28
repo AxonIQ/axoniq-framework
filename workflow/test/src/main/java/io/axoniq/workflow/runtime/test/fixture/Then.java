@@ -18,10 +18,11 @@
  */
 package io.axoniq.workflow.runtime.test.fixture;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 
 import java.util.Map;
 import java.util.Objects;
@@ -52,7 +53,6 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
      * @return fixture to continue fluent invocations
      */
     @SuppressWarnings("unchecked")
-    @Nonnull
     public WorkflowTestFixture<ACTION, SELF> and() {
         return (WorkflowTestFixture<ACTION, SELF>) fixture;
     }
@@ -66,8 +66,7 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
      * @param stepNames additional expected waiting step names
      * @return this phase for fluent chaining
      */
-    @Nonnull
-    public SELF waitingIn(@Nonnull String stepName, String... stepNames) {
+    public SELF waitingIn(String stepName, String... stepNames) {
         Objects.requireNonNull(stepName, "Step name must not be null");
         testDriver.testingState().waitingIn(this.testDriver.assertionFailureHandler(), stepName, stepNames);
         return self();
@@ -82,8 +81,7 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
      * @param stepNames additional expected passed step names
      * @return this phase for fluent chaining
      */
-    @Nonnull
-    public SELF stepsPassed(@Nonnull String stepName, String... stepNames) {
+    public SELF stepsPassed(String stepName, String... stepNames) {
         Objects.requireNonNull(stepName, "Step name must not be null");
         testDriver.testingState().stepsPassed(this.testDriver.assertionFailureHandler(), stepName, stepNames);
         return self();
@@ -98,8 +96,7 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
      * @param stepNames additional expected step names
      * @return this phase for fluent chaining
      */
-    @Nonnull
-    public SELF hasSteps(@Nonnull String stepName, String... stepNames) {
+    public SELF hasSteps(String stepName, String... stepNames) {
         Objects.requireNonNull(stepName, "Step name must not be null");
         testDriver.testingState().hasSteps(this.testDriver.assertionFailureHandler(), stepName, stepNames);
         return self();
@@ -112,8 +109,7 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
      * @param stepNames additional expected step names
      * @return this phase for fluent chaining
      */
-    @Nonnull
-    public SELF hasStepsInAnyOrder(@Nonnull String stepName, String... stepNames) {
+    public SELF hasStepsInAnyOrder(String stepName, String... stepNames) {
         Objects.requireNonNull(stepName, "Step name must not be null");
         testDriver.testingState().hasStepsInAnyOrder(this.testDriver.assertionFailureHandler(), stepName, stepNames);
         return self();
@@ -125,8 +121,7 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
      * @param stepName step name that must be absent
      * @return this phase for fluent chaining
      */
-    @Nonnull
-    public SELF noStep(@Nonnull String stepName) {
+    public SELF noStep(String stepName) {
         Objects.requireNonNull(stepName, "Step name must not be null");
         testDriver.testingState().noStep(stepName);
         return self();
@@ -137,7 +132,6 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
      *
      * @return this phase for fluent chaining
      */
-    @Nonnull
     public SELF workflowNotFinished() {
         testDriver.awaitEventually("Expected current workflow to remain non-terminal", () -> {
             var workflowStatus = testDriver.testingState().state().workflowStatus();
@@ -157,8 +151,7 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
      * @param workflowStatus expected terminal workflow status
      * @return this phase for fluent chaining
      */
-    @Nonnull
-    public SELF workflowFinished(@Nonnull WorkflowStatus workflowStatus) {
+    public SELF workflowFinished(WorkflowStatus workflowStatus) {
         Objects.requireNonNull(workflowStatus, "Workflow status must not be null");
         noExecution();
         testDriver.awaitEventually("Expected workflow to finish with status %s".formatted(workflowStatus), () -> {
@@ -191,8 +184,7 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
      * @param payloadConsumer consumer for payload retrieved from the current testing state.
      * @return this phase for fluent chaining
      */
-    @Nonnull
-    public SELF payloadSatisfies(@Nonnull Consumer<Map<String, Object>> payloadConsumer) {
+    public SELF payloadSatisfies(Consumer<Map<String, @Nullable Object>> payloadConsumer) {
         Objects.requireNonNull(payloadConsumer, "Payload consumer must not be null");
         payloadConsumer.accept(testDriver.testingState().state().payload());
         return self();
@@ -204,8 +196,7 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
      * @param predicate predicate to test the payload against
      * @return this phase for fluent chaining
      */
-    @Nonnull
-    public SELF payloadMatches(@Nonnull Predicate<Map<String, Object>> predicate) {
+    public SELF payloadMatches(Predicate<Map<String, @Nullable Object>> predicate) {
         Objects.requireNonNull(predicate, "Payload predicate must not be null");
         testDriver.testingState().payloadMatches(this.testDriver.assertionFailureHandler(), predicate);
         return self();
@@ -217,7 +208,7 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
      * @param expectedPayload expected workflow payload
      * @return this phase for fluent chaining
      */
-    public SELF payloadEquals(@Nonnull Map<String, Object> expectedPayload) {
+    public SELF payloadEquals(Map<String, @Nullable Object> expectedPayload) {
         Objects.requireNonNull(expectedPayload, "Payload must not be null");
         return payloadMatches(p -> p.equals(expectedPayload));
     }
@@ -228,7 +219,7 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
      * @param expectedPayload expected workflow payload
      * @return this phase for fluent chaining
      */
-    public SELF payloadContains(@Nonnull Map<String, Object> expectedPayload) {
+    public SELF payloadContains(Map<String, @Nullable Object> expectedPayload) {
         Objects.requireNonNull(expectedPayload, "Payload must not be null");
         return payloadMatches(p -> p.entrySet().containsAll(expectedPayload.entrySet()));
     }
@@ -239,7 +230,7 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
      * @param workflowStateConsumer workflow state consumer
      * @return this phase for fluent chaining
      */
-    public SELF workflowStateSatisfies(@Nonnull Consumer<WorkflowState> workflowStateConsumer) {
+    public SELF workflowStateSatisfies(Consumer<WorkflowState> workflowStateConsumer) {
         Objects.requireNonNull(workflowStateConsumer, "Consumer must not be null");
         workflowStateConsumer.accept(testDriver.testingState().state());
         return self();
@@ -252,7 +243,7 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
      * @param stepStatus expected step status
      * @return this phase for fluent chaining
      */
-    public SELF step(@Nonnull String stepName, @Nonnull StepStatus stepStatus) {
+    public SELF step(String stepName, StepStatus stepStatus) {
         Objects.requireNonNull(stepName, "Step name must not be null");
         Objects.requireNonNull(stepStatus, "Step status must not be null");
         testDriver.testingState().step(this.testDriver.assertionFailureHandler(),

@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.test.fixture;
 
-import jakarta.annotation.Nonnull;
 
 /**
  * Runtime exception used by the workflow test fixture to report assertion failures.
@@ -43,7 +42,7 @@ public class WorkflowTestFixtureException extends RuntimeException {
      *
      * @param message message of the exception
      */
-    public WorkflowTestFixtureException(@Nonnull String message) {
+    public WorkflowTestFixtureException(String message) {
         super(message);
     }
 
@@ -53,7 +52,7 @@ public class WorkflowTestFixtureException extends RuntimeException {
      * @param message message of the exception
      * @param cause   cause of the exception
      */
-    public WorkflowTestFixtureException(@Nonnull String message, @Nonnull Throwable cause) {
+    public WorkflowTestFixtureException(String message, Throwable cause) {
         super(message, cause);
     }
 }

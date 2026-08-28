@@ -35,7 +35,6 @@ import io.axoniq.workflow.runtime.association.ValueComparisonOperatorRegistry;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
@@ -211,7 +210,7 @@ class WorkflowModuleTest {
     public static class TestAutodetectedWorkflow {
 
         @Workflow(workflowName = "autodetectedWorkflow", startOnEventName = "java.lang.String", idProperty = "id")
-        void myWorkflow(@Nonnull TestWorkflowContext context) {
+        void myWorkflow(TestWorkflowContext context) {
             // some workflow logic
         }
     }

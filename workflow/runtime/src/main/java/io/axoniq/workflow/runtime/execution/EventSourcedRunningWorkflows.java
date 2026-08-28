@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
@@ -50,7 +49,6 @@ public class EventSourcedRunningWorkflows implements RunningWorkflows {
      *
      * @return event criteria for workflow lifecycle reconstruction
      */
-    @Nonnull
     public static EventCriteria criteriaBuilder() {
         return EventCriteria.havingTags(Tag.of(
                                                 WorkflowEventTags.TAG_WORKFLOW_EVENT_TYPE,
@@ -64,23 +62,22 @@ public class EventSourcedRunningWorkflows implements RunningWorkflows {
      *
      * @param metadata lifecycle event metadata
      */
-    public void evolve(@Nonnull Metadata metadata) {
+    public void evolve(Metadata metadata) {
         MetadataUtils.getWorkflowStatus(metadata)
                      .ifPresent(status -> applyLifecycle(MetadataUtils.getWorkflowId(metadata), status));
     }
 
     @Override
-    @Nonnull
     public Set<String> workflowIds() {
         return Set.copyOf(workflowIds);
     }
 
     @Override
-    public boolean contains(@Nonnull String workflowId) {
+    public boolean contains(String workflowId) {
         return workflowIds.contains(workflowId);
     }
 
-    private void applyLifecycle(@Nonnull String workflowId, @Nonnull WorkflowStatus status) {
+    private void applyLifecycle(String workflowId, WorkflowStatus status) {
         switch (status) {
             case STARTED -> workflowIds.add(workflowId);
             case COMPLETED, FAILED, TIMED_OUT, CANCELLED -> workflowIds.remove(workflowId);

@@ -18,12 +18,13 @@
  */
 package io.axoniq.workflow.springboot;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
@@ -78,7 +79,7 @@ public class WorkflowDefinitionLookupUtilsFactoryBeanTest {
 
     static class MyWorkflowContext extends SimpleWorkflowContext {
 
-        public MyWorkflowContext(String workflowId, Map<String, Object> payload, ProcessingContext processingContext,
+        public MyWorkflowContext(String workflowId, Map<String, @Nullable Object> payload, ProcessingContext processingContext,
                                  WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
         }
@@ -86,7 +87,7 @@ public class WorkflowDefinitionLookupUtilsFactoryBeanTest {
 
     static class OtherWorkflowContext extends AbstractDSLWorkflowContext {
 
-        public OtherWorkflowContext(String workflowId, Map<String, Object> payload, ProcessingContext processingContext,
+        public OtherWorkflowContext(String workflowId, Map<String, @Nullable Object> payload, ProcessingContext processingContext,
                                     WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
         }
@@ -95,11 +96,10 @@ public class WorkflowDefinitionLookupUtilsFactoryBeanTest {
 
     static class MyWorkflowContextFactory implements WorkflowContextFactory<MyWorkflowContext> {
 
-        @Nonnull
         @Override
-        public MyWorkflowContext createContext(@Nonnull Map<String, Object> initialPayload, @Nonnull String workflowId,
-                                               @Nonnull ProcessingContext processingContext,
-                                               @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
+        public MyWorkflowContext createContext(Map<String, @Nullable Object> initialPayload, String workflowId,
+                                               ProcessingContext processingContext,
+                                               WorkflowConfiguration<?> workflowConfiguration) {
             return new MyWorkflowContext(workflowId, initialPayload, processingContext, workflowConfiguration);
         }
     }
@@ -110,11 +110,10 @@ public class WorkflowDefinitionLookupUtilsFactoryBeanTest {
 
     static class MyIndirectWorkflowContextFactory extends BaseWorkflowContextFactory<OtherWorkflowContext> {
 
-        @Nonnull
         @Override
-        public OtherWorkflowContext createContext(@Nonnull Map<String, Object> initialPayload, @Nonnull String workflowId,
-                                               @Nonnull ProcessingContext processingContext,
-                                               @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
+        public OtherWorkflowContext createContext(Map<String, @Nullable Object> initialPayload, String workflowId,
+                                               ProcessingContext processingContext,
+                                               WorkflowConfiguration<?> workflowConfiguration) {
             return new OtherWorkflowContext(workflowId, initialPayload, processingContext, workflowConfiguration);
         }
     }

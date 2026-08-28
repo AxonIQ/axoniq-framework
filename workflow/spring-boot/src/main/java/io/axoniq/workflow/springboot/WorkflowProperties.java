@@ -18,7 +18,7 @@
  */
 package io.axoniq.workflow.springboot;
 
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**

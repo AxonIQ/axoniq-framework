@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.MessageType;
 
 import java.util.Collection;
@@ -67,8 +66,7 @@ public final class Version implements Comparable<Version> {
      *
      * @throws IllegalArgumentException if {@code value} is not a valid semver string.
      */
-    @Nonnull
-    public static Version of(@Nonnull String value) {
+    public static Version of(String value) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException("Workflow version must not be blank");
         }
@@ -89,7 +87,7 @@ public final class Version implements Comparable<Version> {
     /**
      * Validates {@code value} is a parseable semver string. Throws otherwise.
      */
-    public static void validate(@Nonnull String value) {
+    public static void validate(String value) {
         of(value);
     }
 
@@ -97,7 +95,6 @@ public final class Version implements Comparable<Version> {
      * Parses {@code value} as a semver string or returns empty when unparseable. Useful for filtering collections of
      * mixed-quality version strings (e.g. legacy event streams).
      */
-    @Nonnull
     public static Optional<Version> tryOf(String value) {
         if (value == null || value.isBlank()) {
             return Optional.empty();
@@ -113,9 +110,8 @@ public final class Version implements Comparable<Version> {
      * Returns the <strong>highest version less than or equal to</strong> {@code target} among {@code candidates}, or
      * empty when no candidate qualifies. This is the "closest-sibling" routing rule.
      */
-    @Nonnull
-    public static Optional<Version> closestNotGreaterThan(@Nonnull Collection<Version> candidates,
-                                                          @Nonnull Version target) {
+    public static Optional<Version> closestNotGreaterThan(Collection<Version> candidates,
+                                                          Version target) {
         return candidates.stream()
                          .filter(v -> v.compareTo(target) <= 0)
                          .max(Version::compareTo);
@@ -125,9 +121,8 @@ public final class Version implements Comparable<Version> {
      * Returns the <strong>lowest version strictly greater than</strong> {@code target} among {@code candidates}, or
      * empty when no candidate qualifies. This is the "closest-higher-sibling" routing rule.
      */
-    @Nonnull
-    public static Optional<Version> closestHigherThan(@Nonnull Collection<Version> candidates,
-                                                      @Nonnull Version target) {
+    public static Optional<Version> closestHigherThan(Collection<Version> candidates,
+                                                      Version target) {
         return candidates.stream()
                          .filter(v -> v.compareTo(target) > 0)
                          .min(Version::compareTo);
@@ -137,7 +132,6 @@ public final class Version implements Comparable<Version> {
      * The canonical {@code String} representation, suitable for {@link MessageType#version()} and other wire-format
      * boundaries.
      */
-    @Nonnull
     public String value() {
         return value;
     }
@@ -145,19 +139,19 @@ public final class Version implements Comparable<Version> {
     /**
      * {@code true} when this version is strictly greater than {@code other} in semver order.
      */
-    public boolean isGreaterThan(@Nonnull Version other) {
+    public boolean isGreaterThan(Version other) {
         return compareTo(other) > 0;
     }
 
     /**
      * {@code true} when this version is greater than or equal to {@code other} in semver order.
      */
-    public boolean isGreaterThanOrEqualTo(@Nonnull Version other) {
+    public boolean isGreaterThanOrEqualTo(Version other) {
         return compareTo(other) >= 0;
     }
 
     @Override
-    public int compareTo(@Nonnull Version other) {
+    public int compareTo(Version other) {
         int cmp = Integer.compare(this.major, other.major);
         if (cmp != 0) {
             return cmp;

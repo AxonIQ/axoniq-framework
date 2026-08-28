@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowExecutionException;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
@@ -75,7 +77,7 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
         Metadata metadata = MetadataUtils.create("wfId", WorkflowStatus.STARTED)
                                          .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
                                            NAME);
-        // String payload cannot be converted to Map<String, Object> via Jackson as a root object if it is not a JSON object
+        // String payload cannot be converted to Map<String, @Nullable Object> via Jackson as a root object if it is not a JSON object
         EventMessage eventMessage = new GenericEventMessage(new MessageType("evolve"),
                                                             "Not a Map",
                                                             metadata);

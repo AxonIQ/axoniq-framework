@@ -19,7 +19,6 @@
 package io.axoniq.workflow.springboot;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
-import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
@@ -46,7 +45,7 @@ public class WorkflowDefinitionLookup implements BeanDefinitionRegistryPostProce
     private static final Logger logger = LoggerFactory.getLogger(WorkflowDefinitionLookup.class);
 
     @Override
-    public void postProcessBeanFactory(@Nonnull ConfigurableListableBeanFactory beanFactory) throws BeansException {
+    public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
         if (!(beanFactory instanceof BeanDefinitionRegistry registry)) {
             logger.warn("Given bean factory is not a BeanDefinitionRegistry. Cannot auto-configure workflow handlers");
             return;
@@ -89,7 +88,7 @@ public class WorkflowDefinitionLookup implements BeanDefinitionRegistryPostProce
 
 
     @Override
-    public void postProcessBeanDefinitionRegistry(@Nonnull BeanDefinitionRegistry registry) throws BeansException {
+    public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) throws BeansException {
 
     }
 }

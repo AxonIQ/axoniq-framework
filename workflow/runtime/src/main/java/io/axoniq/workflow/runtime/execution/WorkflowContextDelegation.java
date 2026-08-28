@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
@@ -31,7 +33,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl
 import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -100,14 +101,14 @@ public class WorkflowContextDelegation implements WorkflowContext {
      * @param processingContext     processing context
      */
     public WorkflowContextDelegation(
-            @Nonnull WorkflowConfiguration<?> workflowConfiguration,
-            @Nonnull WorkflowContext workflowContext,
-            @Nonnull WorkflowExecution workflowExecution,
-            @Nonnull RunningSteps runningSteps,
-            @Nonnull EventWaitConditions eventWaitConditions,
-            @Nonnull ReachedSteps reachedSteps,
-            @Nonnull WorkflowTerminalTransition terminalTransition,
-            @Nonnull ProcessingContext processingContext
+            WorkflowConfiguration<?> workflowConfiguration,
+            WorkflowContext workflowContext,
+            WorkflowExecution workflowExecution,
+            RunningSteps runningSteps,
+            EventWaitConditions eventWaitConditions,
+            ReachedSteps reachedSteps,
+            WorkflowTerminalTransition terminalTransition,
+            ProcessingContext processingContext
     ) {
 
         var stepParent = workflowConfiguration.eventNameCustomizer().forStepInheritance();
@@ -204,44 +205,37 @@ public class WorkflowContextDelegation implements WorkflowContext {
         this.allCombinatorDelegate = new AllMatchCombinatorDelegate(workflowExecution);
     }
 
-    @Nonnull
     @Override
     public String workflowId() {
         return workflowExecution.workflowId();
     }
 
-    @Nonnull
     @Override
     public String workflowVersion() {
         return workflowExecution.state().workflowDefinitionId().version();
     }
 
-    @Nonnull
     @Override
-    public Map<String, Object> workflowPayload() {
+    public Map<String, @Nullable Object> workflowPayload() {
         return workflowExecution.state().payload();
     }
 
     @Override
-    @Nonnull
-    public WorkflowStepResult modifyPayload(@Nonnull PayloadPrimitive.ModifyPayloadCommand command) {
+    public WorkflowStepResult modifyPayload(PayloadPrimitive.ModifyPayloadCommand command) {
         workflowExecution.state().throwTerminalCause();
         return payloadDelegate.modifyPayload(command);
     }
 
-    @Nonnull
     @Override
     public WorkflowStatus workflowStatus() {
         return workflowExecution.state().workflowStatus();
     }
 
-    @Nonnull
     @Override
     public List<String> workflowStepNames() {
         return workflowExecution.state().workflowStepNames();
     }
 
-    @Nonnull
     @Override
     public ProcessingContext processingContext() {
         return this.processingContext;
@@ -249,28 +243,25 @@ public class WorkflowContextDelegation implements WorkflowContext {
 
     // delegation
     @Override
-    @Nonnull
-    public WorkflowStepResult execute(@Nonnull ExecutePrimitive.ExecuteCommand command) {
+    public WorkflowStepResult execute(ExecutePrimitive.ExecuteCommand command) {
         workflowExecution.state().throwTerminalCause();
         return retryableExecuteDelegate.execute(command);
     }
 
     @Override
-    @Nonnull
-    public WorkflowStepResult waitForEvent(@Nonnull WaitForPrimitive.WaitForCommand command) {
+    public WorkflowStepResult waitForEvent(WaitForPrimitive.WaitForCommand command) {
         workflowExecution.state().throwTerminalCause();
         return waitForDelegate.waitForEvent(command);
     }
 
     @Override
-    @Nonnull
-    public WorkflowStepResult version(@Nonnull VersionPrimitive.VersionCommand command) {
+    public WorkflowStepResult version(VersionPrimitive.VersionCommand command) {
         workflowExecution.state().throwTerminalCause();
         return versionDelegate.version(command);
     }
 
     @Override
-    public void cancelWorkflow(@Nonnull WorkflowLifecycleControl.CancelWorkflowCommand command) {
+    public void cancelWorkflow(WorkflowLifecycleControl.CancelWorkflowCommand command) {
         workflowExecution.state().throwTerminalCause();
         lifecycleControlDelegate.cancelWorkflow(PrimitiveCommands.cancelWorkflow(
                 command.cause(),
@@ -279,7 +270,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
     }
 
     @Override
-    public void failWorkflow(@Nonnull WorkflowLifecycleControl.FailWorkflowCommand command) {
+    public void failWorkflow(WorkflowLifecycleControl.FailWorkflowCommand command) {
         workflowExecution.state().throwTerminalCause();
         lifecycleControlDelegate.failWorkflow(PrimitiveCommands.failWorkflow(
                 command.cause(),
@@ -288,45 +279,39 @@ public class WorkflowContextDelegation implements WorkflowContext {
     }
 
     @Override
-    public boolean cancelStep(@Nonnull WorkflowLifecycleControl.CancelStepCommand command) {
+    public boolean cancelStep(WorkflowLifecycleControl.CancelStepCommand command) {
         return lifecycleControlDelegate.cancelStep(command);
     }
 
-    @Nonnull
     @Override
-    public CombinatorWorkflowStepResult allMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+    public CombinatorWorkflowStepResult allMatch(Predicate<WorkflowStepResult> predicate,
                                                  WorkflowStepResult... results) {
         return allCombinatorDelegate.allMatch(predicate, results);
     }
 
-    @Nonnull
     @Override
-    public CombinatorWorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+    public CombinatorWorkflowStepResult anyMatch(Predicate<WorkflowStepResult> predicate,
                                                  WorkflowStepResult... results) {
         return anyCombinatorDelegate.anyMatch(predicate, results);
     }
 
-    @Nonnull
     @Override
-    public CombinatorWorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+    public CombinatorWorkflowStepResult noneMatch(Predicate<WorkflowStepResult> predicate,
                                                   WorkflowStepResult... results) {
         return noneCombinatorDelegate.noneMatch(predicate, results);
     }
 
 
-    @Nonnull
     public CompletableFuture<Void> publishEvent(
-            @Nonnull ProcessingContext processingContext,
-            @Nonnull EventMessage eventMessage) {
+            ProcessingContext processingContext,
+            EventMessage eventMessage) {
         return this.eventSink.publish(processingContext, eventMessage);
     }
 
-    @Nonnull
     public Clock clock() {
         return this.clock;
     }
 
-    @Nonnull
     public UnitOfWorkFactory unitOfWorkFactory() {
         return this.unitOfWorkFactory;
     }
@@ -342,12 +327,10 @@ public class WorkflowContextDelegation implements WorkflowContext {
      *
      * @return the non-transactional unit of work factory used for the workflow-body wrapper.
      */
-    @Nonnull
     public UnitOfWorkFactory workflowBodyUnitOfWorkFactory() {
         return this.workflowBodyUnitOfWorkFactory;
     }
 
-    @Nonnull
     public ExecutorService executorService() {
         return this.executorService;
     }
@@ -358,7 +341,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
      * @param awaited event arrival wrapper object.
      */
     @Internal
-    public void eventReceived(@Nonnull EventWaitConditions.Awaited awaited) {
+    public void eventReceived(EventWaitConditions.Awaited awaited) {
         waitForDelegate.eventReceived(awaited);
     }
 
@@ -378,7 +361,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
     }
 
     @Override
-    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+    public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("workflowId", workflowExecution.workflowId());
         descriptor.describeProperty("workflowName", workflowExecution.workflowName());
     }

@@ -18,8 +18,7 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.IdentityHashMap;
@@ -41,7 +40,7 @@ import java.util.IdentityHashMap;
  * @since 1.0.0
  */
 @Internal
-public record WorkflowError(@Nonnull String type,
+public record WorkflowError(String type,
                             @Nullable String message,
                             @Nullable WorkflowError cause) implements Cause {
 
@@ -71,9 +70,8 @@ public record WorkflowError(@Nonnull String type,
         return fromInternal(throwable, new IdentityHashMap<>(), 0);
     }
 
-    @Nonnull
-    private static WorkflowError fromInternal(@Nonnull Throwable throwable,
-                                              @Nonnull IdentityHashMap<Throwable, Boolean> seen,
+    private static WorkflowError fromInternal(Throwable throwable,
+                                              IdentityHashMap<Throwable, Boolean> seen,
                                               int depth) {
         seen.put(throwable, Boolean.TRUE);
         Throwable rawCause = throwable.getCause();
@@ -100,7 +98,6 @@ public record WorkflowError(@Nonnull String type,
      *
      * @return reconstructed exception.
      */
-    @Nonnull
     public WorkflowExecutionException toThrowable() {
         WorkflowExecutionException reconstructedCause = cause != null ? cause.toThrowable() : null;
         return new WorkflowExecutionException(type, message, reconstructedCause);

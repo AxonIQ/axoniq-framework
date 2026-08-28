@@ -18,8 +18,7 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Exception used as the failure cause when a step's action was in-flight at a crash and, under the
@@ -49,7 +48,7 @@ public class StepIndeterminateException extends StepFailedException {
      *
      * @param stepName the step whose in-flight attempt was interrupted by a crash and not re-run
      */
-    public StepIndeterminateException(@Nonnull String stepName) {
+    public StepIndeterminateException(String stepName) {
         super("Step '" + stepName + "' was in-flight when the worker crashed; under the at-most-once "
                       + "execution guarantee it was not re-run on recovery, so its outcome is indeterminate "
                       + "(the side effect ran at most once).");
@@ -61,7 +60,7 @@ public class StepIndeterminateException extends StepFailedException {
      * @param message the detail message describing the indeterminate step
      * @param cause   the underlying cause, or {@code null} if none
      */
-    public StepIndeterminateException(@Nonnull String message, @Nullable Throwable cause) {
+    public StepIndeterminateException(String message, @Nullable Throwable cause) {
         super(message, cause);
     }
 }

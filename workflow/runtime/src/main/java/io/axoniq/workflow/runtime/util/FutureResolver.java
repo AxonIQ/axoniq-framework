@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.util;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,7 +73,6 @@ public abstract class FutureResolver {
      *
      * @return the configured resolver, or the default resolver when no service is present
      */
-    @Nonnull
     public static FutureResolver getInstance() {
         return INSTANCE;
     }
@@ -88,8 +86,8 @@ public abstract class FutureResolver {
      * @param processingContext context containing the configured resolver
      * @param future            future to resolve
      */
-    public static void resolve(@Nonnull ProcessingContext processingContext,
-                               @Nonnull CompletableFuture<?> future) {
+    public static void resolve(ProcessingContext processingContext,
+                               CompletableFuture<?> future) {
         Objects.requireNonNull(processingContext, "Processing context must not be null");
         Objects.requireNonNull(future, "Future must not be null");
         var resolver = processingContext.component(FutureResolver.class);
@@ -101,5 +99,5 @@ public abstract class FutureResolver {
      *
      * @param future future to resolve
      */
-    public abstract void resolve(@Nonnull CompletableFuture<?> future);
+    public abstract void resolve(CompletableFuture<?> future);
 }

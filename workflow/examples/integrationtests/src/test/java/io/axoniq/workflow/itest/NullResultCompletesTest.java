@@ -26,7 +26,6 @@ import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 
@@ -81,7 +80,7 @@ class NullResultCompletesTest extends AbstractWorkflowTestBase<SimpleWorkflowCon
                 idProperty = "id",
                 startOnEventClass = StartNullResultEvent.class
         )
-        public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        public void execute(SimpleWorkflowContext ctx) {
             ctx.awaitExecute("returnsNull", Map.of(), (c, p) -> null, step -> step.timeout(Duration.ofDays(1)));
         }
     }

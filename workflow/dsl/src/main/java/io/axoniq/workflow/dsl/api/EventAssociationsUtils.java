@@ -23,7 +23,6 @@ import io.axoniq.workflow.runtime.association.Associations;
 import io.axoniq.workflow.runtime.association.MetadataPropertyValueRetriever;
 import io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever;
 import io.axoniq.workflow.runtime.association.ValueRetriever;
-import jakarta.annotation.Nonnull;
 
 /**
  * DSL-level helpers for authoring serialized event associations.
@@ -43,7 +42,7 @@ public final class EventAssociationsUtils {
      * @param propertyName payload property name
      * @return payload-property retriever
      */
-    public static ValueRetriever payloadProperty(@Nonnull String propertyName) {
+    public static ValueRetriever payloadProperty(String propertyName) {
         return PayloadPropertyValueRetriever.payloadProperty(propertyName);
     }
 
@@ -53,7 +52,7 @@ public final class EventAssociationsUtils {
      * @param propertyName metadata key
      * @return metadata-property retriever
      */
-    public static ValueRetriever metadataProperty(@Nonnull String propertyName) {
+    public static ValueRetriever metadataProperty(String propertyName) {
         return MetadataPropertyValueRetriever.metadataProperty(propertyName);
     }
 
@@ -63,7 +62,7 @@ public final class EventAssociationsUtils {
      * @param value expected association value
      * @return equals matcher
      */
-    public static Associations.Matcher equalsTo(@Nonnull Object value) {
+    public static Associations.Matcher equalsTo(Object value) {
         return new Associations.Matcher(EqualsComparison.OPERATOR, value);
     }
 
@@ -73,7 +72,7 @@ public final class EventAssociationsUtils {
      * @param value expected association value
      * @return equals matcher
      */
-    public static Associations.Matcher eq(@Nonnull Object value) {
+    public static Associations.Matcher eq(Object value) {
         return equalsTo(value);
     }
 }

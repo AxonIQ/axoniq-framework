@@ -18,8 +18,7 @@
  */
 package io.axoniq.workflow.runtime.util;
 
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.EventStoreTransaction;
 import org.axonframework.messaging.core.Context;
@@ -61,10 +60,10 @@ public class ProcessingContextUtils {
      */
     public static <R> CompletableFuture<R> executeWithResult(
             @Nullable String id,
-            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
-            @Nonnull Executor executor,
-            @Nonnull Context parentContext,
-            @Nonnull Function<ProcessingContext, CompletableFuture<R>> action) {
+            UnitOfWorkFactory unitOfWorkFactory,
+            Executor executor,
+            Context parentContext,
+            Function<ProcessingContext, CompletableFuture<R>> action) {
         var uow = (id == null)
                 ? unitOfWorkFactory.create(customize -> customize.workScheduler(executor))
                 : unitOfWorkFactory.create(UUID.randomUUID().toString(),
@@ -103,10 +102,10 @@ public class ProcessingContextUtils {
      */
     public static <R> void executeWithResultInSeparateThread(
             @Nullable String id,
-            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
-            @Nonnull ExecutorService executorService,
-            @Nonnull ProcessingContext parentContext,
-            @Nonnull Function<ProcessingContext, CompletableFuture<R>> action) {
+            UnitOfWorkFactory unitOfWorkFactory,
+            ExecutorService executorService,
+            ProcessingContext parentContext,
+            Function<ProcessingContext, CompletableFuture<R>> action) {
         executorService.execute(() -> FutureResolver.resolve(
                 parentContext,
                 executeWithResult(id, unitOfWorkFactory, executorService, parentContext, action)

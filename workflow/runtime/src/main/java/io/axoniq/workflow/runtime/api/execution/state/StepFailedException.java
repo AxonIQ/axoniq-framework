@@ -18,8 +18,7 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Base exception type for individual step failures surfaced by the DSL.
@@ -38,7 +37,7 @@ public class StepFailedException extends RuntimeException {
      *
      * @param message the detail message describing why the step failed
      */
-    public StepFailedException(@Nonnull String message) {
+    public StepFailedException(String message) {
         super(message);
     }
 
@@ -47,7 +46,7 @@ public class StepFailedException extends RuntimeException {
      *
      * @param cause the underlying cause of the failure
      */
-    public StepFailedException(@Nonnull Throwable cause) {
+    public StepFailedException(Throwable cause) {
         super(cause);
     }
 
@@ -57,7 +56,7 @@ public class StepFailedException extends RuntimeException {
      * @param message the detail message describing why the step failed
      * @param cause   the underlying cause of the failure, or {@code null} if none
      */
-    public StepFailedException(@Nonnull String message, @Nullable Throwable cause) {
+    public StepFailedException(String message, @Nullable Throwable cause) {
         super(message, cause);
     }
 }

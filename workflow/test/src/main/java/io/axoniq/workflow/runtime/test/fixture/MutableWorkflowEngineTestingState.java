@@ -18,11 +18,12 @@
  */
 package io.axoniq.workflow.runtime.test.fixture;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.history.api.WorkflowHistory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
-import jakarta.annotation.Nonnull;
 import org.awaitility.core.ConditionTimeoutException;
 import org.awaitility.core.ThrowingRunnable;
 import org.axonframework.common.annotation.Internal;
@@ -79,8 +80,8 @@ class MutableWorkflowEngineTestingState implements WorkflowEngineTestingState {
     }
 
     @Override
-    public void waitingIn(@Nonnull AssertionFailureHandler assertionFailureHandler,
-                          @Nonnull String stepName,
+    public void waitingIn(AssertionFailureHandler assertionFailureHandler,
+                          String stepName,
                           String... stepNames) {
         var allNames = stepNames(stepName, stepNames);
         awaitEventually(assertionFailureHandler,
@@ -100,8 +101,8 @@ class MutableWorkflowEngineTestingState implements WorkflowEngineTestingState {
     }
 
     @Override
-    public void stepsPassed(@Nonnull AssertionFailureHandler assertionFailureHandler,
-                            @Nonnull String stepName,
+    public void stepsPassed(AssertionFailureHandler assertionFailureHandler,
+                            String stepName,
                             String... stepNames) {
         var allNames = stepNames(stepName, stepNames);
         awaitEventually(assertionFailureHandler,
@@ -127,8 +128,8 @@ class MutableWorkflowEngineTestingState implements WorkflowEngineTestingState {
     }
 
     @Override
-    public void hasSteps(@Nonnull AssertionFailureHandler assertionFailureHandler,
-                         @Nonnull String stepName,
+    public void hasSteps(AssertionFailureHandler assertionFailureHandler,
+                         String stepName,
                          String... stepNames) {
         var allNames = stepNames(stepName, stepNames);
         awaitEventually(assertionFailureHandler,
@@ -146,8 +147,8 @@ class MutableWorkflowEngineTestingState implements WorkflowEngineTestingState {
     }
 
     @Override
-    public void hasStepsInAnyOrder(@Nonnull AssertionFailureHandler assertionFailureHandler,
-                                   @Nonnull String stepName,
+    public void hasStepsInAnyOrder(AssertionFailureHandler assertionFailureHandler,
+                                   String stepName,
                                    String... stepNames) {
         var allNames = stepNames(stepName, stepNames);
         awaitEventually(assertionFailureHandler,
@@ -166,8 +167,8 @@ class MutableWorkflowEngineTestingState implements WorkflowEngineTestingState {
     }
 
     @Override
-    public void hasStepsInOrder(@Nonnull AssertionFailureHandler assertionFailureHandler,
-                                @Nonnull String stepName,
+    public void hasStepsInOrder(AssertionFailureHandler assertionFailureHandler,
+                                String stepName,
                                 String... stepNames) {
         var allNames = stepNames(stepName, stepNames);
         awaitEventually(assertionFailureHandler,
@@ -197,8 +198,8 @@ class MutableWorkflowEngineTestingState implements WorkflowEngineTestingState {
     }
 
     @Override
-    public WorkflowStep stepMatches(@Nonnull AssertionFailureHandler assertionFailureHandler,
-                                    @Nonnull Predicate<WorkflowStep> predicate) {
+    public WorkflowStep stepMatches(AssertionFailureHandler assertionFailureHandler,
+                                    Predicate<WorkflowStep> predicate) {
         awaitEventually(assertionFailureHandler,
                         "Expected workflow state to contain a step matching the given predicate",
                         () -> {
@@ -218,22 +219,22 @@ class MutableWorkflowEngineTestingState implements WorkflowEngineTestingState {
     }
 
     @Override
-    public void stepSatisfies(@Nonnull Consumer<WorkflowStep> stepConsumer) {
+    public void stepSatisfies(Consumer<WorkflowStep> stepConsumer) {
         Objects.requireNonNull(stepConsumer, "Step consumer must not be null");
         stepConsumer.accept(stepExists());
     }
 
     @Override
-    public void stepSatisfies(@Nonnull AssertionFailureHandler assertionFailureHandler,
-                              @Nonnull Predicate<WorkflowStep> predicate,
-                              @Nonnull Consumer<WorkflowStep> stepConsumer) {
+    public void stepSatisfies(AssertionFailureHandler assertionFailureHandler,
+                              Predicate<WorkflowStep> predicate,
+                              Consumer<WorkflowStep> stepConsumer) {
         Objects.requireNonNull(stepConsumer, "Step consumer must not be null");
         stepConsumer.accept(stepMatches(assertionFailureHandler, predicate));
     }
 
     @Override
-    public Map<String, Object> payloadMatches(@Nonnull AssertionFailureHandler assertionFailureHandler,
-                                              @Nonnull Predicate<Map<String, Object>> predicate) {
+    public Map<String, @Nullable Object> payloadMatches(AssertionFailureHandler assertionFailureHandler,
+                                              Predicate<Map<String, @Nullable Object>> predicate) {
         awaitEventually(assertionFailureHandler,
                         "Expected workflow payload to match the given predicate",
                         () -> {
@@ -249,19 +250,19 @@ class MutableWorkflowEngineTestingState implements WorkflowEngineTestingState {
     }
 
     @Override
-    public Map<String, Object> payloadExists() {
+    public Map<String, @Nullable Object> payloadExists() {
         return payloadMatches(payload -> true);
     }
 
     @Override
-    public void payloadSatisfies(@Nonnull Consumer<Map<String, Object>> payloadConsumer) {
+    public void payloadSatisfies(Consumer<Map<String, @Nullable Object>> payloadConsumer) {
         Objects.requireNonNull(payloadConsumer, "Payload consumer must not be null");
         payloadConsumer.accept(payloadExists());
     }
 
     @Override
-    public WorkflowState workflowStateMatches(@Nonnull AssertionFailureHandler assertionFailureHandler,
-                                              @Nonnull Predicate<WorkflowState> predicate) {
+    public WorkflowState workflowStateMatches(AssertionFailureHandler assertionFailureHandler,
+                                              Predicate<WorkflowState> predicate) {
         awaitEventually(assertionFailureHandler,
                         "Expected workflow state to match the given predicate",
                         () -> {
@@ -277,7 +278,7 @@ class MutableWorkflowEngineTestingState implements WorkflowEngineTestingState {
     }
 
     @Override
-    public void workflowStateSatisfies(@Nonnull Consumer<WorkflowState> workflowStateConsumer) {
+    public void workflowStateSatisfies(Consumer<WorkflowState> workflowStateConsumer) {
         Objects.requireNonNull(workflowStateConsumer, "Workflow state consumer must not be null");
         workflowStateConsumer.accept(workflowStateExists());
     }
@@ -289,9 +290,9 @@ class MutableWorkflowEngineTestingState implements WorkflowEngineTestingState {
      * @param assertion               assertion to execute
      * @param assertionFailureHandler handler for assertion failures
      */
-    static void awaitEventually(@Nonnull AssertionFailureHandler assertionFailureHandler,
-                                @Nonnull String description,
-                                @Nonnull ThrowingRunnable assertion) {
+    static void awaitEventually(AssertionFailureHandler assertionFailureHandler,
+                                String description,
+                                ThrowingRunnable assertion) {
         AtomicReference<Throwable> lastFailure = new AtomicReference<>();
         try {
             await(description).untilAsserted(() -> {
@@ -308,16 +309,14 @@ class MutableWorkflowEngineTestingState implements WorkflowEngineTestingState {
         }
     }
 
-    @Nonnull
     private List<String> waitingSteps() {
         return state().workflowStepNames().stream()
                       .filter(name -> !state().getStep(name).status().isTerminal())
                       .toList();
     }
 
-    @Nonnull
-    private static String lastAssertionMessage(@Nonnull String description,
-                                               @Nonnull ConditionTimeoutException exception,
+    private static String lastAssertionMessage(String description,
+                                               ConditionTimeoutException exception,
                                                Throwable lastFailure) {
         var cause = lastFailure != null ? lastFailure : exception.getCause();
         if (cause != null && cause.getMessage() != null && !cause.getMessage().isBlank()) {
@@ -326,15 +325,13 @@ class MutableWorkflowEngineTestingState implements WorkflowEngineTestingState {
         return description;
     }
 
-    @Nonnull
-    private static String formatExpectedSteps(@Nonnull List<String> stepNames) {
+    private static String formatExpectedSteps(List<String> stepNames) {
         return stepNames.size() == 1
                 ? formatStepName(stepNames.getFirst())
                 : "steps %s".formatted(stepNames);
     }
 
-    @Nonnull
-    private static String formatActualWaitingSteps(@Nonnull List<String> stepNames) {
+    private static String formatActualWaitingSteps(List<String> stepNames) {
         if (stepNames.isEmpty()) {
             return "no step";
         }
@@ -343,21 +340,18 @@ class MutableWorkflowEngineTestingState implements WorkflowEngineTestingState {
                 : "steps %s".formatted(stepNames);
     }
 
-    @Nonnull
-    private static String formatStepName(@Nonnull String stepName) {
+    private static String formatStepName(String stepName) {
         return "step '%s'".formatted(stepName);
     }
 
-    @Nonnull
-    private static String formatStepStatuses(@Nonnull List<WorkflowStep> steps) {
+    private static String formatStepStatuses(List<WorkflowStep> steps) {
         return steps.stream()
                     .map(step -> "%s=%s".formatted(step.stepName(), step.status()))
                     .toList()
                     .toString();
     }
 
-    @Nonnull
-    private static String describeState(@Nonnull WorkflowState state) {
+    private static String describeState(WorkflowState state) {
         return "steps=%s, payload=%s".formatted(
                 formatStepStatuses(state.workflowStepNames().stream().map(state::getStep).toList()),
                 state.payload()

@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.association;
 
 
-import jakarta.annotation.Nonnull;
 
 import java.util.Map;
 import java.util.Objects;
@@ -74,8 +73,7 @@ public class ValueComparisonOperatorRegistry {
      * @param name operator name.
      * @return operator or throws exception if an operator does not exist.
      */
-    @Nonnull
-    public ValueComparisonOperator get(@Nonnull String name) {
+    public ValueComparisonOperator get(String name) {
         Objects.requireNonNull(name, "Operator name must not be null.");
         if (!operators.containsKey(name)) {
             throw new IllegalArgumentException("Unknown operator used " + name);

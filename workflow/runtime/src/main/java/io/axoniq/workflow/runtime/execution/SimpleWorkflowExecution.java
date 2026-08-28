@@ -30,8 +30,7 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionCheckpointingSupport.ExecutionTaskQueue;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.FutureResolver;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -102,7 +101,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                         }
 
                         @Override
-                        public void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
+                        public void appendTask(Consumer<WorkflowExecution> task) {
                             if (taskQueue.offer(task)) {
                                 return;
                             }
@@ -122,11 +121,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param workflowConfiguration workflow configuration.
      * @param workflowContext       workflow context created by the factory.
      */
-    public SimpleWorkflowExecution(@Nonnull String workflowId,
-                                   @Nonnull Map<String, Object> initial,
-                                   @Nonnull ProcessingContext processingContext,
-                                   @Nonnull WorkflowConfiguration<?> workflowConfiguration,
-                                   @Nonnull WorkflowContext workflowContext
+    public SimpleWorkflowExecution(String workflowId,
+                                   Map<String, @Nullable Object> initial,
+                                   ProcessingContext processingContext,
+                                   WorkflowConfiguration<?> workflowConfiguration,
+                                   WorkflowContext workflowContext
     ) {
         this(workflowId,
              initial,
@@ -138,14 +137,14 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
              new ReachedSteps());
     }
 
-    SimpleWorkflowExecution(@Nonnull String workflowId,
-                            @Nonnull Map<String, Object> initial,
-                            @Nonnull ProcessingContext processingContext,
-                            @Nonnull WorkflowConfiguration<?> workflowConfiguration,
-                            @Nonnull WorkflowContext workflowContext,
-                            @Nonnull RunningSteps runningSteps,
-                            @Nonnull EventWaitConditions eventWaitConditions,
-                            @Nonnull ReachedSteps reachedSteps) {
+    SimpleWorkflowExecution(String workflowId,
+                            Map<String, @Nullable Object> initial,
+                            ProcessingContext processingContext,
+                            WorkflowConfiguration<?> workflowConfiguration,
+                            WorkflowContext workflowContext,
+                            RunningSteps runningSteps,
+                            EventWaitConditions eventWaitConditions,
+                            ReachedSteps reachedSteps) {
         this.workflowId = Objects.requireNonNull(workflowId, "Workflow id must not be null");
         this.workflowConfiguration = Objects.requireNonNull(workflowConfiguration,
                                                             "Workflow configuration must not be null");
@@ -191,7 +190,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * resources are held while the instance is parked.
      */
     @Override
-    public void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler) {
+    public void execute(Consumer<WorkflowExecution> terminationHandler) {
         this.running = true;
         checkpointingSupport.refreshCheckpointWorkState();
         // run in a separate thread to avoid blocking the replay status change handler thread ( = WorkPackage)
@@ -243,7 +242,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      *
      * @param ctx processing context.
      */
-    private void publishStartWorkflow(@Nonnull ProcessingContext ctx) {
+    private void publishStartWorkflow(ProcessingContext ctx) {
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         if (this.state().workflowStatus() == WorkflowStatus.NONE) {
             FutureResolver.resolve(
@@ -267,7 +266,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param ctx processing context.
      * @throws Exception if something went wrong.
      */
-    private void executeWorkflow(@Nonnull ProcessingContext ctx) throws Exception {
+    private void executeWorkflow(ProcessingContext ctx) throws Exception {
         var workflowPayload = this.workflowContext().workflowPayload();
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         logger.info("Executing workflow with initial payload {} from thread {}",
@@ -306,7 +305,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param ctx       processing context.
      * @param exception exception to handle.
      */
-    private void handleWorkflowException(@Nonnull ProcessingContext ctx, @Nonnull Throwable exception) {
+    private void handleWorkflowException(ProcessingContext ctx, Throwable exception) {
         if (completeCancellationRequest(ctx)) {
             return;
         }
@@ -403,7 +402,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param ctx processing context used to publish the terminal event
      * @return {@code true} when a cancellation request was completed, otherwise {@code false}
      */
-    private boolean completeCancellationRequest(@Nonnull ProcessingContext ctx) {
+    private boolean completeCancellationRequest(ProcessingContext ctx) {
         var cancellation = workflowCancellationRequest.consumeWorkflowCancellation();
         if (cancellation == null) {
             return false;
@@ -441,7 +440,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         terminationHandler.accept(this);
     }
 
-    private void transitionToTerminalState(@Nonnull Runnable terminalEventPublication) {
+    private void transitionToTerminalState(Runnable terminalEventPublication) {
         runningSteps.cancelAll(new StepInterruptedException("Workflow reached terminal state"), cancelled -> {
         });
         // Keep checkpoint barriers until finishWorkflow can release their callbacks after the terminal event is durable.
@@ -456,7 +455,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     @Override
     public void awaitStateChange(
-            @Nonnull Predicate<WorkflowState> predicate
+            Predicate<WorkflowState> predicate
     ) throws InterruptedException {
         do {
             var taken = taskQueue.take();
@@ -465,7 +464,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     @Override
-    public void onEvent(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
+    public void onEvent(EventMessage eventMessage, ProcessingContext processingContext) {
         if (running) {
             // live mode
             appendTask(i -> {
@@ -503,7 +502,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     @Override
-    public void addCheckpointLatch(@Nonnull Runnable latch) {
+    public void addCheckpointLatch(Runnable latch) {
         checkpointingSupport.addCheckpointLatch(latch);
     }
 
@@ -513,7 +512,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     @Override
-    public void registerCheckpointWorkStateListener(@Nonnull CheckpointWorkStateListener listener) {
+    public void registerCheckpointWorkStateListener(CheckpointWorkStateListener listener) {
         checkpointingSupport.registerListener(listener);
     }
 
@@ -525,7 +524,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     @Override
-    public void appendTask(@Nonnull Consumer<WorkflowExecution> task) {
+    public void appendTask(Consumer<WorkflowExecution> task) {
         checkpointingSupport.appendTask(task);
     }
 
@@ -539,8 +538,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         return running;
     }
 
-    private CompletableFuture<Void> sendWorkflowEvent(@Nonnull EventMessage eventMessage,
-                                                      @Nonnull ProcessingContext processingContext) {
+    private CompletableFuture<Void> sendWorkflowEvent(EventMessage eventMessage,
+                                                      ProcessingContext processingContext) {
         // TODO: make sure the consistency marker is used
         return ProcessingContextUtils
                 .executeWithResult(
@@ -558,43 +557,37 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     @Override
-    @Nonnull
     public ProcessingContext processingContext() {
         return contextDelegate.processingContext();
     }
 
     @Override
-    @Nonnull
     public WorkflowState state() {
         return workflowState;
     }
 
     @Override
-    @Nonnull
     public WorkflowContext workflowContext() {
         return this.contextDelegate;
     }
 
-    @Nonnull
     @Override
     public String workflowName() {
         return this.workflowName;
     }
 
-    @Nonnull
     @Override
     public String workflowId() {
         return this.workflowId;
     }
 
-    @Nonnull
     @Override
     public WorkflowConfiguration<?> workflowConfiguration() {
         return this.workflowConfiguration;
     }
 
     @Override
-    public void initializeState(@Nonnull WorkflowState state) {
+    public void initializeState(WorkflowState state) {
         this.workflowState = new EventSourcedWorkflowState(
                 state,
                 this.contextDelegate.typedWorkflowContext(),
@@ -602,14 +595,13 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         );
     }
 
-    @Nonnull
     @Override
     public WorkflowCancellation workflowCancellation() {
         return workflowCancellationRequest;
     }
 
     @Override
-    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+    public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("delegate", contextDelegate);
         descriptor.describeProperty("running", running);
         descriptor.describeProperty("state", state());

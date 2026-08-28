@@ -22,8 +22,7 @@ import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.payload.PayloadModification;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 
 import java.time.Duration;
@@ -53,11 +52,11 @@ public class PrimitiveCommands {
      * @return command object
      */
     public static WorkflowStepResultWaitForCommand waitForEvent(
-            @Nonnull String stepName,
-            @Nonnull EventCondition eventCondition,
-            @Nonnull PayloadReducer resultPayloadReducer,
-            @Nonnull Duration duration,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            String stepName,
+            EventCondition eventCondition,
+            PayloadReducer resultPayloadReducer,
+            Duration duration,
+            EventNameCustomizer eventNameCustomizer
     ) {
         return new WorkflowStepResultWaitForCommand(stepName,
                                                     eventCondition,
@@ -75,9 +74,9 @@ public class PrimitiveCommands {
      * @return command object
      */
     public static WorkflowStepResultModifyPayloadCommand modifyPayload(
-            @Nonnull String stepName,
-            @Nonnull PayloadModification payloadModification,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            String stepName,
+            PayloadModification payloadModification,
+            EventNameCustomizer eventNameCustomizer
     ) {
         return new WorkflowStepResultModifyPayloadCommand(stepName, payloadModification, eventNameCustomizer);
     }
@@ -91,9 +90,9 @@ public class PrimitiveCommands {
      * @return command object.
      */
     public static SimpleVersionCommand version(
-            @Nonnull String stepName,
-            @Nonnull String newVersion,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            String stepName,
+            String newVersion,
+            EventNameCustomizer eventNameCustomizer
     ) {
         return new SimpleVersionCommand(stepName, newVersion, eventNameCustomizer);
     }
@@ -105,10 +104,9 @@ public class PrimitiveCommands {
      * @param eventNameCustomizer customizer for published event names
      * @return workflow cancellation command
      */
-    @Nonnull
     public static WorkflowLifecycleControl.CancelWorkflowCommand cancelWorkflow(
             @Nullable Throwable cause,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            EventNameCustomizer eventNameCustomizer
     ) {
         return new DefaultCancelWorkflowCommand(cause, eventNameCustomizer);
     }
@@ -120,10 +118,9 @@ public class PrimitiveCommands {
      * @param eventNameCustomizer customizer for published event names
      * @return workflow failure command
      */
-    @Nonnull
     public static WorkflowLifecycleControl.FailWorkflowCommand failWorkflow(
             @Nullable Throwable cause,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            EventNameCustomizer eventNameCustomizer
     ) {
         return new DefaultFailWorkflowCommand(cause, eventNameCustomizer);
     }
@@ -136,11 +133,10 @@ public class PrimitiveCommands {
      * @param eventNameCustomizer customizer for published event names
      * @return step cancellation command
      */
-    @Nonnull
     public static WorkflowLifecycleControl.CancelStepCommand cancelStep(
-            @Nonnull String stepName,
+            String stepName,
             @Nullable Throwable cause,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            EventNameCustomizer eventNameCustomizer
     ) {
         return new DefaultCancelStepCommand(stepName, cause, eventNameCustomizer);
     }
@@ -151,7 +147,7 @@ public class PrimitiveCommands {
     @Internal
     public record WorkflowStepResultExecuteCommand(
             String stepName,
-            Map<String, Object> local,
+            Map<String, @Nullable Object> local,
             PayloadProcessor action,
             PayloadReducer parameterMapping,
             PayloadReducer resultMapping,
@@ -161,14 +157,14 @@ public class PrimitiveCommands {
     ) implements ExecutePrimitive.ExecuteCommand {
 
         public WorkflowStepResultExecuteCommand(
-                @Nonnull String stepName,
-                @Nonnull Map<String, Object> local,
-                @Nonnull PayloadProcessor action,
-                @Nonnull PayloadReducer parameterMapping,
-                @Nonnull PayloadReducer resultMapping,
-                @Nonnull Duration timeout,
-                @Nonnull EventNameCustomizer eventNameCustomizer,
-                @Nonnull RetryPolicy retryPolicy
+                String stepName,
+                Map<String, @Nullable Object> local,
+                PayloadProcessor action,
+                PayloadReducer parameterMapping,
+                PayloadReducer resultMapping,
+                Duration timeout,
+                EventNameCustomizer eventNameCustomizer,
+                RetryPolicy retryPolicy
         ) {
             this.stepName = stepName;
             this.local = local;
@@ -180,49 +176,41 @@ public class PrimitiveCommands {
             this.retryPolicy = retryPolicy;
         }
 
-        @Nonnull
         @Override
         public String stepName() {
             return stepName;
         }
 
-        @Nonnull
         @Override
-        public Map<String, Object> local() {
+        public Map<String, @Nullable Object> local() {
             return local;
         }
 
-        @Nonnull
         @Override
         public PayloadProcessor action() {
             return action;
         }
 
-        @Nonnull
         @Override
         public PayloadReducer parameterPayloadReducer() {
             return parameterMapping;
         }
 
-        @Nonnull
         @Override
         public PayloadReducer resultPayloadReducer() {
             return resultMapping;
         }
 
-        @Nonnull
         @Override
         public Duration timeout() {
             return timeout;
         }
 
-        @Nonnull
         @Override
         public EventNameCustomizer eventNameCustomizer() {
             return eventNameCustomizer;
         }
 
-        @Nonnull
         @Override
         public RetryPolicy retryPolicy() {
             return retryPolicy;
@@ -241,11 +229,11 @@ public class PrimitiveCommands {
      */
     @Internal
     public record WorkflowStepResultWaitForCommand(
-            @Nonnull String stepName,
-            @Nonnull EventCondition eventCondition,
-            @Nonnull PayloadReducer resultPayloadReducer,
-            @Nonnull Duration timeout,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            String stepName,
+            EventCondition eventCondition,
+            PayloadReducer resultPayloadReducer,
+            Duration timeout,
+            EventNameCustomizer eventNameCustomizer
     ) implements WaitForPrimitive.WaitForCommand {
     }
 
@@ -259,9 +247,9 @@ public class PrimitiveCommands {
      */
     @Internal
     public record WorkflowStepResultModifyPayloadCommand(
-            @Nonnull String stepName,
-            @Nonnull PayloadModification payloadModification,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            String stepName,
+            PayloadModification payloadModification,
+            EventNameCustomizer eventNameCustomizer
     ) implements PayloadPrimitive.ModifyPayloadCommand {
     }
 
@@ -270,9 +258,9 @@ public class PrimitiveCommands {
      */
     @Internal
     public record SimpleVersionCommand(
-            @Nonnull String stepName,
-            @Nonnull String newVersion,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            String stepName,
+            String newVersion,
+            EventNameCustomizer eventNameCustomizer
     ) implements VersionPrimitive.VersionCommand {
     }
 
@@ -282,7 +270,7 @@ public class PrimitiveCommands {
     @Internal
     record DefaultCancelWorkflowCommand(
             @Nullable Throwable cause,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            EventNameCustomizer eventNameCustomizer
     ) implements WorkflowLifecycleControl.CancelWorkflowCommand {
 
         DefaultCancelWorkflowCommand {
@@ -296,7 +284,7 @@ public class PrimitiveCommands {
     @Internal
     record DefaultFailWorkflowCommand(
             @Nullable Throwable cause,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            EventNameCustomizer eventNameCustomizer
     ) implements WorkflowLifecycleControl.FailWorkflowCommand {
 
         DefaultFailWorkflowCommand {
@@ -309,9 +297,9 @@ public class PrimitiveCommands {
      */
     @Internal
     record DefaultCancelStepCommand(
-            @Nonnull String stepName,
+            String stepName,
             @Nullable Throwable cause,
-            @Nonnull EventNameCustomizer eventNameCustomizer
+            EventNameCustomizer eventNameCustomizer
     ) implements WorkflowLifecycleControl.CancelStepCommand {
 
         DefaultCancelStepCommand {

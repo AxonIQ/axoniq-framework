@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.dsl.simple;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.dsl.api.Payload;
 import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
@@ -30,7 +32,6 @@ import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.association.Associations;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
@@ -66,10 +67,10 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
      * @param workflowConfiguration runtime configuration for this workflow
      */
     public SimpleWorkflowContext(
-            @Nonnull String workflowId,
-            @Nonnull Map<String, Object> payload,
-            @Nonnull ProcessingContext processingContext,
-            @Nonnull WorkflowConfiguration<?> workflowConfiguration
+            String workflowId,
+            Map<String, @Nullable Object> payload,
+            ProcessingContext processingContext,
+            WorkflowConfiguration<?> workflowConfiguration
     ) {
         super(workflowId, payload, processingContext, workflowConfiguration);
     }
@@ -81,10 +82,9 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
      * @param processor function that performs the step work
      * @return handle for the running step
      */
-    @Nonnull
     public WorkflowStepResult execute(
-            @Nonnull String stepName,
-            @Nonnull PayloadProcessor processor
+            String stepName,
+            PayloadProcessor processor
     ) {
         return execute(stepName, Map.of(), processor, UnaryOperator.identity());
     }
@@ -97,11 +97,10 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
      * @param customizer customizer for timeout, mapping, retries, or metadata
      * @return handle for the running step
      */
-    @Nonnull
     public WorkflowStepResult execute(
-            @Nonnull String stepName,
-            @Nonnull PayloadProcessor processor,
-            @Nonnull UnaryOperator<ExecuteStepDefinition> customizer
+            String stepName,
+            PayloadProcessor processor,
+            UnaryOperator<ExecuteStepDefinition> customizer
     ) {
         return execute(stepName, Map.of(), processor, customizer);
     }
@@ -118,11 +117,10 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
      * @param <T>        expected result type
      * @return typed result returned by the action
      */
-    @Nonnull
     public <T> T awaitExecute(
-            @Nonnull String stepName,
-            @Nonnull Class<T> resultType,
-            @Nonnull Supplier<T> action
+            String stepName,
+            Class<T> resultType,
+            Supplier<T> action
     ) {
         String resultKey = syntheticStepResultKey(stepName);
         return resultType.cast(awaitExecute(
@@ -132,8 +130,7 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
         ).get(resultKey));
     }
 
-    @Nonnull
-    private static String syntheticStepResultKey(@Nonnull String stepName) {
+    private static String syntheticStepResultKey(String stepName) {
         return "__" + stepName + "Result";
     }
 
@@ -144,8 +141,8 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
      * @param timeout  time to wait before continuing
      */
     public void sleep(
-            @Nonnull String stepName,
-            @Nonnull Duration timeout
+            String stepName,
+            Duration timeout
     ) {
         sleep(stepName, step -> step.timeout(timeout));
     }
@@ -161,12 +158,11 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
      * @param <T>        expected event payload type
      * @return converted event payload
      */
-    @Nonnull
     public <T> T awaitEvent(
-            @Nonnull String stepName,
-            @Nonnull Class<T> eventType,
-            @Nonnull Associations conditions,
-            @Nonnull UnaryOperator<WaitForStepDefinition> customizer
+            String stepName,
+            Class<T> eventType,
+            Associations conditions,
+            UnaryOperator<WaitForStepDefinition> customizer
     ) {
         var result = waitForEvent(stepName, eventType, conditions, customizer);
         result.await();
@@ -199,10 +195,10 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
      * @return handle for the waiting step
      */
     public WorkflowStepResult waitForEvent(
-            @Nonnull String stepName,
-            @Nonnull Class<?> eventType,
-            @Nonnull Associations conditions,
-            @Nonnull UnaryOperator<WaitForStepDefinition> customizer) {
+            String stepName,
+            Class<?> eventType,
+            Associations conditions,
+            UnaryOperator<WaitForStepDefinition> customizer) {
         return waitForEvent(
                 stepName,
                 EventConditions.fromQualifiedName(resolve(eventType), conditions),
@@ -219,9 +215,9 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
      * @return handle for the waiting step
      */
     public WorkflowStepResult waitForEvent(
-            @Nonnull String stepName,
-            @Nonnull Class<?> eventType,
-            @Nonnull Associations conditions) {
+            String stepName,
+            Class<?> eventType,
+            Associations conditions) {
         return super.waitForEvent(
                 stepName,
                 EventConditions.fromQualifiedName(resolve(eventType), conditions)
@@ -235,8 +231,8 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
      * @param value    object whose properties become the new workflow payload
      */
     public void setPayload(
-            @Nonnull String stepName,
-            @Nonnull Object value
+            String stepName,
+            Object value
     ) {
         awaitModifyPayload(
                 stepName,

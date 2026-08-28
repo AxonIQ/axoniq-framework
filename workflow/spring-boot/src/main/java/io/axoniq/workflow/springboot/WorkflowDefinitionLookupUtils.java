@@ -21,7 +21,6 @@ package io.axoniq.workflow.springboot;
 import io.axoniq.workflow.configuration.AutoDetectionUtils.MethodWithWorkflowAttributes;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
@@ -59,8 +58,8 @@ class WorkflowDefinitionLookupUtils {
      * @return A map keyed by the workflow context type, containing a list of bean definitions.
      */
     static Map<Class<? extends WorkflowContext>, List<String>> workflowBeanDefinitions(
-            @Nonnull Class<? extends WorkflowContext> workflowContextType,
-            @Nonnull ConfigurableListableBeanFactory beanFactory,
+            Class<? extends WorkflowContext> workflowContextType,
+            ConfigurableListableBeanFactory beanFactory,
             boolean includePrototypeBeans) {
 
         Map<Class<? extends WorkflowContext>, List<String>> found = new java.util.HashMap<>();
@@ -94,7 +93,7 @@ class WorkflowDefinitionLookupUtils {
      * @return A list of bean names with message handlers.
      */
     static Map<Class<? extends WorkflowContext>, String> workflowContextFactoryBeans(
-            @Nonnull ConfigurableListableBeanFactory beanFactory,
+            ConfigurableListableBeanFactory beanFactory,
             boolean includePrototypeBeans) {
 
         Map<Class<? extends WorkflowContext>, String> found = new java.util.HashMap<>();

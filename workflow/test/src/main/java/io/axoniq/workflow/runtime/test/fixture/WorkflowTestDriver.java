@@ -26,7 +26,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.StepFailedException;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.test.configuration.WorkflowTestSteppingModeEnhancer;
-import jakarta.annotation.Nonnull;
 import org.awaitility.core.ThrowingRunnable;
 
 import java.time.Duration;
@@ -104,9 +103,9 @@ public interface WorkflowTestDriver {
      * @return workflow test driver
      */
     static <C extends WorkflowContext> WorkflowTestDriver stepper(
-            @Nonnull WorkflowModule<C> workflowModule,
+            WorkflowModule<C> workflowModule,
             boolean throwFixtureException,
-            @Nonnull UnaryOperator<WorkflowConfigurer> customize) {
+            UnaryOperator<WorkflowConfigurer> customize) {
 
         var configurer = WorkflowConfigurer.create();
         configurer.componentRegistry(r -> new WorkflowTestSteppingModeEnhancer().enhance(r))
@@ -133,8 +132,8 @@ public interface WorkflowTestDriver {
      * @return workflow test driver
      */
     static <C extends WorkflowContext> WorkflowTestDriver live(
-            @Nonnull WorkflowModule<C> workflowModule,
-            @Nonnull UnaryOperator<WorkflowConfigurer> customize) {
+            WorkflowModule<C> workflowModule,
+            UnaryOperator<WorkflowConfigurer> customize) {
         return live(
                 Objects.requireNonNull(workflowModule, "Workflow module must not be null"),
                 false,
@@ -151,9 +150,9 @@ public interface WorkflowTestDriver {
      * @return workflow test driver
      */
     static <C extends WorkflowContext> WorkflowTestDriver live(
-            @Nonnull WorkflowModule<C> workflowModule,
+            WorkflowModule<C> workflowModule,
             boolean throwFixtureException,
-            @Nonnull UnaryOperator<WorkflowConfigurer> customize) {
+            UnaryOperator<WorkflowConfigurer> customize) {
         var configurer = WorkflowConfigurer.create();
         configurer.registerWorkflowModule(Objects.requireNonNull(workflowModule, "Workflow module must not be null"));
         var configuration = Objects.requireNonNull(customize, "Customizer must not be null").apply(configurer).start();
@@ -172,8 +171,7 @@ public interface WorkflowTestDriver {
      * @param stepNames optional additional step names
      * @return list of steps
      */
-    @Nonnull
-    static List<String> stepNames(@Nonnull String stepName, String... stepNames) {
+    static List<String> stepNames(String stepName, String... stepNames) {
         var allNames = new ArrayList<String>();
         allNames.add(Objects.requireNonNull(stepName, "Step name must not be null"));
         allNames.addAll(Arrays.asList(stepNames));
@@ -185,7 +183,6 @@ public interface WorkflowTestDriver {
      *
      * @return services for testing workflow runtime
      */
-    @Nonnull
     WorkflowTestServices workflowTestServices();
 
     /**
@@ -193,7 +190,6 @@ public interface WorkflowTestDriver {
      *
      * @return shared testing state
      */
-    @Nonnull
     WorkflowEngineTestingState testingState();
 
     /**
@@ -201,7 +197,6 @@ public interface WorkflowTestDriver {
      *
      * @return assertion failure handler
      */
-    @Nonnull
     AssertionFailureHandler assertionFailureHandler();
 
     /**
@@ -224,14 +219,14 @@ public interface WorkflowTestDriver {
      * @param predicate predicate used to select matching executions
      * @return the selected execution
      */
-    WorkflowExecution executionMatches(@Nonnull Predicate<WorkflowExecution> predicate);
+    WorkflowExecution executionMatches(Predicate<WorkflowExecution> predicate);
 
     /**
      * Waits until an active workflow execution exists and applies the given consumer.
      *
      * @param executionConsumer consumer applied to the selected execution
      */
-    void executionSatisfies(@Nonnull Consumer<WorkflowExecution> executionConsumer);
+    void executionSatisfies(Consumer<WorkflowExecution> executionConsumer);
 
     /**
      * Waits until no active workflow executions exist.
@@ -244,7 +239,7 @@ public interface WorkflowTestDriver {
      * @param predicate predicate used to select matching histories
      * @return the selected history
      */
-    WorkflowHistory historyMatches(@Nonnull Predicate<WorkflowHistory> predicate);
+    WorkflowHistory historyMatches(Predicate<WorkflowHistory> predicate);
 
     /**
      * Waits until a workflow history exists.
@@ -258,7 +253,7 @@ public interface WorkflowTestDriver {
      *
      * @param historyConsumer consumer applied to the selected history
      */
-    void historySatisfies(@Nonnull Consumer<WorkflowHistory> historyConsumer);
+    void historySatisfies(Consumer<WorkflowHistory> historyConsumer);
 
     /**
      * Asserts that no workflow histories exist.
@@ -270,14 +265,14 @@ public interface WorkflowTestDriver {
      *
      * @param event event message or event payload
      */
-    void publishEvent(@Nonnull Object event);
+    void publishEvent(Object event);
 
     /**
      * Advances time by the given duration.
      *
      * @param duration duration to advance time by
      */
-    void timePasses(@Nonnull Duration duration);
+    void timePasses(Duration duration);
 
     /**
      * Waits until the given step is executed calling original action defined in the workflow definition.
@@ -286,7 +281,7 @@ public interface WorkflowTestDriver {
      *
      * @param stepName step name
      */
-    void executeStep(@Nonnull String stepName);
+    void executeStep(String stepName);
 
     /**
      * Waits until the given step is executed calling the given payload processor.
@@ -296,7 +291,7 @@ public interface WorkflowTestDriver {
      * @param stepName step name
      * @param payloadProcessor payload processor to use instead of the workflow-defined action
      */
-    void executeStep(@Nonnull String stepName, @Nonnull PayloadProcessor payloadProcessor);
+    void executeStep(String stepName, PayloadProcessor payloadProcessor);
 
     /**
      * Waits until the given step is executed throwing the given exception.
@@ -306,7 +301,7 @@ public interface WorkflowTestDriver {
      * @param stepName name of the step to execute
      * @param exception exception to throw
      */
-    void executeStepFailing(@Nonnull String stepName, @Nonnull StepFailedException exception);
+    void executeStepFailing(String stepName, StepFailedException exception);
 
     /**
      * Shuts down the tester.
@@ -319,5 +314,5 @@ public interface WorkflowTestDriver {
      * @param description description of the assertion
      * @param assertion assertion to execute
      */
-    void awaitEventually(@Nonnull String description, @Nonnull ThrowingRunnable assertion);
+    void awaitEventually(String description, ThrowingRunnable assertion);
 }

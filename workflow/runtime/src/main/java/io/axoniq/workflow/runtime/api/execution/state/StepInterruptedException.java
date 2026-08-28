@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
-import jakarta.annotation.Nonnull;
 
 /**
  * Exception thrown into the workflow body when a step's blocking wait is interrupted because the
@@ -43,7 +42,7 @@ public class StepInterruptedException extends StepFailedException {
      *
      * @param message the detail message describing why the wait was interrupted
      */
-    public StepInterruptedException(@Nonnull String message) {
+    public StepInterruptedException(String message) {
         super(message);
     }
 
@@ -53,7 +52,7 @@ public class StepInterruptedException extends StepFailedException {
      * @param message the detail message describing why the wait was interrupted
      * @param cause   the underlying cause of the interruption
      */
-    public StepInterruptedException(@Nonnull String message, @Nonnull Throwable cause) {
+    public StepInterruptedException(String message, Throwable cause) {
         super(message, cause);
     }
 
@@ -62,7 +61,7 @@ public class StepInterruptedException extends StepFailedException {
      *
      * @param cause the underlying cause of the interruption
      */
-    public StepInterruptedException(@Nonnull Throwable cause) {
+    public StepInterruptedException(Throwable cause) {
         super(cause);
     }
 }

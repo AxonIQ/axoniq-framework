@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.test.utils;
 
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.eventsourcing.eventstore.EventStore;
@@ -49,18 +48,16 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
      *
      * @param delegate event store to wrap.
      */
-    public PrettyPrintingRecordingEventStore(@Nonnull EventStore delegate) {
+    public PrettyPrintingRecordingEventStore(EventStore delegate) {
         super(delegate);
         lastInstance = this;
     }
 
-    @Nonnull
     public static PrettyPrintingRecordingEventStore lastInstance() {
         return Objects.requireNonNull(lastInstance, "No PrettyPrintingRecordingEventStore has been created yet");
     }
 
-    @Nonnull
-    public static EventStore eventStore(@Nonnull EventStore delegate) {
+    public static EventStore eventStore(EventStore delegate) {
         if (delegate instanceof PrettyPrintingRecordingEventStore) {
             return delegate;
         } else {
@@ -69,7 +66,7 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
     }
 
     @Override
-    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+    public void describeTo(ComponentDescriptor descriptor) {
         var eventsByWorkflowId = recorded().stream()
                                            .filter(e -> e.metadata().containsKey(METADATA_KEY_WORKFLOW_ID))
                                            .collect(groupingBy(e -> e.metadata()
@@ -87,7 +84,7 @@ public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
     ) implements DescribableComponent {
 
         @Override
-        public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+        public void describeTo(ComponentDescriptor descriptor) {
             descriptor.describeProperty(workflowId, events.stream().map(event -> {
                 var status = MetadataUtils.getStepStatus(event.metadata()).map(Enum::name)
                                           .or(() -> MetadataUtils.getWorkflowStatus(event.metadata()).map(Enum::name))

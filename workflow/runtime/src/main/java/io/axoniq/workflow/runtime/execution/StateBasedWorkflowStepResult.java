@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepFailedException;
@@ -25,7 +27,6 @@ import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -64,10 +65,10 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
      * @param cancellation       operation that requests cancellation of this step
      * @param state              workflow execution providing the state
      */
-    public StateBasedWorkflowStepResult(@Nonnull String stepName,
-                                        @Nonnull Callable<Void> stateChangeTrigger,
-                                        @Nonnull Consumer<Throwable> cancellation,
-                                        @Nonnull WorkflowExecution state) {
+    public StateBasedWorkflowStepResult(String stepName,
+                                        Callable<Void> stateChangeTrigger,
+                                        Consumer<Throwable> cancellation,
+                                        WorkflowExecution state) {
         this.stepName = Objects.requireNonNull(stepName, "Step name must not be null");
         this.stateChangeTrigger = Objects.requireNonNull(stateChangeTrigger, "State change trigger must not be null");
         this.cancellation = Objects.requireNonNull(cancellation, "Cancellation operation must not be null");
@@ -75,7 +76,6 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
     }
 
     @Override
-    @Nonnull
     public String getStepName() {
         return stepName;
     }
@@ -86,8 +86,7 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
     }
 
     @Override
-    @Nonnull
-    public Optional<Map<String, Object>> result() {
+    public Optional<Map<String, @Nullable Object>> result() {
         return Optional.of(workflowExecution.state().getStep(stepName))
                        .map(WorkflowStep::result)
                        .map(o -> workflowExecution.processingContext().component(EventConverter.class)
@@ -95,21 +94,18 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
     }
 
     @Override
-    @Nonnull
-    public <T> Optional<T> resultAs(@Nonnull Type type) {
+    public <T> Optional<T> resultAs(Type type) {
         return resultAs(type, workflowExecution.processingContext().component(EventConverter.class));
     }
 
     @Override
-    @Nonnull
-    public <T> Optional<T> resultAs(@Nonnull Type type, @Nonnull Converter converter) {
+    public <T> Optional<T> resultAs(Type type, Converter converter) {
         return Optional.of(workflowExecution.state().getStep(stepName))
                        .map(WorkflowStep::result)
                        .map(o -> converter.convert(o, type));
     }
 
     @Override
-    @Nonnull
     public Optional<StepFailedException> error() {
         return Optional.of(workflowExecution.state().getStep(stepName)).map(step -> {
             var cause = step.error();
@@ -169,7 +165,7 @@ public class StateBasedWorkflowStepResult implements WorkflowStepResult {
     }
 
     @Override
-    public void cancel(@Nonnull String reason) {
+    public void cancel(String reason) {
         cancellation.accept(new StepCancellationException(reason));
     }
 }

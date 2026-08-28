@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.test.fixture;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.history.api.WorkflowHistory;
 import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.api.execution.state.StepFailedException;
@@ -221,7 +223,7 @@ class GivenWhenTest {
     }
 
     private WorkflowState workflowState(List<String> stepNames,
-                                        Map<String, Object> payload,
+                                        Map<String, @Nullable Object> payload,
                                         WorkflowStep... steps) {
         WorkflowState state = mock(WorkflowState.class);
         when(state.workflowStepNames()).thenReturn(stepNames);

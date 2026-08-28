@@ -20,7 +20,6 @@ package io.axoniq.workflow.history.inmemory;
 
 import io.axoniq.workflow.history.api.WorkflowHistory;
 import io.axoniq.workflow.history.api.WorkflowHistoryRepository;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.List;
@@ -38,20 +37,18 @@ public class InMemoryWorkflowHistoryRepository implements MutableWorkflowHistory
 
     private final ConcurrentHashMap<String, WorkflowHistory> workflowHistoryMap = new ConcurrentHashMap<>();
 
-    @Nonnull
     @Override
     public List<WorkflowHistory> findAll() {
         return List.copyOf(workflowHistoryMap.values());
     }
 
-    @Nonnull
     @Override
-    public Optional<WorkflowHistory> findById(@Nonnull String workflowId) {
+    public Optional<WorkflowHistory> findById(String workflowId) {
         return Optional.ofNullable(workflowHistoryMap.get(workflowId));
     }
 
     @Override
-    public void save(@Nonnull WorkflowHistory workflowHistory) {
+    public void save(WorkflowHistory workflowHistory) {
         workflowHistoryMap.put(workflowHistory.workflowId(), workflowHistory);
     }
 

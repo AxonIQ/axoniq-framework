@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.dsl.api;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.CancelStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.CancelWorkflowDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.ExecuteStepDefinition;
@@ -28,7 +30,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WaitForStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
-import jakarta.annotation.Nonnull;
 
 import java.util.Map;
 
@@ -57,8 +58,7 @@ public interface WorkflowDSL {
      *                       payload mapping, timing, and retry configuration
      * @return durable asynchronous result handle for the execution step
      */
-    @Nonnull
-    WorkflowStepResult execute(@Nonnull ExecuteStepDefinition stepDefinition);
+    WorkflowStepResult execute(ExecuteStepDefinition stepDefinition);
 
     /**
      * Executes a step synchronously from a DSL step definition and returns the resulting step payload.
@@ -73,8 +73,7 @@ public interface WorkflowDSL {
      * @return resulting payload map of the completed step, or an empty map when no result payload is produced
      * @throws RuntimeException any exception captured by the durable step result
      */
-    @Nonnull
-    Map<String, Object> awaitExecute(@Nonnull ExecuteStepDefinition stepDefinition);
+    Map<String, @Nullable Object> awaitExecute(ExecuteStepDefinition stepDefinition);
 
     /**
      * Starts an asynchronous wait step from a DSL step definition.
@@ -88,8 +87,7 @@ public interface WorkflowDSL {
      *                       mapping, and timing
      * @return durable asynchronous result handle representing the active wait step
      */
-    @Nonnull
-    WorkflowStepResult waitForEvent(@Nonnull WaitForStepDefinition stepDefinition);
+    WorkflowStepResult waitForEvent(WaitForStepDefinition stepDefinition);
 
     /**
      * Starts a wait step from a DSL step definition and blocks until it completes.
@@ -104,8 +102,7 @@ public interface WorkflowDSL {
      * @return resulting payload map of the completed wait step, or an empty map when no result payload is produced
      * @throws RuntimeException any exception captured by the durable step result
      */
-    @Nonnull
-    Map<String, Object> awaitEvent(@Nonnull WaitForStepDefinition stepDefinition);
+    Map<String, @Nullable Object> awaitEvent(WaitForStepDefinition stepDefinition);
 
     /**
      * Applies a payload modification asynchronously from a DSL step definition.
@@ -117,8 +114,7 @@ public interface WorkflowDSL {
      * @param stepDefinition author-facing payload step definition containing step metadata and payload modification
      * @return durable asynchronous result handle for the payload modification step
      */
-    @Nonnull
-    WorkflowStepResult modifyPayload(@Nonnull PayloadStepDefinition stepDefinition);
+    WorkflowStepResult modifyPayload(PayloadStepDefinition stepDefinition);
 
     /**
      * Applies a payload modification from a DSL step definition and blocks until it completes.
@@ -130,7 +126,7 @@ public interface WorkflowDSL {
      * @param stepDefinition author-facing payload step definition containing step metadata and payload modification
      * @throws RuntimeException any exception captured by the durable step result
      */
-    void awaitModifyPayload(@Nonnull PayloadStepDefinition stepDefinition);
+    void awaitModifyPayload(PayloadStepDefinition stepDefinition);
 
     /**
      * Migrates the workflow to the version carried by {@code stepDefinition} for the given changeId
@@ -151,7 +147,7 @@ public interface WorkflowDSL {
      * @return {@code true} iff the workflow has committed to (or is past) the requested version for
      * this {@code changeId}; {@code false} if it stays on the legacy branch.
      */
-    boolean migrateVersion(@Nonnull VersionStepDefinition stepDefinition);
+    boolean migrateVersion(VersionStepDefinition stepDefinition);
 
     /**
      * Terminates the workflow with failure from a DSL step definition.
@@ -163,7 +159,7 @@ public interface WorkflowDSL {
      * @param definition author-facing failure definition containing step metadata and failure cause
      * @throws WorkflowFailedException always, after the failure event is published
      */
-    void fail(@Nonnull FailWorkflowDefinition definition);
+    void fail(FailWorkflowDefinition definition);
 
     /**
      * Terminates the workflow with cancellation from a DSL definition.
@@ -175,7 +171,7 @@ public interface WorkflowDSL {
      * @param definition author-facing cancellation definition containing step metadata and optional cause
      * @throws WorkflowCancelledException always, after the cancellation event is published
      */
-    void cancel(@Nonnull CancelWorkflowDefinition definition);
+    void cancel(CancelWorkflowDefinition definition);
 
     /**
      * Terminates the step with cancellation from a DSL definition.
@@ -187,5 +183,5 @@ public interface WorkflowDSL {
      * @param definition author-facing cancellation definition containing step metadata and optional cause
      * @throws WorkflowCancelledException always, after the cancellation event is published
      */
-    void cancelStep(@Nonnull CancelStepDefinition definition);
+    void cancelStep(CancelStepDefinition definition);
 }

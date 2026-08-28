@@ -21,7 +21,6 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
@@ -54,7 +53,7 @@ public class ReachedSteps implements DescribableComponent {
      *
      * @param stepName name of the reached workflow step
      */
-    void record(@Nonnull String stepName) {
+    void record(String stepName) {
         referencedStepNames.add(stepName);
     }
 
@@ -71,7 +70,7 @@ public class ReachedSteps implements DescribableComponent {
      * @param state event-sourced state to compare with this invocation's progress
      * @return {@code true} when at least one terminal state step was not reached
      */
-    boolean hasUnreferencedTerminalStep(@Nonnull WorkflowState state) {
+    boolean hasUnreferencedTerminalStep(WorkflowState state) {
         return !unreferencedTerminalSteps(state).isEmpty();
     }
 
@@ -83,17 +82,16 @@ public class ReachedSteps implements DescribableComponent {
      * @param aboutToExecute description of the operation being attempted
      * @throws WorkflowReplayDriftException when terminal state steps were not reached by the current invocation
      */
-    void assertNoReplayDrift(@Nonnull String workflowId,
-                             @Nonnull WorkflowState state,
-                             @Nonnull String aboutToExecute) {
+    void assertNoReplayDrift(String workflowId,
+                             WorkflowState state,
+                             String aboutToExecute) {
         List<String> unreferenced = unreferencedTerminalSteps(state);
         if (!unreferenced.isEmpty()) {
             throw new WorkflowReplayDriftException(workflowId, aboutToExecute, unreferenced);
         }
     }
 
-    @Nonnull
-    private List<String> unreferencedTerminalSteps(@Nonnull WorkflowState state) {
+    private List<String> unreferencedTerminalSteps(WorkflowState state) {
         return state.workflowStepNames().stream()
                     .filter(name -> !referencedStepNames.contains(name))
                     .filter(name -> WorkflowStateUtils.isStepTerminal(state, name))
@@ -101,7 +99,7 @@ public class ReachedSteps implements DescribableComponent {
     }
 
     @Override
-    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+    public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("referencedSteps", referencedStepNames.stream().toList());
     }
 }

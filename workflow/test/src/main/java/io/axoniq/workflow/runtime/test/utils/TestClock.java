@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.test.utils;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 import java.time.Clock;
@@ -53,7 +52,7 @@ public class TestClock extends Clock {
      * @param instant initial instant
      * @param zone    time zone
      */
-    public TestClock(@Nonnull Instant instant, @Nonnull ZoneId zone) {
+    public TestClock(Instant instant, ZoneId zone) {
         this.instant = new AtomicReference<>(Objects.requireNonNull(instant, "Instant must not be null"));
         this.zone = Objects.requireNonNull(zone, "Zone must not be null");
     }
@@ -63,7 +62,6 @@ public class TestClock extends Clock {
      *
      * @return clock time zone
      */
-    @Nonnull
     @Override
     public ZoneId getZone() {
         return zone;
@@ -75,9 +73,8 @@ public class TestClock extends Clock {
      * @param zone time zone for the returned clock
      * @return mutable clock using the requested zone
      */
-    @Nonnull
     @Override
-    public Clock withZone(@Nonnull ZoneId zone) {
+    public Clock withZone(ZoneId zone) {
         return new TestClock(instant(), zone);
     }
 
@@ -86,7 +83,6 @@ public class TestClock extends Clock {
      *
      * @return current instant
      */
-    @Nonnull
     @Override
     public Instant instant() {
         return instant.get();
@@ -98,8 +94,7 @@ public class TestClock extends Clock {
      * @param duration duration to advance
      * @return new instant
      */
-    @Nonnull
-    public Instant advanceBy(@Nonnull Duration duration) {
+    public Instant advanceBy(Duration duration) {
         return instant.updateAndGet(current -> current.plus(duration));
     }
 }

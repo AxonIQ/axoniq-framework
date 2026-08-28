@@ -21,7 +21,6 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.TagResolver;
 import org.axonframework.messaging.core.Metadata;
@@ -44,8 +43,7 @@ public class WorkflowEventTagResolver implements TagResolver {
 
 
     @Override
-    @Nonnull
-    public Set<Tag> resolve(@Nonnull EventMessage eventMessage) {
+    public Set<Tag> resolve(EventMessage eventMessage) {
         var tags = new ArrayList<Tag>();
         Metadata metadata = eventMessage.metadata();
 
@@ -78,16 +76,14 @@ public class WorkflowEventTagResolver implements TagResolver {
                 || MetadataUtils.getStepStatus(metadata).isPresent());
     }
 
-    @Nonnull
-    private static String lifecycleValue(@Nonnull WorkflowStatus status) {
+    private static String lifecycleValue(WorkflowStatus status) {
         return switch (status) {
             case NONE -> throw new IllegalArgumentException("Workflow lifecycle tag is undefined for status NONE");
             case STARTED, COMPLETED, FAILED, TIMED_OUT, CANCELLED -> TAG_VALUE_EVENT_TYPE_LIFECYCLE;
         };
     }
 
-    @Nonnull
-    private static String lifecycleValue(@Nonnull StepStatus status) {
+    private static String lifecycleValue(StepStatus status) {
         return switch (status) {
             case STARTED, COMPLETED, TIMED_OUT, CANCELLED -> TAG_VALUE_EVENT_TYPE_WAIT_STEP;
             case RETRYING, FAILED -> throw new IllegalArgumentException(

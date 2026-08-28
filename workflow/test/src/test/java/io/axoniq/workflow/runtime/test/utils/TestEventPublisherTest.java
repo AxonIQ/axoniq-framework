@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.test.utils;
 
+import org.jspecify.annotations.Nullable;
+
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -56,7 +58,7 @@ class TestEventPublisherTest {
     void publishWrapsPayloadAsEventMessage() {
         CompletableFuture<Void> completion = CompletableFuture.completedFuture(null);
         when(eventSink.publish(isNull(), any(EventMessage.class))).thenReturn(completion);
-        Map<String, Object> payload = Map.of("orderId", "order-1");
+        Map<String, @Nullable Object> payload = Map.of("orderId", "order-1");
         MessageType messageType = new MessageType("OrderCreated");
         when(messageTypeResolver.resolveOrThrow(payload)).thenReturn(messageType);
         when(idGenerator.next()).thenReturn("event-1");

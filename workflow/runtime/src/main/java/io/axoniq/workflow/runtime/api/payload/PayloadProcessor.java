@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.api.payload;
 
+import org.jspecify.annotations.Nullable;
+
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.util.Map;
@@ -31,6 +33,6 @@ import java.util.function.BiFunction;
  * @since 1.0.0
  */
 @FunctionalInterface
-public interface PayloadProcessor extends BiFunction<ProcessingContext, Map<String, Object>, Map<String, Object>> {
+public interface PayloadProcessor extends BiFunction<ProcessingContext, Map<String, @Nullable Object>, Map<String, @Nullable Object>> {
 
 }

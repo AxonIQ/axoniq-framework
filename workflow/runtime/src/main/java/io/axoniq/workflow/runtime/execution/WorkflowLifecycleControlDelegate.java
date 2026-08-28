@@ -27,8 +27,7 @@ import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.FutureResolver;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -88,14 +87,14 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
      */
     @Internal
     public WorkflowLifecycleControlDelegate(
-            @Nonnull WorkflowContext workflowContext,
-            @Nonnull WorkflowExecution workflowExecution,
-            @Nonnull RunningSteps runningSteps,
-            @Nonnull ReachedSteps reachedSteps,
-            @Nonnull WorkflowTerminalTransition terminalTransition,
-            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
-            @Nonnull EventSink eventSink,
-            @Nonnull Executor executor
+            WorkflowContext workflowContext,
+            WorkflowExecution workflowExecution,
+            RunningSteps runningSteps,
+            ReachedSteps reachedSteps,
+            WorkflowTerminalTransition terminalTransition,
+            UnitOfWorkFactory unitOfWorkFactory,
+            EventSink eventSink,
+            Executor executor
     ) {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow execution is mandatory");
@@ -109,7 +108,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     }
 
     @Override
-    public void cancelWorkflow(@Nonnull WorkflowLifecycleControl.CancelWorkflowCommand command) {
+    public void cancelWorkflow(WorkflowLifecycleControl.CancelWorkflowCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
         reachedSteps.assertNoReplayDrift(
                 workflowExecution.workflowId(),
@@ -127,7 +126,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     }
 
     @Override
-    public void failWorkflow(@Nonnull WorkflowLifecycleControl.FailWorkflowCommand command) {
+    public void failWorkflow(WorkflowLifecycleControl.FailWorkflowCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
         reachedSteps.assertNoReplayDrift(
                 workflowExecution.workflowId(),
@@ -143,7 +142,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     }
 
     @Override
-    public boolean cancelStep(@Nonnull WorkflowLifecycleControl.CancelStepCommand command) {
+    public boolean cancelStep(WorkflowLifecycleControl.CancelStepCommand command) {
         Objects.requireNonNull(command, "Command must not be null");
         var stepName = command.stepName();
         reachedSteps.record(stepName);
@@ -178,8 +177,8 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         return true;
     }
 
-    private void publishFailed(@Nonnull WorkflowLifecycleControl.FailWorkflowCommand command,
-                               @Nonnull String effectiveName) {
+    private void publishFailed(WorkflowLifecycleControl.FailWorkflowCommand command,
+                               String effectiveName) {
         var cause = command.cause();
         var eventNameCustomizer = command.eventNameCustomizer();
         var workflowDefinitionId = workflowExecution.state().workflowDefinitionId();
@@ -197,8 +196,8 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
                                                         eventNameCustomizer))), "FAILED");
     }
 
-    private void publishCancelled(@Nonnull WorkflowLifecycleControl.CancelWorkflowCommand command,
-                                  @Nonnull String effectiveName) {
+    private void publishCancelled(WorkflowLifecycleControl.CancelWorkflowCommand command,
+                                  String effectiveName) {
         var cause = command.cause();
         var eventNameCustomizer = command.eventNameCustomizer();
         var workflowDefinitionId = workflowExecution.state().workflowDefinitionId();
@@ -222,8 +221,8 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
      * @param publication    asynchronous terminal-event publication
      * @param terminalStatus terminal status represented by the event
      */
-    private void awaitTerminalEventPublication(@Nonnull CompletableFuture<Void> publication,
-                                               @Nonnull String terminalStatus) {
+    private void awaitTerminalEventPublication(CompletableFuture<Void> publication,
+                                               String terminalStatus) {
         try {
             FutureResolver.resolve(workflowContext.processingContext(), publication);
         } catch (CompletionException exception) {
@@ -233,7 +232,6 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         }
     }
 
-    @Nonnull
     private static Exception getException(@Nullable Throwable cause) {
         return cause instanceof Exception
                 ? (Exception) cause

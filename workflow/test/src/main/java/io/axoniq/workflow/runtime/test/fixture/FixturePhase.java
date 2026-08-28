@@ -21,7 +21,6 @@ package io.axoniq.workflow.runtime.test.fixture;
 import io.axoniq.workflow.history.api.WorkflowHistory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.Objects;
@@ -63,8 +62,8 @@ abstract class FixturePhase<SELF extends FixturePhase<SELF>> extends Phase<SELF>
      * @param fixture owning workflow test fixture
      * @param testDriver shared workflow test driver
      */
-    protected void initialize(@Nonnull WorkflowTestFixture<?, ?> fixture,
-                              @Nonnull WorkflowTestDriver testDriver) {
+    protected void initialize(WorkflowTestFixture<?, ?> fixture,
+                              WorkflowTestDriver testDriver) {
         Objects.requireNonNull(fixture, "Fixture must not be null");
         Objects.requireNonNull(testDriver, "Test driver must not be null");
         this.fixture = fixture;
@@ -89,7 +88,7 @@ abstract class FixturePhase<SELF extends FixturePhase<SELF>> extends Phase<SELF>
      * @param predicate predicate used to select matching executions
      * @return this phase for fluent chaining
      */
-    public SELF executionExists(@Nonnull Predicate<WorkflowExecution> predicate) {
+    public SELF executionExists(Predicate<WorkflowExecution> predicate) {
         Objects.requireNonNull(predicate, "Execution predicate must not be null");
         testDriver.executionMatches(predicate);
         return self();
@@ -103,7 +102,7 @@ abstract class FixturePhase<SELF extends FixturePhase<SELF>> extends Phase<SELF>
      * @param predicate predicate used to select matching histories
      * @return this phase for fluent chaining
      */
-    public SELF historyExists(@Nonnull Predicate<WorkflowHistory> predicate) {
+    public SELF historyExists(Predicate<WorkflowHistory> predicate) {
         Objects.requireNonNull(predicate, "History predicate must not be null");
         testDriver.historyMatches(predicate);
         return self();
@@ -115,7 +114,7 @@ abstract class FixturePhase<SELF extends FixturePhase<SELF>> extends Phase<SELF>
      * @param workflowId workflow id to find
      * @return this phase for fluent chaining
      */
-    public SELF historyExists(@Nonnull String workflowId) {
+    public SELF historyExists(String workflowId) {
         Objects.requireNonNull(workflowId, "Workflow id must not be null");
         return historyExists(h -> workflowId.equals(h.workflowId()));
     }
@@ -126,7 +125,7 @@ abstract class FixturePhase<SELF extends FixturePhase<SELF>> extends Phase<SELF>
      * @param workflowStatus expected workflow status
      * @return this phase for fluent chaining
      */
-    public SELF historyExists(@Nonnull WorkflowStatus workflowStatus) {
+    public SELF historyExists(WorkflowStatus workflowStatus) {
         Objects.requireNonNull(workflowStatus, "Workflow status must not be null");
         testDriver.historyMatches(history -> history.state().workflowStatus().equals(workflowStatus));
         return self();

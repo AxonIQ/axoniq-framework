@@ -24,7 +24,6 @@ import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 
@@ -87,7 +86,7 @@ class SegmentReleaseDrainTest extends AbstractWorkflowTestBase<SimpleWorkflowCon
                 idProperty = "id",
                 startOnEventClass = RegistrationReceivedEvent.class
         )
-        public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        public void execute(SimpleWorkflowContext ctx) {
             // Waits for an event that is never published, so the body stays parked until it is interrupted.
             var id = String.valueOf(ctx.workflowPayload().get("id"));
             ctx.awaitEvent("parked",

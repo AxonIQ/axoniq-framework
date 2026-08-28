@@ -22,7 +22,6 @@ import io.axoniq.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentBuilder;
 
 import java.util.function.UnaryOperator;
@@ -75,7 +74,7 @@ public interface WorkflowTestFixture<ACTION extends GivenWhen<ACTION, ASSERT>, A
      * @return fixture backed by the supplied workflow module
      */
     static <T extends WorkflowContext> WorkflowTestFixture<GivenWhen.Phase, Then.Phase> of(
-            @Nonnull WorkflowModule<T> workflowModule
+            WorkflowModule<T> workflowModule
     ) {
         return new DefaultWorkflowTestFixture<>(workflowModule, UnaryOperator.identity(),
                                                 new GivenWhen.Phase(), new Then.Phase());
@@ -90,8 +89,8 @@ public interface WorkflowTestFixture<ACTION extends GivenWhen<ACTION, ASSERT>, A
      * @return fixture backed by the supplied workflow module and customization
      */
     static <T extends WorkflowContext> WorkflowTestFixture<GivenWhen.Phase, Then.Phase> of(
-            @Nonnull WorkflowModule<T> workflowModule,
-            @Nonnull UnaryOperator<WorkflowConfigurer> customize
+            WorkflowModule<T> workflowModule,
+            UnaryOperator<WorkflowConfigurer> customize
     ) {
         return new DefaultWorkflowTestFixture<>(workflowModule, customize,
                                                 new GivenWhen.Phase(), new Then.Phase());
@@ -116,10 +115,10 @@ public interface WorkflowTestFixture<ACTION extends GivenWhen<ACTION, ASSERT>, A
             ACTION extends GivenWhen<ACTION, ASSERT>,
             ASSERT extends Then<ASSERT, ACTION>
             > WorkflowTestFixture<ACTION, ASSERT> of(
-            @Nonnull WorkflowModule<T> workflowModule,
-            @Nonnull UnaryOperator<WorkflowConfigurer> customize,
-            @Nonnull ACTION givenWhenPhase,
-            @Nonnull ASSERT thenPhase
+            WorkflowModule<T> workflowModule,
+            UnaryOperator<WorkflowConfigurer> customize,
+            ACTION givenWhenPhase,
+            ASSERT thenPhase
     ) {
         return new DefaultWorkflowTestFixture<>(workflowModule, customize, givenWhenPhase, thenPhase);
     }

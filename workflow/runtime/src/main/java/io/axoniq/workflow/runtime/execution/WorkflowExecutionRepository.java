@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
 
@@ -46,15 +45,13 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
      * @param workflowId the workflow identifier
      * @return an {@link Optional} containing the workflow execution, or empty if not found
      */
-    @Nonnull
-    Optional<WorkflowExecution> findById(@Nonnull String workflowId);
+    Optional<WorkflowExecution> findById(String workflowId);
 
     /**
      * Returns all stored workflow executions, with at most one execution per workflow identifier.
      *
      * @return an unmodifiable collection of all workflow executions
      */
-    @Nonnull
     default Set<WorkflowExecution> findAll() {
         return findAll(e -> true);
     }
@@ -66,8 +63,7 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
      * @param predicate the predicate to match workflow executions against
      * @return an unmodifiable collection of all workflow executions
      */
-    @Nonnull
-    Set<WorkflowExecution> findAll(@Nonnull Predicate<WorkflowExecution> predicate);
+    Set<WorkflowExecution> findAll(Predicate<WorkflowExecution> predicate);
 
     /**
      * Atomically stores a new workflow execution if no execution exists for the given workflow identifier. If an
@@ -76,8 +72,7 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
      * @param factory the factory to create a new workflow execution if absent
      * @return the existing or newly created workflow execution
      */
-    @Nonnull
-    WorkflowExecution save(@Nonnull String workflowId, @Nonnull Supplier<WorkflowExecution> factory);
+    WorkflowExecution save(String workflowId, Supplier<WorkflowExecution> factory);
 
     /**
      * Removes the workflow execution associated with the given identifier.
@@ -85,14 +80,14 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
      * @param workflowId the identifier of the workflow to remove
      * @return the removed {@link WorkflowExecution}, or {@code null} if no execution was found
      */
-    WorkflowExecution remove(@Nonnull String workflowId);
+    WorkflowExecution remove(String workflowId);
 
     /**
      * Removes all workflow executions matching the given predicate.
      *
      * @param predicate the predicate to match workflow executions against
      */
-    void removeAll(@Nonnull Predicate<WorkflowExecution> predicate);
+    void removeAll(Predicate<WorkflowExecution> predicate);
 
     /**
      * Removes all stored workflow executions.

@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.api.execution.context;
 
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
-import jakarta.annotation.Nonnull;
 
 /**
  * Primitive for forking workflow logic mid-flight. Behaves like get-or-set on a per-{@code stepName} slot:
@@ -42,8 +41,7 @@ public interface VersionPrimitive {
      * @return a {@link WorkflowStepResult} that resolves to the version this workflow has committed to
      * for the given {@code stepName}.
      */
-    @Nonnull
-    WorkflowStepResult version(@Nonnull VersionCommand command);
+    WorkflowStepResult version(VersionCommand command);
 
     /**
      * Parameter object for the primitive.
@@ -57,7 +55,6 @@ public interface VersionPrimitive {
          *
          * @return step name.
          */
-        @Nonnull
         String stepName();
 
         /**
@@ -66,7 +63,6 @@ public interface VersionPrimitive {
          *
          * @return new version.
          */
-        @Nonnull
         String newVersion();
 
         /**
@@ -74,7 +70,6 @@ public interface VersionPrimitive {
          *
          * @return event name customizer.
          */
-        @Nonnull
         EventNameCustomizer eventNameCustomizer();
     }
 }

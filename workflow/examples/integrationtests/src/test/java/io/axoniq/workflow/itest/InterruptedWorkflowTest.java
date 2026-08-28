@@ -24,7 +24,6 @@ import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.workflow.dsl.base.BaseWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -85,7 +84,7 @@ class InterruptedWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowConte
                 idProperty = "id",
                 startOnEventClass = RegistrationReceivedEvent.class
         )
-        public void execute(@Nonnull BaseWorkflowContext ctx) {
+        public void execute(BaseWorkflowContext ctx) {
             logger.info("Interrupted workflow started for {}", ctx.workflowPayload());
 
             ctx.awaitExecute("stepA", Map.of(), (c, p) -> Map.of("result", "done"));

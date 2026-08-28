@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.api.execution.context;
 
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
-import jakarta.annotation.Nonnull;
 
 import java.time.Duration;
 
@@ -40,8 +39,7 @@ public interface WaitForPrimitive {
      * @param command command object
      * @return result of command execution
      */
-    @Nonnull
-    WorkflowStepResult waitForEvent(@Nonnull WaitForCommand command);
+    WorkflowStepResult waitForEvent(WaitForCommand command);
 
     /**
      * Parameter object for the primitive.
@@ -56,7 +54,6 @@ public interface WaitForPrimitive {
          *
          * @return step name
          */
-        @Nonnull
         String stepName();
 
         /**
@@ -64,7 +61,6 @@ public interface WaitForPrimitive {
          *
          * @return event condition
          */
-        @Nonnull
         EventCondition eventCondition();
 
         /**
@@ -72,7 +68,6 @@ public interface WaitForPrimitive {
          *
          * @return timeout duration
          */
-        @Nonnull
         Duration timeout();
 
         /**
@@ -80,7 +75,6 @@ public interface WaitForPrimitive {
          *
          * @return result reducer
          */
-        @Nonnull
         PayloadReducer resultPayloadReducer();
 
         /**
@@ -88,7 +82,6 @@ public interface WaitForPrimitive {
          *
          * @return event name customizer
          */
-        @Nonnull
         EventNameCustomizer eventNameCustomizer();
     }
 }

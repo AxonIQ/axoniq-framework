@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
-import jakarta.annotation.Nonnull;
 
 /**
  * Exception thrown when an individual step is cancelled.
@@ -37,7 +36,7 @@ public class StepCancellationException extends StepFailedException {
      *
      * @param message the detail message describing the cancellation reason
      */
-    public StepCancellationException(@Nonnull String message) {
+    public StepCancellationException(String message) {
         super(message);
     }
 
@@ -47,7 +46,7 @@ public class StepCancellationException extends StepFailedException {
      * @param message the detail message describing the cancellation reason
      * @param cause   the underlying cause of the cancellation
      */
-    public StepCancellationException(@Nonnull String message, Throwable cause) {
+    public StepCancellationException(String message, Throwable cause) {
         super(message, cause);
     }
 
@@ -56,7 +55,7 @@ public class StepCancellationException extends StepFailedException {
      *
      * @param cause the underlying cause of the cancellation
      */
-    public StepCancellationException(@Nonnull Throwable cause) {
+    public StepCancellationException(Throwable cause) {
         super(cause);
     }
 }

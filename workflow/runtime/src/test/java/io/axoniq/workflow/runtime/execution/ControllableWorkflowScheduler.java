@@ -19,7 +19,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import jakarta.annotation.Nonnull;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -48,9 +47,8 @@ final class ControllableWorkflowScheduler implements WorkflowScheduler {
         return (int) tasks.stream().filter(task -> !task.completion.isDone()).count();
     }
 
-    @Nonnull
     @Override
-    public ScheduledTask schedule(@Nonnull Instant deadline) {
+    public ScheduledTask schedule(Instant deadline) {
         var controlledTask = new ControlledTask(deadline);
         tasks.add(controlledTask);
         if (fireDuringSchedule) {
@@ -74,7 +72,6 @@ final class ControllableWorkflowScheduler implements WorkflowScheduler {
             }
         }
 
-        @Nonnull
         @Override
         public CompletableFuture<Void> completion() {
             return completion;

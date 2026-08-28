@@ -19,6 +19,8 @@
 
 package io.axoniq.workflow.configuration;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.association.ValueComparisonOperatorRegistry;
@@ -42,7 +44,7 @@ class AutoDetectionUtilsTest {
 
     @Test
     void shouldValidateAttributesSuccessfully() throws NoSuchMethodException {
-        Map<String, Object> attributes = new HashMap<>();
+        Map<String, @Nullable Object> attributes = new HashMap<>();
         attributes.put(ATTR_ID_PROPERTY, "myId");
         attributes.put(ATTR_START_ON_EVENT_CLASS, Object.class);
 
@@ -55,7 +57,7 @@ class AutoDetectionUtilsTest {
 
     @Test
     void shouldValidateAttributesSuccessfullyWithFqn() throws NoSuchMethodException {
-        Map<String, Object> attributes = new HashMap<>();
+        Map<String, @Nullable Object> attributes = new HashMap<>();
         attributes.put(ATTR_ID_PROPERTY, "myId");
         attributes.put(ATTR_START_ON_EVENT_NAME, "io.axoniq.MyEvent");
 
@@ -68,7 +70,7 @@ class AutoDetectionUtilsTest {
 
     @Test
     void shouldValidateAttributesSuccessfullyWithIdProvider() throws NoSuchMethodException {
-        Map<String, Object> attributes = new HashMap<>();
+        Map<String, @Nullable Object> attributes = new HashMap<>();
         attributes.put(ATTR_ID_PROPERTY_PROVIDER, MyIdProvider.class);
         attributes.put(ATTR_START_ON_EVENT_CLASS, Object.class);
 
@@ -81,7 +83,7 @@ class AutoDetectionUtilsTest {
 
     @Test
     void shouldFailValidationIfIdMissing() throws NoSuchMethodException {
-        Map<String, Object> attributes = new HashMap<>();
+        Map<String, @Nullable Object> attributes = new HashMap<>();
         attributes.put(ATTR_START_ON_EVENT_CLASS, Object.class);
         // Default idPropertyProvider is PayloadPropertyWorkflowIdProvider
         attributes.put(ATTR_ID_PROPERTY_PROVIDER, WorkflowIdProvider.class);
@@ -96,7 +98,7 @@ class AutoDetectionUtilsTest {
 
     @Test
     void shouldFailValidationIfStartOnMissing() throws NoSuchMethodException {
-        Map<String, Object> attributes = new HashMap<>();
+        Map<String, @Nullable Object> attributes = new HashMap<>();
         attributes.put(ATTR_ID_PROPERTY, "myId");
         attributes.put(ATTR_START_ON_EVENT_CLASS, Void.class);
         attributes.put(ATTR_START_ON_EVENT_NAME, "");
@@ -112,7 +114,7 @@ class AutoDetectionUtilsTest {
 
     @Test
     void shouldFailValidationIfBothStartOnAttributesAreSpecified() throws NoSuchMethodException {
-        Map<String, Object> attributes = new HashMap<>();
+        Map<String, @Nullable Object> attributes = new HashMap<>();
         attributes.put(ATTR_ID_PROPERTY, "myId");
         attributes.put(ATTR_START_ON_EVENT_CLASS, String.class);
         attributes.put(ATTR_START_ON_EVENT_NAME, "some.package.Type");
@@ -135,7 +137,7 @@ class AutoDetectionUtilsTest {
         when(configuration.getComponent(eq(ValueComparisonOperatorRegistry.class), any(Supplier.class))).thenReturn(
                 operatorRegistry);
 
-        Map<String, Object> attributes = new HashMap<>();
+        Map<String, @Nullable Object> attributes = new HashMap<>();
         attributes.put(ATTR_START_ON_EVENT_NAME, "io.axoniq.MyEvent");
         attributes.put(ATTR_START_ON_EVENT_CLASS, String.class);
         attributes.put(ATTR_START_ON_CONDITIONS, new String[0]);
@@ -155,7 +157,7 @@ class AutoDetectionUtilsTest {
         when(configuration.getComponent(eq(ValueComparisonOperatorRegistry.class), any(Supplier.class))).thenReturn(
                 operatorRegistry);
 
-        Map<String, Object> attributes = new HashMap<>();
+        Map<String, @Nullable Object> attributes = new HashMap<>();
         attributes.put(ATTR_START_ON_EVENT_NAME, "");
         attributes.put(ATTR_START_ON_EVENT_CLASS, AnnotatedEvent.class);
         attributes.put(ATTR_START_ON_CONDITIONS, new String[0]);
@@ -174,7 +176,7 @@ class AutoDetectionUtilsTest {
         when(configuration.getComponent(eq(ValueComparisonOperatorRegistry.class), any(Supplier.class))).thenReturn(
                 operatorRegistry);
 
-        Map<String, Object> attributes = new HashMap<>();
+        Map<String, @Nullable Object> attributes = new HashMap<>();
         attributes.put(ATTR_START_ON_EVENT_NAME, "io.axoniq.MyEvent");
         attributes.put(ATTR_START_ON_EVENT_CLASS, String.class);
         attributes.put(ATTR_START_ON_CONDITIONS, new String[]{"payload:status=vip"});
@@ -193,7 +195,7 @@ class AutoDetectionUtilsTest {
         when(configuration.getComponent(eq(ValueComparisonOperatorRegistry.class), any(Supplier.class))).thenReturn(
                 operatorRegistry);
 
-        Map<String, Object> attributes = new HashMap<>();
+        Map<String, @Nullable Object> attributes = new HashMap<>();
         attributes.put(ATTR_START_ON_EVENT_NAME, "io.axoniq.MyEvent");
         attributes.put(ATTR_START_ON_EVENT_CLASS, String.class);
         attributes.put(ATTR_START_ON_CONDITIONS, new String[]{"status=vip"});

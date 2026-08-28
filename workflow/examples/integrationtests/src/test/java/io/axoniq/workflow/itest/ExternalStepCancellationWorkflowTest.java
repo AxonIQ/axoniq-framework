@@ -31,7 +31,6 @@ import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.workflow.runtime.test.utils.PrettyPrintingRecordingEventStore;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -129,7 +128,7 @@ class ExternalStepCancellationWorkflowTest extends AbstractWorkflowTestBase<Simp
                 idProperty = "id",
                 startOnEventClass = RegistrationReceivedEvent.class
         )
-        public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        public void execute(SimpleWorkflowContext ctx) {
             logger.info("ExternalStepCancellationWorkflow started for {}", ctx.workflowPayload());
             var id = String.valueOf(ctx.workflowPayload().get("id"));
             try {

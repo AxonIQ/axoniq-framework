@@ -29,8 +29,7 @@ import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
@@ -89,16 +88,16 @@ public abstract class AbstractStepExecutor {
      */
     @Internal
     public AbstractStepExecutor(
-            @Nonnull WorkflowContext workflowContext,
-            @Nonnull WorkflowExecution workflowExecution,
-            @Nonnull RunningSteps runningSteps,
-            @Nonnull ReachedSteps reachedSteps,
-            @Nonnull EventNameCustomizer parentEventNameCustomizer,
-            @Nonnull Clock clock,
-            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
-            @Nonnull EventSink eventSink,
-            @Nonnull Executor executor,
-            @Nonnull WorkflowScheduler timeoutScheduler
+            WorkflowContext workflowContext,
+            WorkflowExecution workflowExecution,
+            RunningSteps runningSteps,
+            ReachedSteps reachedSteps,
+            EventNameCustomizer parentEventNameCustomizer,
+            Clock clock,
+            UnitOfWorkFactory unitOfWorkFactory,
+            EventSink eventSink,
+            Executor executor,
+            WorkflowScheduler timeoutScheduler
     ) {
         this.clock = Objects.requireNonNull(clock, "Clock is mandatory");
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
@@ -113,7 +112,7 @@ public abstract class AbstractStepExecutor {
         this.timeoutScheduler = Objects.requireNonNull(timeoutScheduler, "Timeout scheduler is mandatory");
     }
 
-    protected void acceptAllPendingTasksForStep(@Nonnull String stepName) {
+    protected void acceptAllPendingTasksForStep(String stepName) {
         while ((!workflowExecution.state().containsStep(stepName) && workflowExecution.hasTasks())
                 || !workflowExecution.isRunning()) {
             var poll = workflowExecution.getNextTask();
@@ -123,54 +122,48 @@ public abstract class AbstractStepExecutor {
         }
     }
 
-    @Nonnull
-    protected Context getContext(@Nonnull String stepName) {
+    protected Context getContext(String stepName) {
         return workflowExecution.state().containsStep(stepName)
                 ? workflowExecution.state().getStep(stepName).context()
                 : workflowExecution.processingContext();
     }
 
-    @Nonnull
-    protected CompletableFuture<Void> started(@Nonnull String stepName, @Nonnull Map<String, Object> payload,
-                                              @Nonnull EventNameCustomizer eventNameCustomizer) {
+    protected CompletableFuture<Void> started(String stepName, Map<String, @Nullable Object> payload,
+                                              EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, startedStep(workflowContext, stepName, sanitize(payload),
                                                    merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
-    @Nonnull
-    protected CompletableFuture<Void> startedWaitForEvent(@Nonnull String stepName,
-                                                          @Nonnull Map<String, Object> payload,
-                                                          @Nonnull EventNameCustomizer eventNameCustomizer) {
+    protected CompletableFuture<Void> startedWaitForEvent(String stepName,
+                                                          Map<String, @Nullable Object> payload,
+                                                          EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, startedWaitForEventStep(workflowContext, stepName, sanitize(payload),
                                                                merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
-    @Nonnull
-    protected CompletableFuture<Void> completed(@Nonnull String stepName, @Nonnull Map<String, Object> payload,
-                                                @Nonnull EventNameCustomizer eventNameCustomizer) {
+    protected CompletableFuture<Void> completed(String stepName, Map<String, @Nullable Object> payload,
+                                                EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, completedStep(workflowContext, stepName, sanitize(payload),
                                                      null,
                                                      merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
-    @Nonnull
-    protected CompletableFuture<Void> completed(@Nonnull String stepName, @Nonnull Map<String, Object> payload,
+    protected CompletableFuture<Void> completed(String stepName, Map<String, @Nullable Object> payload,
                                                 @Nullable String payloadReducerName,
-                                                @Nonnull EventNameCustomizer eventNameCustomizer) {
+                                                EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, completedStep(workflowContext, stepName, sanitize(payload),
                                                      payloadReducerName,
                                                      merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
-    @Nonnull
-    protected CompletableFuture<Void> completedWaitForEvent(@Nonnull String stepName,
-                                                            @Nonnull Map<String, Object> payload,
+    protected CompletableFuture<Void> completedWaitForEvent(String stepName,
+                                                            Map<String, @Nullable Object> payload,
                                                             @Nullable String payloadReducerName,
-                                                            @Nonnull EventNameCustomizer eventNameCustomizer) {
+                                                            EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, completedWaitForEventStep(workflowContext,
                                                                  stepName,
                                                                  sanitize(payload),
@@ -180,16 +173,14 @@ public abstract class AbstractStepExecutor {
         ), getContext(stepName));
     }
 
-    @Nonnull
-    protected CompletableFuture<Void> cancelled(@Nonnull String stepName,
-                                                @Nonnull EventNameCustomizer eventNameCustomizer) {
+    protected CompletableFuture<Void> cancelled(String stepName,
+                                                EventNameCustomizer eventNameCustomizer) {
         return cancelled(stepName, null, eventNameCustomizer);
     }
 
-    @Nonnull
-    protected CompletableFuture<Void> cancelled(@Nonnull String stepName,
+    protected CompletableFuture<Void> cancelled(String stepName,
                                                 @Nullable Throwable cause,
-                                                @Nonnull EventNameCustomizer eventNameCustomizer) {
+                                                EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, cancelledStep(workflowContext, stepName, cause,
                                                      merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
@@ -206,10 +197,10 @@ public abstract class AbstractStepExecutor {
      * @param eventNameCustomizer event name customizer of the step
      * @param onCancelled         cleanup to run when the parked phase is cancelled
      */
-    protected void registerParkedStep(@Nonnull String stepName,
-                                      @Nonnull CompletableFuture<?> parkedPhase,
-                                      @Nonnull EventNameCustomizer eventNameCustomizer,
-                                      @Nonnull Runnable onCancelled) {
+    protected void registerParkedStep(String stepName,
+                                      CompletableFuture<?> parkedPhase,
+                                      EventNameCustomizer eventNameCustomizer,
+                                      Runnable onCancelled) {
         registerParkedStep(stepName, parkedPhase, () -> {
         }, eventNameCustomizer, onCancelled);
     }
@@ -223,11 +214,11 @@ public abstract class AbstractStepExecutor {
      * @param eventNameCustomizer event name customizer of the step
      * @param onCancelled         cleanup to run when the parked phase is cancelled
      */
-    protected void registerParkedStep(@Nonnull String stepName,
-                                      @Nonnull CompletableFuture<?> parkedPhase,
-                                      @Nonnull Runnable cancelTimer,
-                                      @Nonnull EventNameCustomizer eventNameCustomizer,
-                                      @Nonnull Runnable onCancelled) {
+    protected void registerParkedStep(String stepName,
+                                      CompletableFuture<?> parkedPhase,
+                                      Runnable cancelTimer,
+                                      EventNameCustomizer eventNameCustomizer,
+                                      Runnable onCancelled) {
         // Register before observing completion. If a timer has already completed, whenComplete removes this exact
         // registration immediately instead of leaving a completed future permanently marked as running.
         runningSteps.register(stepName, parkedPhase);
@@ -247,67 +238,59 @@ public abstract class AbstractStepExecutor {
         });
     }
 
-    @Nonnull
-    protected CompletableFuture<Void> cancelledWaitForEvent(@Nonnull String stepName,
+    protected CompletableFuture<Void> cancelledWaitForEvent(String stepName,
                                                             @Nullable Throwable cause,
-                                                            @Nonnull EventNameCustomizer eventNameCustomizer) {
+                                                            EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, cancelledWaitForEventStep(workflowContext, stepName, cause,
                                                                  merge(parentEventNameCustomizer,
                                                                        eventNameCustomizer)
         ), getContext(stepName));
     }
 
-    @Nonnull
-    protected CompletableFuture<Void> failed(@Nonnull String stepName, @Nonnull Throwable ex,
-                                             @Nonnull EventNameCustomizer eventNameCustomizer) {
+    protected CompletableFuture<Void> failed(String stepName, Throwable ex,
+                                             EventNameCustomizer eventNameCustomizer) {
         logger.error("Step '{}' failed in workflow '{}'", stepName, workflowExecution.workflowId(), ex);
         return sendStepEvent(stepName, failStep(workflowContext, stepName, ex,
                                                 merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
-    @Nonnull
-    protected CompletableFuture<Void> retrying(@Nonnull String stepName,
-                                               @Nonnull StepRetryInfo retryInfo,
-                                               @Nonnull EventNameCustomizer eventNameCustomizer) {
+    protected CompletableFuture<Void> retrying(String stepName,
+                                               StepRetryInfo retryInfo,
+                                               EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, retryingStep(workflowContext, stepName, retryInfo,
                                                     merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
-    @Nonnull
-    protected CompletableFuture<Void> timedOut(@Nonnull String stepName,
-                                               @Nonnull EventNameCustomizer eventNameCustomizer) {
+    protected CompletableFuture<Void> timedOut(String stepName,
+                                               EventNameCustomizer eventNameCustomizer) {
         return timedOut(stepName, Instant.now(clock), eventNameCustomizer);
     }
 
-    @Nonnull
-    protected CompletableFuture<Void> timedOut(@Nonnull String stepName, @Nonnull Instant timeoutTimestamp,
-                                               @Nonnull EventNameCustomizer eventNameCustomizer) {
+    protected CompletableFuture<Void> timedOut(String stepName, Instant timeoutTimestamp,
+                                               EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, timeoutStep(workflowContext, stepName, timeoutTimestamp,
                                                    merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
-    @Nonnull
-    protected CompletableFuture<Void> timedOutWaitForEvent(@Nonnull String stepName,
-                                                           @Nonnull EventNameCustomizer eventNameCustomizer) {
+    protected CompletableFuture<Void> timedOutWaitForEvent(String stepName,
+                                                           EventNameCustomizer eventNameCustomizer) {
         return timedOutWaitForEvent(stepName, Instant.now(clock), eventNameCustomizer);
     }
 
-    @Nonnull
-    protected CompletableFuture<Void> timedOutWaitForEvent(@Nonnull String stepName,
-                                                           @Nonnull Instant timeoutTimestamp,
-                                                           @Nonnull EventNameCustomizer eventNameCustomizer) {
+    protected CompletableFuture<Void> timedOutWaitForEvent(String stepName,
+                                                           Instant timeoutTimestamp,
+                                                           EventNameCustomizer eventNameCustomizer) {
         return sendStepEvent(stepName, timeoutWaitForEventStep(workflowContext, stepName, timeoutTimestamp,
                                                                merge(parentEventNameCustomizer, eventNameCustomizer)
         ), getContext(stepName));
     }
 
-    @Nonnull
-    private CompletableFuture<Void> sendStepEvent(@Nonnull String stepName,
-                                                  @Nonnull EventMessage eventMessage,
-                                                  @Nonnull Context context) {
+    private CompletableFuture<Void> sendStepEvent(String stepName,
+                                                  EventMessage eventMessage,
+                                                  Context context) {
         if (workflowContext.workflowStatus().isTerminal()) {
             logger.debug("Skipping step event {} — workflow is in terminal state {}", eventMessage.type(),
                          workflowContext.workflowStatus());
@@ -337,16 +320,14 @@ public abstract class AbstractStepExecutor {
                 );
     }
 
-    @Nonnull
-    protected Map<String, Object> sanitize(@Nullable Map<String, Object> payload) {
+    protected Map<String, @Nullable Object> sanitize(@Nullable Map<String, @Nullable Object> payload) {
         if (payload == null) {
             return new LinkedHashMap<>();
         }
         return payload;
     }
 
-    @Nonnull
-    protected Map<String, Object> eventMessagePayload(@Nonnull EventMessage eventMessage) {
+    protected Map<String, @Nullable Object> eventMessagePayload(EventMessage eventMessage) {
         return sanitize(eventMessage.payloadAs(new TypeReference<>() {
                         })
         );
@@ -358,20 +339,18 @@ public abstract class AbstractStepExecutor {
      * @param error completion error to classify
      * @return {@code true} when the error represents step or workflow cancellation
      */
-    public static boolean isCancellation(@Nonnull Throwable error) {
+    public static boolean isCancellation(Throwable error) {
         var cause = unwrapCompletionException(error);
         return cause instanceof StepCancellationException
                 || cause instanceof WorkflowCancelledException
                 || cause instanceof WorkflowFailedException;
     }
 
-    @Nonnull
-    protected static Throwable unwrapCancellation(@Nonnull Throwable e) {
+    protected static Throwable unwrapCancellation(Throwable e) {
         return unwrapCompletionException(e);
     }
 
-    @Nonnull
-    protected static Throwable unwrapCompletionException(@Nonnull Throwable e) {
+    protected static Throwable unwrapCompletionException(Throwable e) {
         return FutureUtils.unwrap(e);
     }
 
@@ -383,10 +362,9 @@ public abstract class AbstractStepExecutor {
      * @param workflowExecution   execution providing state access and cancellation delegation
      * @return state-backed step result handle
      */
-    @Nonnull
-    public static WorkflowStepResult stateBased(@Nonnull String stepName,
-                                                @Nonnull EventNameCustomizer eventNameCustomizer,
-                                                @Nonnull WorkflowExecution workflowExecution) {
+    public static WorkflowStepResult stateBased(String stepName,
+                                                EventNameCustomizer eventNameCustomizer,
+                                                WorkflowExecution workflowExecution) {
         return new StateBasedWorkflowStepResult(stepName, () -> {
             workflowExecution.awaitStateChange(s -> true);
             return null;

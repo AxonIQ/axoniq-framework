@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.test.utils;
 
 import io.axoniq.workflow.runtime.test.configuration.WorkflowTestEventPublicationEnhancer;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -71,11 +70,11 @@ public class TestEventPublisher {
      * @param clock               clock to use for event timestamps
      * @param idGenerator         id generator to use for event ids
      */
-    public TestEventPublisher(@Nonnull EventSink eventSink,
-                              @Nonnull MessageTypeResolver messageTypeResolver,
-                              @Nonnull EventConverter converter,
-                              @Nonnull Clock clock,
-                              @Nonnull IdGenerator idGenerator
+    public TestEventPublisher(EventSink eventSink,
+                              MessageTypeResolver messageTypeResolver,
+                              EventConverter converter,
+                              Clock clock,
+                              IdGenerator idGenerator
     ) {
         this.eventSink = eventSink;
         this.messageTypeResolver = messageTypeResolver;

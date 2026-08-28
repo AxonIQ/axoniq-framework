@@ -32,7 +32,7 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageType;
@@ -448,7 +448,7 @@ class WorkflowEngineReplayTest {
         Map<WorkflowContext, String> workflowIdsByContext = new HashMap<>();
 
         when(configuration.workflowIdProvider())
-                .thenReturn(event -> String.valueOf(event.payloadAs(new TypeReference<Map<String, Object>>() {
+                .thenReturn(event -> String.valueOf(event.payloadAs(new TypeReference<Map<String, @Nullable Object>>() {
                 }).get("orderId")));
         when(configuration.workflowContextFactory()).thenReturn(contextFactory);
         when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
@@ -735,7 +735,7 @@ class WorkflowEngineReplayTest {
 
     private static EventMessage workflowStartedEvent(String workflowId,
                                                      MessageType definitionId,
-                                                     Map<String, Object> payload) {
+                                                     Map<String, @Nullable Object> payload) {
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(MetadataUtils.create(workflowId, WorkflowStatus.STARTED, definitionId)
                                                               .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,

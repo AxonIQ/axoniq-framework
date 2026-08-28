@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.api.execution.context;
 
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 
 /**
  * Listener informed on status change of workflow.
@@ -36,5 +35,5 @@ public interface WorkflowStatusChangeListener {
      * @param state   workflow status.
      * @param context workflow context.
      */
-    <C extends WorkflowContext> void onWorkflowStatus(@Nonnull WorkflowStatus state, @Nonnull C context);
+    <C extends WorkflowContext> void onWorkflowStatus(WorkflowStatus state, C context);
 }

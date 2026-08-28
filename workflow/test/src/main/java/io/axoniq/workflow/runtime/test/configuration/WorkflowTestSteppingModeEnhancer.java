@@ -24,7 +24,6 @@ import io.axoniq.workflow.runtime.execution.WorkflowScheduler;
 import io.axoniq.workflow.runtime.test.utils.ManualExecuteStepActionResolver;
 import io.axoniq.workflow.runtime.test.utils.ManualWorkflowScheduler;
 import io.axoniq.workflow.runtime.test.utils.TestClock;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 
@@ -60,7 +59,7 @@ import java.time.Clock;
 public class WorkflowTestSteppingModeEnhancer implements ConfigurationEnhancer {
 
     @Override
-    public void enhance(@Nonnull ComponentRegistry registry) {
+    public void enhance(ComponentRegistry registry) {
         registry.registerComponent(ManualExecuteStepActionResolver.class, c -> new ManualExecuteStepActionResolver())
                 .registerComponent(ExecuteStepActionResolver.class,
                                    c -> c.getComponent(ManualExecuteStepActionResolver.class))

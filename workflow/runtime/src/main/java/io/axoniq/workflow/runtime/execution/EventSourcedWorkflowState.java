@@ -31,8 +31,7 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -66,13 +65,13 @@ public class EventSourcedWorkflowState implements WorkflowState {
     /**
      * Type reference for a map of strings to objects used as workflow payload.
      */
-    public static final TypeReference<Map<String, Object>> PAYLOAD_TYPE = new TypeReference<>() {
+    public static final TypeReference<Map<String, @Nullable Object>> PAYLOAD_TYPE = new TypeReference<>() {
     };
 
     private final static Logger logger = LoggerFactory.getLogger(EventSourcedWorkflowState.class);
 
     private final String workflowId;
-    private Map<String, Object> payload;
+    private Map<String, @Nullable Object> payload;
     private volatile MessageType workflowDefinition;
     private final WorkflowStateListenerSupport listenerSupport;
 
@@ -89,8 +88,8 @@ public class EventSourcedWorkflowState implements WorkflowState {
      * @param workflowDefinition workflow definition representing the reference to the definition (name and version)
      */
     @Internal
-    public EventSourcedWorkflowState(@Nonnull String workflowId,
-                                     @Nonnull MessageType workflowDefinition) {
+    public EventSourcedWorkflowState(String workflowId,
+                                     MessageType workflowDefinition) {
         this(workflowId, Map.of(), workflowDefinition);
     }
 
@@ -103,9 +102,9 @@ public class EventSourcedWorkflowState implements WorkflowState {
      */
     @Internal
     public EventSourcedWorkflowState(
-            @Nonnull String workflowId,
-            @Nonnull Map<String, Object> payload,
-            @Nonnull MessageType workflowDefinition
+            String workflowId,
+            Map<String, @Nullable Object> payload,
+            MessageType workflowDefinition
     ) {
         this.workflowId = requireNonNull(workflowId, "Workflow id must be set.");
         this.payload = requireNonNull(payload, "Payload must be set.");
@@ -123,11 +122,11 @@ public class EventSourcedWorkflowState implements WorkflowState {
      * @param listeners          workflow status change listeners
      */
     EventSourcedWorkflowState(
-            @Nonnull String workflowId,
-            @Nonnull Map<String, Object> payload,
-            @Nonnull MessageType workflowDefinition,
-            @Nonnull WorkflowContext context,
-            @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
+            String workflowId,
+            Map<String, @Nullable Object> payload,
+            MessageType workflowDefinition,
+            WorkflowContext context,
+            Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
         this.workflowId = requireNonNull(workflowId, "Workflow id must be set.");
         this.payload = requireNonNull(payload, "Payload must be set.");
@@ -139,9 +138,9 @@ public class EventSourcedWorkflowState implements WorkflowState {
     }
 
     EventSourcedWorkflowState(
-            @Nonnull WorkflowState state,
-            @Nonnull WorkflowContext context,
-            @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
+            WorkflowState state,
+            WorkflowContext context,
+            Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
         this(requireEventSourcedState(state), context, listeners);
     }
@@ -170,9 +169,9 @@ public class EventSourcedWorkflowState implements WorkflowState {
      * @param listeners    workflow status change listeners
      */
     EventSourcedWorkflowState(
-            @Nonnull EventSourcedWorkflowState sourcedState,
-            @Nonnull WorkflowContext context,
-            @Nonnull Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
+            EventSourcedWorkflowState sourcedState,
+            WorkflowContext context,
+            Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
         this(
                 requireNonNull(sourcedState, "Sourced workflow state must not be null").workflowId,
@@ -188,7 +187,6 @@ public class EventSourcedWorkflowState implements WorkflowState {
     }
 
     @Override
-    @Nonnull
     public String workflowId() {
         return workflowId;
     }
@@ -199,47 +197,42 @@ public class EventSourcedWorkflowState implements WorkflowState {
      * @param workflowId workflow identifier
      * @return event criteria for workflow-state reconstruction
      */
-    @Nonnull
-    public static EventCriteria criteriaBuilder(@Nonnull String workflowId) {
+    public static EventCriteria criteriaBuilder(String workflowId) {
         return EventCriteria.havingTags(Tag.of(WorkflowEventTags.TAG_WORKFLOW_ID, workflowId));
     }
 
     @Override
-    public WorkflowStep getStep(@Nonnull String stepName) {
+    public WorkflowStep getStep(String stepName) {
         return steps.get(stepName);
     }
 
     @Override
-    public boolean containsStep(@Nonnull String stepName) {
+    public boolean containsStep(String stepName) {
         return steps.containsKey(stepName);
     }
 
     @Override
-    @Nonnull
-    public String versionFor(@Nonnull String changeId) {
+    public String versionFor(String changeId) {
         requireNonNull(changeId, "changeId must not be null");
         return versions.getOrDefault(changeId, workflowDefinition.version());
     }
 
     @Override
-    public boolean hasVersionMigrationStep(@Nonnull String changeId) {
+    public boolean hasVersionMigrationStep(String changeId) {
         return versions.containsKey(changeId);
     }
 
     @Override
-    @Nonnull
     public MessageType workflowDefinitionId() {
         return workflowDefinition;
     }
 
     @Override
-    @Nonnull
     public WorkflowStatus workflowStatus() {
         return this.status;
     }
 
     @Override
-    @Nonnull
     public List<String> workflowStepNames() {
         return steps.values()
                     .stream()
@@ -248,8 +241,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                     .toList();
     }
 
-    @Nonnull
-    public Map<String, Object> payload() {
+    public Map<String, @Nullable Object> payload() {
         return Map.copyOf(payload);
     }
 
@@ -261,8 +253,8 @@ public class EventSourcedWorkflowState implements WorkflowState {
      * @return this evolved workflow state
      */
     public WorkflowState evolve(
-            @Nonnull EventMessage eventMessage,
-            @Nonnull ProcessingContext processingContext) {
+            EventMessage eventMessage,
+            ProcessingContext processingContext) {
         return evolve(eventMessage, processingContext, true);
     }
 
@@ -275,8 +267,8 @@ public class EventSourcedWorkflowState implements WorkflowState {
      * @return this evolved workflow state
      */
     WorkflowState evolve(
-            @Nonnull EventMessage eventMessage,
-            @Nonnull ProcessingContext processingContext,
+            EventMessage eventMessage,
+            ProcessingContext processingContext,
             boolean notifyStatusListeners) {
         logger.trace("Applying event {}", eventMessage.type());
         Object eventPayload = eventMessage.payloadAs(Object.class);
@@ -392,7 +384,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     /**
      * Migration steps: first writer wins (replay-idempotent); bump workflow version if strictly greater.
      */
-    private void applyVersionMigrationStep(@Nonnull Metadata metadata) {
+    private void applyVersionMigrationStep(Metadata metadata) {
         var changeId = MetadataUtils.getVersionChangeId(metadata).orElse(null);
         var newVersion = MetadataUtils.getVersion(metadata).orElse(null);
         if (changeId == null || newVersion == null) {
@@ -412,14 +404,14 @@ public class EventSourcedWorkflowState implements WorkflowState {
      * @param eventMessage      event message contaning new payload and metadata.
      * @param processingContext processing context.
      */
-    void evolvePayload(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
+    void evolvePayload(EventMessage eventMessage, ProcessingContext processingContext) {
         // set payload if desired
         MetadataUtils.payloadReducer(eventMessage.metadata()).ifPresent(reducerName -> {
             processingContext
                     .component(PayloadReducerRegistry.class)
                     .get(reducerName)
                     .ifPresentOrElse(resultReducer -> {
-                        Map<String, Object> stepPayload;
+                        Map<String, @Nullable Object> stepPayload;
                         try {
                             stepPayload = payloadAsMap(eventMessage);
                         } catch (Exception e) {
@@ -441,10 +433,10 @@ public class EventSourcedWorkflowState implements WorkflowState {
         });
     }
 
-    private Map<String, Object> payloadAsMap(@Nonnull EventMessage eventMessage) {
+    private Map<String, @Nullable Object> payloadAsMap(EventMessage eventMessage) {
         var payload = eventMessage.payloadAs(Object.class);
         if (payload instanceof Map<?, ?> map) {
-            var result = new HashMap<String, Object>();
+            var result = new HashMap<String, @Nullable Object>();
             map.forEach((key, value) -> result.put((String) key, value));
             return result;
         }
@@ -459,7 +451,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
      * @param notifyStatusListeners whether a workflow status transition notifies its live listeners
      */
     void setStatus(
-            @Nonnull WorkflowStatus workflowStatus,
+            WorkflowStatus workflowStatus,
             @Nullable Throwable terminationCause,
             boolean notifyStatusListeners
     ) {
@@ -475,7 +467,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
      *
      * @param workflowStep step to add.
      */
-    void addStep(@Nonnull WorkflowStep workflowStep) {
+    void addStep(WorkflowStep workflowStep) {
         this.steps.put(workflowStep.stepName(), workflowStep);
     }
 
@@ -499,7 +491,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
 
 
     @Override
-    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+    public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("status", status);
         if (terminationCause != null) {
             descriptor.describeProperty("terminationCause", terminationCause.getMessage());
@@ -532,7 +524,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
          *
          * @param status status to notify about.
          */
-        public void notify(@Nonnull WorkflowStatus status) {
+        public void notify(WorkflowStatus status) {
             // only notify if we have a workflow context, this allows the usage without the context
             if (this.workflowContext != null && this.listeners != null) {
                 var listener = this.listeners.get(status);

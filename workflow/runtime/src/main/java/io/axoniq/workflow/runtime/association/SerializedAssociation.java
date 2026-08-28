@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.association;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
@@ -38,10 +37,10 @@ import java.util.function.BiPredicate;
  * @since 1.0.0
  */
 public record SerializedAssociation(
-        @Nonnull String qualifier,
-        @Nonnull String path,
-        @Nonnull String operator,
-        @Nonnull String value
+        String qualifier,
+        String path,
+        String operator,
+        String value
 ) {
 
     /**
@@ -52,11 +51,10 @@ public record SerializedAssociation(
      * @param value     comparison value
      * @return serialized association
      */
-    @Nonnull
     public static SerializedAssociation from(
-            @Nonnull ValueRetriever retriever,
-            @Nonnull String operator,
-            @Nonnull Object value
+            ValueRetriever retriever,
+            String operator,
+            Object value
     ) {
         Objects.requireNonNull(retriever, "Value retriever is mandatory");
         Objects.requireNonNull(operator, "Operator is mandatory");
@@ -76,10 +74,9 @@ public record SerializedAssociation(
      * @param serializedCondition serialized association
      * @return parsed serialized association
      */
-    @Nonnull
     public static SerializedAssociation parse(
-            @Nonnull ValueComparisonOperatorRegistry registry,
-            @Nonnull String serializedCondition
+            ValueComparisonOperatorRegistry registry,
+            String serializedCondition
     ) {
         Objects.requireNonNull(registry, "Registry must not be null");
         Objects.requireNonNull(serializedCondition, "Association string must not be null");
@@ -127,9 +124,8 @@ public record SerializedAssociation(
      * @param registry value comparison operator registry
      * @return bi predicate that can be used to filter event messages
      */
-    @Nonnull
     public BiPredicate<EventMessage, ProcessingContext> asEventMessagePredicate(
-            @Nonnull ValueComparisonOperatorRegistry registry
+            ValueComparisonOperatorRegistry registry
     ) {
         Objects.requireNonNull(registry, "Registry must not be null");
         var retriever = valueRetriever();
@@ -145,7 +141,6 @@ public record SerializedAssociation(
      *
      * @return serialized association
      */
-    @Nonnull
     public String serialize() {
         return qualifier + ":" + path + operator + value;
     }
@@ -155,7 +150,6 @@ public record SerializedAssociation(
         return serialize();
     }
 
-    @Nonnull
     private ValueRetriever valueRetriever() {
         return switch (qualifier) {
             case PayloadPropertyValueRetriever.QUALIFIER -> PayloadPropertyValueRetriever.payloadProperty(path);
@@ -168,7 +162,6 @@ public record SerializedAssociation(
         return value == null ? null : String.valueOf(value);
     }
 
-    @Nonnull
     private static Set<String> supportedQualifiers() {
         return Set.of(PayloadPropertyValueRetriever.QUALIFIER, MetadataPropertyValueRetriever.QUALIFIER);
     }

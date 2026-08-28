@@ -27,7 +27,6 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.FutureResolver;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -76,14 +75,14 @@ public class VersionDelegate implements VersionPrimitive {
      * @param eventSink                 event sink
      * @param executor                  executor for event publication
      */
-    public VersionDelegate(@Nonnull WorkflowContext workflowContext,
-                           @Nonnull WorkflowExecution workflowExecution,
-                           @Nonnull ReachedSteps reachedSteps,
-                           @Nonnull EventNameCustomizer parentEventNameCustomizer,
-                           @Nonnull Clock clock,
-                           @Nonnull UnitOfWorkFactory unitOfWorkFactory,
-                           @Nonnull EventSink eventSink,
-                           @Nonnull Executor executor) {
+    public VersionDelegate(WorkflowContext workflowContext,
+                           WorkflowExecution workflowExecution,
+                           ReachedSteps reachedSteps,
+                           EventNameCustomizer parentEventNameCustomizer,
+                           Clock clock,
+                           UnitOfWorkFactory unitOfWorkFactory,
+                           EventSink eventSink,
+                           Executor executor) {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow execution is mandatory");
         this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
@@ -96,8 +95,7 @@ public class VersionDelegate implements VersionPrimitive {
     }
 
     @Override
-    @Nonnull
-    public WorkflowStepResult version(@Nonnull VersionCommand command) {
+    public WorkflowStepResult version(VersionCommand command) {
         var stepName = command.stepName();
         var requestedRaw = command.newVersion();
         var state = workflowExecution.state();

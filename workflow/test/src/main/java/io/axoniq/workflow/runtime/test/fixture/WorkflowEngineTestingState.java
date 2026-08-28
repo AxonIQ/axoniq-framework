@@ -18,11 +18,12 @@
  */
 package io.axoniq.workflow.runtime.test.fixture;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.history.api.WorkflowHistory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
-import jakarta.annotation.Nonnull;
 
 import java.util.Map;
 import java.util.function.Consumer;
@@ -83,7 +84,7 @@ public interface WorkflowEngineTestingState {
      * @param stepName                first expected waiting step name
      * @param stepNames               additional optional expected waiting step names
      */
-    void waitingIn(@Nonnull AssertionFailureHandler assertionFailureHandler, String stepName, String... stepNames);
+    void waitingIn(AssertionFailureHandler assertionFailureHandler, String stepName, String... stepNames);
 
     /**
      * Verifies that given steps are waiting in the workflow execution.
@@ -102,7 +103,7 @@ public interface WorkflowEngineTestingState {
      * @param stepName                first expected passed step name
      * @param stepNames               additional optional expected passed step names
      */
-    void stepsPassed(@Nonnull AssertionFailureHandler assertionFailureHandler, String stepName, String... stepNames);
+    void stepsPassed(AssertionFailureHandler assertionFailureHandler, String stepName, String... stepNames);
 
     /**
      * Verifies that given steps have passed.
@@ -121,7 +122,7 @@ public interface WorkflowEngineTestingState {
      * @param stepName                first expected step name
      * @param stepNames               additional optional expected step names
      */
-    void hasSteps(@Nonnull AssertionFailureHandler assertionFailureHandler, String stepName, String... stepNames);
+    void hasSteps(AssertionFailureHandler assertionFailureHandler, String stepName, String... stepNames);
 
     /**
      * Verifies that given steps exist in the workflow state.
@@ -140,7 +141,7 @@ public interface WorkflowEngineTestingState {
      * @param stepName                first expected step name
      * @param stepNames               additional optional expected step names
      */
-    void hasStepsInAnyOrder(@Nonnull AssertionFailureHandler assertionFailureHandler, String stepName, String... stepNames);
+    void hasStepsInAnyOrder(AssertionFailureHandler assertionFailureHandler, String stepName, String... stepNames);
 
     /**
      * Verifies that given steps exist in the workflow state in any order.
@@ -159,7 +160,7 @@ public interface WorkflowEngineTestingState {
      * @param stepName                first expected step name
      * @param stepNames               additional optional expected step names
      */
-    void hasStepsInOrder(@Nonnull AssertionFailureHandler assertionFailureHandler, String stepName, String... stepNames);
+    void hasStepsInOrder(AssertionFailureHandler assertionFailureHandler, String stepName, String... stepNames);
 
     /**
      * Verifies that given steps exist in the workflow state in the given order.
@@ -167,7 +168,7 @@ public interface WorkflowEngineTestingState {
      * @param stepName  first expected step name
      * @param stepNames additional optional expected step names
      */
-    default void hasStepsInOrder(@Nonnull String stepName, String... stepNames) {
+    default void hasStepsInOrder(String stepName, String... stepNames) {
         hasStepsInOrder(AssertionFailureHandler.handler(false), stepName, stepNames);
     }
 
@@ -186,8 +187,8 @@ public interface WorkflowEngineTestingState {
      * @param predicate               predicate for the workflow step
      * @return the matching workflow step
      */
-    WorkflowStep stepMatches(@Nonnull AssertionFailureHandler assertionFailureHandler,
-                             @Nonnull Predicate<WorkflowStep> predicate);
+    WorkflowStep stepMatches(AssertionFailureHandler assertionFailureHandler,
+                             Predicate<WorkflowStep> predicate);
 
     /**
      * Waits until a step satisfies the given predicate.
@@ -196,7 +197,7 @@ public interface WorkflowEngineTestingState {
      * @param predicate               predicate for the workflow step
      * @return the matching workflow step
      */
-    default WorkflowStep step(@Nonnull AssertionFailureHandler assertionFailureHandler, @Nonnull Predicate<WorkflowStep> predicate) {
+    default WorkflowStep step(AssertionFailureHandler assertionFailureHandler, Predicate<WorkflowStep> predicate) {
         return stepMatches(assertionFailureHandler, predicate);
     }
 
@@ -206,7 +207,7 @@ public interface WorkflowEngineTestingState {
      * @param predicate predicate for the workflow step
      * @return the matching workflow step
      */
-    default WorkflowStep stepMatches(@Nonnull Predicate<WorkflowStep> predicate) {
+    default WorkflowStep stepMatches(Predicate<WorkflowStep> predicate) {
         return stepMatches(AssertionFailureHandler.handler(false), predicate);
     }
 
@@ -216,7 +217,7 @@ public interface WorkflowEngineTestingState {
      * @param predicate predicate for the workflow step
      * @return the matching workflow step
      */
-    default WorkflowStep step(@Nonnull Predicate<WorkflowStep> predicate) {
+    default WorkflowStep step(Predicate<WorkflowStep> predicate) {
         return stepMatches(AssertionFailureHandler.handler(false), predicate);
     }
 
@@ -234,7 +235,7 @@ public interface WorkflowEngineTestingState {
      *
      * @param stepConsumer consumer to apply to the step
      */
-    void stepSatisfies(@Nonnull Consumer<WorkflowStep> stepConsumer);
+    void stepSatisfies(Consumer<WorkflowStep> stepConsumer);
 
     /**
      * Applies a consumer to the first step matching the predicate.
@@ -243,9 +244,9 @@ public interface WorkflowEngineTestingState {
      * @param predicate               predicate for the workflow step
      * @param stepConsumer            consumer to apply to the matching step
      */
-    void stepSatisfies(@Nonnull AssertionFailureHandler assertionFailureHandler,
-                       @Nonnull Predicate<WorkflowStep> predicate,
-                       @Nonnull Consumer<WorkflowStep> stepConsumer);
+    void stepSatisfies(AssertionFailureHandler assertionFailureHandler,
+                       Predicate<WorkflowStep> predicate,
+                       Consumer<WorkflowStep> stepConsumer);
 
     /**
      * Applies a consumer to the first step matching the predicate.
@@ -253,7 +254,7 @@ public interface WorkflowEngineTestingState {
      * @param predicate    predicate for the workflow step
      * @param stepConsumer consumer to apply to the matching step
      */
-    default void stepSatisfies(@Nonnull Predicate<WorkflowStep> predicate, @Nonnull Consumer<WorkflowStep> stepConsumer) {
+    default void stepSatisfies(Predicate<WorkflowStep> predicate, Consumer<WorkflowStep> stepConsumer) {
         stepSatisfies(AssertionFailureHandler.handler(false), predicate, stepConsumer);
     }
 
@@ -264,8 +265,8 @@ public interface WorkflowEngineTestingState {
      * @param predicate               predicate for the workflow payload
      * @return the matching workflow payload
      */
-    Map<String, Object> payloadMatches(@Nonnull AssertionFailureHandler assertionFailureHandler,
-                                       @Nonnull Predicate<Map<String, Object>> predicate);
+    Map<String, @Nullable Object> payloadMatches(AssertionFailureHandler assertionFailureHandler,
+                                       Predicate<Map<String, @Nullable Object>> predicate);
 
     /**
      * Waits until the workflow payload matches the given predicate.
@@ -273,7 +274,7 @@ public interface WorkflowEngineTestingState {
      * @param predicate predicate for the workflow payload
      * @return the matching workflow payload
      */
-    default Map<String, Object> payloadMatches(@Nonnull Predicate<Map<String, Object>> predicate) {
+    default Map<String, @Nullable Object> payloadMatches(Predicate<Map<String, @Nullable Object>> predicate) {
         return payloadMatches(AssertionFailureHandler.handler(false), predicate);
     }
 
@@ -282,14 +283,14 @@ public interface WorkflowEngineTestingState {
      *
      * @return the workflow payload
      */
-    Map<String, Object> payloadExists();
+    Map<String, @Nullable Object> payloadExists();
 
     /**
      * Applies a consumer to the workflow payload after asserting it exists.
      *
      * @param payloadConsumer consumer for the workflow payload
      */
-    void payloadSatisfies(@Nonnull Consumer<Map<String, Object>> payloadConsumer);
+    void payloadSatisfies(Consumer<Map<String, @Nullable Object>> payloadConsumer);
 
     /**
      * Waits until the workflow state matches the given predicate.
@@ -298,8 +299,8 @@ public interface WorkflowEngineTestingState {
      * @param predicate               predicate for the workflow state
      * @return the matching workflow state
      */
-    WorkflowState workflowStateMatches(@Nonnull AssertionFailureHandler assertionFailureHandler,
-                                       @Nonnull Predicate<WorkflowState> predicate);
+    WorkflowState workflowStateMatches(AssertionFailureHandler assertionFailureHandler,
+                                       Predicate<WorkflowState> predicate);
 
     /**
      * Waits until the workflow state matches the given predicate.
@@ -307,7 +308,7 @@ public interface WorkflowEngineTestingState {
      * @param predicate predicate for the workflow state
      * @return the matching workflow state
      */
-    default WorkflowState workflowStateMatches(@Nonnull Predicate<WorkflowState> predicate) {
+    default WorkflowState workflowStateMatches(Predicate<WorkflowState> predicate) {
         return workflowStateMatches(AssertionFailureHandler.handler(false), predicate);
     }
 
@@ -325,5 +326,5 @@ public interface WorkflowEngineTestingState {
      *
      * @param workflowStateConsumer consumer for the workflow state
      */
-    void workflowStateSatisfies(@Nonnull Consumer<WorkflowState> workflowStateConsumer);
+    void workflowStateSatisfies(Consumer<WorkflowState> workflowStateConsumer);
 }

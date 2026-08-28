@@ -21,7 +21,6 @@ package io.axoniq.workflow.runtime.test.fixture;
 import io.axoniq.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,10 +58,10 @@ public class DefaultWorkflowTestFixture<
      * @param thenPhase      phase instance used for {@code then()}
      */
     DefaultWorkflowTestFixture(
-            @Nonnull WorkflowModule<T> workflowModule,
-            @Nonnull UnaryOperator<WorkflowConfigurer> customize,
-            @Nonnull ACTION givenWhenPhase,
-            @Nonnull ASSERT thenPhase
+            WorkflowModule<T> workflowModule,
+            UnaryOperator<WorkflowConfigurer> customize,
+            ACTION givenWhenPhase,
+            ASSERT thenPhase
     ) {
         var baseDriver = (DefaultWorkflowTestDriver) WorkflowTestDriver.stepper(
                 Objects.requireNonNull(workflowModule, "Workflow module must not be null"),

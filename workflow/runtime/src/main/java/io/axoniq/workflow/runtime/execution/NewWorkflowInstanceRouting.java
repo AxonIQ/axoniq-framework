@@ -19,8 +19,7 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,8 +58,8 @@ final class NewWorkflowInstanceRouting {
      */
     public static boolean hasDerivedWorkflowId(
             @Nullable String baseWorkflowId,
-            @Nonnull WorkflowConfiguration<?> workflowConfiguration,
-            @Nonnull EventMessage eventMessage
+            WorkflowConfiguration<?> workflowConfiguration,
+            EventMessage eventMessage
     ) {
         if (baseWorkflowId != null) {
             return true;
@@ -90,10 +89,10 @@ final class NewWorkflowInstanceRouting {
      */
     @Nullable
     public static String resolveWorkflowIdForNewInstance(
-            @Nonnull WorkflowExecutionRepository repository,
-            @Nonnull String baseWorkflowId,
-            @Nonnull String newInstanceVersion,
-            @Nonnull EventMessage eventMessage
+            WorkflowExecutionRepository repository,
+            String baseWorkflowId,
+            String newInstanceVersion,
+            EventMessage eventMessage
     ) {
         var existing = repository.findById(baseWorkflowId);
         if (existing.isEmpty()) {
