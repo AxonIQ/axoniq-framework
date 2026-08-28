@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.MessageStream;
@@ -28,9 +27,11 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
+import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
 import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
@@ -53,6 +54,7 @@ class LocalShortcutQueryBusWiringTest {
 
     private static final QualifiedName SUBSCRIBED = new QualifiedName("io.axoniq.test.SubscribedQuery");
     private static final QualifiedName UNSUBSCRIBED = new QualifiedName("io.axoniq.test.UnsubscribedQuery");
+    private static final String LOCAL_HANDLER_RESULT = "local-result";
 
     private RecordingQueryBusConnector connector;
     private AtomicBoolean localHandlerInvoked;
@@ -74,43 +76,62 @@ class LocalShortcutQueryBusWiringTest {
         QueryBus queryBus = config.getComponent(QueryBus.class);
         queryBus.subscribe(SUBSCRIBED, (query, context) -> {
             localHandlerInvoked.set(true);
-            return MessageStream.empty().cast();
+            return MessageStream.just(queryResponseMessage(LOCAL_HANDLER_RESULT)).cast();
         });
         return queryBus;
     }
 
     @Test
     void shortcutsToLocalHandlerWhenSubscribedAndPredicateMatches() {
+        // given
         QueryBus queryBus = queryBusWith((query, context) -> true);
 
-        queryBus.query(queryMessage(SUBSCRIBED), null);
+        // when
+        CompletableFuture<QueryResponseMessage> result =
+                queryBus.query(queryMessage(SUBSCRIBED), null)
+                        .first()
+                        .asCompletableFuture()
+                        .thenApply(MessageStream.Entry::message);
 
-        await().atMost(Duration.ofSeconds(5)).untilTrue(localHandlerInvoked);
+        // then
+        assertThat(result).succeedsWithin(Duration.ofSeconds(5))
+                          .satisfies(response -> assertThat(response.payload()).isEqualTo(LOCAL_HANDLER_RESULT));
+        assertThat(localHandlerInvoked).isTrue();
         assertThat(connector.queryCount).hasValue(0);
     }
 
     @Test
     void routesThroughConnectorWhenQueryNotLocallySubscribed() {
+        // given
         QueryBus queryBus = queryBusWith((query, context) -> true);
 
+        // when
         queryBus.query(queryMessage(UNSUBSCRIBED), null);
 
+        // then
         await().atMost(Duration.ofSeconds(5)).until(() -> connector.queryCount.get() == 1);
         assertThat(localHandlerInvoked).isFalse();
     }
 
     @Test
     void routesThroughConnectorWhenPredicateDoesNotMatch() {
+        // given
         QueryBus queryBus = queryBusWith((query, context) -> false);
 
+        // when
         queryBus.query(queryMessage(SUBSCRIBED), null);
 
+        // then
         await().atMost(Duration.ofSeconds(5)).until(() -> connector.queryCount.get() == 1);
         assertThat(localHandlerInvoked).isFalse();
     }
 
     private static QueryMessage queryMessage(QualifiedName name) {
         return new GenericQueryMessage(new MessageType(name), "payload");
+    }
+
+    private static QueryResponseMessage queryResponseMessage(String payload) {
+        return new GenericQueryResponseMessage(new MessageType("io.axoniq.test.QueryResult"), payload);
     }
 
     /**

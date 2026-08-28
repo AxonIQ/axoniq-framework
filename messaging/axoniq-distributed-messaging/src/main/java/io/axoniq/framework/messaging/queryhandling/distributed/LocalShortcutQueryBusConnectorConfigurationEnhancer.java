@@ -19,11 +19,11 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ComponentRegistry;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.jspecify.annotations.Nullable;
 
 import static org.axonframework.common.configuration.DecoratorDefinition.forType;
 
@@ -66,8 +66,6 @@ public class LocalShortcutQueryBusConnectorConfigurationEnhancer implements Conf
      * top of the range achieves this. {@link Integer#MAX_VALUE} is deliberately halved rather than used directly: it
      * leaves ample room above for a decorator that must legitimately observe or transform <em>every</em> query, local
      * or remote, by choosing a still-higher order.
-     *
-     * @since 5.3.0
      */
     public static final int LOCAL_SHORTCUT_CONNECTOR_ORDER = Integer.MAX_VALUE >> 1;
 
@@ -99,6 +97,7 @@ public class LocalShortcutQueryBusConnectorConfigurationEnhancer implements Conf
                      .orElseGet(() -> preferLocalQueryHandler(config) ? ALWAYS_LOCAL : null);
     }
 
+    @SuppressWarnings("removal")
     private static boolean preferLocalQueryHandler(Configuration config) {
         return config.getOptionalComponent(DistributedQueryBusConfiguration.class)
                      .orElse(DistributedQueryBusConfiguration.DEFAULT)

@@ -19,9 +19,9 @@
 
 package io.axoniq.framework.messaging.commandhandling.distributed;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Predicate deciding whether a {@link CommandMessage} that is about to be dispatched through a

@@ -19,9 +19,9 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.queryhandling.QueryMessage;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Predicate deciding whether a {@link QueryMessage} that is about to be dispatched through a {@link QueryBusConnector}
@@ -29,8 +29,10 @@ import org.axonframework.messaging.queryhandling.QueryMessage;
  * connector, which may hand the query to a different segment.
  * <p>
  * Register an implementation as a component to activate the {@link LocalShortcutQueryBusConnector}. The predicate is
- * consulted for every outgoing query, but only takes effect when the local segment actually subscribed a handler for
- * the query; when it did not, the query is routed as usual regardless of this predicate's outcome.
+ * consulted for every outgoing direct (point-to-point) query, but only takes effect when the local segment actually
+ * subscribed a handler for the query. When it did not, the query is routed as usual regardless of this predicate's
+ * outcome. Subscription queries are never shortcut and never consult this predicate as their update registrations must
+ * be coordinated across all nodes.
  * <p>
  * Both the {@code query} and the (nullable) {@link ProcessingContext} of the dispatch are provided, allowing the
  * decision to be based on the query's payload, {@link QueryMessage#type() type}, metadata, or a flag placed on the

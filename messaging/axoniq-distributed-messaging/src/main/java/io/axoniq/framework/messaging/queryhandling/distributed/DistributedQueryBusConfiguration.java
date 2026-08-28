@@ -35,13 +35,13 @@ import static org.axonframework.common.BuilderUtils.assertStrictPositive;
  * <p>
  * Can be used to modify non-critical settings of the bus, such as the query processing thread pool.
  *
- * @param queryThreads            The number of threads used by the {@link DistributedQueryBus}.
- * @param queryQueueCapacity      The initial capacity of the priority queue used for query processing tasks.
- * @param executorServiceFactory   The {@link ExecutorServiceFactory} constructing the priority-aware
- *                                {@link ExecutorService} for the {@link DistributedQueryBus}.
- * @param preferLocalQueryHandler Whether to use local query handlers directly when available, bypassing remote
+ * @param queryThreads            the number of threads used by the {@link DistributedQueryBus}
+ * @param queryQueueCapacity      the initial capacity of the priority queue used for query processing tasks
+ * @param executorServiceFactory  the {@link ExecutorServiceFactory} constructing the priority-aware
+ *                                {@link ExecutorService} for the {@link DistributedQueryBus}
+ * @param preferLocalQueryHandler whether to use local query handlers directly when available, bypassing remote
  *                                dispatch. Deprecated in favor of registering a {@link LocalQueryDispatchPredicate};
- *                                see {@link #preferLocalQueryHandler(boolean)}.
+ *                                see {@link #preferLocalQueryHandler(boolean)}
  * @author Steven van Beelen
  * @author Allard Buijze
  * @since 5.0.0
@@ -132,9 +132,9 @@ public record DistributedQueryBusConfiguration(
      * Configures whether the distributed query bus should use local query handlers directly when available, bypassing
      * remote dispatch.
      * <p>
-     * When enabled, queries for which a local handler is registered will be executed locally without going through
-     * the {@link QueryBusConnector}, improving performance by avoiding network overhead. Only when no local handler
-     * is available will the query be dispatched remotely. This is safe when query handlers are deterministic and
+     * When enabled, queries for which a local handler is registered will be executed locally without going through the
+     * {@link QueryBusConnector}, improving performance by avoiding network overhead. Only when no local handler is
+     * available will the query be dispatched remotely. This is safe when query handlers are deterministic and
      * consistent across all nodes.
      * <p>
      * Defaults to {@code true}.
@@ -152,6 +152,20 @@ public record DistributedQueryBusConfiguration(
         return new DistributedQueryBusConfiguration(
                 queryThreads, queryQueueCapacity, executorServiceFactory, preferLocalQueryHandler
         );
+    }
+
+    /**
+     * Indicates whether the distributed query bus should use local query handlers directly when available, bypassing
+     * remote dispatch.
+     *
+     * @return {@code true} when local handlers are used directly when available, {@code false} when queries always
+     * dispatch through the connector
+     * @deprecated Register a {@link LocalQueryDispatchPredicate} component instead, which offers the same local
+     * shortcut with per-query control. See {@link #preferLocalQueryHandler(boolean)}.
+     */
+    @Deprecated(since = "5.4.0", forRemoval = true)
+    public boolean preferLocalQueryHandler() {
+        return preferLocalQueryHandler;
     }
 
     /**

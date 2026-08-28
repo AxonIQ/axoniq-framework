@@ -19,13 +19,13 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.Set;
@@ -40,9 +40,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * The shortcut reuses the very same local-handling path that the {@link DistributedQueryBus} exposes to incoming,
  * remotely-routed queries: the {@link Handler} registered through {@link #onIncomingQuery(Handler)}. A short-cut query
- * therefore behaves exactly as if it had been routed to this segment - same handler invocation, same response
- * handling - only without leaving the JVM. Because this connector wraps the payload-converting connector (rather than
- * the other way around), the shortcut also avoids the payload serialization round-trip.
+ * therefore behaves exactly as if it had been routed to this segment - same handler invocation, same response handling
+ * - only without leaving the JVM. Because this connector wraps the payload-converting connector (rather than the other
+ * way around), the shortcut also avoids the payload serialization round-trip.
  * <p>
  * Because short-cut queries are handled through this same {@link Handler}, they are queued onto and executed by the
  * same bounded, priority-ordered worker pool as queries arriving from remote segments. A burst of locally-preferred

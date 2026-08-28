@@ -19,12 +19,12 @@
 
 package io.axoniq.framework.messaging.commandhandling.distributed;
 
-import org.jspecify.annotations.Nullable;
+import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
-import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
@@ -35,6 +35,9 @@ import java.util.function.BiConsumer;
  * <p>
  * One connector can be wrapped with another through the {@link DelegatingCommandBusConnector}, upon which more
  * functionality can be added, such as payload conversion or conversion.
+ * <p>
+ * Implementations must be prepared for {@link #dispatch(CommandMessage, ProcessingContext)} to complete with a
+ * {@code null} {@link CommandResultMessage}, as a command handler may legitimately produce no result.
  *
  * @author Allard Buijze
  * @author Mitchell Herrijgers

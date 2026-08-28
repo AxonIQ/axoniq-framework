@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.messaging.commandhandling.distributed;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
@@ -28,6 +27,7 @@ import org.axonframework.messaging.commandhandling.GenericCommandResultMessage;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
@@ -70,6 +70,7 @@ class LocalShortcutCommandBusConnectorTest {
 
         @Test
         void dispatchesToLocalHandlerWhenSubscribedAndPredicateMatches() {
+            // given
             LocalShortcutCommandBusConnector connector = connectorFor((c, ctx) -> true);
             connector.onIncomingCommand(localHandler);
             connector.subscribe(commandName, 100);
@@ -77,8 +78,10 @@ class LocalShortcutCommandBusConnectorTest {
             CommandResultMessage resultMessage = asCommandResultMessage("result");
             localHandler.resultToReturn = resultMessage;
 
-            CompletableFuture<CommandResultMessage> result = connector.dispatch(command, null);
+            // when
+            CompletableFuture<@Nullable CommandResultMessage> result = connector.dispatch(command, null);
 
+            // then
             assertThat(result).isCompletedWithValue(resultMessage);
             assertThat(localHandler.handleCount).hasValue(1);
             assertThat(delegate.dispatchCount).hasValue(0);
@@ -86,6 +89,7 @@ class LocalShortcutCommandBusConnectorTest {
 
         @Test
         void propagatesLocalHandlerErrorWhenDispatchingLocally() {
+            // given
             LocalShortcutCommandBusConnector connector = connectorFor((c, ctx) -> true);
             connector.onIncomingCommand(localHandler);
             connector.subscribe(commandName, 100);
@@ -93,8 +97,10 @@ class LocalShortcutCommandBusConnectorTest {
             RuntimeException failure = new RuntimeException("handling failed");
             localHandler.errorToRaise = failure;
 
-            CompletableFuture<CommandResultMessage> result = connector.dispatch(command, null);
+            // when
+            CompletableFuture<@Nullable CommandResultMessage> result = connector.dispatch(command, null);
 
+            // then
             assertThat(result).isCompletedExceptionally();
             assertThatThrownBy(result::get).hasCause(failure);
             assertThat(delegate.dispatchCount).hasValue(0);
@@ -106,48 +112,60 @@ class LocalShortcutCommandBusConnectorTest {
 
         @Test
         void routesThroughDelegateWhenPredicateDoesNotMatch() {
+            // given
             LocalShortcutCommandBusConnector connector = connectorFor((c, ctx) -> false);
             connector.onIncomingCommand(localHandler);
             connector.subscribe(commandName, 100);
 
+            // when
             connector.dispatch(command, null);
 
+            // then
             assertThat(delegate.dispatchCount).hasValue(1);
             assertThat(localHandler.handleCount).hasValue(0);
         }
 
         @Test
         void routesThroughDelegateWhenCommandNotLocallySubscribed() {
+            // given
             LocalShortcutCommandBusConnector connector = connectorFor((c, ctx) -> true);
             connector.onIncomingCommand(localHandler);
             // No matching subscription registered.
 
+            // when
             connector.dispatch(command, null);
 
+            // then
             assertThat(delegate.dispatchCount).hasValue(1);
             assertThat(localHandler.handleCount).hasValue(0);
         }
 
         @Test
         void routesThroughDelegateWhenNoLocalHandlerRegistered() {
+            // given
             LocalShortcutCommandBusConnector connector = connectorFor((c, ctx) -> true);
             connector.subscribe(commandName, 100);
             // onIncomingCommand never called, so no local handler is available yet.
 
+            // when
             connector.dispatch(command, null);
 
+            // then
             assertThat(delegate.dispatchCount).hasValue(1);
         }
 
         @Test
         void unsubscribeStopsLocalDispatch() {
+            // given
             LocalShortcutCommandBusConnector connector = connectorFor((c, ctx) -> true);
             connector.onIncomingCommand(localHandler);
             connector.subscribe(commandName, 100);
             connector.unsubscribe(commandName);
 
+            // when
             connector.dispatch(command, null);
 
+            // then
             assertThat(delegate.dispatchCount).hasValue(1);
             assertThat(localHandler.handleCount).hasValue(0);
             assertThat(delegate.unsubscribed).containsExactly(commandName);
@@ -155,6 +173,7 @@ class LocalShortcutCommandBusConnectorTest {
 
         @Test
         void passesProcessingContextToPredicate() {
+            // given
             AtomicReference<Object> seenContext = new AtomicReference<>("unset");
             LocalShortcutCommandBusConnector connector = connectorFor((c, ctx) -> {
                 seenContext.set(ctx);
@@ -163,8 +182,10 @@ class LocalShortcutCommandBusConnectorTest {
             connector.onIncomingCommand(localHandler);
             connector.subscribe(commandName, 100);
 
+            // when
             connector.dispatch(command, null);
 
+            // then
             assertThat(seenContext.get()).isNull();
         }
     }
@@ -174,12 +195,15 @@ class LocalShortcutCommandBusConnectorTest {
 
         @Test
         void subscribeOnIncomingCommandAndUnsubscribeDelegateToWrappedConnector() {
+            // given
             LocalShortcutCommandBusConnector connector = connectorFor((c, ctx) -> false);
 
+            // when
             connector.subscribe(commandName, 100);
             connector.onIncomingCommand(localHandler);
             boolean unsubscribed = connector.unsubscribe(commandName);
 
+            // then
             assertThat(delegate.subscribed).containsExactly(commandName);
             assertThat(delegate.incomingHandler).isSameAs(localHandler);
             assertThat(delegate.unsubscribed).containsExactly(commandName);
@@ -188,11 +212,14 @@ class LocalShortcutCommandBusConnectorTest {
 
         @Test
         void describeToDescribesWrapperOfDelegate() {
+            // given
             LocalShortcutCommandBusConnector connector = connectorFor((c, ctx) -> false);
             RecordingComponentDescriptor descriptor = new RecordingComponentDescriptor();
 
+            // when
             connector.describeTo(descriptor);
 
+            // then
             assertThat(descriptor.properties).containsEntry("delegate", delegate);
         }
     }
@@ -269,8 +296,8 @@ class LocalShortcutCommandBusConnectorTest {
     }
 
     /**
-     * Recording {@link ComponentDescriptor} capturing the properties described to it, so the wrapper relationship can be
-     * asserted without mocking.
+     * Recording {@link ComponentDescriptor} capturing the properties described to it, so the wrapper relationship can
+     * be asserted without mocking.
      */
     private static class RecordingComponentDescriptor implements ComponentDescriptor {
 

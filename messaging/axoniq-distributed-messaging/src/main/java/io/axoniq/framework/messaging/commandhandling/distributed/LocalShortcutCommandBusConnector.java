@@ -19,12 +19,12 @@
 
 package io.axoniq.framework.messaging.commandhandling.distributed;
 
-import org.jspecify.annotations.Nullable;
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
-import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.Set;
@@ -93,7 +93,8 @@ public class LocalShortcutCommandBusConnector extends DelegatingCommandBusConnec
         return super.dispatch(command, processingContext);
     }
 
-    private static CompletableFuture<@Nullable CommandResultMessage> dispatchLocally(CommandMessage command, Handler handler) {
+    private static CompletableFuture<@Nullable CommandResultMessage> dispatchLocally(CommandMessage command,
+                                                                                     Handler handler) {
         CompletableFuture<@Nullable CommandResultMessage> result = new CompletableFuture<>();
         handler.handle(command, new ResultCallback() {
             @Override

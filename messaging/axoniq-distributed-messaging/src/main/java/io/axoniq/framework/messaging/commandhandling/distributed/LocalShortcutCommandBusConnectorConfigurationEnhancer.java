@@ -21,14 +21,14 @@ package io.axoniq.framework.messaging.commandhandling.distributed;
 
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentRegistry;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 
 import static org.axonframework.common.configuration.DecoratorDefinition.forType;
 
 /**
- * Configuration enhancer that, when both a {@link CommandBusConnector} and a {@link LocalCommandDispatchPredicate} are
- * present in the configuration, decorates the {@code CommandBusConnector} with a
- * {@link LocalShortcutCommandBusConnector}.
+ * Configuration enhancer that, when a {@link CommandBusConnector} is present in the configuration, may decorate it with
+ * a {@link LocalShortcutCommandBusConnector} wrapping a registered {@link LocalCommandDispatchPredicate}.
  * <p>
  * The decorator is registered at {@link #LOCAL_SHORTCUT_CONNECTOR_ORDER}, placing it near the outer edge of the
  * connector decorator chain. As decorators are applied in ascending order and a higher order wraps a lower one, this
@@ -39,8 +39,9 @@ import static org.axonframework.common.configuration.DecoratorDefinition.forType
  * operates on unconverted, in-memory commands and captures the unconverted local {@link CommandBusConnector.Handler},
  * skipping payload (de)serialization entirely.
  * <p>
- * When no {@link LocalCommandDispatchPredicate} is registered, this enhancer does nothing, leaving the default
- * distributed dispatch behavior fully intact.
+ * The {@link LocalCommandDispatchPredicate} is resolved lazily, at decoration time, rather than when this enhancer
+ * runs: this way, a predicate registered by another component after this enhancer still takes effect. When none is
+ * registered, the connector is left undecorated, leaving the default distributed dispatch behavior fully intact.
  *
  * @author Allard Buijze
  * @see LocalShortcutCommandBusConnector
@@ -60,23 +61,23 @@ public class LocalShortcutCommandBusConnectorConfigurationEnhancer implements Co
      * near the top of the range achieves this. {@link Integer#MAX_VALUE} is deliberately halved rather than used
      * directly: it leaves ample room above for a decorator that must legitimately observe or transform <em>every</em>
      * dispatch, local or remote, by choosing a still-higher order.
-     *
-     * @since 5.3.0
      */
     public static final int LOCAL_SHORTCUT_CONNECTOR_ORDER = Integer.MAX_VALUE >> 1;
 
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
-        if (componentRegistry.hasComponent(CommandBusConnector.class)
-                && componentRegistry.hasComponent(LocalCommandDispatchPredicate.class)) {
+        if (componentRegistry.hasComponent(CommandBusConnector.class)) {
             componentRegistry.registerDecorator(
                     forType(CommandBusConnector.class)
-                            .with((config, name, delegate) -> new LocalShortcutCommandBusConnector(
-                                    delegate,
-                                    config.getComponent(LocalCommandDispatchPredicate.class)
-                            ))
+                            .with((config, name, delegate) -> decorate(config, delegate))
                             .order(LOCAL_SHORTCUT_CONNECTOR_ORDER)
             );
         }
+    }
+
+    private static CommandBusConnector decorate(Configuration config, CommandBusConnector delegate) {
+        return config.getOptionalComponent(LocalCommandDispatchPredicate.class)
+                     .<CommandBusConnector>map(predicate -> new LocalShortcutCommandBusConnector(delegate, predicate))
+                     .orElse(delegate);
     }
 }
