@@ -1,0 +1,172 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+
+package io.axoniq.framework.springboot.springcloud;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+import java.time.Duration;
+
+/**
+ * Properties for configuring the Axoniq Framework Spring Cloud connector.
+ * <p>
+ * These properties are bound to the {@code axon.springcloud} prefix.
+ * <p>
+ * The two endpoint paths must be the same on every member of a cluster, since they are how members reach each other.
+ * The command load factor is not configured here: it belongs to the distributed command bus as a whole, and is set
+ * through {@code DistributedCommandBusConfiguration}.
+ *
+ * @author Allard Buijze
+ * @since 5.4.0
+ */
+@ConfigurationProperties("axon.springcloud")
+public class SpringCloudProperties {
+
+    /**
+     * Whether the Spring Cloud connector is enabled.
+     * <p>
+     * When set to {@code false}, no connector is registered and commands are not distributed through Spring Cloud.
+     * Defaults to {@code true}.
+     */
+    private boolean enabled = true;
+
+    /**
+     * The path this application receives commands from other members under.
+     * <p>
+     * Must match {@link #capabilitiesEndpoint} in one respect: every member of the cluster has to agree on it.
+     * Defaults to {@code /axoniq-springcloud/command}.
+     */
+    private String commandEndpoint = "/axoniq-springcloud/command";
+
+    /**
+     * The path this application serves its command handling capabilities under.
+     * <p>
+     * Every member of the cluster has to agree on it. Defaults to
+     * {@code /axoniq-springcloud/member-capabilities}.
+     */
+    private String capabilitiesEndpoint = "/axoniq-springcloud/member-capabilities";
+
+    /**
+     * How long a service instance is left alone after answering a capabilities request with a client error.
+     * <p>
+     * Spring Cloud Discovery reports every registered service, not only those running this connector. An instance that
+     * answers with a client error is not serving the capabilities endpoint, and asking it again on every heartbeat is
+     * wasted work. The period is finite because an instance may have answered that way only because it was still
+     * starting up. Defaults to one minute.
+     */
+    private Duration ignoreListingExpireThreshold = Duration.ofMinutes(1);
+
+    /**
+     * The service instance metadata property holding an instance's context root, appended to its URI when reaching it.
+     * <p>
+     * Leave unset when services are served from the root, which is the default.
+     */
+    private String contextRootMetadataPropertyName;
+
+    /**
+     * Returns whether the Spring Cloud connector is enabled.
+     *
+     * @return {@code true} if enabled, {@code false} otherwise
+     */
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    /**
+     * Sets whether the Spring Cloud connector is enabled.
+     *
+     * @param enabled {@code true} to enable, {@code false} to disable
+     */
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    /**
+     * Returns the path this application receives commands from other members under.
+     *
+     * @return the path commands are received under
+     */
+    public String getCommandEndpoint() {
+        return commandEndpoint;
+    }
+
+    /**
+     * Sets the path this application receives commands from other members under.
+     *
+     * @param commandEndpoint the path commands are received under
+     */
+    public void setCommandEndpoint(String commandEndpoint) {
+        this.commandEndpoint = commandEndpoint;
+    }
+
+    /**
+     * Returns the path this application serves its command handling capabilities under.
+     *
+     * @return the path capabilities are served under
+     */
+    public String getCapabilitiesEndpoint() {
+        return capabilitiesEndpoint;
+    }
+
+    /**
+     * Sets the path this application serves its command handling capabilities under.
+     *
+     * @param capabilitiesEndpoint the path capabilities are served under
+     */
+    public void setCapabilitiesEndpoint(String capabilitiesEndpoint) {
+        this.capabilitiesEndpoint = capabilitiesEndpoint;
+    }
+
+    /**
+     * Returns how long a service instance is left alone after answering a capabilities request with a client error.
+     *
+     * @return the period an instance answering with a client error is ignored for
+     */
+    public Duration getIgnoreListingExpireThreshold() {
+        return ignoreListingExpireThreshold;
+    }
+
+    /**
+     * Sets how long a service instance is left alone after answering a capabilities request with a client error.
+     *
+     * @param ignoreListingExpireThreshold the period an instance answering with a client error is ignored for
+     */
+    public void setIgnoreListingExpireThreshold(Duration ignoreListingExpireThreshold) {
+        this.ignoreListingExpireThreshold = ignoreListingExpireThreshold;
+    }
+
+    /**
+     * Returns the service instance metadata property holding an instance's context root.
+     *
+     * @return the metadata property holding an instance's context root, or {@code null} when services are served from
+     * the root
+     */
+    public String getContextRootMetadataPropertyName() {
+        return contextRootMetadataPropertyName;
+    }
+
+    /**
+     * Sets the service instance metadata property holding an instance's context root.
+     *
+     * @param contextRootMetadataPropertyName the metadata property holding an instance's context root
+     */
+    public void setContextRootMetadataPropertyName(String contextRootMetadataPropertyName) {
+        this.contextRootMetadataPropertyName = contextRootMetadataPropertyName;
+    }
+}

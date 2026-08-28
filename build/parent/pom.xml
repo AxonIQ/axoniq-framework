@@ -101,6 +101,7 @@
         <spring-boot.version>3.5.16</spring-boot.version>
         <spring-data.version>2025.0.7</spring-data.version>
         <spring-security.version>6.5.11</spring-security.version>
+        <spring-cloud-commons.version>4.3.3</spring-cloud-commons.version>
         <!-- Testing -->
         <assertj.version>3.27.7</assertj.version>
         <archunit.version>1.5.0</archunit.version>
@@ -524,6 +525,13 @@
                 <version>${spring-security.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <!-- Only spring-cloud-commons is managed; importing the full spring-cloud-dependencies BOM
+                 would pull discovery implementations into the framework's dependency management. -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-commons</artifactId>
+                <version>${spring-cloud-commons.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

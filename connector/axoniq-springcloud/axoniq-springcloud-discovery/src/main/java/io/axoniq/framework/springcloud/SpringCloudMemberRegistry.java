@@ -1,0 +1,342 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+
+package io.axoniq.framework.springcloud;
+
+import io.axoniq.framework.springcloud.discovery.CapabilityDiscoveryMode;
+import io.axoniq.framework.springcloud.discovery.ServiceInstanceKey;
+import io.axoniq.framework.springcloud.routing.ConsistentHash;
+import io.axoniq.framework.springcloud.routing.Member;
+import io.axoniq.framework.springcloud.routing.MemberCapabilities;
+import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.messaging.core.QualifiedName;
+import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.cloud.client.ServiceInstance;
+import org.springframework.cloud.client.discovery.DiscoveryClient;
+import org.springframework.cloud.client.discovery.event.HeartbeatEvent;
+import org.springframework.cloud.client.discovery.event.InstanceRegisteredEvent;
+import org.springframework.cloud.client.serviceregistry.Registration;
+import org.springframework.context.event.EventListener;
+import org.springframework.web.util.UriComponentsBuilder;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
+/**
+ * Maintains the {@link ConsistentHash} ring this application routes commands with, from the {@code ServiceInstance}s
+ * reported by Spring Cloud Discovery.
+ * <p>
+ * The ring is rebuilt from scratch on every {@link HeartbeatEvent}, which is what makes the discovery implementation's
+ * heartbeat interval the speed at which cluster topology changes propagate. Rebuilding rather than patching means a
+ * member that has gone away simply does not reappear, and no bookkeeping is needed to notice it left.
+ * <p>
+ * This registry must be a Spring bean: it learns about the cluster through {@link EventListener}-annotated methods,
+ * and Spring only publishes events to beans it manages. It is registered by the Spring Boot autoconfiguration.
+ * <p>
+ * In Axon Framework 4 this work sat in a {@code CommandRouter} alongside the connector. That split is gone — a
+ * {@code CommandBusConnector} now owns routing as well as transport — so this registry is the connector's own
+ * collaborator rather than a component of the bus.
+ *
+ * @author Allard Buijze
+ * @since 5.4.0
+ */
+public class SpringCloudMemberRegistry implements DescribableComponent {
+
+    private static final Logger logger = LoggerFactory.getLogger(SpringCloudMemberRegistry.class);
+
+    private final DiscoveryClient discoveryClient;
+    private final Registration localRegistration;
+    private final CapabilityDiscoveryMode discoveryMode;
+    private final Predicate<ServiceInstance> serviceInstanceFilter;
+    private final @Nullable String contextRootMetadataPropertyName;
+
+    private volatile ConsistentHash ring = new ConsistentHash();
+    private volatile MemberCapabilities localCapabilities = MemberCapabilities.INCAPABLE;
+    private volatile boolean registered = false;
+
+    /**
+     * Constructs a {@code SpringCloudMemberRegistry} discovering members through the given {@code discoveryClient}.
+     *
+     * @param discoveryClient   The client reporting the service instances making up the cluster.
+     * @param localRegistration The registration representing this application, used to tell this application's own
+     *                          instance apart from the others.
+     * @param discoveryMode     The mode used to learn what each discovered instance handles.
+     */
+    public SpringCloudMemberRegistry(DiscoveryClient discoveryClient,
+                                     Registration localRegistration,
+                                     CapabilityDiscoveryMode discoveryMode) {
+        this(discoveryClient, localRegistration, discoveryMode, instance -> true, null);
+    }
+
+    /**
+     * Constructs a {@code SpringCloudMemberRegistry} discovering members through the given {@code discoveryClient}.
+     *
+     * @param discoveryClient                 The client reporting the service instances making up the cluster.
+     * @param localRegistration               The registration representing this application, used to tell this
+     *                                        application's own instance apart from the others.
+     * @param discoveryMode                   The mode used to learn what each discovered instance handles.
+     * @param serviceInstanceFilter           Decides which discovered instances are considered at all. Instances
+     *                                        rejected here are never asked for their capabilities, which is cheaper
+     *                                        than relying on the ignore list when whole services can be excluded up
+     *                                        front.
+     * @param contextRootMetadataPropertyName The {@link ServiceInstance#getMetadata() metadata} key holding an
+     *                                        instance's context root, to be appended to its URI, or {@code null} when
+     *                                        instances are served from the root.
+     */
+    public SpringCloudMemberRegistry(DiscoveryClient discoveryClient,
+                                     Registration localRegistration,
+                                     CapabilityDiscoveryMode discoveryMode,
+                                     Predicate<ServiceInstance> serviceInstanceFilter,
+                                     @Nullable String contextRootMetadataPropertyName) {
+        this.discoveryClient = Objects.requireNonNull(discoveryClient, "The discoveryClient cannot be null.");
+        this.localRegistration = Objects.requireNonNull(localRegistration, "The localRegistration cannot be null.");
+        this.discoveryMode = Objects.requireNonNull(discoveryMode, "The discoveryMode cannot be null.");
+        this.serviceInstanceFilter = Objects.requireNonNull(serviceInstanceFilter,
+                                                            "The serviceInstanceFilter cannot be null.");
+        this.contextRootMetadataPropertyName = contextRootMetadataPropertyName;
+        // Publishing the (empty) local capabilities up front means the discovery mode recognises this application's
+        // own instance from the first discovery round, rather than asking this application for its capabilities over
+        // HTTP until the first handler subscribes.
+        this.discoveryMode.updateLocalCapabilities(localRegistration, MemberCapabilities.INCAPABLE);
+    }
+
+    /**
+     * Resolves the member a command of the given {@code commandName} carrying the given {@code routingKey} should be
+     * handled by.
+     *
+     * @param routingKey  The routing key of the command to resolve a member for.
+     * @param commandName The {@link QualifiedName} of the command to resolve a member for.
+     * @return the member that should handle the command, or {@link Optional#empty()} when no known member handles
+     * commands of the given {@code commandName}
+     */
+    public Optional<Member> findDestination(String routingKey, QualifiedName commandName) {
+        return ring.getMember(routingKey, commandName);
+    }
+
+    /**
+     * Publishes the given {@code capabilities} as this application's own, making them visible to other members on
+     * their next discovery round, and reflecting them in this application's own ring right away.
+     *
+     * @param capabilities The messages this application handles, and the command load it asks for.
+     */
+    public void publishLocalCapabilities(MemberCapabilities capabilities) {
+        Objects.requireNonNull(capabilities, "The capabilities cannot be null.");
+        this.localCapabilities = capabilities;
+        discoveryMode.updateLocalCapabilities(localRegistration, capabilities);
+        // Updating the local member immediately, rather than waiting for the next heartbeat, means a command
+        // dispatched right after its handler subscribed can already be routed to this member.
+        synchronized (this) {
+            ring = ring.with(localMember(), capabilities);
+        }
+        logger.debug("Published local capabilities [{}]; ring is now [{}]", capabilities, ring);
+    }
+
+    /**
+     * Removes the given {@code member} from the ring, on the grounds that it could not be reached.
+     * <p>
+     * The member returns on the next discovery round if it answers again, so this only keeps commands away from a
+     * member that is currently unreachable. It does not weaken any consistency guarantee: routing a command to one
+     * member is a matter of locality, while consistency is enforced where the events are appended.
+     *
+     * @param member The member that could not be reached.
+     */
+    public void suspect(Member member) {
+        Objects.requireNonNull(member, "The member cannot be null.");
+        synchronized (this) {
+            ConsistentHash updated = ring.without(member);
+            if (updated != ring) {
+                logger.info("Removing member [{}] from the ring, as it could not be reached. It returns on the next "
+                                    + "discovery round if it answers again.", member);
+                ring = updated;
+            }
+        }
+    }
+
+    /**
+     * Rebuilds the ring now that this application has completed its discovery registration.
+     * <p>
+     * Until registration completes, this application's own URI is not available, so it is a member of its own ring
+     * under a provisional name and without an endpoint. This event is the point at which its real name and URI become
+     * known.
+     *
+     * @param event The event signalling that registration completed. Serves only as a trigger.
+     */
+    @EventListener
+    public void onInstanceRegistered(InstanceRegisteredEvent<?> event) {
+        logger.debug("This instance completed its discovery registration; rebuilding the ring.");
+        registered = true;
+        updateMemberships();
+    }
+
+    /**
+     * Rebuilds the ring from the instances discovery currently reports.
+     *
+     * @param event The heartbeat signalling that discovery may have new information. Serves only as a trigger.
+     */
+    @EventListener
+    public void onHeartbeat(HeartbeatEvent event) {
+        updateMemberships();
+    }
+
+    /**
+     * Rebuilds the ring from the instances discovery currently reports, asking each for its capabilities.
+     * <p>
+     * Exposed beyond the event listeners so that a deployment without discovery heartbeats, or a test, can drive the
+     * discovery round itself.
+     */
+    public void updateMemberships() {
+        List<ServiceInstance> instances = discoveredInstances();
+        ConsistentHash rebuilt = new ConsistentHash();
+        for (ServiceInstance instance : instances) {
+            Optional<MemberCapabilities> capabilities = capabilitiesOf(instance);
+            if (capabilities.isPresent()) {
+                rebuilt = rebuilt.with(buildMember(instance), capabilities.get());
+            }
+        }
+        discoveryMode.retainOnly(instances.stream()
+                                          .map(ServiceInstanceKey::of)
+                                          .collect(Collectors.toUnmodifiableSet()));
+        synchronized (this) {
+            ring = rebuilt;
+        }
+        logger.debug("Rebuilt the ring from [{}] discovered instances: [{}]", instances.size(), rebuilt);
+    }
+
+    private Optional<MemberCapabilities> capabilitiesOf(ServiceInstance instance) {
+        try {
+            return discoveryMode.capabilities(instance);
+        } catch (Exception e) {
+            logger.info("Leaving ServiceInstance [{}] out of the ring, as discovering its capabilities failed.",
+                        ServiceInstanceKey.of(instance), e);
+            return Optional.empty();
+        }
+    }
+
+    private List<ServiceInstance> discoveredInstances() {
+        List<ServiceInstance> instances = discoveryClient.getServices()
+                                                        .stream()
+                                                        .map(discoveryClient::getInstances)
+                                                        .flatMap(Collection::stream)
+                                                        .filter(serviceInstanceFilter)
+                                                        .collect(Collectors.toCollection(ArrayList::new));
+        if (instances.isEmpty()) {
+            // Discovery may not have anything to report yet, but this application can already handle its own
+            // commands, so it must not fall out of its own ring while it waits.
+            instances.add(localRegistration);
+        }
+        return instances;
+    }
+
+    /**
+     * Returns the {@link Member} representing this application.
+     *
+     * @return the member representing this application
+     */
+    public Member localMember() {
+        if (!registered) {
+            return Member.unregisteredLocalMember(localRegistration.getServiceId().toUpperCase() + "[LOCAL]");
+        }
+        return buildMember(localRegistration);
+    }
+
+    /**
+     * Returns the ring this registry currently routes with.
+     *
+     * @return the current routing ring
+     */
+    public ConsistentHash ring() {
+        return ring;
+    }
+
+    private Member buildMember(ServiceInstance instance) {
+        URI endpoint = endpointOf(instance);
+        boolean local = isLocal(instance);
+        if (endpoint == null) {
+            // Only reachable for this application's own instance before registration completed; a remote instance
+            // without a URI was already filtered out by its capabilities request failing.
+            return Member.unregisteredLocalMember(instance.getServiceId().toUpperCase() + "[LOCAL]");
+        }
+        return new Member(instance.getServiceId().toUpperCase() + "[" + endpoint + "]", endpoint, local);
+    }
+
+    private boolean isLocal(ServiceInstance instance) {
+        if (ServiceInstanceKey.of(instance).equals(ServiceInstanceKey.of(localRegistration))) {
+            return true;
+        }
+        URI localUri = endpointOf(localRegistration);
+        return localUri != null && Objects.equals(endpointOf(instance), localUri);
+    }
+
+    private @Nullable URI endpointOf(ServiceInstance instance) {
+        URI uri = uriOf(instance);
+        if (uri == null || contextRootMetadataPropertyName == null) {
+            return uri;
+        }
+        String contextRoot = Optional.ofNullable(instance.getMetadata())
+                                     .map(metadata -> metadata.get(contextRootMetadataPropertyName))
+                                     .orElse(null);
+        if (contextRoot == null) {
+            logger.debug("ServiceInstance [{}] has no [{}] metadata property; serving it from the root.",
+                         ServiceInstanceKey.of(instance), contextRootMetadataPropertyName);
+            return uri;
+        }
+        return UriComponentsBuilder.fromUri(uri).path(contextRoot).build().toUri();
+    }
+
+    /**
+     * Returns the URI of the given {@code instance}, or {@code null} when it does not have one yet.
+     * <p>
+     * Several Spring Cloud Discovery implementations throw rather than return {@code null} when an instance's URI is
+     * requested before it has registered, so the exception is what "no URI yet" looks like in practice.
+     *
+     * @param instance The instance to read the URI of.
+     * @return the URI of the given {@code instance}, or {@code null} when it does not have one
+     */
+    private static @Nullable URI uriOf(ServiceInstance instance) {
+        try {
+            return instance.getUri();
+        } catch (Exception e) {
+            logger.debug("ServiceInstance [{}] does not report a URI yet.", instance.getServiceId(), e);
+            return null;
+        }
+    }
+
+    @Override
+    public void describeTo(ComponentDescriptor descriptor) {
+        ConsistentHash current = ring;
+        descriptor.describeProperty("localMember", localMember().name());
+        descriptor.describeProperty("localCapabilities", localCapabilities.toString());
+        descriptor.describeProperty("ringVersion", current.version());
+        descriptor.describeProperty("members", memberNames(current.getMembers()));
+    }
+
+    private static List<String> memberNames(Set<Member> members) {
+        return members.stream().map(Member::name).sorted().toList();
+    }
+}

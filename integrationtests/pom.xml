@@ -36,6 +36,16 @@
         Does not contain any production code.
     </description>
 
+    <properties>
+        <!--
+            The Spring Cloud connector distributes commands over HTTP, so exercising it across two nodes needs a
+            servlet container, which means Spring Boot on the test classpath. The ban on Spring dependencies exists to
+            keep the framework's own modules Spring-agnostic; this module publishes nothing and holds no production
+            code, so lifting it here costs nothing. Everything below stays test-scoped.
+        -->
+        <maven-enforcer.allow-spring-dependencies>true</maven-enforcer.allow-spring-dependencies>
+    </properties>
+
     <dependencies>
         <!-- Axon Framework -->
         <dependency>
@@ -111,6 +121,19 @@
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-testcontainer</artifactId>
             <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Brings the Spring Cloud connector, its autoconfiguration and the web stack commands travel over. -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-springcloud-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
 
