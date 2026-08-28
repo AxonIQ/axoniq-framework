@@ -154,6 +154,7 @@ public class AggregateBasedAxonServerEventStorageEngine implements EventStorageE
                 }
                 var modifiableMetadataMap = new HashMap<>(builder.getMetaDataMap());
                 buildMetadata(event.metadata(), modifiableMetadataMap);
+                builder.putAllMetaData(modifiableMetadataMap);
                 Event message = builder.build();
                 tx.appendEvent(message);
             });
@@ -194,7 +195,7 @@ public class AggregateBasedAxonServerEventStorageEngine implements EventStorageE
     }
 
     @Override
-    public MessageStream<EventMessage> source(SourcingCondition condition) {
+    public MessageStream<EventMessage> source(SourcingCondition condition, @Nullable ProcessingContext context) {
         CompletableFuture<Void> endOfStreams = new CompletableFuture<>();
         List<AggregateSource> aggregateSources = condition.criteria()
                                                           .flatten()

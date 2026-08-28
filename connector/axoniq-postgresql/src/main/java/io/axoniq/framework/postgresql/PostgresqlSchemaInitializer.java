@@ -22,6 +22,7 @@ package io.axoniq.framework.postgresql;
 import org.axonframework.common.annotation.Internal;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import javax.sql.DataSource;
@@ -40,12 +41,26 @@ final class PostgresqlSchemaInitializer {
         // utility class
     }
 
+    /**
+     * Creates the tables, sequence, and indices that {@link PostgresqlEventStorageEngine} relies
+     * on, and installs the type tag migration, if either does not already exist.
+     *
+     * @param dataSource a data source to connect to PostgreSQL, cannot be {@code null}
+     * @throws SQLException when a JDBC error occurred
+     */
+    static void initialize(DataSource dataSource) throws SQLException {
+        createSchema(dataSource);
+        installTypeTagMigration(dataSource);
+    }
+
     // TODO #7 Allow to configure tables, sequences and indices
-    static void initialize(DataSource dataSource) {
+    static void createSchema(DataSource dataSource) throws SQLException {
         try (
             Connection connection = dataSource.getConnection();
             Statement statement = connection.createStatement();
         ) {
+            connection.setAutoCommit(false);
+
             statement.execute(
                 """
                 CREATE TABLE IF NOT EXISTS events (
@@ -56,6 +71,7 @@ final class PostgresqlSchemaInitializer {
                   metadata JSON NOT NULL,
                   identifier VARCHAR NOT NULL,
                   type VARCHAR NOT NULL,
+                  type_version VARCHAR NOT NULL,
 
                   -- keys
                   PRIMARY KEY (global_index)
@@ -92,13 +108,112 @@ final class PostgresqlSchemaInitializer {
                 -- BTREE index on global_index in tags (for faster finalizations)
                 CREATE INDEX IF NOT EXISTS tags_global_index_idx
                   ON tags (global_index);
+
+                -- Ensures at most one reserved type tag row per event
+                CREATE UNIQUE INDEX IF NOT EXISTS tags_type_unique
+                  ON tags (global_index) WHERE key = '__T';
                 """
             );
 
             connection.commit();
         }
-        catch (SQLException e) {
-            throw new IllegalStateException("Could not initialize database schema", e);
+    }
+
+    /**
+     * Older schemas (from before "type_version" existed) stored an event's full {@code MessageType}
+     * String representation - "qualifiedName#version" (see {@code MessageType#toString()}) - in a
+     * single "type" column. This migration splits any such pre-existing values into "type" (holding
+     * only the qualified name from now on) and the new "type_version" column, which is required
+     * ({@code NOT NULL}). This makes the whole migration a hard cut-over, not something older,
+     * unaware application instances can keep running against: once it runs, any instance whose
+     * insert into "events" does not supply "type_version" fails outright, since there is no default
+     * for it to fall back on. Every instance appending events must already be upgraded before (or,
+     * practically, around the same time as) this migration runs.
+     *
+     * The reserved type tag (see PostgresqlEventStorageEngine's TYPE_TAG_KEY) is then populated from
+     * the now-split "type" column directly. A trigger writes it alongside every event's regular tags,
+     * allowing type to be filtered using the same mechanism as any other tag. This runs as a database
+     * trigger rather than application code so it applies uniformly to every insert into "events" -
+     * including any current or future insertion code path within the (now uniformly upgraded)
+     * application - without any of them needing to know about the reserved tag themselves.
+     *
+     * A second trigger independently validates that every "__T" row's value matches its referenced
+     * event's type, regardless of which code path wrote it - a guarantee that doesn't depend on the
+     * write-side trigger (or anything else) staying correct.
+     *
+     * The one-time historical backfill (for events that already existed before this trigger was
+     * first installed) runs atomically alongside both triggers' creation, in the same transaction.
+     * Once this block commits, no event can ever be missing its type tag again - which is also why
+     * it is safe to skip this block entirely once the trigger is present.
+     *
+     * @param dataSource a data source to connect to PostgreSQL, cannot be {@code null}
+     * @throws SQLException when a JDBC error occurred
+     */
+    static void installTypeTagMigration(DataSource dataSource) throws SQLException {
+        try (
+            Connection connection = dataSource.getConnection();
+            Statement statement = connection.createStatement();
+        ) {
+            try (ResultSet resultSet = statement.executeQuery(
+                "SELECT 1 FROM pg_trigger WHERE tgname = 'axon_events_write_type_tag' AND tgrelid = 'events'::regclass"
+            )) {
+                if (resultSet.next()) {
+                    return;  // migration already installed
+                }
+            }
+
+            connection.setAutoCommit(false);
+
+            statement.execute(
+                """
+                -- Adds "type_version" if it does not already exist (a fresh schema already has it -
+                -- see createSchema()) and splits any pre-existing "type" values of the form
+                -- "qualifiedName#version" into the two columns.
+                ALTER TABLE events ADD COLUMN IF NOT EXISTS type_version VARCHAR;
+
+                UPDATE events
+                  SET type_version = split_part(type, '#', 2),
+                      type = split_part(type, '#', 1)
+                  WHERE type_version IS NULL;
+
+                ALTER TABLE events ALTER COLUMN type_version SET NOT NULL;
+
+                -- Writes the reserved "__T" tag with the event's type alongside its regular tags.
+                CREATE OR REPLACE FUNCTION axon_write_type_tag() RETURNS TRIGGER AS $$
+                BEGIN
+                  INSERT INTO tags (global_index, key, value) VALUES (NEW.global_index, '__T', NEW.type)
+                    ON CONFLICT (global_index) WHERE key = '__T' DO UPDATE SET value = EXCLUDED.value;
+                  RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql;
+
+                CREATE TRIGGER axon_events_write_type_tag
+                  AFTER INSERT ON events
+                  FOR EACH ROW EXECUTE FUNCTION axon_write_type_tag();
+
+                -- Guarantees value equals the referenced event's type for every "__T" row.
+                CREATE OR REPLACE FUNCTION axon_validate_type_tag() RETURNS TRIGGER AS $$
+                BEGIN
+                  IF NEW.key = '__T' AND NOT EXISTS (
+                    SELECT 1 FROM events WHERE global_index = NEW.global_index AND type = NEW.value
+                  ) THEN
+                    RAISE EXCEPTION 'Type tag value % does not match event type for global_index %', NEW.value, NEW.global_index;
+                  END IF;
+                  RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql;
+
+                CREATE TRIGGER axon_tags_validate_type
+                  BEFORE INSERT OR UPDATE ON tags
+                  FOR EACH ROW EXECUTE FUNCTION axon_validate_type_tag();
+
+                -- Backfills "__T" for events that already existed before this migration ran.
+                INSERT INTO tags (global_index, key, value)
+                  SELECT global_index, '__T', type FROM events;
+                """
+            );
+
+            connection.commit();
         }
     }
 }

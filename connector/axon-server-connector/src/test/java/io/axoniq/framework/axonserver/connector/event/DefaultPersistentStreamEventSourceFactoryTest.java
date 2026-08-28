@@ -19,14 +19,16 @@
 
 package io.axoniq.framework.axonserver.connector.event;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
 import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.test.appender.ListAppender;
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.messaging.core.SubscribableEventSource;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.AfterEach;
@@ -36,7 +38,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.concurrent.ScheduledExecutorService;
@@ -78,7 +79,7 @@ class DefaultPersistentStreamEventSourceFactoryTest {
         @Test
         void returnsEventSource() {
             // when
-            PersistentStreamEventSource result = factory.build(STREAM_NAME, properties, scheduler, 1, configuration);
+            SubscribableEventSource result = factory.build(STREAM_NAME, properties, scheduler, 1, configuration);
 
             // then
             assertThat(result).isNotNull();
@@ -87,8 +88,8 @@ class DefaultPersistentStreamEventSourceFactoryTest {
         @Test
         void returnsDistinctInstancesForSameName() {
             // when
-            PersistentStreamEventSource first = factory.build(STREAM_NAME, properties, scheduler, 1, configuration);
-            PersistentStreamEventSource second = factory.build(STREAM_NAME, properties, scheduler, 1, configuration);
+            SubscribableEventSource first = factory.build(STREAM_NAME, properties, scheduler, 1, configuration);
+            SubscribableEventSource second = factory.build(STREAM_NAME, properties, scheduler, 1, configuration);
 
             // then
             assertThat(first).isNotSameAs(second);
@@ -98,18 +99,18 @@ class DefaultPersistentStreamEventSourceFactoryTest {
     @Nested
     class DuplicateStreamNameWarning {
 
-        private ListAppender<ILoggingEvent> logAppender;
+        private ListAppender logAppender;
 
         @BeforeEach
         void attachAppender() {
-            logAppender = new ListAppender<>();
+            logAppender = new ListAppender("DuplicateStreamNameWarningLog");
             logAppender.start();
-            ((Logger) LoggerFactory.getLogger(DefaultPersistentStreamEventSourceFactory.class)).addAppender(logAppender);
+            ((Logger) LogManager.getLogger(DefaultPersistentStreamEventSourceFactory.class)).addAppender(logAppender);
         }
 
         @AfterEach
         void detachAppender() {
-            ((Logger) LoggerFactory.getLogger(DefaultPersistentStreamEventSourceFactory.class)).detachAppender(logAppender);
+            ((Logger) LogManager.getLogger(DefaultPersistentStreamEventSourceFactory.class)).removeAppender(logAppender);
         }
 
         @Test
@@ -118,7 +119,7 @@ class DefaultPersistentStreamEventSourceFactoryTest {
             factory.build(STREAM_NAME, properties, scheduler, 1, configuration);
 
             // then
-            assertThat(logAppender.list)
+            assertThat(logAppender.getEvents())
                     .noneMatch(event -> event.getLevel() == Level.WARN);
         }
 
@@ -131,9 +132,9 @@ class DefaultPersistentStreamEventSourceFactoryTest {
             factory.build(STREAM_NAME, properties, scheduler, 1, configuration);
 
             // then
-            assertThat(logAppender.list)
-                    .anyMatch(event -> event.getLevel() == Level.WARN
-                            && event.getFormattedMessage().contains(STREAM_NAME));
+            assertThat(logAppender.getEvents())
+                    .anyMatch((LogEvent event) -> event.getLevel() == Level.WARN
+                            && event.getMessage().getFormattedMessage().contains(STREAM_NAME));
         }
 
         @Test
@@ -145,7 +146,7 @@ class DefaultPersistentStreamEventSourceFactoryTest {
             factory.build("otherStream", otherProps, scheduler, 1, configuration);
 
             // then
-            assertThat(logAppender.list)
+            assertThat(logAppender.getEvents())
                     .noneMatch(event -> event.getLevel() == Level.WARN);
         }
     }

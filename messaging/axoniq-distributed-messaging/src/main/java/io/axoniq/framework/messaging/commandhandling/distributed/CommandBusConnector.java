@@ -56,6 +56,10 @@ public interface CommandBusConnector extends DescribableComponent {
 
     /**
      * Subscribes to a command with the given {@code commandName} and a {@code loadFactor}.
+     * <p>
+     * Subscribing a {@code commandName} this connector is already subscribed to replaces the earlier subscription,
+     * adopting the given {@code loadFactor}. A single {@link #unsubscribe(QualifiedName) unsubscribe} of that
+     * {@code commandName} undoes any number of subscriptions to it.
      *
      * @param commandName The {@link QualifiedName} of the command to subscribe to.
      * @param loadFactor  The load factor for the command, which can be used to control the distribution of command
@@ -67,6 +71,9 @@ public interface CommandBusConnector extends DescribableComponent {
 
     /**
      * Unsubscribes from a command with the given {@code commandName}.
+     * <p>
+     * Undoes any number of {@link #subscribe(QualifiedName, int) subscriptions} to the given {@code commandName},
+     * leaving no command of that name routed to this connector.
      *
      * @param commandName The {@link QualifiedName} of the command to unsubscribe from.
      * @return {@code true} if the unsubscription was successful, {@code false} otherwise.

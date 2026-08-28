@@ -103,6 +103,7 @@ public class PersistentStreamConnection {
 
     private final ScheduledExecutorService scheduler;
     private final UnitOfWorkFactory unitOfWorkFactory;
+    private final PersistentStreamContextCustomizer contextCustomizer;
     private final int batchSize;
     private final Map<Integer, SegmentConnection> segments = new ConcurrentHashMap<>();
     private final AtomicInteger retrySeconds = new AtomicInteger(MIN_RETRY_INTERVAL_SECONDS);
@@ -141,12 +142,14 @@ public class PersistentStreamConnection {
              persistentStreamProperties,
              scheduler,
              unitOfWorkFactory,
+             PersistentStreamContextCustomizer.NO_OP,
              batchSize,
              context);
     }
 
     /**
-     * Instantiates a {@code PersistentStreamConnection}.
+     * Instantiates a {@code PersistentStreamConnection} placing additional resources on the
+     * {@link ProcessingContext} of every batch through the given {@code contextCustomizer}.
      *
      * @param streamId                   the unique identifier of the persistent stream
      * @param connectionManager          the Axon Server connection manager
@@ -156,6 +159,9 @@ public class PersistentStreamConnection {
      * @param persistentStreamProperties the properties for the persistent stream
      * @param scheduler                  the scheduler thread pool to schedule tasks
      * @param unitOfWorkFactory          the unit of work factory
+     * @param contextCustomizer          the customizer placing resources on the {@link ProcessingContext} of every
+     *                                   batch, invoked once per batch before any of its events is consumed, returning
+     *                                   the context that batch is consumed with
      * @param batchSize                  the maximum number of events to collect per batch
      * @param context                    the Axon Server context to connect to, or {@code null} to use
      *                                   {@link AxonServerConfiguration#getContext()}
@@ -168,6 +174,7 @@ public class PersistentStreamConnection {
                                       PersistentStreamProperties persistentStreamProperties,
                                       ScheduledExecutorService scheduler,
                                       UnitOfWorkFactory unitOfWorkFactory,
+                                      PersistentStreamContextCustomizer contextCustomizer,
                                       int batchSize,
                                       @Nullable String context) {
         this.streamId = Objects.requireNonNull(streamId, "streamId must not be null");
@@ -179,6 +186,7 @@ public class PersistentStreamConnection {
                                                                  "persistentStreamProperties must not be null");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler must not be null");
         this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "unitOfWorkFactory must not be null");
+        this.contextCustomizer = Objects.requireNonNull(contextCustomizer, "contextCustomizer must not be null");
         if (batchSize <= 0) {
             throw new IllegalArgumentException("batchSize must be positive, but was: " + batchSize);
         }
@@ -405,35 +413,49 @@ public class PersistentStreamConnection {
             }
         }
 
+        /**
+         * Processes the given {@code batch} of events.
+         * <p>
+         * Once a {@code batch} is dequeued from the {@link PersistentStreamSegment segment's} buffer, it must
+         * <b>always</b> be processed and acknowledged. Doing so ensures we process through events given by the
+         * {@code PersistentStreamSegment} before it may complete (exceptionally). If we'd stop processing before that
+         * because {@link PersistentStreamSegment#isClosed()} is {@code true}, we may thus skip events.
+         *
+         * @param batch the batch of events to process
+         * @return a future completing when all events in the given {@code batch} have been processed
+         */
         private CompletableFuture<Void> processBatch(List<PersistentStreamEvent> batch) {
-            if (!persistentStreamSegment.isClosed() && !batch.isEmpty()) {
-                PersistentStreamEvent batchLastEvent = batch.getLast();
-                long token = batchLastEvent.getEvent().getToken();
-                TrackingToken batchEndToken = createToken(batchLastEvent);
-                UnitOfWork unitOfWork = unitOfWorkFactory.create();
-                return unitOfWork.executeWithResult(processingContext -> {
-                    CompletableFuture<?> result = CompletableFuture.completedFuture(null);
-                    processingContext.putResource(TrackingToken.BATCH_END_RESOURCE_KEY, batchEndToken);
-                    for (PersistentStreamEvent pse : batch) {
-                        result = result
-                                .thenCompose(ignored ->
-                                                     consumer.get().apply(List.of(convertToMessage(pse)),
-                                                                          enrichContextInformation(pse,
-                                                                                                   processingContext)));
-                    }
-                    return result;
-                }).thenRun(() -> {
-                    if (logger.isTraceEnabled()) {
-                        logger.trace("{}/{} processed {} entries",
-                                     streamId,
-                                     persistentStreamSegment.segment(),
-                                     batch.size());
-                    }
-                    persistentStreamSegment.acknowledge(token);
-                });
-
+            if (batch.isEmpty()) {
+                return CompletableFuture.completedFuture(null);
             }
-            return CompletableFuture.completedFuture(null);
+
+            PersistentStreamEvent batchLastEvent = batch.getLast();
+            long token = batchLastEvent.getEvent().getToken();
+            TrackingToken batchEndToken = createToken(batchLastEvent);
+            UnitOfWork unitOfWork = unitOfWorkFactory.create();
+
+            return unitOfWork.executeWithResult(processingContext -> {
+                CompletableFuture<?> result = CompletableFuture.completedFuture(null);
+                // Applied before the first event is consumed, so every event of this batch observes the
+                // batch-constant resources, such as the tenant a per-tenant stream belongs to.
+                ProcessingContext batchContext =
+                        contextCustomizer.apply(processingContext)
+                                         .withResource(TrackingToken.BATCH_END_RESOURCE_KEY, batchEndToken);
+                for (PersistentStreamEvent pse : batch) {
+                    result = result.thenCompose(
+                            ignored -> consumer.get().apply(
+                                    List.of(convertToMessage(pse)), enrichContextInformation(pse, batchContext)
+                            )
+                    );
+                }
+                return result;
+            }).thenRun(() -> {
+                if (logger.isTraceEnabled()) {
+                    logger.trace("{}/{} processed {} entries",
+                                 streamId, persistentStreamSegment.segment(), batch.size());
+                }
+                persistentStreamSegment.acknowledge(token);
+            });
         }
 
         public void messageAvailable() {
@@ -458,29 +480,26 @@ public class PersistentStreamConnection {
             ).withConverter(converter);
         }
 
+        // Branches off the batch context per event rather than writing into it, so an event only ever sees the
+        // information of its own, and nothing an event is given outlives the event it belongs to.
         private ProcessingContext enrichContextInformation(PersistentStreamEvent pse,
-                                                           ProcessingContext processingContext) {
+                                                           ProcessingContext batchContext) {
             // supply tracking information
-            TrackingToken token = createToken(pse);
-            processingContext.putResource(TrackingToken.RESOURCE_KEY, token);
-
-            // reset pre-existing legacy aggregate information
-            processingContext.removeResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY);
-            processingContext.removeResource(LegacyResources.AGGREGATE_TYPE_KEY);
-            processingContext.removeResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY);
+            ProcessingContext eventContext = batchContext.withResource(TrackingToken.RESOURCE_KEY, createToken(pse));
 
             String aggregateIdentifier = getAggregateIdentifier(pse);
             if (aggregateIdentifier != null && !aggregateIdentifier.isEmpty()) {
                 // supply legacy aggregate information
-                processingContext.putResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY, aggregateIdentifier);
+                eventContext = eventContext.withResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY,
+                                                         aggregateIdentifier);
                 String aggregateType = getAggregateType(pse);
                 if (aggregateType != null) {
-                    processingContext.putResource(LegacyResources.AGGREGATE_TYPE_KEY, aggregateType);
+                    eventContext = eventContext.withResource(LegacyResources.AGGREGATE_TYPE_KEY, aggregateType);
                 }
-                processingContext.putResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY,
-                                              getAggregateSequenceNumber(pse));
+                eventContext = eventContext.withResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY,
+                                                         getAggregateSequenceNumber(pse));
             }
-            return processingContext;
+            return eventContext;
         }
 
         private TrackingToken createToken(PersistentStreamEvent event) {

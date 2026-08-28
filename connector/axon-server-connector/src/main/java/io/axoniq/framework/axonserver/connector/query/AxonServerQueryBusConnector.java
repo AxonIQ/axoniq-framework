@@ -30,6 +30,7 @@ import io.axoniq.axonserver.grpc.query.QueryRequest;
 import io.axoniq.axonserver.grpc.query.QueryResponse;
 import io.axoniq.axonserver.grpc.query.SubscriptionQuery;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.api.ConnectorLifecycle;
 import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import org.axonframework.common.FutureUtils;
@@ -49,12 +50,14 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
-import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.LockSupport;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
+import static io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils.clientSupportsQueryStreaming;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -64,11 +67,15 @@ import static java.util.Objects.requireNonNull;
  * <p/>
  * This class facilitates interaction with AxonServer, handles incoming query requests, manages active subscriptions,
  * and oversees lifecycle phases related to query dispatching and receiving.
+ * <p/>
+ * Queries are served by a single handler: every {@link QualifiedName name} this connector subscribes is registered to
+ * the same handler, and each name is registered exactly once. Serving one query with several handlers is a concern of
+ * the application subscribing to this connector, not of the connector itself.
  *
  * @author Steven van Beelen, Allard Buijze, Jan Galinski
  * @since 5.0.0
  */
-public class AxonServerQueryBusConnector implements QueryBusConnector {
+public class AxonServerQueryBusConnector implements QueryBusConnector, ConnectorLifecycle {
 
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
@@ -87,8 +94,8 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
     /**
      * Creates a QueryBusConnector implementation that connects to AxonServer for dispatching and receiving queries.
      *
-     * @param connection    The connection to AxonServer
-     * @param configuration The configuration containing local settings for this connector
+     * @param connection    the connection to AxonServer
+     * @param configuration the configuration containing local settings for this connector
      */
     public AxonServerQueryBusConnector(AxonServerConnection connection,
                                        AxonServerConfiguration configuration) {
@@ -98,9 +105,9 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
     /**
      * Creates a QueryBusConnector implementation that connects to AxonServer for dispatching and receiving queries.
      *
-     * @param connection    The connection to AxonServer
-     * @param configuration The configuration containing local settings for this connector
-     * @param converter     The converter to be used for payload conversion
+     * @param connection    the connection to AxonServer
+     * @param configuration the configuration containing local settings for this connector
+     * @param converter     the converter to be used for payload conversion
      */
     public AxonServerQueryBusConnector(AxonServerConnection connection,
                                        AxonServerConfiguration configuration, @Nullable MessageConverter converter) {
@@ -116,6 +123,7 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
     /**
      * Starts the Axon Server {@link QueryBusConnector} implementation.
      */
+    @Override
     public void start() {
         shutdownLatch.initialize();
         logger.trace("The AxonServerQueryBusConnector started.");
@@ -126,12 +134,16 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
     public CompletableFuture<Void> subscribe(QualifiedName name) {
         logger.debug("Subscribing to query handler [{}].",
                      name);
-        QueryDefinition definition = new QueryDefinition(name.fullName(), "");
-        Registration registration = connection.queryChannel()
-                                              .registerQueryHandler(localSegmentAdapter, definition);
-
-        this.subscriptions.put(name, registration);
-
+        // Subscribing a name this connector already subscribed to reuses the existing registration, as this connector
+        // registers a single query handler for all names it subscribes to. Registering that handler for the same name
+        // twice makes the two registrations indistinguishable to the query channel, leaving the query deregistered
+        // entirely once either of them is cancelled.
+        Registration registration = this.subscriptions.computeIfAbsent(
+                name,
+                queryName -> connection.queryChannel()
+                                       .registerQueryHandler(localSegmentAdapter,
+                                                             new QueryDefinition(queryName.fullName(), ""))
+        );
         CompletableFuture<Void> completion = new CompletableFuture<>();
         registration.onAck(() -> completion.complete(null));
         return completion;
@@ -163,10 +175,8 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
         try (ShutdownLatch.ActivityHandle queryInTransit = shutdownLatch.registerActivity()) {
             ResultStream<QueryResponse> resultStream = connection.queryChannel()
                                                                  .query(QueryConverter.convertQueryMessage(
-                                                                         query,
-                                                                         clientId,
-                                                                         componentName)
-                                                                 );
+                                                                         query, clientId, componentName
+                                                                 ));
             return new QueryResponseMessageStream(resultStream, converter).onClose(queryInTransit::end);
         }
     }
@@ -198,20 +208,28 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
      * This shutdown operation is performed in the {@link Phase#INBOUND_QUERY_CONNECTOR}
      * phase.
      *
-     * @return A completable future that resolves once the {@link AxonServerConnection#queryChannel()} has prepared
-     * disconnecting.
+     * @return a completable future that resolves once the {@link AxonServerConnection#queryChannel()} has prepared
+     * disconnecting and the active inbound queries have terminated or been cancelled
      */
+    @Override
     public CompletableFuture<Void> disconnect() {
-        if (connection.isConnected()) {
-            logger.trace("Disconnecting the AxonServerQueryBusConnector.");
-            connection.queryChannel().prepareDisconnect();
+        if (!connection.isConnected()) {
+            return FutureUtils.emptyCompletedFuture();
         }
-        if (!localSegmentAdapter.awaitTermination(queryInProgressAwait)) {
-            logger.info("Awaited termination of queries in progress without success. "
-                                + "Going to cancel remaining queries in progress.");
-            localSegmentAdapter.cancel();
-        }
-        return FutureUtils.emptyCompletedFuture();
+        logger.trace("Disconnecting the AxonServerQueryBusConnector.");
+        return connection.queryChannel()
+                         .prepareDisconnect()
+                         .thenCompose(ignored -> localSegmentAdapter.awaitTermination(queryInProgressAwait))
+                         .exceptionallyCompose(throwable -> {
+                             if (throwable instanceof TimeoutException
+                                     || throwable.getCause() instanceof TimeoutException) {
+                                 logger.info("Awaited termination of queries in progress without success. "
+                                                     + "Going to cancel remaining queries in progress.");
+                                 localSegmentAdapter.cancel();
+                                 return FutureUtils.emptyCompletedFuture();
+                             }
+                             return CompletableFuture.failedFuture(throwable);
+                         });
     }
 
     /**
@@ -220,8 +238,9 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
      * This process will wait for dispatched queries which have not received a response yet. This shutdown operation is
      * performed in the {@link Phase#OUTBOUND_QUERY_CONNECTORS} phase.
      *
-     * @return A completable future which is resolved once all query dispatching activities are completed.
+     * @return a completable future which is resolved once all query dispatching activities are completed
      */
+    @Override
     public CompletableFuture<Void> shutdownDispatching() {
         logger.trace("Shutting down dispatching of AxonServerQueryBusConnector.");
         return shutdownLatch.initiateShutdown();
@@ -240,7 +259,7 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
      */
     private class LocalSegmentAdapter implements QueryHandler {
 
-        private final Map<String, Runnable> queriesInProgress = new ConcurrentHashMap<>();
+        private final Map<String, QueryInProgress> queriesInProgress = new ConcurrentHashMap<>();
 
         @Override
         public void handle(QueryRequest query, ReplyChannel<QueryResponse> responseHandler) {
@@ -250,13 +269,28 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
         @Override
         public FlowControl stream(QueryRequest query, ReplyChannel<QueryResponse> responseHandler) {
             var result = incomingHandler.query(QueryConverter.convertQueryRequest(query, converter));
-            var previous = queriesInProgress.put(query.getMessageIdentifier(), result::close);
+            QueryInProgress queryInProgress = new QueryInProgress(result::close);
+            var previous = queriesInProgress.put(query.getMessageIdentifier(), queryInProgress);
             if (previous != null) {
-                previous.run();
+                previous.cancel();
             }
-            return new FlowControlledResponseSender(clientId, query.getMessageIdentifier(),
-                                                    result.onClose(queriesInProgress.remove(query.getMessageIdentifier())),
-                                                    responseHandler);
+            var responses = result.onClose(() -> {
+                queryInProgress.complete();
+                queriesInProgress.remove(query.getMessageIdentifier(), queryInProgress);
+            });
+
+            // Switching on the clientSupportsStreaming allows us to deviate between AF5 and AF4 applications.
+            // An AF4 application will always have that setting to false, making it so that we can aggregate several
+            // results into a single message. This allows for the ResponseType#multipleInstancesOf structure, which
+            // uses a single Message.
+            boolean clientSupportsStreaming = clientSupportsQueryStreaming(query.getProcessingInstructionsList());
+            return clientSupportsStreaming
+                    ? new FlowControlledResponseSender(
+                    clientId, query.getMessageIdentifier(), responses, responseHandler, converter
+            )
+                    : new AggregatingResponseSender(
+                    clientId, query.getMessageIdentifier(), responses, responseHandler, converter
+            );
         }
 
         @Override
@@ -269,26 +303,47 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
             };
         }
 
-        private boolean awaitTermination(Duration timeout) {
-            Instant startAwait = Instant.now();
-            Instant endAwait = startAwait.plusSeconds(timeout.getSeconds());
-            while (Instant.now().isBefore(endAwait) && !queriesInProgress.isEmpty()) {
-                queriesInProgress.values()
-                                 .stream()
-                                 .findFirst()
-                                 .ifPresent(queryInProgress -> {
-                                     while (Instant.now().isBefore(endAwait)) {
-                                         LockSupport.parkNanos(10_000_000);
-                                     }
-                                 });
-            }
-            return queriesInProgress.isEmpty();
+        private CompletableFuture<Void> awaitTermination(Duration timeout) {
+            List<CompletableFuture<Void>> terminations = queriesInProgress.values()
+                                                                          .stream()
+                                                                          .map(QueryInProgress::termination)
+                                                                          .toList();
+            return CompletableFuture.allOf(terminations.toArray(CompletableFuture[]::new))
+                                    .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS);
         }
 
         private void cancel() {
-            queriesInProgress.values()
-                             .iterator()
-                             .forEachRemaining(Runnable::run);
+            queriesInProgress.values().forEach(QueryInProgress::cancel);
+            queriesInProgress.clear();
+        }
+
+        /**
+         * Tracks an inbound query while its response stream remains open.
+         * <p>
+         * The termination future completes when the stream closes, allowing disconnect to await all active queries.
+         * When that drain times out, the cancellation action closes the stream and completes the termination future.
+         */
+        private static final class QueryInProgress {
+
+            private final Runnable cancellation;
+            private final CompletableFuture<Void> termination = new CompletableFuture<>();
+
+            private QueryInProgress(Runnable cancellation) {
+                this.cancellation = cancellation;
+            }
+
+            private CompletableFuture<Void> termination() {
+                return termination;
+            }
+
+            private void complete() {
+                termination.complete(null);
+            }
+
+            private void cancel() {
+                cancellation.run();
+                complete();
+            }
         }
     }
 
@@ -314,7 +369,8 @@ public class AxonServerQueryBusConnector implements QueryBusConnector {
 
         @Override
         public CompletableFuture<Void> completeExceptionally(Throwable error) {
-            updateHandler.sendUpdate(QueryConverter.convertQueryUpdate(clientId, ErrorCode.QUERY_EXECUTION_ERROR, error));
+            ErrorCode errorCode = ErrorCode.getQueryExecutionErrorCode(error);
+            updateHandler.sendUpdate(QueryConverter.convertQueryUpdate(clientId, errorCode, error, converter));
             updateHandler.complete();
             return FutureUtils.emptyCompletedFuture();
         }

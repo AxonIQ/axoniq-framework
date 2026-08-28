@@ -26,13 +26,11 @@ import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.jspecify.annotations.Nullable;
 
-import java.lang.reflect.Type;
 import java.util.Optional;
 import java.util.function.BiFunction;
 
@@ -52,8 +50,7 @@ final class MappingEventTransformation<T, U> implements EventTransformation {
 
     private final FromMatcher matcher;
     private final MessageType toType;
-    private final Type inputType;
-    private final Class<T> rawInputClass;
+    private final DeclaredInputType<T> inputType;
     private final BiFunction<T, @Nullable ProcessingContext, U> mapper;
 
     /**
@@ -68,11 +65,9 @@ final class MappingEventTransformation<T, U> implements EventTransformation {
                                MessageType toType,
                                TypeReference<T> inputType,
                                BiFunction<T, @Nullable ProcessingContext, U> mapper) {
-        requireNonNull(inputType, "inputType may not be null");
         this.matcher = requireNonNull(matcher, "matcher may not be null");
         this.toType = requireNonNull(toType, "toType may not be null");
-        this.inputType = inputType.getType();
-        this.rawInputClass = inputType.getTypeAsClass();
+        this.inputType = DeclaredInputType.of(inputType);
         this.mapper = requireNonNull(mapper, "mapper may not be null");
     }
 
@@ -88,7 +83,7 @@ final class MappingEventTransformation<T, U> implements EventTransformation {
     @Override
     public MessageStream<EventMessage> transform(EventMessage message, TransformationContext context) {
         requireNonNull(context, "context may not be null");
-        T typedPayload = extractTypedPayload(message, context);
+        T typedPayload = inputType.resolvePayload(message, context);
         U mappedPayload = mapper.apply(typedPayload, context.processingContext());
         verifyOutputIdentity(mappedPayload, message, context);
         EventMessage output = new GenericEventMessage(
@@ -126,29 +121,6 @@ final class MappingEventTransformation<T, U> implements EventTransformation {
                 resolved.get()));
     }
 
-    /**
-     * Returns the payload typed as {@link #rawInputClass}, converting via the {@link MessageConverter} when the
-     * payload is not already an instance of it.
-     *
-     * @throws IllegalStateException if the converter resolves the stored payload to {@code null}
-     */
-    private T extractTypedPayload(EventMessage message, TransformationContext context) {
-        Object payload = message.payload();
-        if (rawInputClass.isInstance(payload)) {
-            return rawInputClass.cast(payload);
-        }
-        T converted = context.converter().convertPayload(message, inputType);
-        if (converted == null) {
-            throw new IllegalStateException("""
-                    MessageConverter resolved the stored payload to null for declared input type %s. \
-                    Input event: %s. \
-                    The stored payload is missing or malformed.""".formatted(
-                    inputType.getTypeName(),
-                    EventDescriptions.describe(message, context.entryContext())));
-        }
-        return converted;
-    }
-
     @Override
     public FromMatcher matcher() {
         return matcher;
@@ -167,7 +139,7 @@ final class MappingEventTransformation<T, U> implements EventTransformation {
     public String toString() {
         return "MappingEventTransformation{from=" + matcher
                 + ", to=" + toType
-                + ", inputType=" + inputType.getTypeName()
+                + ", inputType=" + inputType.type().getTypeName()
                 + '}';
     }
 }

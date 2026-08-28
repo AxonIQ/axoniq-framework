@@ -72,23 +72,17 @@ Customize the distributed query bus configuration:
 
 [source,java]
 ----
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
-
-public class AxonConfig {
-    public void configureQueryBus(MessagingConfigurer configurer) {
-        // Customize the configuration
-        DistributedQueryBusConfiguration config = DistributedQueryBusConfiguration.DEFAULT
-                .queryThreads(20)                        // Set number of query processing threads
-                .queryQueueCapacity(2000);               // Set queue capacity
-
-        // Register the custom configuration
-        configurer.registerComponent(DistributedQueryBusConfiguration.class, c -> config);
-    }
-}
+include::example$distributedmessaging/distributedquerybus/customize/AxonConfig.java[tag=customize-query-bus-configuration,indent=0]
 ----
 
+TODO
 To control the local handler shortcut, register a `LocalQueryDispatchPredicate` as shown above rather than using the deprecated `preferLocalQueryHandler` setting.
+To disable the local handler shortcut:
+
+[source,java]
+----
+include::example$distributedmessaging/distributedquerybus/disableshortcut/DisableLocalShortcut.java[tag=disable-local-shortcut,indent=0]
+----
 --
 
 Spring Boot::
@@ -106,27 +100,16 @@ axon.axonserver.query-threads=20
 
 [source,java]
 ----
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
-import io.axoniq.framework.messaging.queryhandling.distributed.LocalQueryDispatchPredicate;
-
-@Configuration
-public class AxonConfig {
-
-    @Bean
-    public DistributedQueryBusConfiguration queryBusConfiguration() {
-        return DistributedQueryBusConfiguration.DEFAULT
-                .queryThreads(20);
-    }
+include::example$distributedmessaging/distributedquerybus/spring/AxonConfig.java[tag=query-bus-configuration-bean,indent=0]
 
     @Bean
     public LocalQueryDispatchPredicate localQueryDispatchPredicate() {
         // Prefer the local handler for every query that this node can handle.
         return (query, context) -> true;
     }
-}
 ----
+
+TODO
 --
 ====
 
@@ -159,16 +142,7 @@ Configure your application:
 
 [source,java]
 ----
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-
-public class AxonApp {
-
-    public static void main(String[] args) {
-        // Returns a Configurer instance with default components configured.
-        // `DistributedQueryBus` with `AxonServerQueryBusConnector` is configured as Query Bus by default.
-        MessagingConfigurer configurer = MessagingConfigurer.create();
-    }
-}
+include::example$distributedmessaging/distributedquerybus/defaultconfig/AxonApp.java[tag=default-configuration,indent=0]
 ----
 --
 

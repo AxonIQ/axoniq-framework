@@ -147,12 +147,17 @@ final class CriteriaWidener {
     private static void index(EventTransformation transformation,
                               Map<QualifiedName, Set<QualifiedName>> sourcesByTarget,
                               Set<QualifiedName> droppingTargets) {
-        // A mapping and a rename both declare a 'to' that contributes widening edges; a drop declares no 'to'.
+        // A mapping and a rename both declare one 'to' type that contributes to one widening edge
+        // A split contributes one edge per declared 'to' type
+        // A drop declares no 'to'.
         switch (transformation) {
             case MappingEventTransformation<?, ?> mapping ->
                     indexEdges(mapping.matcher(), mapping.toType().qualifiedName(), sourcesByTarget, droppingTargets);
             case RenameEventTransformation rename ->
                     indexEdges(rename.matcher(), rename.toType().qualifiedName(), sourcesByTarget, droppingTargets);
+            case SplitEventTransformation<?> split ->
+                    split.declaredToTypes().forEach(target ->
+                            indexEdges(split.matcher(), target, sourcesByTarget, droppingTargets));
             case DropEventTransformation ignored -> {
                 // A drop produces no event, so it adds no widening edge: a read never needs to fetch a dropped type.
             }

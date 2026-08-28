@@ -20,6 +20,7 @@
 package io.axoniq.framework.integrationtests.testsuite.course;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
@@ -33,6 +34,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.UUID;
+
+import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
 
 class StudentAxonTestFixtureAxonServerIntegrationIT {
 
@@ -72,7 +75,7 @@ class StudentAxonTestFixtureAxonServerIntegrationIT {
         try {
             AxonServerContainerUtils.purgeEventsFromAxonServer(container.getHost(),
                                                                container.getHttpPort(),
-                                                               "default",
+                                                               DEFAULT_CONTEXT,
                                                                AxonServerContainerUtils.DCB_CONTEXT);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -81,10 +84,12 @@ class StudentAxonTestFixtureAxonServerIntegrationIT {
                     container.getHttpPort());
         AxonServerConfiguration axonServerConfiguration = new AxonServerConfiguration();
         axonServerConfiguration.setServers(container.getHost() + ":" + container.getGrpcPort());
-        configurer.componentRegistry(cr -> cr.registerComponent(
-                AxonServerConfiguration.class,
-                c -> axonServerConfiguration
-        ));
+        // Not a multi-tenancy test. See MultiTenancyUtils#disable.
+        configurer.componentRegistry(MultiTenancyUtils::disable)
+                  .componentRegistry(cr -> cr.registerComponent(
+                          AxonServerConfiguration.class,
+                          c -> axonServerConfiguration
+                  ));
         return CreateCourseConfiguration.configure(configurer);
     }
 

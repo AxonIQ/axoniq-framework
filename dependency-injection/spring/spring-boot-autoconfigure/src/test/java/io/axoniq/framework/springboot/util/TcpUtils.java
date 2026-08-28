@@ -29,7 +29,7 @@ import java.net.ServerSocket;
  *
  * @author Allard Buijze
  */
-public abstract class TcpUtils {
+public final class TcpUtils {
 
     /**
      * Returns a free port number on localhost.

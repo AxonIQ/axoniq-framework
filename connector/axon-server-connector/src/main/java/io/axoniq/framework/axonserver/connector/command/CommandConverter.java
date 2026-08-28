@@ -25,6 +25,7 @@ import io.axoniq.axonserver.grpc.SerializedObject;
 import io.axoniq.axonserver.grpc.command.Command;
 import io.axoniq.axonserver.grpc.command.CommandResponse;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
 import io.axoniq.framework.axonserver.connector.shared.ExceptionConverter;
 import io.axoniq.framework.axonserver.connector.shared.MetadataConverter;
 import io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils;
@@ -80,12 +81,10 @@ public final class CommandConverter {
      * Will set the {@link ProcessingKey#ROUTING_KEY routing key} and {@link ProcessingKey#PRIORITY priority} when
      * present on the given {@code command}.
      *
-     * @param command       The command message to convert to a {@link Command}.
-     * @param clientId      The identifier of this application, as specific in the
-     *                      {@link AxonServerConfiguration}.
-     * @param componentName The name of this application, as specific in the
-     *                      {@link AxonServerConfiguration}.
-     * @return The given {@code command} converted to a {@link Command}.
+     * @param command       the command message to convert to a {@link Command}
+     * @param clientId      the identifier of this application, as specific in the {@link AxonServerConfiguration}
+     * @param componentName the name of this application, as specific in the {@link AxonServerConfiguration}
+     * @return the given {@code command} converted to a {@link Command}
      */
     public static Command convertCommandMessage(CommandMessage command,
                                                 String clientId,
@@ -121,7 +120,7 @@ public final class CommandConverter {
      * {@link AxonServerCommandBusConnector#dispatch(CommandMessage, ProcessingContext) dispatching}.
      *
      * @param commandResponse the command response to convert to a {@link CommandResultMessage}
-     * @param converter the converter to use for payload conversion in the resulting {@link CommandResultMessage}
+     * @param converter       the converter to use for payload conversion in the resulting {@link CommandResultMessage}
      * @return the {@code commandResponse} converted to a {@link CommandResultMessage}, wrapped in a
      * {@link CompletableFuture} for convenience; the future completes with {@code null} when the response carries no
      * payload, or completes exceptionally when the response holds an error
@@ -135,7 +134,8 @@ public final class CommandConverter {
             return CompletableFuture.failedFuture(ExceptionConverter.convertToAxonException(
                     commandResponse.getErrorCode(),
                     commandResponse.getErrorMessage(),
-                    commandResponsePayload
+                    commandResponsePayload,
+                    converter
             ));
         }
 
@@ -159,7 +159,7 @@ public final class CommandConverter {
      * Converts the given {@code command} into a {@link CommandMessage} for handling in
      * {@link AxonServerCommandBusConnector#subscribe(QualifiedName, int) subscribed} command handlers.
      *
-     * @param command the command to convert to a {@link CommandMessage}
+     * @param command   the command to convert to a {@link CommandMessage}
      * @param converter the converter to use for payload conversion in the resulting {@link CommandMessage}
      * @return the given {@code command} converted into a {@link CommandMessage}
      */
@@ -189,10 +189,10 @@ public final class CommandConverter {
      * returning a result from handling of a
      * {@link AxonServerCommandBusConnector#subscribe(QualifiedName, int) subscribed} command handler.
      *
-     * @param resultMessage     The result message to convert to a {@link CommandResponse}, when present.
-     * @param requestIdentifier The identifier correlating the {@link CommandResponse} to the {@link Command} that led
-     *                          to the response.
-     * @return A {@link CommandResponse} based on the given {@code resultMessage} and {@code requestIdentifier}.
+     * @param resultMessage     the result message to convert to a {@link CommandResponse}, when present
+     * @param requestIdentifier the identifier correlating the {@link CommandResponse} to the {@link Command} that led
+     *                          to the response
+     * @return a {@link CommandResponse} based on the given {@code resultMessage} and {@code requestIdentifier}
      */
     public static CommandResponse convertResultMessage(@Nullable CommandResultMessage resultMessage,
                                                        String requestIdentifier) {
@@ -249,6 +249,40 @@ public final class CommandConverter {
         return StringUtils.nonEmptyOrNull(payload.getRevision())
                 ? payload.getRevision()
                 : MessageType.DEFAULT_VERSION;
+    }
+
+    /**
+     * Converts the given {@code cause} into a {@link CommandResponse} carrying an error, using the given
+     * {@code requestIdentifier} to correlate the {@link Command} that led to this {@link CommandResponse}.
+     * <p>
+     * Used when a {@link AxonServerCommandBusConnector#subscribe(QualifiedName, int) subscribed} command handler
+     * completes a command exceptionally.
+     *
+     * @param clientId          the identifier of this application, as specified in the {@link AxonServerConfiguration},
+     *                          used as the location reported in the resulting error message
+     * @param requestIdentifier the identifier correlating the {@link CommandResponse} to the {@link Command} that led
+     *                          to the response
+     * @param cause             the exception to convert into the error carried by the {@link CommandResponse}
+     * @param converter         the converter to use for serializing application-specific exception details onto the
+     *                          resulting {@link CommandResponse}, or {@code null} if no such conversion is available
+     * @return a {@link CommandResponse} carrying the error derived from the given {@code cause}
+     */
+    public static CommandResponse convertErrorResponse(String clientId,
+                                                       String requestIdentifier,
+                                                       Throwable cause,
+                                                       @Nullable Converter converter) {
+        ErrorCode errorCode = ErrorCode.getCommandExecutionErrorCode(cause);
+        CommandResponse.Builder responseBuilder =
+                CommandResponse.newBuilder()
+                               .setMessageIdentifier(UUID.randomUUID().toString())
+                               .setRequestIdentifier(requestIdentifier)
+                               .setErrorCode(errorCode.errorCode())
+                               .setErrorMessage(ExceptionConverter.convertToErrorMessage(clientId, errorCode, cause));
+        SerializedObject detailsPayload = ExceptionConverter.convertToDetails(cause, converter);
+        if (detailsPayload != null) {
+            responseBuilder.setPayload(detailsPayload);
+        }
+        return responseBuilder.build();
     }
 
     private CommandConverter() {

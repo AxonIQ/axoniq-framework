@@ -63,7 +63,9 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
     @Test
     void axonServerWinsIfEnabled() {
         new ApplicationContextRunner()
-                .withPropertyValues("axon.axonserver.enabled=true")
+                // Multi-tenancy is default-on with Axon Server; disable it so this test isolates
+                // the Axon-Server-over-JPA storage engine precedence rather than the tenant-routing wrapper.
+                .withPropertyValues("axon.axonserver.enabled=true", "axon.multitenancy.enabled=false")
                 .withUserConfiguration(EmptyTestContext.class)
                 .run(context -> {
                     assertThat(context).hasSingleBean(EventStore.class);

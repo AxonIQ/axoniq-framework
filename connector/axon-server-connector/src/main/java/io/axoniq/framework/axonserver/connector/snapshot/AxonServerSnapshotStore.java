@@ -25,6 +25,7 @@ import io.axoniq.axonserver.grpc.event.dcb.AddSnapshotRequest;
 import io.axoniq.axonserver.grpc.event.dcb.GetLastSnapshotRequest;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.eventstore.AggregateSequenceNumberPosition;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
@@ -32,6 +33,7 @@ import org.axonframework.eventsourcing.eventstore.Position;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
@@ -50,6 +52,7 @@ import java.util.concurrent.CompletionException;
  * @since 5.1.0
  */
 public class AxonServerSnapshotStore implements SnapshotStore {
+
     private static final String POSITION_TYPE_KEY = "__AxonFramework__:Position-Type";  // reserved key in metadata
     private static final ByteString NUL = ByteString.copyFrom(new byte[] {0});
 
@@ -74,7 +77,8 @@ public class AxonServerSnapshotStore implements SnapshotStore {
     }
 
     @Override
-    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot) {
+    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
+                                         @Nullable ProcessingContext context) {
         Objects.requireNonNull(qualifiedName, "The qualifiedName parameter must not be null.");
         Objects.requireNonNull(identifier, "The identifier parameter must not be null.");
         Objects.requireNonNull(snapshot, "The snapshot parameter must not be null.");
@@ -109,7 +113,8 @@ public class AxonServerSnapshotStore implements SnapshotStore {
     }
 
     @Override
-    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier) {
+    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
+                                                      @Nullable ProcessingContext context) {
         Objects.requireNonNull(qualifiedName, "The qualifiedName parameter must not be null.");
         Objects.requireNonNull(identifier, "The identifier parameter must not be null.");
 
@@ -156,5 +161,11 @@ public class AxonServerSnapshotStore implements SnapshotStore {
 
                 throw new CompletionException("Snapshot loading failed for %s with identifier %s".formatted(qualifiedName.toString(), identifier.toString()), e);
             });
+    }
+
+    @Override
+    public void describeTo(ComponentDescriptor descriptor) {
+        descriptor.describeProperty("connection", connection);
+        descriptor.describeProperty("converter", converter);
     }
 }

@@ -32,6 +32,7 @@ import io.axoniq.axonserver.grpc.command.CommandResponse;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import org.axonframework.common.lifecycle.ShutdownInProgressException;
+import org.axonframework.messaging.commandhandling.CommandExecutionException;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
 import org.axonframework.messaging.commandhandling.GenericCommandMessage;
@@ -52,6 +53,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
@@ -333,6 +335,16 @@ class AxonServerCommandBusConnectorTest {
     }
 
     @Test
+    void disconnectDoesNotCloseTheConnectionOnceCommandChannelPreparationCompletes() {
+        when(commandChannel.prepareDisconnect()).thenReturn(CompletableFuture.completedFuture(null));
+        when(connection.isConnected()).thenReturn(true);
+
+        testSubject.disconnect().join();
+
+        verify(connection, never()).disconnect();
+    }
+
+    @Test
     void afterShutdownDispatchingAnShutdownInProgressExceptionIsThrownOnDispatchInvocation() {
         CommandMessage testCommand = new GenericCommandMessage(ANY_TEST_TYPE, ANY_TEST_PAYLOAD);
 
@@ -421,6 +433,64 @@ class AxonServerCommandBusConnectorTest {
         }
     }
 
+    @Nested
+    class FutureResultCallback {
+
+        @Test
+        void onErrorCompletesResponseSuccessfullyWithErrorCodeMessageAndDetailsPayload() {
+            when(converter.convert("some details", byte[].class)).thenReturn("some details".getBytes());
+
+            CompletableFuture<CommandResponse> result =
+                    triggerOnError(new CommandExecutionException("boom", null, "some details"));
+
+            assertThat(result).isCompleted();
+            CommandResponse response = result.join();
+            assertThat(response.getErrorMessage().getMessage()).isEqualTo("boom");
+            assertThat(response.getErrorCode()).isNotEmpty();
+            assertThat(response.hasPayload()).isTrue();
+            assertThat(response.getPayload().getData().toStringUtf8()).isEqualTo("some details");
+            assertThat(response.getPayload().getType()).isEqualTo(String.class.getName());
+        }
+
+        @Test
+        void onErrorWithoutHandlerExecutionDetailsCompletesResponseWithoutPayload() {
+            CompletableFuture<CommandResponse> result = triggerOnError(new RuntimeException("boom"));
+
+            assertThat(result).isCompleted();
+            CommandResponse response = result.join();
+            assertThat(response.getErrorMessage().getMessage()).isEqualTo("boom");
+            assertThat(response.hasPayload()).isFalse();
+        }
+
+        private CompletableFuture<CommandResponse> triggerOnError(Throwable cause) {
+            Registration mockRegistration = mock(Registration.class);
+            //noinspection unchecked
+            ArgumentCaptor<Function<Command, CompletableFuture<CommandResponse>>> handlerCaptor =
+                    ArgumentCaptor.forClass(Function.class);
+            when(commandChannel.registerCommandHandler(handlerCaptor.capture(),
+                                                       eq(ANY_TEST_LOAD_FACTOR),
+                                                       eq(ANY_TEST_COMMAND_NAME.name())))
+                    .thenReturn(mockRegistration);
+            testSubject.subscribe(ANY_TEST_COMMAND_NAME, ANY_TEST_LOAD_FACTOR);
+
+            AtomicReference<CommandBusConnector.ResultCallback> resultCallback = new AtomicReference<>();
+            testSubject.onIncomingCommand((commandMessage, callback) -> resultCallback.set(callback));
+
+            Command command = Command.newBuilder()
+                                     .setName(ANY_TEST_COMMAND_NAME.name())
+                                     .setMessageIdentifier(ANY_TEST_MESSAGE_ID)
+                                     .setPayload(SerializedObject.newBuilder()
+                                                                 .setType(ANY_TEST_COMMAND_TYPE)
+                                                                 .setRevision(ANY_TEST_REVISION)
+                                                                 .setData(ByteString.copyFrom(ANY_TEST_PAYLOAD)))
+                                     .build();
+
+            CompletableFuture<CommandResponse> result = handlerCaptor.getValue().apply(command);
+            resultCallback.get().onError(cause);
+            return result;
+        }
+    }
+
     // Helpers
     private CommandMessage createTestCommandMessage() {
         return new GenericCommandMessage(new GenericMessage(ANY_TEST_MESSAGE_ID,
@@ -456,7 +526,7 @@ class AxonServerCommandBusConnectorTest {
 
     private CommandBusConnector.Handler getIncomingHandler(AxonServerCommandBusConnector instance) {
         try {
-            Field field = instance.getClass().getDeclaredField("incomingHandler");
+            Field field = AxonServerCommandBusConnector.class.getDeclaredField("incomingHandler");
             field.setAccessible(true);
             return (CommandBusConnector.Handler) field.get(instance);
         } catch (NoSuchFieldException | IllegalAccessException e) {

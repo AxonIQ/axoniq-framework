@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (c) 2010-2026. AxonIQ B.V.
+  ~
+  ~ Licensed under the AXONIQ TERMS OF SERVICE,
+  ~ Version 29 April 2026 (the "License");
+  ~
+  ~ The software is available for evaluation use without registration.
+  ~ Continued use beyond the evaluation period requires registration
+  ~ and a commercial license. See the License for the specific language
+  ~ governing permissions and limitations under the License.
+  ~ You may not use this file except in compliance with the License.
+  ~
+  ~ You may obtain a copy of the License at:
+  ~  https://www.axoniq.io/legal/terms-of-service
+  ~
+  ~ For licensing information and to register, visit:
+  ~  https://www.axoniq.io/pricing
+  -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.axoniq.framework</groupId>
+        <artifactId>axoniq-framework-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../build/parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>axoniq-tracing-micrometer</artifactId>
+
+    <name>Axoniq Framework - Tracing Micrometer</name>
+    <description>
+        Micrometer Tracing binding for the tracing API: a Micrometer-backed SpanFactory plus the metadata
+        propagator setter/getter used to propagate trace context through message metadata, and a
+        ProcessingContext-to-ThreadLocal context-propagation bridge for deep trace-context propagation into
+        framework-executed segments.
+    </description>
+
+    <dependencies>
+        <!-- Axoniq Entitlement -->
+        <dependency>
+            <groupId>io.axoniq.license</groupId>
+            <artifactId>entitlement-manager</artifactId>
+        </dependency>
+
+        <!-- Tracing API (org.axonframework.messaging.tracing) + UnitOfWork SPI -->
+        <dependency>
+            <groupId>org.axonframework</groupId>
+            <artifactId>axon-messaging</artifactId>
+        </dependency>
+
+        <!-- Micrometer Tracing facade (Tracer + Propagator; a bridge is a host-application concern) -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing</artifactId>
+        </dependency>
+
+        <!-- Context propagation (declared directly: optional inside micrometer-tracing) -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>context-propagation</artifactId>
+        </dependency>
+
+        <!-- Testing -->
+        <dependency>
+            <groupId>org.axonframework</groupId>
+            <artifactId>axon-messaging</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk-testing</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <Automatic-Module-Name>io.axoniq.framework.tracing.micrometer</Automatic-Module-Name>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

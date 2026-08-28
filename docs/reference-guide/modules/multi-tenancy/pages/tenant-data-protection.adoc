@@ -1,0 +1,71 @@
+[.axoniq-feature]
+= Multi-Tenancy with Data Protection
+:navtitle: Data protection
+:reftext: Multi-tenancy with data protection
+
+Axoniq Data Protection encrypts selected fields while a message is converted to or from bytes.
+In a multi-tenant application, provide a separate converter for every tenant so the converter uses that tenant's crypto engine and key store.
+This keeps key management separate even when two tenants use the same data-subject identifier.
+
+The converter is selected when Axon Framework creates infrastructure for a known tenant.
+It is then used for command and query payloads, event storage, snapshots, and persistent-stream events.
+The tenant is not added to event metadata and does not need to be held in application state.
+
+== Marking protected fields
+
+Mark the data-subject identifier and the fields to protect in the event payload.
+The data-subject identifier selects the encryption key; `@PersonalData` marks a field for encryption.
+
+[source,java]
+----
+include::example$multitenancy/dataprotection/CustomerDataRecorded.java[indent=0]
+----
+
+== Providing a converter per tenant
+
+Register one tenant-scoped component provider for `Converter`.
+Its factory is called for a tenant when that tenant first needs a converter.
+Create a `FieldEncryptingConverter` with the crypto engine for that tenant and a normal delegate converter.
+
+The crypto-engine factory is application-specific.
+It must select a key store or key namespace that is isolated for the supplied `TenantDescriptor`; a shared engine that maps equal data-subject identifiers to the same key does not provide tenant isolation.
+
+[tabs]
+====
+Declarative - Configuration API::
++
+--
+Register the provider on the application's `MessagingConfigurer`:
+
+[source,java]
+----
+include::example$multitenancy/dataprotection/DeclarativeDataProtectionConfiguration.java[tag=register-tenant-converters,indent=0]
+----
+<1> Register the `TenantComponentProvider` so multi-tenancy can discover it.
+<2> The provider supplies `Converter` instances.
+<3> Build the crypto engine for the tenant that the provider is creating a converter for.
+--
+Spring Boot::
++
+--
+Expose the provider as a Spring bean:
+
+[source,java]
+----
+include::example$multitenancy/dataprotection/SpringDataProtectionConfiguration.java[tag=register-tenant-converters,indent=0]
+----
+<1> The provider supplies one converter per tenant.
+<2> Build the crypto engine for that tenant before constructing its encrypting converter.
+--
+====
+
+The provider creates and caches each converter lazily, and releases it when its tenant is removed.
+See xref:multi-tenancy:tenant-scoped-components.adoc#lifecycle-and-cleanup[tenant-scoped component lifecycle] for the lifecycle details.
+
+== What remains global
+
+Registering a tenant-scoped `Converter` does not replace the application's normal global converter.
+The global converter remains in use for work that has no tenant, while the tenant-scoped converter is used wherever multi-tenancy has already resolved the tenant.
+If no tenant-scoped converter is registered, multi-tenancy uses the normal global converter for every tenant.
+
+For data-protection configuration beyond tenant scoping, including crypto-engine selection and key deletion, see the Axoniq Data Protection reference documentation.

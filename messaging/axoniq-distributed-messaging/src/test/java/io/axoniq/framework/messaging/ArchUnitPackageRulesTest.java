@@ -19,14 +19,19 @@
 
 package io.axoniq.framework.messaging;
 
+import com.tngtech.archunit.core.domain.Dependency;
+import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
+import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
-import com.tngtech.archunit.library.DependencyRules;
+import com.tngtech.archunit.lang.ConditionEvents;
+import com.tngtech.archunit.lang.SimpleConditionEvent;
 import org.junit.jupiter.api.*;
 
 import java.lang.invoke.MethodHandles;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -42,10 +47,32 @@ public class ArchUnitPackageRulesTest {
             .beFreeOfCycles()
             .as("Package Cycles");
 
+    /**
+     * General form of ArchUnit's {@code NO_CLASSES_SHOULD_DEPEND_UPPER_PACKAGES} that permits depending on
+     * upper-package <em>interfaces</em>. Implementations in component-owned sub-packages (e.g. the tracing decorators
+     * in {@code ..distributed.tracing}) must implement the contract of the package they decorate, so a dependency on
+     * an upper-package interface is legitimate; depending on upper-package <em>classes</em> remains forbidden.
+     */
     @ArchTest
-    private final ArchRule noClassesShouldDependOnUpperPackages = DependencyRules
-            .NO_CLASSES_SHOULD_DEPEND_UPPER_PACKAGES
+    private final ArchRule noClassesShouldDependOnUpperPackages = noClasses()
+            .should(dependOnUpperPackagesExceptInterfaces())
             .as("Package Hierarchy Violations");
+
+    private static ArchCondition<JavaClass> dependOnUpperPackagesExceptInterfaces() {
+        return new ArchCondition<>("depend on upper packages (interfaces excluded)") {
+            @Override
+            public void check(JavaClass javaClass, ConditionEvents events) {
+                for (Dependency dependency : javaClass.getDirectDependenciesFromSelf()) {
+                    JavaClass target = dependency.getTargetClass().getBaseComponentType();
+                    boolean upperPackage = javaClass.getPackageName()
+                                                    .startsWith(target.getPackageName() + ".");
+                    if (upperPackage && !target.isInterface()) {
+                        events.add(SimpleConditionEvent.satisfied(dependency, dependency.getDescription()));
+                    }
+                }
+            }
+        };
+    }
 
     @Test
     void shouldMatchPackageName() {

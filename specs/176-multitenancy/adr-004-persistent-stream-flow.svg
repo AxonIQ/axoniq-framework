@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="580" viewBox="0 0 820 580" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="818" height="578" rx="8" fill="#ffffff" stroke="#d1d5db"/>
+
+  <rect x="24" y="12" width="12" height="12" rx="3" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="42" y="22" font-size="11" fill="#2C2C2A">framework / core / connector</text>
+  <rect x="250" y="12" width="12" height="12" rx="3" fill="#EEEDFE" stroke="#7F77DD"/>
+  <text x="268" y="22" font-size="11" fill="#2C2C2A">custom (multi-tenancy)</text>
+  <text x="470" y="22" font-size="11" font-weight="500" fill="#0F6E56">stream flow</text>
+  <text x="600" y="22" font-size="11" font-weight="500" fill="#B45309">lifecycle: create / evict</text>
+
+  <rect x="612" y="42" width="176" height="46" rx="6" fill="none" stroke="#B45309" stroke-dasharray="4 3"/>
+  <text x="700" y="61" font-size="12" font-weight="500" fill="#B45309" text-anchor="middle">No processor restart</text>
+  <text x="700" y="77" font-size="10" fill="#B45309" text-anchor="middle">(unlike ADR 002)</text>
+  <path d="M624 88 L534 65" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#a)"/>
+
+  <rect x="230" y="40" width="300" height="40" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="380" y="64" font-size="13" font-weight="500" fill="#2C2C2A" text-anchor="middle">Subscribing event processor</text>
+  <path d="M380 80 L380 104" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="388" y="96" font-size="11" font-weight="500" fill="#0F6E56">subscribe(consumer)</text>
+
+  <rect x="190" y="104" width="380" height="54" rx="6" fill="#EEEDFE" stroke="#7F77DD"/>
+  <text x="380" y="124" font-size="13" font-weight="500" fill="#26215C" text-anchor="middle">MultiTenantPersistentStreamEventSource</text>
+  <text x="380" y="142" font-size="11" fill="#534AB7" text-anchor="middle">SubscribableEventSource + MultiTenantAwareComponent</text>
+
+  <rect x="636" y="108" width="150" height="34" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="711" y="129" font-size="12" font-weight="500" fill="#2C2C2A" text-anchor="middle">TenantProvider</text>
+  <text x="711" y="157" font-size="9" fill="#5F5E5A" text-anchor="middle">registerTenant = registerAndStartTenant</text>
+  <path d="M636 125 L570 125" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="580" y="118" font-size="10" fill="#5F5E5A">bound to consumer's lifetime</text>
+
+  <path d="M380 158 L380 206" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="388" y="186" font-size="11" font-weight="500" fill="#B45309">lazy create per tenant</text>
+
+  <rect x="210" y="206" width="340" height="50" rx="6" fill="#EEEDFE" stroke="#7F77DD"/>
+  <text x="380" y="226" font-size="13" font-weight="500" fill="#26215C" text-anchor="middle">TenantScopedCache&lt;Segment&gt;</text>
+  <text x="380" y="242" font-size="11" fill="#B45309" text-anchor="middle">lazy create, evict on tenant removal (ADR 001)</text>
+
+  <path d="M300 256 L230 306" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <path d="M460 256 L600 306" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <rect x="40" y="280" width="740" height="180" rx="8" fill="none" stroke="#B4B2A9" stroke-dasharray="4 3"/>
+  <text x="380" y="296" font-size="11" fill="#5F5E5A" text-anchor="middle">one segment per current tenant, cached in TenantScopedCache</text>
+
+  <rect x="60" y="306" width="340" height="140" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="230" y="326" font-size="12" font-weight="500" fill="#2C2C2A" text-anchor="middle">tenant A segment</text>
+  <text x="230" y="346" font-size="11" fill="#2C2C2A" text-anchor="middle">PersistentStreamEventSource</text>
+  <text x="230" y="364" font-size="10" fill="#5F5E5A" text-anchor="middle">→ own PersistentStreamConnection (gRPC stream)</text>
+  <text x="230" y="382" font-size="10" fill="#5F5E5A" text-anchor="middle">→ scheduler: stream@tenantA</text>
+  <text x="230" y="400" font-size="10" fill="#5F5E5A" text-anchor="middle">→ customizer: withResource(TENANT, A) per batch</text>
+
+  <rect x="420" y="306" width="340" height="140" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="590" y="326" font-size="12" font-weight="500" fill="#2C2C2A" text-anchor="middle">tenant B segment</text>
+  <text x="590" y="346" font-size="11" fill="#2C2C2A" text-anchor="middle">PersistentStreamEventSource</text>
+  <text x="590" y="364" font-size="10" fill="#5F5E5A" text-anchor="middle">→ own PersistentStreamConnection (gRPC stream)</text>
+  <text x="590" y="382" font-size="10" fill="#5F5E5A" text-anchor="middle">→ scheduler: stream@tenantB</text>
+  <text x="590" y="400" font-size="10" fill="#5F5E5A" text-anchor="middle">→ customizer: withResource(TENANT, B) per batch</text>
+
+  <path d="M230 446 L230 478" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="238" y="466" font-size="10" fill="#0F6E56">gRPC stream</text>
+  <path d="M590 446 L590 478" fill="none" stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="598" y="466" font-size="10" fill="#0F6E56">gRPC stream</text>
+
+  <rect x="60" y="478" width="340" height="40" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="230" y="495" font-size="12" font-weight="500" fill="#2C2C2A" text-anchor="middle">Axon Server — context A</text>
+  <text x="230" y="511" font-size="10" fill="#5F5E5A" text-anchor="middle">owns the position; no token store</text>
+
+  <rect x="420" y="478" width="340" height="40" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+  <text x="590" y="495" font-size="12" font-weight="500" fill="#2C2C2A" text-anchor="middle">Axon Server — context B</text>
+  <text x="590" y="511" font-size="10" fill="#5F5E5A" text-anchor="middle">owns the position; no token store</text>
+
+  <text x="40" y="540" font-size="10" fill="#5F5E5A">Each batch's ProcessingContext is branched with withResource(TenantDescriptor.RESOURCE_KEY, tenant) once, before handlers run; @TenantScoped params resolve from it.</text>
+  <text x="40" y="556" font-size="10" fill="#5F5E5A">No token store, no merged stream, no processor restart: each tenant's stream, scheduler, and position are independent (Axon Server owns each tenant's position).</text>
+</svg>

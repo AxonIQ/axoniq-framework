@@ -20,6 +20,7 @@
 package io.axoniq.framework.integrationtests.queryhandling;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBus;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
@@ -33,6 +34,8 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.io.IOException;
+
+import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
 
 /**
  * An {@link AbstractQueryInterceptorTestSuite} implementation validating query interceptor functionality with the
@@ -59,7 +62,7 @@ public class DistributedQueryBusInterceptorTest extends AbstractQueryInterceptor
         // Mainly needed to create DBC context now:
         AxonServerContainerUtils.purgeEventsFromAxonServer(container.getHost(),
                                                            container.getHttpPort(),
-                                                           "default",
+                                                           DEFAULT_CONTEXT,
                                                            AxonServerContainerUtils.DCB_CONTEXT);
         logger.info("Using Axon Server for integration test. UI is available at http://localhost:{}",
                     container.getHttpPort());
@@ -81,6 +84,8 @@ public class DistributedQueryBusInterceptorTest extends AbstractQueryInterceptor
     @Override
     protected MessagingConfigurer createMessagingConfigurer() {
         return MessagingConfigurer.create()
+                                  // Not a multi-tenancy test. See MultiTenancyUtils#disable.
+                                  .componentRegistry(MultiTenancyUtils::disable)
                                   .componentRegistry(cr -> cr.registerComponent(
                                           AxonServerConfiguration.class,
                                           c -> testContainerAxonServerConfiguration()

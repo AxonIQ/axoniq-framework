@@ -65,11 +65,17 @@ public class QueryResponseMessageStream extends AbstractQueryResponseMessageStre
     protected AxonException createAxonException(QueryResponse queryResponse) {
         return convertToAxonException(queryResponse.getErrorCode(),
                                       queryResponse.getErrorMessage(),
-                                      queryResponse.getPayload());
+                                      queryResponse.getPayload(),
+                                      converter);
     }
 
     @Override
     protected boolean isError(QueryResponse queryResponse) {
         return queryResponse.hasErrorMessage();
+    }
+
+    @Override
+    protected boolean isEmptyResult(QueryResponse queryResponse) {
+        return QueryConverter.EMPTY_PAYLOAD_TYPE.equalsIgnoreCase(queryResponse.getPayload().getType());
     }
 }

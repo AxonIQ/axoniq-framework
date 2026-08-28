@@ -21,32 +21,46 @@ package io.axoniq.framework.axonserver.connector.query;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.Registration;
+import io.axoniq.axonserver.connector.ReplyChannel;
 import io.axoniq.axonserver.connector.ResultStream;
 import io.axoniq.axonserver.connector.query.QueryChannel;
 import io.axoniq.axonserver.connector.query.QueryDefinition;
 import io.axoniq.axonserver.connector.query.QueryHandler;
 import io.axoniq.axonserver.connector.query.SubscriptionQueryResult;
+import io.axoniq.axonserver.grpc.ProcessingKey;
 import io.axoniq.axonserver.grpc.SerializedObject;
+import io.axoniq.axonserver.grpc.query.QueryRequest;
 import io.axoniq.axonserver.grpc.query.QueryResponse;
 import io.axoniq.axonserver.grpc.query.QueryUpdate;
+import io.axoniq.axonserver.grpc.query.SubscriptionQuery;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils;
 import io.axoniq.framework.axonserver.connector.util.StubResultStream;
+import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
+import org.axonframework.common.TypeReference;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.conversion.DelegatingMessageConverter;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
+import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
+import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.junit.jupiter.api.*;
+import org.mockito.*;
 
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static com.google.protobuf.ByteString.copyFrom;
 import static com.google.protobuf.ByteString.copyFromUtf8;
@@ -54,6 +68,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class AxonServerQueryBusConnectorTest {
+
+    private static final TypeReference<List<String>> LIST_OF_STRINGS = new TypeReference<>() {
+    };
 
     private final String clientId = "clientId";
     private final String componentName = "componentName";
@@ -118,6 +135,95 @@ class AxonServerQueryBusConnectorTest {
     }
 
     @Nested
+    class Disconnect {
+
+        @Test
+        void disconnectPreparesTheQueryChannelWithoutDisconnectingTheSharedConnection() {
+            when(connection.isConnected()).thenReturn(true);
+            when(mockQueryChannel.prepareDisconnect()).thenReturn(CompletableFuture.completedFuture(null));
+
+            testSubject.disconnect().join();
+
+            verify(mockQueryChannel).prepareDisconnect();
+            verify(connection, never()).disconnect();
+        }
+
+    }
+
+    @Nested
+    class InboundQueryDrain {
+
+        @Test
+        void disconnectCompletesAfterAnActiveInboundQueryFinishes() {
+            // given an active inbound query
+            CompletableFuture<QueryResponseMessage> queryResult = new CompletableFuture<>();
+            QueryBusConnector.Handler incomingHandler = mock(QueryBusConnector.Handler.class);
+            when(incomingHandler.query(any())).thenReturn(MessageStream.fromFuture(queryResult));
+            testSubject.onIncomingQuery(incomingHandler);
+            QueryHandler localSegmentAdapter = registerLocalSegmentAdapter();
+            localSegmentAdapter.stream(queryRequest(), mock(ReplyChannel.class)).request(Long.MAX_VALUE);
+
+            when(connection.isConnected()).thenReturn(true);
+            when(mockQueryChannel.prepareDisconnect()).thenReturn(CompletableFuture.completedFuture(null));
+
+            // when disconnecting while the query is still active
+            CompletableFuture<Void> disconnect = testSubject.disconnect();
+
+            // then the caller is not blocked, but shutdown awaits the active query asynchronously
+            assertThat(disconnect).isNotCompleted();
+
+            // and completes after the query has finished
+            queryResult.complete(new GenericQueryResponseMessage(new MessageType(String.class), "done"));
+            assertThat(disconnect).succeedsWithin(1, TimeUnit.SECONDS);
+        }
+
+        @Test
+        void disconnectCancelsAnInboundQueryThatExceedsTheDrainTimeout() {
+            // given an active inbound query that does not finish on its own
+            MessageStream<QueryResponseMessage> queryResult = spy(MessageStream.fromFuture(new CompletableFuture<>()));
+            QueryBusConnector.Handler incomingHandler = mock(QueryBusConnector.Handler.class);
+            when(incomingHandler.query(any())).thenReturn(queryResult);
+            testSubject.onIncomingQuery(incomingHandler);
+            QueryHandler localSegmentAdapter = registerLocalSegmentAdapter();
+            localSegmentAdapter.stream(queryRequest(), mock(ReplyChannel.class)).request(Long.MAX_VALUE);
+
+            when(connection.isConnected()).thenReturn(true);
+            when(mockQueryChannel.prepareDisconnect()).thenReturn(CompletableFuture.completedFuture(null));
+
+            // when disconnecting while the query remains active
+            CompletableFuture<Void> disconnect = testSubject.disconnect();
+
+            // then the query-drain timeout cancels the query and completes shutdown
+            assertThat(disconnect)
+                    .isNotCompleted()
+                    .succeedsWithin(6, TimeUnit.SECONDS);
+            verify(queryResult, atLeastOnce()).close();
+        }
+
+        private QueryRequest queryRequest() {
+            return QueryRequest.newBuilder()
+                               .setMessageIdentifier(UUID.randomUUID().toString())
+                               .setPayload(SerializedObject.newBuilder().setType("QueryType").build())
+                               .build();
+        }
+
+        private QueryHandler registerLocalSegmentAdapter() {
+            Registration registration = mock(Registration.class);
+            when(registration.onAck(any(Runnable.class))).thenAnswer(i -> {
+                i.getArgument(0, Runnable.class).run();
+                return null;
+            });
+            ArgumentCaptor<QueryHandler> handlerCaptor = ArgumentCaptor.forClass(QueryHandler.class);
+            when(mockQueryChannel.registerQueryHandler(handlerCaptor.capture(), any(QueryDefinition.class)))
+                    .thenReturn(registration);
+
+            testSubject.subscribe(new QualifiedName("TestQuery"));
+
+            return handlerCaptor.getValue();
+        }
+    }
+
+    @Nested
     class QueryDispatching {
 
         @Test
@@ -146,6 +252,33 @@ class AxonServerQueryBusConnectorTest {
             assertThat(stream.hasNextAvailable()).isFalse();
             assertThat(stream.error()).isPresent();
             assertThat(stream.error().get()).hasMessageContaining("Query execution failed");
+            assertThat(stream.isCompleted()).isTrue();
+        }
+
+        @Test
+        void queryWithEmptySentinelResponseCollapsesToStreamWithNoAvailableMessage() {
+            // given a response marked with the "empty" sentinel type, as sent for a null/Optional.empty() result
+            QueryResponse emptyResponse = QueryResponse.newBuilder()
+                                                       .setMessageIdentifier(UUID.randomUUID().toString())
+                                                       .setPayload(SerializedObject.newBuilder()
+                                                                                   .setType("empty")
+                                                                                   .build())
+                                                       .build();
+            ResultStream<QueryResponse> resultStream = new StubResultStream<>(emptyResponse);
+            when(mockQueryChannel.query(any())).thenReturn(resultStream);
+
+            QueryMessage query = new GenericQueryMessage(
+                    new GenericMessage(new MessageType("QueryType", "1"),
+                                       "payload".getBytes(),
+                                       Metadata.emptyInstance())
+            );
+
+            // when
+            MessageStream<QueryResponseMessage> stream = testSubject.query(query, null);
+
+            // then the sentinel is not surfaced as an entry, the stream simply completes without a result
+            assertThat(stream.hasNextAvailable()).isFalse();
+            assertThat(stream.error()).isNotPresent();
             assertThat(stream.isCompleted()).isTrue();
         }
 
@@ -183,6 +316,100 @@ class AxonServerQueryBusConnectorTest {
             stream.close();
             verify(resultStream).close();
             verify(mockConverter).convert(any(), eq((Type)String.class));
+        }
+    }
+
+    @Nested
+    class IncomingQueryResponseCardinality {
+
+        // A real (Jackson-based) converter is used here, instead of the outer class's mockConverter, since these
+        // tests exercise the actual payload decode-and-recombine logic in AggregatingResponseSender.
+        private final MessageConverter converter = new DelegatingMessageConverter(new JacksonConverter());
+        private final AxonServerQueryBusConnector localTestSubject =
+                new AxonServerQueryBusConnector(connection, configuration, converter);
+
+        private GenericQueryResponseMessage responseOf(String payload) {
+            return new GenericQueryResponseMessage(new MessageType(String.class),
+                                                   converter.convert(payload, byte[].class))
+                    .withConverter(converter);
+        }
+
+        @Test
+        void aggregatesMultipleLocalResponsesIntoOneWireResponseWhenClientDoesNotSupportStreaming() {
+            // given a local handler producing 3 responses (e.g. a @QueryHandler returning a List)
+            QueryBusConnector.Handler incomingHandlerMock = mock(QueryBusConnector.Handler.class);
+            when(incomingHandlerMock.query(any()))
+                    .thenReturn(MessageStream.fromItems(responseOf("a"), responseOf("b"), responseOf("c")));
+            localTestSubject.onIncomingQuery(incomingHandlerMock);
+
+            QueryRequest requestWithoutStreamingSupport =
+                    QueryRequest.newBuilder()
+                                .setMessageIdentifier(UUID.randomUUID().toString())
+                                .setPayload(SerializedObject.newBuilder().setType("QueryType").build())
+                                .build();
+            ReplyChannel<QueryResponse> replyChannel = mock();
+
+            // when
+            registerLocalSegmentAdapter().stream(requestWithoutStreamingSupport, replyChannel)
+                                         .request(Long.MAX_VALUE);
+
+            // then exactly one response is sent, carrying the full combined list, never the per-element send()
+            verify(replyChannel, never()).send(any());
+            verify(replyChannel).sendLast(assertArg(response -> {
+                List<String> combined = converter.convert(
+                        response.getPayload().getData().toByteArray(), LIST_OF_STRINGS.getType()
+                );
+                assertThat(combined).containsExactly("a", "b", "c");
+            }));
+        }
+
+        @Test
+        void streamsResponsesUnchangedWhenClientSupportsStreaming() {
+            // given the same local handler, but a client that declares streaming support (e.g. Axon Framework 5)
+            QueryBusConnector.Handler incomingHandlerMock = mock(QueryBusConnector.Handler.class);
+            when(incomingHandlerMock.query(any()))
+                    .thenReturn(MessageStream.fromItems(responseOf("a"), responseOf("b"), responseOf("c")));
+            localTestSubject.onIncomingQuery(incomingHandlerMock);
+
+            QueryRequest requestWithStreamingSupport =
+                    QueryRequest.newBuilder()
+                                .setMessageIdentifier(UUID.randomUUID().toString())
+                                .setPayload(SerializedObject.newBuilder().setType("QueryType").build())
+                                .addProcessingInstructions(
+                                        ProcessingInstructionUtils.createProcessingInstruction(
+                                                ProcessingKey.CLIENT_SUPPORTS_STREAMING, true
+                                        )
+                                )
+                                .build();
+            ReplyChannel<QueryResponse> replyChannel = mock();
+
+            // when
+            registerLocalSegmentAdapter().stream(requestWithStreamingSupport, replyChannel)
+                                         .request(Long.MAX_VALUE);
+
+            // then each element is sent separately, unchanged existing behaviour
+            verify(replyChannel, times(3)).send(any());
+            verify(replyChannel).complete();
+            verify(replyChannel, never()).sendLast(any());
+        }
+
+        /**
+         * Subscribes {@link #localTestSubject} and captures the {@link QueryHandler} it registers with the (mocked)
+         * {@link io.axoniq.axonserver.connector.query.QueryChannel}, i.e. its private {@code LocalSegmentAdapter}.
+         */
+        private QueryHandler registerLocalSegmentAdapter() {
+            Registration reg = mock(Registration.class);
+            when(reg.onAck(any(Runnable.class))).thenAnswer(i -> {
+                i.getArgument(0, Runnable.class).run();
+                return null;
+            });
+            ArgumentCaptor<QueryHandler> handlerCaptor = ArgumentCaptor.forClass(QueryHandler.class);
+            when(mockQueryChannel.registerQueryHandler(handlerCaptor.capture(), any(QueryDefinition.class)))
+                    .thenReturn(reg);
+
+            localTestSubject.subscribe(new QualifiedName("TestQuery"));
+
+            return handlerCaptor.getValue();
         }
     }
 
@@ -270,6 +497,108 @@ class AxonServerQueryBusConnectorTest {
         }
     }
 
+    @Nested
+    class UpdateCallbackErrorHandling {
+
+        @Test
+        void completeExceptionallySendsUpdateWithDetailsPayloadWhenErrorCarriesHandlerExecutionDetails() {
+            // given
+            QueryBusConnector.Handler incomingHandlerMock = mock(QueryBusConnector.Handler.class);
+            testSubject.onIncomingQuery(incomingHandlerMock);
+
+            ArgumentCaptor<QueryBusConnector.UpdateCallback> callbackCaptor =
+                    ArgumentCaptor.forClass(QueryBusConnector.UpdateCallback.class);
+            when(incomingHandlerMock.registerUpdateHandler(any(), callbackCaptor.capture()))
+                    .thenReturn(mock(org.axonframework.common.Registration.class));
+
+            SerializedObject serializedPayload =
+                    SerializedObject.newBuilder()
+                                    .setType("QueryType")
+                                    .setRevision("1")
+                                    .setData(copyFrom("query-payload".getBytes(StandardCharsets.UTF_8)))
+                                    .build();
+            QueryRequest queryRequest = QueryRequest.newBuilder()
+                                                    .setPayload(serializedPayload)
+                                                    .build();
+            SubscriptionQuery subscriptionQuery =
+                    SubscriptionQuery.newBuilder()
+                                     .setSubscriptionIdentifier(UUID.randomUUID().toString())
+                                     .setQueryRequest(queryRequest)
+                                     .build();
+            QueryHandler.UpdateHandler updateHandlerMock = mock(QueryHandler.UpdateHandler.class);
+            registerLocalSegmentAdapter().registerSubscriptionQuery(subscriptionQuery, updateHandlerMock);
+
+            when(mockConverter.convert("some details", byte[].class)).thenReturn("some details".getBytes());
+
+            // when
+            callbackCaptor.getValue().completeExceptionally(new QueryExecutionException("boom", null, "some details"));
+
+            // then
+            ArgumentCaptor<QueryUpdate> updateCaptor = ArgumentCaptor.forClass(QueryUpdate.class);
+            verify(updateHandlerMock).sendUpdate(updateCaptor.capture());
+            verify(updateHandlerMock).complete();
+            QueryUpdate sentUpdate = updateCaptor.getValue();
+            assertThat(sentUpdate.getErrorMessage().getMessage()).isEqualTo("boom");
+            assertThat(sentUpdate.hasPayload()).isTrue();
+            assertThat(sentUpdate.getPayload().getData().toStringUtf8()).isEqualTo("some details");
+        }
+
+        @Test
+        void completeExceptionallyWithoutHandlerExecutionDetailsSendsUpdateWithoutPayload() {
+            // given
+            QueryBusConnector.Handler incomingHandlerMock = mock(QueryBusConnector.Handler.class);
+            testSubject.onIncomingQuery(incomingHandlerMock);
+
+            ArgumentCaptor<QueryBusConnector.UpdateCallback> callbackCaptor =
+                    ArgumentCaptor.forClass(QueryBusConnector.UpdateCallback.class);
+            when(incomingHandlerMock.registerUpdateHandler(any(), callbackCaptor.capture()))
+                    .thenReturn(mock(org.axonframework.common.Registration.class));
+
+            SerializedObject serializedPayload =
+                    SerializedObject.newBuilder()
+                                    .setType("QueryType")
+                                    .setRevision("1")
+                                    .setData(copyFrom("query-payload".getBytes(StandardCharsets.UTF_8)))
+                                    .build();
+            QueryRequest queryRequest = QueryRequest.newBuilder()
+                                                    .setPayload(serializedPayload)
+                                                    .build();
+            SubscriptionQuery subscriptionQuery =
+                    SubscriptionQuery.newBuilder()
+                                     .setSubscriptionIdentifier(UUID.randomUUID().toString())
+                                     .setQueryRequest(queryRequest)
+                                     .build();
+            QueryHandler.UpdateHandler updateHandlerMock = mock(QueryHandler.UpdateHandler.class);
+            registerLocalSegmentAdapter().registerSubscriptionQuery(subscriptionQuery, updateHandlerMock);
+
+            // when
+            callbackCaptor.getValue().completeExceptionally(new RuntimeException("boom"));
+
+            // then
+            ArgumentCaptor<QueryUpdate> updateCaptor = ArgumentCaptor.forClass(QueryUpdate.class);
+            verify(updateHandlerMock).sendUpdate(updateCaptor.capture());
+            assertThat(updateCaptor.getValue().hasPayload()).isFalse();
+        }
+
+        /**
+         * Subscribes {@link #testSubject} and captures the {@link QueryHandler} it registers with the (mocked)
+         * {@link io.axoniq.axonserver.connector.query.QueryChannel}, i.e. its private {@code LocalSegmentAdapter}.
+         */
+        private QueryHandler registerLocalSegmentAdapter() {
+            Registration reg = mock(Registration.class);
+            when(reg.onAck(any(Runnable.class))).thenAnswer(i -> {
+                i.getArgument(0, Runnable.class).run();
+                return null;
+            });
+            ArgumentCaptor<QueryHandler> handlerCaptor = ArgumentCaptor.forClass(QueryHandler.class);
+            when(mockQueryChannel.registerQueryHandler(handlerCaptor.capture(), any(QueryDefinition.class)))
+                    .thenReturn(reg);
+
+            testSubject.subscribe(new QualifiedName("TestQuery"));
+
+            return handlerCaptor.getValue();
+        }
+    }
 
     // ---- Test support classes ----
 

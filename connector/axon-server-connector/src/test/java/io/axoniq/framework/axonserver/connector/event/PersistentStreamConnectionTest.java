@@ -36,11 +36,13 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.LegacyResources;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.ReplayToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.Nullable;
@@ -56,6 +58,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -76,6 +79,7 @@ class PersistentStreamConnectionTest {
 
     private static final String STREAM_NAME = "stream-name";
     private static final String STREAM_ID = "stream-id";
+    private static final Context.ResourceKey<String> MARKER_RESOURCE_KEY = Context.ResourceKey.withLabel("marker");
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private final PersistentStreamProperties properties =
@@ -105,18 +109,17 @@ class PersistentStreamConnectionTest {
     }
 
     private PersistentStreamConnection testSubjectWith(EventTypeResolver eventTypeResolver) {
-        return new PersistentStreamConnection(
-                STREAM_ID,
-                mockConnectionManager,
-                new AxonServerConfiguration(),
-                new DelegatingEventConverter(new JacksonConverter()),
-                eventTypeResolver,
-                properties,
-                scheduler,
-                UnitOfWorkTestUtils.SIMPLE_FACTORY,
-                100,
-                null
-        );
+        return new PersistentStreamConnection(STREAM_ID,
+                                              mockConnectionManager,
+                                              new AxonServerConfiguration(),
+                                              new DelegatingEventConverter(new JacksonConverter()),
+                                              eventTypeResolver,
+                                              properties,
+                                              scheduler,
+                                              UnitOfWorkTestUtils.SIMPLE_FACTORY,
+                                              PersistentStreamContextCustomizer.NO_OP,
+                                              100,
+                                              null);
     }
 
     @Test
@@ -462,6 +465,35 @@ class PersistentStreamConnectionTest {
     }
 
     @Test
+    void processBatch_contextOfAnEventWithoutAggregateInformationCarriesNoneOfThePrecedingEvent() {
+        // given — a consumer recording the context of every event
+        List<ProcessingContext> capturedContexts = Collections.synchronizedList(new LinkedList<>());
+        testSubject.open((events, ctx) -> {
+            capturedContexts.add(ctx);
+            return CompletableFuture.completedFuture(null);
+        });
+        MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+        // when — an aggregate event and a plain event in one batch, enqueued before the availability notification
+        mockPersistentStream.publishBatch(0,
+                                          eventWithToken(0, "agg-1", 0, "TestAggregate"),
+                                          eventWithToken(1, "", 0, ""));
+
+        // then — the second event sees none of the first event's aggregate information
+        await().atMost(Duration.ofSeconds(2)).until(() -> capturedContexts.size() == 2);
+        ProcessingContext aggregateEventContext = capturedContexts.get(0);
+        assertThat(aggregateEventContext.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY)).isEqualTo("agg-1");
+        assertThat(aggregateEventContext.getResource(LegacyResources.AGGREGATE_TYPE_KEY)).isEqualTo("TestAggregate");
+        assertThat(aggregateEventContext.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY)).isEqualTo(0);
+        ProcessingContext plainEventContext = capturedContexts.get(1);
+        assertThat(plainEventContext.getResource(LegacyResources.AGGREGATE_IDENTIFIER_KEY)).isNull();
+        assertThat(plainEventContext.getResource(LegacyResources.AGGREGATE_TYPE_KEY)).isNull();
+        assertThat(plainEventContext.getResource(LegacyResources.AGGREGATE_SEQUENCE_NUMBER_KEY)).isNull();
+
+        mockPersistentStream.closeSegment(0);
+    }
+
+    @Test
     void processBatch_contextExposesLegacyAggregateInformation() {
         // given — consumer records the tracking token and batch end token it receives for every invocation
         List<ProcessingContext> capturedContext = Collections.synchronizedList(new LinkedList<>());
@@ -491,11 +523,12 @@ class PersistentStreamConnectionTest {
     }
 
     @Test
-    void allEventsInBatchShareSingleProcessingContext() {
-        // given — consumer records the ProcessingContext it receives for every invocation
-        List<ProcessingContext> capturedContexts = Collections.synchronizedList(new LinkedList<>());
+    void allEventsInBatchShareSingleUnitOfWork() {
+        // given — the consumer marks the first event's context, and records what each event's context carries
+        List<String> observedMarkers = Collections.synchronizedList(new LinkedList<>());
         testSubject.open((events, ctx) -> {
-            capturedContexts.add(ctx);
+            observedMarkers.add(ctx.getResource(MARKER_RESOURCE_KEY));
+            ctx.putResourceIfAbsent(MARKER_RESOURCE_KEY, "first-event");
             return CompletableFuture.completedFuture(null);
         });
         MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
@@ -505,22 +538,23 @@ class PersistentStreamConnectionTest {
                                           eventWithToken(0, "agg-1", 0, "TestAggregate"),
                                           eventWithToken(1, "agg-1", 1, "TestAggregate"));
 
-        // then — consumer is invoked once per event, but both invocations share the same ProcessingContext
+        // then — the second event reads what the first one wrote, so both ran in one unit of work
         await().atMost(Duration.ofSeconds(2))
-               .until(() -> capturedContexts.size() == 2);
-        assertThat(capturedContexts.get(0))
-                .describedAs("both events in the same batch must share one ProcessingContext (one unit of work)")
-                .isSameAs(capturedContexts.get(1));
+               .until(() -> observedMarkers.size() == 2);
+        assertThat(observedMarkers)
+                .describedAs("both events in the same batch must share one unit of work")
+                .containsExactly(null, "first-event");
 
         mockPersistentStream.closeSegment(0);
     }
 
     @Test
-    void consecutiveBatchesGetSeparateProcessingContexts() {
-        // given — consumer records each context; each event is published individually to force separate batches
-        List<ProcessingContext> capturedContexts = Collections.synchronizedList(new LinkedList<>());
+    void consecutiveBatchesGetSeparateUnitsOfWork() {
+        // given — the same marking consumer; each event is published individually to force separate batches
+        List<String> observedMarkers = Collections.synchronizedList(new LinkedList<>());
         testSubject.open((events, ctx) -> {
-            capturedContexts.add(ctx);
+            observedMarkers.add(ctx.getResource(MARKER_RESOURCE_KEY));
+            ctx.putResourceIfAbsent(MARKER_RESOURCE_KEY, "first-batch");
             return CompletableFuture.completedFuture(null);
         });
         MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
@@ -533,12 +567,12 @@ class PersistentStreamConnectionTest {
         // when — second event published only after the first batch is fully committed
         mockPersistentStream.publish(0, eventWithToken(1, "agg-1", 1, "TestAggregate"));
         await().atMost(Duration.ofSeconds(2))
-               .until(() -> capturedContexts.size() == 2);
+               .until(() -> observedMarkers.size() == 2);
 
-        // then — each batch created a fresh unit of work, so the contexts are distinct objects
-        assertThat(capturedContexts.get(0))
-                .describedAs("each batch must run in its own unit of work with a distinct ProcessingContext")
-                .isNotSameAs(capturedContexts.get(1));
+        // then — the second batch carries none of the first one's resources, so it ran in a unit of work of its own
+        assertThat(observedMarkers)
+                .describedAs("each batch must run in its own unit of work")
+                .containsExactly(null, null);
 
         mockPersistentStream.closeSegment(0);
     }
@@ -721,6 +755,35 @@ class PersistentStreamConnectionTest {
         mockPersistentStream.closeSegment(0);
     }
 
+    @Test
+    void batchDequeuedJustBeforeSegmentCloseIsStillProcessedAndAcknowledged() {
+        // given — the segment closes itself in the exact window between readBatch's dequeue and processBatch's
+        //         handling of the resulting batch (e.g. dequeuing the segment's last buffered event flips its
+        //         closed state as a direct consequence of that very dequeue)
+        List<EventMessage> received = new LinkedList<>();
+        testSubject.open((events, ctx) -> {
+            received.addAll(events);
+            return CompletableFuture.completedFuture(null);
+        });
+        MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+        // when
+        mockPersistentStream.publishClosingSegmentAfterRead(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+
+        // then — the event is still delivered to the consumer...
+        await().atMost(Duration.ofSeconds(2)).until(() -> received.size() == 1);
+        // ...its real token is acknowledged (not silently dropped because the segment is now closed), followed by
+        //    the pending-work-done marker since the segment is now fully drained and closed — asserted as an
+        //    ordered sequence rather than a single "last acknowledged" snapshot, since both acks can follow the
+        //    consumer invocation in such quick succession that a synchronous read after the await above could
+        //    already observe the marker
+        await().atMost(Duration.ofSeconds(2))
+               .until(() -> mockPersistentStream.segments.get(0).acknowledgedTokens.contains(
+                       PersistentStreamSegment.PENDING_WORK_DONE_MARKER));
+        assertThat(mockPersistentStream.segments.get(0).acknowledgedTokens)
+                .containsExactly(0L, PersistentStreamSegment.PENDING_WORK_DONE_MARKER);
+    }
+
     @Nested
     class EventTypeResolution {
 
@@ -846,9 +909,17 @@ class PersistentStreamConnectionTest {
 
         @Test
         void rejectsNullEventTypeResolver() {
-            assertThatThrownBy(() -> new PersistentStreamConnection(
-                    STREAM_ID, manager, config, eventConverter, null, props, scheduler,
-                    UnitOfWorkTestUtils.SIMPLE_FACTORY, 100, null))
+            assertThatThrownBy(() -> new PersistentStreamConnection(STREAM_ID,
+                                                                    manager,
+                                                                    config,
+                                                                    eventConverter,
+                                                                    null,
+                                                                    props,
+                                                                    scheduler,
+                                                                    UnitOfWorkTestUtils.SIMPLE_FACTORY,
+                                                                    PersistentStreamContextCustomizer.NO_OP,
+                                                                    100,
+                                                                    null))
                     .isInstanceOf(NullPointerException.class)
                     .hasMessageContaining("eventTypeResolver");
         }
@@ -892,6 +963,193 @@ class PersistentStreamConnectionTest {
                     UnitOfWorkTestUtils.SIMPLE_FACTORY, -1, null))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("batchSize");
+        }
+
+        @Test
+        void rejectsNullContextCustomizer() {
+            assertThatThrownBy(() -> new PersistentStreamConnection(
+                    STREAM_ID, manager, config, eventConverter, EventTypeResolver.DEFAULT, props, scheduler,
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY, null, 100, null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("contextCustomizer");
+        }
+    }
+
+    @Nested
+    class ContextCustomization {
+
+        private static final Context.ResourceKey<String> CUSTOM_RESOURCE_KEY = Context.ResourceKey.withLabel("custom");
+
+        @Test
+        void placesResourceOnTheContextOfEveryEventInTheBatch() {
+            // given — a customizer adding one resource, and a consumer recording it per event
+            PersistentStreamConnection testSubject = testSubjectWith(
+                    processingContext -> processingContext.withResource(CUSTOM_RESOURCE_KEY, "tenant-a")
+            );
+            List<String> observedPerEvent = Collections.synchronizedList(new LinkedList<>());
+            testSubject.open((events, ctx) -> {
+                observedPerEvent.add(ctx.getResource(CUSTOM_RESOURCE_KEY));
+                return CompletableFuture.completedFuture(null);
+            });
+            MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+            // when — both events are enqueued before the availability notification, guaranteeing a single batch
+            mockPersistentStream.publishBatch(0,
+                                              eventWithToken(0, "agg-1", 0, "TestAggregate"),
+                                              eventWithToken(1, "agg-1", 1, "TestAggregate"));
+
+            // then — the consumer runs per event, and every event sees the resource
+            await().atMost(Duration.ofSeconds(2)).until(() -> observedPerEvent.size() == 2);
+            assertThat(observedPerEvent).containsExactly("tenant-a", "tenant-a");
+
+            mockPersistentStream.closeSegment(0);
+        }
+
+        @Test
+        void appliesTheCustomizerOncePerBatchBeforeAnyEventIsConsumed() {
+            // given — the customizer counts its invocations, the consumer records the count it observed
+            AtomicInteger customizations = new AtomicInteger();
+            List<Integer> customizationsBeforeEachEvent = Collections.synchronizedList(new LinkedList<>());
+            PersistentStreamConnection testSubject = testSubjectWith(processingContext -> {
+                customizations.incrementAndGet();
+                return processingContext.withResource(CUSTOM_RESOURCE_KEY, "tenant-a");
+            });
+            testSubject.open((events, ctx) -> {
+                customizationsBeforeEachEvent.add(customizations.get());
+                return CompletableFuture.completedFuture(null);
+            });
+            MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+            // when — a single batch of two events
+            mockPersistentStream.publishBatch(0,
+                                              eventWithToken(0, "agg-1", 0, "TestAggregate"),
+                                              eventWithToken(1, "agg-1", 1, "TestAggregate"));
+
+            // then — customized exactly once, and already before the first event was consumed
+            await().atMost(Duration.ofSeconds(2)).until(() -> customizationsBeforeEachEvent.size() == 2);
+            assertThat(customizations.get())
+                    .describedAs("the customizer runs once per batch, not once per event")
+                    .isEqualTo(1);
+            assertThat(customizationsBeforeEachEvent)
+                    .describedAs("every event observes an already customized context")
+                    .containsExactly(1, 1);
+
+            mockPersistentStream.closeSegment(0);
+        }
+
+        @Test
+        void leavesTheTrackingTokenTheConnectionSuppliesIntact() {
+            // given — a customizer that only adds a resource of its own
+            PersistentStreamConnection testSubject = testSubjectWith(
+                    processingContext -> processingContext.withResource(CUSTOM_RESOURCE_KEY, "tenant-a")
+            );
+            List<TrackingToken> capturedTokens = Collections.synchronizedList(new LinkedList<>());
+            testSubject.open((events, ctx) -> {
+                capturedTokens.add(TrackingToken.fromContext(ctx).orElseThrow());
+                return CompletableFuture.completedFuture(null);
+            });
+            MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+            // when
+            mockPersistentStream.publishBatch(0,
+                                              eventWithToken(0, "agg-1", 0, "TestAggregate"),
+                                              eventWithToken(1, "agg-1", 1, "TestAggregate"));
+
+            // then — the per-event token is still advanced alongside the batch-level resource
+            await().atMost(Duration.ofSeconds(2)).until(() -> capturedTokens.size() == 2);
+            assertThat(capturedTokens).containsExactly(new GlobalSequenceTrackingToken(0),
+                                                       new GlobalSequenceTrackingToken(1));
+
+            mockPersistentStream.closeSegment(0);
+        }
+
+        @Test
+        void keepsABranchedResourceOffTheUnitOfWorkSpanningTheBatch() {
+            // given — a customizer branching off the context it is handed, rather than writing into it
+            List<ProcessingContext> customizedContexts = Collections.synchronizedList(new LinkedList<>());
+            PersistentStreamConnection testSubject = testSubjectWith(processingContext -> {
+                customizedContexts.add(processingContext);
+                return processingContext.withResource(CUSTOM_RESOURCE_KEY, "tenant-a");
+            });
+            List<String> observedPerEvent = Collections.synchronizedList(new LinkedList<>());
+            testSubject.open((events, ctx) -> {
+                observedPerEvent.add(ctx.getResource(CUSTOM_RESOURCE_KEY));
+                return CompletableFuture.completedFuture(null);
+            });
+            MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+            // when
+            mockPersistentStream.publish(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+
+            // then — the consumer reads the resource through the branch, while the unit of work never carries it
+            await().atMost(Duration.ofSeconds(2)).until(() -> observedPerEvent.size() == 1);
+            assertThat(observedPerEvent).containsExactly("tenant-a");
+            assertThat(customizedContexts).hasSize(1);
+            assertThat(customizedContexts.getFirst().containsResource(CUSTOM_RESOURCE_KEY)).isFalse();
+
+            mockPersistentStream.closeSegment(0);
+        }
+
+        @Test
+        void suppliesTheBatchEndTokenThroughABranchedContext() {
+            // given — a branching customizer, so the resources the connection places must still be reachable
+            PersistentStreamConnection testSubject = testSubjectWith(
+                    processingContext -> processingContext.withResource(CUSTOM_RESOURCE_KEY, "tenant-a")
+            );
+            List<TrackingToken> batchEndTokens = Collections.synchronizedList(new LinkedList<>());
+            testSubject.open((events, ctx) -> {
+                batchEndTokens.add(ctx.getResource(TrackingToken.BATCH_END_RESOURCE_KEY));
+                return CompletableFuture.completedFuture(null);
+            });
+            MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+            // when — both events are enqueued before the availability notification, guaranteeing a single batch
+            mockPersistentStream.publishBatch(0,
+                                              eventWithToken(0, "agg-1", 0, "TestAggregate"),
+                                              eventWithToken(1, "agg-1", 1, "TestAggregate"));
+
+            // then — every event of the batch sees the token of its last event
+            await().atMost(Duration.ofSeconds(2)).until(() -> batchEndTokens.size() == 2);
+            assertThat(batchEndTokens).containsExactly(new GlobalSequenceTrackingToken(1),
+                                                       new GlobalSequenceTrackingToken(1));
+
+            mockPersistentStream.closeSegment(0);
+        }
+
+        @Test
+        void defaultsToPlacingNoResources() {
+            // given — a connection built without a customizer
+            List<String> observedPerEvent = Collections.synchronizedList(new LinkedList<>());
+            testSubject.open((events, ctx) -> {
+                observedPerEvent.add(ctx.getResource(CUSTOM_RESOURCE_KEY));
+                return CompletableFuture.completedFuture(null);
+            });
+            MockPersistentStream mockPersistentStream = mockPersistentStreams.get(STREAM_ID);
+
+            // when
+            mockPersistentStream.publish(0, eventWithToken(0, "agg-1", 0, "TestAggregate"));
+
+            // then
+            await().atMost(Duration.ofSeconds(2)).until(() -> observedPerEvent.size() == 1);
+            assertThat(observedPerEvent).containsOnlyNulls();
+
+            mockPersistentStream.closeSegment(0);
+        }
+
+        private PersistentStreamConnection testSubjectWith(PersistentStreamContextCustomizer contextCustomizer) {
+            return new PersistentStreamConnection(
+                    STREAM_ID,
+                    mockConnectionManager,
+                    new AxonServerConfiguration(),
+                    new DelegatingEventConverter(new JacksonConverter()),
+                    EventTypeResolver.DEFAULT,
+                    properties,
+                    scheduler,
+                    UnitOfWorkTestUtils.SIMPLE_FACTORY,
+                    contextCustomizer,
+                    100,
+                    null
+            );
         }
     }
 
@@ -1011,6 +1269,25 @@ class PersistentStreamConnectionTest {
             segment.onAvailable.run();
         }
 
+        /**
+         * Creates the segment (if absent), enqueues {@code event}, arms the segment to close itself
+         * immediately after that event is dequeued by {@code nextIfAvailable()}, and fires the availability
+         * notification. Emulates the segment closing (e.g. reassignment) in the exact window between
+         * {@code readBatch} dequeuing the event and {@code processBatch} handling the resulting batch.
+         */
+        private void publishClosingSegmentAfterRead(int segmentNumber, EventWithToken event) {
+            @SuppressWarnings("resource")
+            MockPersistentStreamSegment segment = segments.computeIfAbsent(segmentNumber, i -> {
+                MockPersistentStreamSegment mockSegment = new MockPersistentStreamSegment(i);
+                callbacks.onSegmentOpened().accept(mockSegment);
+                mockSegment.onAvailable(() -> callbacks.onAvailable().accept(mockSegment));
+                return mockSegment;
+            });
+            segment.entries.add(PersistentStreamEvent.newBuilder().setEvent(event).build());
+            segment.closeSegmentAfterNextRead();
+            segment.onAvailable.run();
+        }
+
         private void closeWithError(Throwable throwable) {
             callbacks.onClosed().accept(throwable);
         }
@@ -1051,15 +1328,23 @@ class PersistentStreamConnectionTest {
         private Runnable onAvailable = () -> {
         };
         final AtomicLong lastAcknowledged = new AtomicLong(-1);
+        // every acknowledged token, in order — used where a single "last" value would race with a fast-following ack
+        final CopyOnWriteArrayList<Long> acknowledgedTokens = new CopyOnWriteArrayList<>();
         // exception to throw on the next nextIfAvailable() call (cleared after use)
         private final AtomicReference<RuntimeException> scheduledFailure = new AtomicReference<>();
         // when true, nextIfAvailable(long, TimeUnit) throws InterruptedException once
         final AtomicBoolean throwInterruptedOnTimeoutNext = new AtomicBoolean(false);
         final AtomicBoolean errorWasReported = new AtomicBoolean(false);
         final AtomicReference<@Nullable String> lastReportedError = new AtomicReference<>();
+        // when true, close the segment immediately after the next successful dequeue (cleared after use)
+        private final AtomicBoolean closeAfterNextRead = new AtomicBoolean(false);
 
         public void failNextWith(RuntimeException ex) {
             scheduledFailure.set(ex);
+        }
+
+        public void closeSegmentAfterNextRead() {
+            closeAfterNextRead.set(true);
         }
 
         private MockPersistentStreamSegment(int segment) {
@@ -1077,7 +1362,11 @@ class PersistentStreamConnectionTest {
             if (ex != null) {
                 throw ex;
             }
-            return entries.isEmpty() ? null : entries.removeFirst();
+            PersistentStreamEvent event = entries.isEmpty() ? null : entries.removeFirst();
+            if (event != null && closeAfterNextRead.compareAndSet(true, false)) {
+                closed.set(true);
+            }
+            return event;
         }
 
         @Override
@@ -1132,6 +1421,7 @@ class PersistentStreamConnectionTest {
         @Override
         public void acknowledge(long token) {
             lastAcknowledged.set(token);
+            acknowledgedTokens.add(token);
         }
 
         @Override

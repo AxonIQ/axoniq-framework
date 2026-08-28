@@ -20,6 +20,7 @@
 package io.axoniq.framework.integrationtests.queryhandling;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBus;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
@@ -45,6 +46,7 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -73,7 +75,7 @@ class DistributedQueryBusSubscriptionQueryTest extends AbstractSubscriptionQuery
         // Mainly needed to create DBC context now:
         AxonServerContainerUtils.purgeEventsFromAxonServer(container.getHost(),
                                                            container.getHttpPort(),
-                                                           "default",
+                                                           DEFAULT_CONTEXT,
                                                            AxonServerContainerUtils.DCB_CONTEXT);
         logger.info("Using Axon Server for integration test. UI is available at http://localhost:{}",
                     container.getHttpPort());
@@ -95,6 +97,8 @@ class DistributedQueryBusSubscriptionQueryTest extends AbstractSubscriptionQuery
     @Override
     protected MessagingConfigurer createMessagingConfigurer() {
         return MessagingConfigurer.create()
+                                  // Not a multi-tenancy test. See MultiTenancyUtils#disable.
+                                  .componentRegistry(MultiTenancyUtils::disable)
                                   .componentRegistry(cr -> cr.registerComponent(
                                           AxonServerConfiguration.class,
                                           c -> testContainerAxonServerConfiguration()
@@ -169,8 +173,8 @@ class DistributedQueryBusSubscriptionQueryTest extends AbstractSubscriptionQuery
                 .isEqualTo(update2Payload);
 
         await().untilAsserted(() -> {
-           assertThat(result.hasNextAvailable()).isFalse();
-           assertThat(result.isCompleted()).isTrue();
+            assertThat(result.hasNextAvailable()).isFalse();
+            assertThat(result.isCompleted()).isTrue();
         });
     }
 }

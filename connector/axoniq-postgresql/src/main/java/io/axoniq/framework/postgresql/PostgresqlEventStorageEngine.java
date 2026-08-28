@@ -70,15 +70,18 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 import javax.sql.DataSource;
 
@@ -112,11 +115,32 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      */
     private record Batch(@Nullable Snapshot snapshot, List<FinalizedEvent> events, long highestGlobalIndex) {}
 
-    private record TagFilter(CharSequence sql, List<List<String>> tagParameters) {
+    /**
+     * The parameters needed to bind one criterion's {@link #FILTER_SUB_QUERY} instance, in the
+     * order its {@code ?} place-holders appear: the criterion's tag key/value pairs, then its
+     * type array (if it restricts by type), then the distinct key/value pair count for {@code HAVING}.
+     *
+     * @param tagParameters    the criterion's tag keys and values, alternating, cannot be {@code null}, may be empty
+     * @param typeParameters   the criterion's type names, cannot be {@code null}, empty if the criterion does not restrict by type
+     * @param distinctTagCount the number of distinct tags required to match: one per tag, plus one more if typeParameters is non-empty
+     */
+    private record CriterionFilter(List<String> tagParameters, List<String> typeParameters, int distinctTagCount) {}
+
+    private record TagFilter(CharSequence sql, List<CriterionFilter> criterionFilters) {
         boolean isEmpty() {
-            return tagParameters.isEmpty();
+            return criterionFilters.isEmpty();
         }
     }
+
+    /**
+     * A single criterion's {@code condition} fragment (for {@link #FILTER_SUB_QUERY} or
+     * {@link #CONSISTENCY_TAGS_LOCK}'s fallback) paired with the {@link CriterionFilter} bind
+     * parameters that go with it - see {@link #buildCriterionSql(EventCriterion)}.
+     *
+     * @param condition the criterion's tag/type condition, cannot be {@code null}
+     * @param filter    the criterion's bind parameters, cannot be {@code null}
+     */
+    private record CriterionSql(String condition, CriterionFilter filter) {}
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PostgresqlEventStorageEngine.class);
     private static final TagFilter EMPTY = new TagFilter("", List.of());
@@ -128,6 +152,16 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * as an actual position, without a separate code path.
      */
     private static final GlobalIndexPosition MAX_GLOBAL_INDEX_POSITION = new GlobalIndexPosition(Long.MAX_VALUE);
+
+    /**
+     * Reserved tag key used to record an event's type as a regular tag, written automatically by
+     * the {@code axon_write_type_tag} database trigger installed in the constructor. Callers
+     * cannot supply a tag using this key themselves; see {@link #validateNoReservedTags(List)}.
+     * <p>
+     * Package-private so tests can construct the exact same {@code consistency_tags} identity
+     * this engine uses for the reserved type restriction.
+     */
+    static final String TYPE_TAG_KEY = "__T";
 
     /**
      * CTE prefix resolving {@code snap} to a fixed, given start position, exposed as {@code
@@ -193,15 +227,18 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * or a row with no snapshot data if there is none - followed by up to {@code limit} events.
      * See {@link #RESUME_AT_SNAPSHOT} for why this leading row always sorts first. Callers must
      * always skip the first row and bind {@code limit + 1} to account for it.
+     * <p>
+     * The trailing {@code type_version} column is the event's {@code MessageType} version - not to
+     * be confused with the {@code version} column, which is the leading snapshot row's own version.
      *
      * <li>Parameter 1 {@code long}: maximum number of rows to query, excluding the leading {@code snap} row
      */
     private static final String EVENTS_READ_MULTIPLE =
         """
-        SELECT s.sort_index AS global_index, s.timestamp, NULL::varchar AS identifier, NULL::varchar AS type, s.payload, s.metadata, s.version, s.snapshot_position
+        SELECT s.sort_index AS global_index, s.timestamp, NULL::varchar AS identifier, NULL::varchar AS type, s.payload, s.metadata, s.version, s.snapshot_position, NULL::varchar AS type_version
           FROM snap s
         UNION ALL
-        SELECT e.global_index, e.timestamp, e.identifier, e.type, e.payload, e.metadata, NULL AS version, NULL::int8 AS snapshot_position
+        SELECT e.global_index, e.timestamp, e.identifier, e.type, e.payload, e.metadata, NULL AS version, NULL::int8 AS snapshot_position, e.type_version
           FROM events e
           WHERE e.global_index > (SELECT sort_index FROM snap)
         ORDER BY global_index
@@ -216,19 +253,20 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * filters need to be applied. This is added to the main query as a JOIN on the tags
      * table.
      * <p>
-     * The {@code key-value-pairs} place-holder must be replaced with multiple parameter
-     * place-holders, one pair for each tag to filter on.
+     * The {@code condition} place-holder must be replaced with the criterion's tag and/or type
+     * condition - see {@link #buildTagFilter(Set)}.
      *
-     * <li>Parameter 1 {@code long}: the number of tags that must match (should be equal to number of tags filtered on)
+     * <li>Parameter 1 {@code long}: the number of distinct key/value pairs that must match (one per
+     * tag, plus one more for the reserved type tag if the criterion also restricts by type)
      */
     private static final String FILTER_SUB_QUERY =
         """
         SELECT t.global_index
           FROM tags t
           WHERE t.global_index > (SELECT sort_index FROM snap)
-            AND (t.key, t.value) IN ({key-value-pairs})
+            AND ({condition})
           GROUP BY t.global_index
-          HAVING COUNT(DISTINCT t.key) = ?
+          HAVING COUNT(DISTINCT (t.key, t.value)) = ?
         """;
 
     /**
@@ -263,14 +301,15 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      *
      * <li>Parameter 1 {@code Instant}: the event timestamp
      * <li>Parameter 2 {@code String}: the event identifier
-     * <li>Parameter 3 {@code String}: the event type
-     * <li>Parameter 4 {@code byte[]}: the payload as a byte array
-     * <li>Parameter 5 {@code String}: the metadata in JSON format
+     * <li>Parameter 3 {@code String}: the event type's qualified name
+     * <li>Parameter 4 {@code String}: the event type's version
+     * <li>Parameter 5 {@code byte[]}: the payload as a byte array
+     * <li>Parameter 6 {@code String}: the metadata in JSON format
      */
     private static final String EVENTS_INSERT =
         """
-        INSERT INTO events (timestamp, identifier, type, payload, metadata)
-          VALUES (?, ?, ?, ?, ?::json)
+        INSERT INTO events (timestamp, identifier, type, type_version, payload, metadata)
+          VALUES (?, ?, ?, ?, ?, ?::json)
         """;
 
     /**
@@ -286,18 +325,114 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         """;
 
     /**
-     * Upserts a tag with the latest global index, if it would be consistent, after inserting an event.
+     * Locks one or more attribute hashes for a single criterion using only the fast, same-row
+     * check - no fallback. This is the first of up to two round trips - see {@link #lockCriterion}
+     * for why the fallback-aware statement ({@link #CONSISTENCY_TAGS_LOCK}) must always be a
+     * separate, later round trip rather than be embedded here.
+     * <p>
+     * The {@code {values}} place-holder must be replaced with one {@code (?, ?)} group per
+     * attribute hash to lock.
      *
-     * <li>Parameter 1 {@code int}: the tag hash
-     * <li>Parameter 2 {@code long}: the global index associated with the newly inserted event
-     * <li>Parameter 3 {@code long}: the global index which it must be consistent with
+     * <li>Parameter group, repeated once per attribute hash: {@code int} the tag hash, {@code long} the temporary global index
+     * <li>Final parameter {@code long}: the marker position
      */
-    private static final String CONSISTENCY_TAGS_UPSERT =
+    private static final String CONSISTENCY_TAGS_FAST_LOCK =
         """
-        INSERT INTO consistency_tags (tag_hash, global_index) VALUES (?, ?)
+        INSERT INTO consistency_tags (tag_hash, global_index) VALUES {values}
           ON CONFLICT (tag_hash) DO UPDATE
-            SET global_index = EXCLUDED.global_index
+            SET global_index = LEAST(consistency_tags.global_index, EXCLUDED.global_index)
             WHERE consistency_tags.global_index < ? AND consistency_tags.global_index >= 0
+          RETURNING tag_hash
+        """;
+
+    /**
+     * Locks one or more still-unresolved attribute hashes for a single criterion, upserting
+     * each with the latest (temporary) global index if it would be consistent - either because
+     * nothing has touched it since the given marker (the fast check, re-tried here in case it
+     * was only contention, not a real conflict, that made {@link #CONSISTENCY_TAGS_FAST_LOCK}
+     * leave it unresolved), or, failing that, because a precise re-check against the real
+     * {@code tags}/{@code events} data confirms no event actually matching the full criterion
+     * exists beyond the marker (the fallback).
+     * <p>
+     * The {@code {values}} place-holder must be replaced with one {@code (?, ?)} group per
+     * attribute hash to lock. The {@code {condition}} place-holder must be replaced with the
+     * criterion's tag/type condition - see {@link #buildCriterionSql(EventCriterion)}.
+     * <p>
+     * This must always run as its own, separate round trip from {@link #CONSISTENCY_TAGS_FAST_LOCK}
+     * - never embedded in the same statement - so that its fallback subquery is guaranteed a
+     * fresh snapshot. Verified empirically against PostgreSQL 16: a statement that has to wait
+     * for a row lock held by another transaction only gets a refreshed view of that specific row
+     * once unblocked (the standard {@code READ COMMITTED} re-check) - a subquery against a
+     * different table, evaluated as part of that same blocked statement, still sees the snapshot
+     * from before the wait began. Splitting the fast check and the fallback into two statements
+     * means the fallback's statement starts (and takes its snapshot) only after any blocking in
+     * the first has already been resolved.
+     * <p>
+     * The fallback treats any still-unfinalized event (negative {@code global_index}) as
+     * unconditionally past the marker: a marker can never be past the last visible index, so an
+     * unfinalized event - committed, just not yet renumbered - is always "later" than it, even
+     * though it stays invisible to reads until finalized.
+     * <p>
+     * Because the fallback can grant permission to update even when the existing value is
+     * negative (unlike the fast check alone, which only ever fires when it is {@code >= 0}), the
+     * existing value is no longer guaranteed to be numerically greater than {@code
+     * EXCLUDED.global_index}: a concurrently-processing event with a more negative (later) temp
+     * index could complete its own locking first. {@code LEAST(...)} keeps whichever of the two
+     * is actually more recent, so this can never regress a hash's recorded position - the same
+     * reasoning as {@link #UNCONDITIONAL_CONSISTENCY_TAGS_UPSERT}.
+     * <p>
+     * Verified empirically against PostgreSQL 16: being uncorrelated to any individual row, the
+     * fallback subquery is evaluated at most once per statement (hoisted into an {@code
+     * InitPlan}) regardless of how many attribute hashes are being locked, and not at all when
+     * the fast check alone resolves every one of them - so this costs nothing when uncontended,
+     * and a single, flat check when it isn't.
+     *
+     * <li>Parameter group, repeated once per attribute hash: {@code int} the tag hash, {@code long} the temporary global index
+     * <li>Parameter {@code long}: the marker position, for the fast check
+     * <li>Parameter {@code long}: the marker position again, for the fallback check
+     * <li>Parameters: the criterion's tag/type bind parameters, see {@link #buildCriterionSql(EventCriterion)}
+     * <li>Final parameter {@code int}: the criterion's distinct tag count, for the fallback's {@code HAVING}
+     */
+    private static final String CONSISTENCY_TAGS_LOCK =
+        """
+        INSERT INTO consistency_tags (tag_hash, global_index) VALUES {values}
+          ON CONFLICT (tag_hash) DO UPDATE
+            SET global_index = LEAST(consistency_tags.global_index, EXCLUDED.global_index)
+            WHERE (consistency_tags.global_index < ? AND consistency_tags.global_index >= 0)
+               OR NOT EXISTS (
+                 SELECT 1
+                   FROM tags t
+                   WHERE (t.global_index >= ? OR t.global_index < 0) AND ({condition})
+                   GROUP BY t.global_index
+                   HAVING COUNT(DISTINCT (t.key, t.value)) = ?
+                   LIMIT 1
+               )
+          RETURNING tag_hash
+        """;
+
+    /**
+     * Directly checks whether an event matching a criterion exists beyond a given marker, for
+     * criteria with no tags at all (a pure type restriction) that have nothing to hash-lock
+     * through {@link #CONSISTENCY_TAGS_LOCK} - see {@link #hasConflict}.
+     * <p>
+     * The {@code {condition}} place-holder must be replaced with the criterion's tag/type
+     * condition - see {@link #buildCriterionSql(EventCriterion)}. Treats any still-unfinalized
+     * event (negative {@code global_index}) as unconditionally past the marker, for the same
+     * reason {@link #CONSISTENCY_TAGS_LOCK}'s fallback does.
+     *
+     * <li>Parameter {@code long}: the marker position
+     * <li>Parameters: the criterion's tag/type bind parameters, see {@link #buildCriterionSql(EventCriterion)}
+     * <li>Final parameter {@code int}: the criterion's distinct tag count, for the {@code HAVING}
+     */
+    private static final String CRITERION_CONFLICT_CHECK =
+        """
+        SELECT 1
+          FROM tags t
+          WHERE (t.global_index >= ? OR t.global_index < 0)
+            AND ({condition})
+          GROUP BY t.global_index
+          HAVING COUNT(DISTINCT (t.key, t.value)) = ?
+          LIMIT 1
         """;
 
     /**
@@ -336,13 +471,17 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      * conflict.
      * <p>
      * Must be a power of two to allow efficient bitmask-based indexing.
+     * <p>
+     * Package-private so tests can assert this hasn't silently changed - a hardcoded hash
+     * collision fixture is only valid for this exact capacity.
      */
-    private final int hashCapacity = 1024 * 1024;  // must be a power of 2
+    final int hashCapacity = 1024 * 1024;  // must be a power of 2
 
     /**
-     * Derived from capacity (which must be a power of 2)
+     * Derived from capacity (which must be a power of 2). Package-private for the same
+     * reason as {@link #hashCapacity}.
      */
-    private final int hashMask = hashCapacity - 1;
+    final int hashMask = hashCapacity - 1;
 
     /*
      * This can become configurable at some later stage with a big warning that it can't be
@@ -420,7 +559,12 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         this.transactionalExecutorProvider = new JdbcTransactionalExecutorProvider(dataSource);
         this.snapshotStore = new PostgresqlSnapshotStore(dataSource, converter);
 
-        PostgresqlSchemaInitializer.initialize(dataSource);
+        try {
+            PostgresqlSchemaInitializer.initialize(dataSource);
+        }
+        catch (SQLException e) {
+            throw new IllegalStateException("Could not initialize " + getClass().getSimpleName(), e);
+        }
 
         this.eventMonitor = new PostgresqlEventMonitor(dataSource);
         this.finalizer = new PostgresqlFinalizer(dataSource, eventMonitor::updateHighestKnownGlobalIndex);
@@ -440,19 +584,23 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
      */
 
     @Override
-    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot) {
-        return snapshotStore.store(qualifiedName, identifier, snapshot);
+    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
+                                         @Nullable ProcessingContext context) {
+        return snapshotStore.store(qualifiedName, identifier, snapshot, context);
     }
 
     @Override
-    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier) {
-        return snapshotStore.load(qualifiedName, identifier);
+    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
+                                                      @Nullable ProcessingContext context) {
+        return snapshotStore.load(qualifiedName, identifier, context);
     }
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("dataSource", dataSource);
         descriptor.describeProperty("converter", converter);
+        descriptor.describeProperty("transactionalExecutorProvider", transactionalExecutorProvider);
+        descriptor.describeProperty("snapshotStore", snapshotStore);
     }
 
     @Override
@@ -461,6 +609,8 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         ProcessingContext context,
         List<TaggedEventMessage<?>> events
     ) {
+        validateNoReservedTags(events);
+
         entitlementManager.claimMessage(PostgresAxoniqAddon.IDENTIFIER, EntitlementMessageType.EVENT, events.size());
 
         if (LOGGER.isDebugEnabled()) {
@@ -473,31 +623,60 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                     LOGGER.debug("appendEvents: failed");
                 }
 
-                throw AppendEventsTransactionRejectedException.conflictingEventsDetected(condition.consistencyMarker());  // allow executor to rollback correctly
+                Set<Tag> tags = condition.criteria()
+                    .flatten()
+                    .stream()
+                    .flatMap(criterion -> criterion.tags().stream())
+                    .collect(Collectors.toSet());
+                // allow executor to rollback correctly
+                throw AppendEventsTransactionRejectedException.conflictingEventsDetected(
+                        condition.consistencyMarker(), tags
+                );
             }
 
             return appendTransaction;
         });
     }
 
+    /**
+     * Rejects any event carrying a tag with the reserved {@link #TYPE_TAG_KEY key}, which is written
+     * automatically by the {@code axon_write_type_tag} database trigger and must never be supplied
+     * directly.
+     *
+     * @param events the events to validate, cannot be {@code null}
+     * @throws IllegalArgumentException if any event carries a tag using the reserved key
+     */
+    private static void validateNoReservedTags(List<TaggedEventMessage<?>> events) {
+        for (TaggedEventMessage<?> tem : events) {
+            for (Tag tag : tem.tags()) {
+                if (TYPE_TAG_KEY.equals(tag.key())) {
+                    throw new IllegalArgumentException(
+                        "Tag key \"" + TYPE_TAG_KEY + "\" is reserved for internal use and cannot be supplied explicitly"
+                    );
+                }
+            }
+        }
+    }
+
     // TODO #8 performance improvement possible here by avoiding a lot of back-and-forth with the server
     private boolean internalAppendEvents(Connection connection, AppendCondition condition, List<TaggedEventMessage<?>> events) throws SQLException {
         try (
             PreparedStatement eventInsert = connection.prepareStatement(EVENTS_INSERT, Statement.RETURN_GENERATED_KEYS);
-            PreparedStatement consistencyTagsUpsert = connection.prepareStatement(CONSISTENCY_TAGS_UPSERT);
             PreparedStatement unconditionalConsistencyTagsUpsert = connection.prepareStatement(UNCONDITIONAL_CONSISTENCY_TAGS_UPSERT);
             PreparedStatement tagInsert = connection.prepareStatement(TAG_INSERT);
         ) {
-            Set<Tag> batchLockedTags = new HashSet<>();
+            Set<Integer> batchLockedHashes = new HashSet<>();
 
             for (TaggedEventMessage<?> tem : events) {
                 EventMessage message = tem.event();
+                String eventTypeName = message.type().qualifiedName().fullName();
 
                 eventInsert.setTimestamp(1, Timestamp.from(message.timestamp()));
                 eventInsert.setString(2, message.identifier());
-                eventInsert.setString(3, message.type().toString());
-                eventInsert.setBytes(4, converter.convertPayload(message, byte[].class));
-                eventInsert.setString(5, MetadataSerializer.toJson(message.metadata()));
+                eventInsert.setString(3, eventTypeName);
+                eventInsert.setString(4, message.type().version());
+                eventInsert.setBytes(5, converter.convertPayload(message, byte[].class));
+                eventInsert.setString(6, MetadataSerializer.toJson(message.metadata()));
                 eventInsert.execute();
 
                 try (ResultSet keys = eventInsert.getGeneratedKeys()) {
@@ -506,20 +685,20 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
                     }
 
                     long temporaryGlobalIndex = keys.getLong(1);
-                    Set<Tag> lockedTags = lock(consistencyTagsUpsert, condition, temporaryGlobalIndex, batchLockedTags);
+                    Set<Integer> lockedHashes = lock(connection, condition, temporaryGlobalIndex, batchLockedHashes);
 
-                    if (lockedTags == null) {  // locking of some or all tags failed, return that appending failed
+                    if (lockedHashes == null) {  // locking of some or all attributes failed, return that appending failed
                         return false;
                     }
 
-                    batchLockedTags.addAll(lockedTags);
+                    batchLockedHashes.addAll(lockedHashes);
 
                     // Update unconditional tags (tags not part of the append condition):
                     for (Tag tag : tem.tags()) {
-                        if (!lockedTags.contains(tag)) {
-                            int hash = hashPolicy.hash((tag.key() + ":" + tag.value()).getBytes(StandardCharsets.UTF_8));
+                        int tagHash = consistencyHash(tag.key(), tag.value());
 
-                            unconditionalConsistencyTagsUpsert.setInt(1, hash & hashMask);
+                        if (!lockedHashes.contains(tagHash)) {
+                            unconditionalConsistencyTagsUpsert.setInt(1, tagHash);
                             unconditionalConsistencyTagsUpsert.setLong(2, temporaryGlobalIndex);
                             unconditionalConsistencyTagsUpsert.execute();
                         }
@@ -537,7 +716,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     }
 
     @Override
-    public MessageStream<EventMessage> source(SourcingCondition condition) {
+    public MessageStream<EventMessage> source(SourcingCondition condition, @Nullable ProcessingContext context) {
         Set<EventCriterion> criterions = condition.criteria().flatten();
 
         return DelayedMessageStream.create(
@@ -746,6 +925,18 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         };
 
         return connectionExecutor(null).apply(connection -> {
+
+            /*
+             * Repeatable read is used here because EVENTS_READ_MULTIPLE is two statements - the page
+             * read and a trailing MAX(global_index) watermark - and under READ COMMITTED each would
+             * take its own snapshot, letting a commit land in between and silently skip events. This
+             * only affects this dedicated, single-call, read-only connection - not
+             * CONSISTENCY_TAGS_LOCK's append-side connection, which relies on READ COMMITTED's
+             * per-statement refresh instead.
+             */
+
+            connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+
             try (PreparedStatement ps = connection.prepareStatement(query)) {
                 int parameterIndex = 1;
 
@@ -756,12 +947,16 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
 
                 ps.setLong(parameterIndex++, positionValue);  // RESUME_AT_POSITION's start position or RESUME_AT_SNAPSHOT's maximum position
 
-                for (List<String> parameterGroup : tagFilter.tagParameters) {
-                    for (String parameter : parameterGroup) {
+                for (CriterionFilter criterionFilter : tagFilter.criterionFilters) {
+                    for (String parameter : criterionFilter.tagParameters()) {
                         ps.setString(parameterIndex++, parameter);  // tag parameters in subquery
                     }
 
-                    ps.setInt(parameterIndex++, parameterGroup.size() / 2);  // HAVING COUNT in each subquery
+                    if (!criterionFilter.typeParameters().isEmpty()) {
+                        ps.setArray(parameterIndex++, connection.createArrayOf("varchar", criterionFilter.typeParameters().toArray()));
+                    }
+
+                    ps.setInt(parameterIndex++, criterionFilter.distinctTagCount());  // HAVING COUNT in each subquery
                 }
 
                 ps.setLong(parameterIndex++, limit + 1L);  // LIMIT ?, +1 for the leading snap row
@@ -813,7 +1008,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         long globalIndex = resultSet.getLong(1);
         Instant timestamp = resultSet.getTimestamp(2).toInstant();
         String identifier = resultSet.getString(3);
-        MessageType messageType = MessageType.fromString(resultSet.getString(4));
+        MessageType messageType = new MessageType(new QualifiedName(resultSet.getString(4)), resultSet.getString(9));
         byte[] payload = resultSet.getBytes(5);
         Map<String, String> metadata = MetadataSerializer.fromJson(resultSet.getString(6));
 
@@ -852,70 +1047,118 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         return TrackingToken.addToContext(Context.empty(), new GlobalSequenceTrackingToken(event.position + 1));
     }
 
+    /**
+     * Builds the tag/type filter for the given criteria, unioning one {@link #FILTER_SUB_QUERY}
+     * instance per criterion. A criterion with neither tags nor types restricts nothing, so the
+     * whole filter collapses to {@link #EMPTY} (match everything) the moment one is encountered -
+     * that is correct even with other, more restrictive criteria present, since criteria combine
+     * with OR semantics.
+     * <p>
+     * Otherwise, each criterion's condition is one of:
+     * <ul>
+     *     <li>tags only - {@code (t.key, t.value) IN (...)}
+     *     <li>types only - {@code t.key = '__T' AND t.value = ANY(?)}, no tags to join on at all
+     *     <li>both - the two conditions above, combined with {@code OR}
+     * </ul>
+     *
+     * @param criterions the criteria to filter events on, cannot be {@code null}
+     * @return the resulting filter, never {@code null}
+     */
     private static TagFilter buildTagFilter(Set<EventCriterion> criterions) {
         if (criterions.isEmpty()) {
             return EMPTY;
         }
 
         StringBuilder sql = new StringBuilder();
-        List<List<String>> parameterGroups = new ArrayList<>();
+        List<CriterionFilter> criterionFilters = new ArrayList<>();
         boolean firstCriterion = true;
 
         for (EventCriterion criterion : criterions) {
-            if (criterion.tags().isEmpty()) {
-                return EMPTY;  // no tag restriction means match all events, so no filter needed
+            if (criterion.tags().isEmpty() && criterion.types().isEmpty()) {
+                return EMPTY;  // no restriction at all means match all events, so no filter needed
             }
 
             if (!firstCriterion) {
                 sql.append(" UNION ");
             }
 
-            List<String> parameters = new ArrayList<>();
-            StringBuilder keyValuePairs = new StringBuilder();
+            CriterionSql criterionSql = buildCriterionSql(criterion);
 
-            for (Tag tag : criterion.tags()) {
-                if (!keyValuePairs.isEmpty()) {
-                    keyValuePairs.append(", ");
-                }
-
-                keyValuePairs.append("(?, ?)");
-
-                parameters.add(tag.key());
-                parameters.add(tag.value());
-            }
-
-            parameterGroups.add(parameters);
-
-            sql.append(FILTER_SUB_QUERY.replace("{key-value-pairs}", keyValuePairs));
+            criterionFilters.add(criterionSql.filter());
+            sql.append(FILTER_SUB_QUERY.replace("{condition}", criterionSql.condition()));
 
             firstCriterion = false;
         }
 
-        return new TagFilter(sql, parameterGroups);
+        return new TagFilter(sql, criterionFilters);
     }
 
     /**
-     * This function "locks" the tags part of the given append condition, so other concurrent
-     * events being appended using overlapping tags will block. If this transaction is committed,
-     * any other transactions blocking on an overlapping tag will fail. If this transaction is
-     * rolled back, they may progress.
+     * Builds the {@code condition} fragment and bind parameters for a single criterion, shared
+     * by {@link #buildTagFilter(Set)} (which unions one instance per criterion for reads) and
+     * {@link #lock} (which checks one criterion at a time for the write-side fallback).
      *
-     * The locking works by modifying the consistency tags table, and setting the global index
-     * for each of the tags involved to the global index value of the event that was just inserted.
-     * This is a temporary value (negative), which will be updated to a permanent global index
-     * as part of a separate finalization transaction.
+     * @param criterion the criterion to build a filter fragment for, cannot be {@code null}
+     * @return the condition fragment and its bind parameters, never {@code null}
+     */
+    private static CriterionSql buildCriterionSql(EventCriterion criterion) {
+        List<String> tagParameters = new ArrayList<>();
+        StringBuilder keyValuePairs = new StringBuilder();
+
+        for (Tag tag : criterion.tags()) {
+            if (!keyValuePairs.isEmpty()) {
+                keyValuePairs.append(", ");
+            }
+
+            keyValuePairs.append("(?, ?)");
+
+            tagParameters.add(tag.key());
+            tagParameters.add(tag.value());
+        }
+
+        List<String> typeParameters = criterion.types().stream().map(QualifiedName::fullName).toList();
+        String typeCondition = "t.key = '" + TYPE_TAG_KEY + "' AND t.value = ANY(?)";
+        String condition = keyValuePairs.isEmpty()
+            ? typeCondition
+            : typeParameters.isEmpty()
+                ? "(t.key, t.value) IN (" + keyValuePairs + ")"
+                : "(t.key, t.value) IN (" + keyValuePairs + ") OR (" + typeCondition + ")";
+
+        int distinctTagCount = criterion.tags().size() + (typeParameters.isEmpty() ? 0 : 1);
+
+        return new CriterionSql(condition, new CriterionFilter(tagParameters, typeParameters, distinctTagCount));
+    }
+
+    /**
+     * This function locks every criterion of the given append condition, so other concurrent
+     * events being appended using overlapping tags or types will block. If this transaction is
+     * committed, any other transactions blocking on an overlapping attribute will fail. If this
+     * transaction is rolled back, they may progress.
+     * <p>
+     * Each real tag is its own independent attribute hash, batched into a single {@link
+     * #CONSISTENCY_TAGS_LOCK} statement per criterion, so one round trip locks all of a
+     * criterion's tags at once. That statement's embedded fallback resolves any hash that looks
+     * stale by precisely re-checking the criterion as a whole against the real data - tags and
+     * type together, via {@link #buildCriterionSql(EventCriterion)} - so a shared tag with a
+     * non-matching type, or an unrelated tag that merely collides on the same hash bucket,
+     * doesn't cause a false conflict.
+     * <p>
+     * A type restriction is never itself hash-locked: unlike tags, types are typically
+     * low-cardinality, so every event of a common type would contend on the same handful of
+     * rows for no benefit - the fallback above already establishes type-precision once a tag's
+     * fast check needs it, by reading the {@code __T} rows the {@code axon_write_type_tag}
+     * trigger maintains directly. The only gap that leaves is a criterion with no tags at all
+     * (a pure type restriction, nothing to hash-lock through), handled separately by directly
+     * running that same precise check unconditionally - see {@link #hasConflict}.
      *
-     * Note that encountering a global index during the update that is either higher than the index
-     * given in the append condition, or is a temporary (negative) index, means there was a conflict.
-     *
-     * @param tagUpsert the conditional tag upsert statement, cannot be {@code null}
+     * @param connection the connection to lock on, cannot be {@code null}
      * @param condition the append condition, cannot be {@code null}
      * @param temporaryGlobalIndex the (temporary) index of a newly inserted event, always negative
-     * @param batchLockedTags tags already locked in this batch, cannot be {@code null}
-     * @return a set of tags that were locked (possibly empty), or {@code null} if locking failed
+     * @param batchLockedHashes attribute hashes already locked in this batch, cannot be {@code null}
+     * @return the attribute hashes that were locked (possibly empty), or {@code null} if locking failed
      * @throws SQLException when a JDBC error occurred
      */
-    private Set<Tag> lock(PreparedStatement tagUpsert, AppendCondition condition, long temporaryGlobalIndex, Set<Tag> batchLockedTags) throws SQLException {
+    private Set<Integer> lock(Connection connection, AppendCondition condition, long temporaryGlobalIndex, Set<Integer> batchLockedHashes) throws SQLException {
 
         /*
          * The position in a consistency marker is the position just after the last event it was consistent with,
@@ -929,29 +1172,235 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
         assert temporaryGlobalIndex < 0;
         assert globalIndex >= 0;
 
-        Set<Tag> lockedTags = new HashSet<>();
+        Set<Integer> lockedHashes = new HashSet<>();
 
-        for(EventCriterion criterion : condition.criteria().flatten()) {
-            // TODO #52 Support type based append transactions
-            for (Tag tag : criterion.tags()) {
-                // Only lock the tag if it wasn't already locked in this batch:
-                if (!batchLockedTags.contains(tag)) {
-                    int hash = hashPolicy.hash((tag.key() + ":" + tag.value()).getBytes(StandardCharsets.UTF_8));
-
-                    tagUpsert.setInt(1, hash & hashMask);
-                    tagUpsert.setLong(2, temporaryGlobalIndex);  // the temporary global index to write
-                    tagUpsert.setLong(3, globalIndex);  // the (permanent) global index to check for consistency (never negative)
-
-                    if (tagUpsert.executeUpdate() == 0) {
-                        return null;
-                    }
+        for (EventCriterion criterion : condition.criteria().flatten()) {
+            if (criterion.tags().isEmpty()) {  // a pure type restriction - nothing to hash-lock, check directly
+                if (hasConflict(connection, criterion, globalIndex)) {
+                    return null;
                 }
 
-                lockedTags.add(tag);
+                continue;
             }
+
+            /*
+             * Sorted (rather than e.g. insertion order) so that any two transactions locking an
+             * overlapping set of hashes always attempt them in the same order - the standard fix
+             * for ABBA deadlocks between concurrent multi-row lock attempts.
+             */
+            Set<Integer> hashesToLock = new TreeSet<>();
+
+            for (Tag tag : criterion.tags()) {
+                hashesToLock.add(consistencyHash(tag.key(), tag.value()));
+            }
+
+            hashesToLock.removeAll(batchLockedHashes);
+            hashesToLock.removeAll(lockedHashes);
+
+            if (hashesToLock.isEmpty()) {
+                continue;  // every tag of this criterion was already locked earlier in this batch
+            }
+
+            Set<Integer> locked = lockCriterion(connection, criterion, hashesToLock, temporaryGlobalIndex, globalIndex);
+
+            if (locked == null) {
+                return null;
+            }
+
+            lockedHashes.addAll(locked);
         }
 
-        return lockedTags;
+        return lockedHashes;
+    }
+
+    /**
+     * Directly checks whether an event matching the given criterion exists beyond the given
+     * marker, for criteria with no tags at all (a pure type restriction) that therefore have
+     * nothing to hash-lock through {@link #CONSISTENCY_TAGS_LOCK} - see {@link #lock}.
+     * <p>
+     * Treats any still-unfinalized event (negative {@code global_index}) as unconditionally
+     * past the marker, for the same reason {@link #CONSISTENCY_TAGS_LOCK}'s fallback does.
+     *
+     * @param connection the connection to check on, cannot be {@code null}
+     * @param criterion the (tag-less) criterion to check, cannot be {@code null}
+     * @param globalIndex the marker position to check consistency against, never negative
+     * @return {@code true} if a matching event exists beyond the marker
+     * @throws SQLException when a JDBC error occurred
+     */
+    private boolean hasConflict(Connection connection, EventCriterion criterion, long globalIndex) throws SQLException {
+        CriterionSql criterionSql = buildCriterionSql(criterion);
+        CriterionFilter filter = criterionSql.filter();
+
+        String sql = CRITERION_CONFLICT_CHECK.replace("{condition}", criterionSql.condition());
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            int parameterIndex = 1;
+
+            ps.setLong(parameterIndex++, globalIndex);
+
+            for (String parameter : filter.tagParameters()) {
+                ps.setString(parameterIndex++, parameter);
+            }
+
+            if (!filter.typeParameters().isEmpty()) {
+                ps.setArray(parameterIndex++, connection.createArrayOf("varchar", filter.typeParameters().toArray()));
+            }
+
+            ps.setInt(parameterIndex, filter.distinctTagCount());
+
+            try (ResultSet resultSet = ps.executeQuery()) {
+                return resultSet.next();
+            }
+        }
+    }
+
+    /**
+     * Locks every given attribute hash for a single criterion, in at most two round trips - see
+     * {@link #lock}.
+     * <p>
+     * The first round trip ({@link #fastLock}) tries the cheap, same-row-only check for every
+     * hash at once. If that alone resolves them all - the common case for high-cardinality tags -
+     * this returns without a second round trip. Otherwise, a second, separate round trip ({@link
+     * #fallbackLock}) re-checks only the hashes still unresolved, now backed by the precise
+     * fallback. This second statement must never be merged into the first: see {@link
+     * #CONSISTENCY_TAGS_LOCK}'s Javadoc for why a fallback sharing a statement with a blocking
+     * write can observe a stale snapshot.
+     *
+     * @param connection the connection to lock on, cannot be {@code null}
+     * @param criterion the criterion {@code hashesToLock} belongs to, used to build the fallback's condition, cannot be {@code null}
+     * @param hashesToLock the distinct attribute hashes to lock, cannot be {@code null} or empty
+     * @param temporaryGlobalIndex the (temporary) index of a newly inserted event, always negative
+     * @param globalIndex the marker position to check consistency against, never negative
+     * @return the hashes that were locked, or {@code null} if a real conflict was confirmed
+     * @throws SQLException when a JDBC error occurred
+     */
+    private Set<Integer> lockCriterion(Connection connection, EventCriterion criterion, Set<Integer> hashesToLock, long temporaryGlobalIndex, long globalIndex) throws SQLException {
+        Set<Integer> resolved = fastLock(connection, hashesToLock, temporaryGlobalIndex, globalIndex);
+
+        if (resolved.size() == hashesToLock.size()) {
+            return resolved;
+        }
+
+        Set<Integer> remaining = new TreeSet<>(hashesToLock);
+
+        remaining.removeAll(resolved);
+
+        Set<Integer> fallbackResolved = fallbackLock(connection, criterion, remaining, temporaryGlobalIndex, globalIndex);
+
+        if (fallbackResolved == null) {
+            return null;
+        }
+
+        Set<Integer> allResolved = new HashSet<>(resolved);
+
+        allResolved.addAll(fallbackResolved);
+
+        return allResolved;
+    }
+
+    /**
+     * Attempts the cheap, same-row-only {@link #CONSISTENCY_TAGS_FAST_LOCK} for every given hash
+     * in one round trip - the first phase of {@link #lockCriterion}.
+     *
+     * @param connection the connection to lock on, cannot be {@code null}
+     * @param hashesToLock the distinct attribute hashes to attempt, cannot be {@code null} or empty
+     * @param temporaryGlobalIndex the (temporary) index of a newly inserted event, always negative
+     * @param globalIndex the marker position to check consistency against, never negative
+     * @return the hashes that resolved via the fast check alone (possibly empty, never {@code null})
+     * @throws SQLException when a JDBC error occurred
+     */
+    private Set<Integer> fastLock(Connection connection, Set<Integer> hashesToLock, long temporaryGlobalIndex, long globalIndex) throws SQLException {
+        String values = String.join(", ", Collections.nCopies(hashesToLock.size(), "(?, ?)"));
+        String sql = CONSISTENCY_TAGS_FAST_LOCK.replace("{values}", values);
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            int parameterIndex = 1;
+
+            for (int hash : hashesToLock) {
+                ps.setInt(parameterIndex++, hash);
+                ps.setLong(parameterIndex++, temporaryGlobalIndex);
+            }
+
+            ps.setLong(parameterIndex, globalIndex);
+
+            try (ResultSet resultSet = ps.executeQuery()) {
+                Set<Integer> lockedHashes = new HashSet<>();
+
+                while (resultSet.next()) {
+                    lockedHashes.add(resultSet.getInt(1));
+                }
+
+                return lockedHashes;
+            }
+        }
+    }
+
+    /**
+     * Re-checks and locks the given (still-unresolved after {@link #fastLock}) attribute hashes
+     * for a single criterion in one round trip, using {@link #CONSISTENCY_TAGS_LOCK}'s fast-check-
+     * or-fallback logic - the second phase of {@link #lockCriterion}, run only when needed.
+     *
+     * @param connection the connection to lock on, cannot be {@code null}
+     * @param criterion the criterion {@code hashesToLock} belongs to, used to build the fallback's condition, cannot be {@code null}
+     * @param hashesToLock the distinct attribute hashes still needing resolution, cannot be {@code null} or empty
+     * @param temporaryGlobalIndex the (temporary) index of a newly inserted event, always negative
+     * @param globalIndex the marker position to check consistency against, never negative
+     * @return the hashes that were locked, or {@code null} if the fallback confirmed a real conflict
+     * @throws SQLException when a JDBC error occurred
+     */
+    private Set<Integer> fallbackLock(Connection connection, EventCriterion criterion, Set<Integer> hashesToLock, long temporaryGlobalIndex, long globalIndex) throws SQLException {
+        CriterionSql criterionSql = buildCriterionSql(criterion);
+        CriterionFilter filter = criterionSql.filter();
+
+        String values = String.join(", ", Collections.nCopies(hashesToLock.size(), "(?, ?)"));
+        String sql = CONSISTENCY_TAGS_LOCK
+            .replace("{values}", values)
+            .replace("{condition}", criterionSql.condition());
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            int parameterIndex = 1;
+
+            for (int hash : hashesToLock) {
+                ps.setInt(parameterIndex++, hash);
+                ps.setLong(parameterIndex++, temporaryGlobalIndex);
+            }
+
+            ps.setLong(parameterIndex++, globalIndex);  // fast check "< ?"
+            ps.setLong(parameterIndex++, globalIndex);  // fallback ">= ?"
+
+            for (String parameter : filter.tagParameters()) {
+                ps.setString(parameterIndex++, parameter);
+            }
+
+            if (!filter.typeParameters().isEmpty()) {
+                ps.setArray(parameterIndex++, connection.createArrayOf("varchar", filter.typeParameters().toArray()));
+            }
+
+            ps.setInt(parameterIndex, filter.distinctTagCount());
+
+            try (ResultSet resultSet = ps.executeQuery()) {
+                Set<Integer> lockedHashes = new HashSet<>();
+
+                while (resultSet.next()) {
+                    lockedHashes.add(resultSet.getInt(1));
+                }
+
+                return lockedHashes.size() == hashesToLock.size() ? lockedHashes : null;
+            }
+        }
+    }
+
+    /**
+     * Computes the masked hash identifying a single tag-like attribute - a real tag, or the
+     * reserved type restriction (see {@link #TYPE_TAG_KEY}) - as used for the {@code
+     * consistency_tags.tag_hash} column.
+     *
+     * @param key   the tag (or reserved type) key, cannot be {@code null}
+     * @param value the tag (or type) value, cannot be {@code null}
+     * @return the masked hash, always non-negative
+     */
+    private int consistencyHash(String key, String value) {
+        return hashPolicy.hash((key + ":" + value).getBytes(StandardCharsets.UTF_8)) & hashMask;
     }
 
     private TransactionalExecutor<Connection> connectionExecutor(ProcessingContext processingContext) {

@@ -79,6 +79,11 @@
                 <artifactId>axoniq-message-transformation</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-multi-tenancy</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- Axoniq Framework: Spring -->
             <dependency>
@@ -99,13 +104,20 @@
                 <artifactId>axoniq-data-protection</artifactId>
                 <!-- explicit versioning since it's maintained in a separate repository -->
                 <!-- make sure to update to the latest compatible release when releasing Axon Framework -->
-                <version>5.1.0</version>
+                <version>5.3.0</version>
             </dependency>
 
             <!-- Axoniq Framework: Test -->
             <dependency>
                 <groupId>io.axoniq.framework</groupId>
                 <artifactId>axoniq-testcontainer</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Axoniq Framework: Tracing -->
+            <dependency>
+                <groupId>io.axoniq.framework</groupId>
+                <artifactId>axoniq-tracing-micrometer</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

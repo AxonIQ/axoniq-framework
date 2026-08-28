@@ -91,6 +91,76 @@ The processor retries the same batch from its last committed position.
 * *DLQ persistence failure rolls back the handler's transactional work.* If the DLQ itself fails to persist a dead letter, that also breaks the transaction.
 Any transactional work performed by the handler earlier in the same batch (such as a projection update) is rolled back as well.
 
+[#_capacity_and_overflow]
+== Capacity and overflow
+
+A dead-letter queue is bounded. Two limits define its capacity:
+
+* `maxSequences` (defaults to 1024) caps the number of *distinct sequences* the queue holds.
+This limit applies to the queue as a whole, across every segment of the processor.
+* `maxSequenceSize` (defaults to 1024) caps the number of dead letters within a *single* sequence.
+
+When a limit is reached, the queue rejects the letter with a `DeadLetterQueueOverflowException`.
+The event can then neither be handled nor be parked, so the exception reaches the processor's xref:events:event-processors/index.adoc#error-handling[error handler] like any other event handling failure.
+With the default `PropagatingErrorHandler`, the streaming processor xref:events:event-processors/streaming.adoc#error_mode[aborts the segment] that the event belongs to and retries it with an incremental back-off.
+
+[IMPORTANT]
+.An overflowing queue stalls a whole segment, not just the failing sequence
+====
+While the queue has room, a failing sequence is parked and the processor moves on.
+Unrelated sequences in the same segment keep progressing, which is the isolation the dead-letter queue exists to provide.
+Once the queue overflows, that isolation disappears.
+
+A segment is not a single sequence: it is a bucket holding many unrelated sequences that share one tracking token and are processed as one ordered stream.
+An event the segment cannot get past holds back that token, and with it *every* sequence assigned to the same segment.
+
+Segments fail independently, so other segments keep processing.
+The result is partial degradation rather than a full stop: the sequences that stall are those that happen to hash into the affected segment.
+====
+
+=== What triggers overflow
+
+The two limits are checked at different moments, which makes the failure easier to predict:
+
+* An event whose sequence is *not yet* dead-lettered is checked against `maxSequences`.
+It is rejected only when the queue already holds the maximum number of sequences.
+* An event whose sequence *is already* dead-lettered is checked against `maxSequenceSize`.
+It is rejected only when that particular sequence is full.
+
+Two consequences follow.
+First, once the queue sits at `maxSequences`, follow-up events for sequences that are already parked continue to enqueue normally, until such a sequence reaches `maxSequenceSize`.
+It is the *first new failing sequence* that trips the overflow.
+Second, because `maxSequences` counts across all segments, failures piling up in one segment consume capacity that every other segment shares.
+A segment that is healthy in itself can therefore stall on the first failure it meets, purely because other segments exhausted the queue.
+
+=== Limiting the impact
+
+The <<Enqueue policy,enqueue policy>> is consulted _before_ a letter is enqueued, while overflow is raised _during_ the enqueue.
+A policy can therefore not react to an overflow. It can only keep the queue from reaching it.
+Overflow is something to prevent, not something to handle.
+
+Three levers are available, and they are most effective combined:
+
+*Size the queue for the failure volume you intend to absorb.*
+The defaults of 1024 suit a queue that parks the occasional poison message, not one that absorbs a broad outage.
+If a single downstream failure can dead-letter thousands of distinct entities, raise `maxSequences` accordingly through a <<Using a custom factory,custom factory>>.
+Weigh this against the cost of retrying that many sequences once the underlying problem is fixed.
+
+*Keep the queue from filling up.*
+An enqueue policy bounds growth from both ends: `Decisions.doNotEnqueue()` keeps failures that can never succeed out of the queue, and `Decisions.evict()` removes letters that have exhausted their retries.
+Without eviction, letters that keep failing occupy capacity indefinitely.
+The <<Enqueue policy,enqueue policy>> section shows both.
+
+Deciding to skip an event is a deliberate trade-off: you accept a gap in the affected sequence, to be closed by a xref:events:event-processors/streaming.adoc#replaying-events[replay] or manual remediation, in exchange for keeping the segment moving for everything else.
+For event handling components where a stall is more costly than a gap, this is usually the right default.
+
+*Watch how full the queue is.*
+`SequencedDeadLetterQueue#amountOfSequences` reports the current number of sequences, and `size` the total number of letters.
+Alert on these well before they reach the configured limits, so that a rising queue is a warning rather than the first symptom of a stalled segment.
+xref:axoniq-platform-reference:ROOT:features/dlq.adoc[Axoniq Platform] surfaces the same information without custom instrumentation.
+
+For the other conditions that stall a segment, and how to bound their impact, see xref:events:event-processors/streaming.adoc#stalled_segments[Common causes of a stalled segment].
+
 == Configuration
 
 Dead-letter queue configuration happens through the `DeadLetterQueueConfiguration` class, which provides a fluent API for enabling and customizing the queue.
@@ -103,26 +173,7 @@ Configuration API::
 --
 [source,java]
 ----
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-
-public class AxonConfig {
-
-    public void configureDeadLetterQueue(MessagingConfigurer configurer) {
-        configurer.eventProcessing(ep -> ep.pooledStreaming(ps -> ps
-                .processor(
-                        EventProcessorModule
-                                .pooledStreaming("my-processor")
-                                .eventHandlingComponents(components -> components
-                                        .declarative("myHandler", cfg -> myHandlerComponent))
-                                .customized((cfg, processorConfig) -> processorConfig
-                                        .extend(DeadLetterQueueConfiguration.class,
-                                                () -> new DeadLetterQueueConfiguration().enabled()))
-                )
-        ));
-    }
-}
+include::example$deadletterqueue/index/enable/AxonConfig.java[tag=configure-dead-letter-queue,indent=0]
 ----
 --
 
@@ -150,9 +201,8 @@ To selectively enable or disable the DLQ for individual components, use the Conf
 ====
 
 You can set the maximum number of saved sequences (defaults to 1024) and the maximum number of dead letters in a sequence (also defaults to 1024).
-If either of these thresholds is exceeded, the queue will throw a `DeadLetterQueueOverflowException`.
-This exception means the processor will stop processing new events altogether.
-Thus, the processor moves back to the behavior described at the start of the xref:events:event-processors/index.adoc#error-handling[Error Handling] section.
+Both are set on the queue itself, through a <<Using a custom factory,custom factory>>. There are no properties for them.
+Read <<_capacity_and_overflow,Capacity and overflow>> before changing these values, as exceeding either limit stalls a segment of the processor.
 
 === Using a custom factory
 
@@ -166,33 +216,7 @@ Configuration API::
 --
 [source,java]
 ----
-import io.axoniq.framework.messaging.deadletter.InMemorySequencedDeadLetterQueue;
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-
-public class AxonConfig {
-
-    public void configureDeadLetterQueue(MessagingConfigurer configurer) {
-        configurer.eventProcessing(ep -> ep.pooledStreaming(ps -> ps
-                .processor(
-                        EventProcessorModule
-                                .pooledStreaming("my-processor")
-                                .eventHandlingComponents(components -> components
-                                        .declarative("myHandler", cfg -> myHandlerComponent))
-                                .customized((cfg, processorConfig) -> processorConfig
-                                        .extend(DeadLetterQueueConfiguration.class,
-                                                () -> new DeadLetterQueueConfiguration()
-                                                        .enabled()
-                                                        .factory((name, config) ->
-                                                                InMemorySequencedDeadLetterQueue.builder()
-                                                                        .maxSequences(256)
-                                                                        .maxSequenceSize(256)
-                                                                        .build())))
-                )
-        ));
-    }
-}
+include::example$deadletterqueue/index/customfactory/AxonConfig.java[tag=custom-factory,indent=0]
 ----
 --
 
@@ -205,36 +229,7 @@ When this bean is present, it replaces the Spring Boot auto-configured factory f
 
 [source,java]
 ----
-import org.axonframework.conversion.GeneralConverter;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
-import io.axoniq.framework.messaging.eventhandling.deadletter.jpa.JpaSequencedDeadLetterQueue;
-import org.axonframework.messaging.core.unitofwork.transaction.jpa.JpaTransactionalExecutorProvider;
-import jakarta.persistence.EntityManagerFactory;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
-@Configuration
-public class DlqConfig {
-
-    @Bean
-    SequencedDeadLetterQueueFactory myDeadLetterQueueFactory(
-            EntityManagerFactory entityManagerFactory,
-            EventConverter eventConverter,
-            GeneralConverter converter
-    ) {
-        return (processingGroup, config) ->
-                JpaSequencedDeadLetterQueue.builder()
-                        .processingGroup(processingGroup)
-                        .maxSequences(256)
-                        .maxSequenceSize(256)
-                        .transactionalExecutorProvider(
-                                new JpaTransactionalExecutorProvider(entityManagerFactory))
-                        .eventConverter(eventConverter)
-                        .genericConverter(converter)
-                        .build();
-    }
-}
+include::example$deadletterqueue/index/DlqConfig.java[tag=jpa-factory-bean,indent=0]
 ----
 
 [source,properties]
@@ -263,26 +258,7 @@ Configuration API::
 --
 [source,java]
 ----
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-
-public class AxonConfig {
-
-    public void configureDeadLetterQueue(MessagingConfigurer configurer) {
-        configurer.eventProcessing(ep -> ep.pooledStreaming(ps -> ps
-                .processor(
-                        EventProcessorModule
-                                .pooledStreaming("my-processor")
-                                .eventHandlingComponents(/* ... */)
-                                .customized((cfg, processorConfig) -> processorConfig
-                                        .extend(DeadLetterQueueConfiguration.class,
-                                                () -> new DeadLetterQueueConfiguration()
-                                                        .enabled()
-                                                        .cacheMaxSize(4096)))) // Set a larger cache
-        ));
-    }
-}
+include::example$deadletterqueue/index/cachesize/AxonConfig.java[tag=configure-dead-letter-queue-cache-size,indent=0]
 ----
 --
 
@@ -310,41 +286,15 @@ axon.eventhandling.processors.my-processor.dlq.cache.size=0
 [NOTE]
 ====
 This feature is available through the Configuration API only.
-In Spring Boot, configure each processor individually using `axon.eventhandling.processors.<name>.dlq.enabled=true` and the related cache and overflow properties.
+In Spring Boot, configure each processor individually using `axon.eventhandling.processors.<name>.dlq.enabled=true` and the related cache properties.
+To set the capacity limits, supply a custom `SequencedDeadLetterQueueFactory` bean as shown in <<Using a custom factory>>.
 ====
 
 You can set dead-letter queue defaults that apply to all pooled streaming processors, which individual processors can then override:
 
 [source,java]
 ----
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-
-public class AxonConfig {
-
-    public void configureDeadLetterQueue(MessagingConfigurer configurer) {
-        configurer.eventProcessing(ep -> ep.pooledStreaming(ps -> ps
-                // Enable DLQ for all pooled streaming processors by default
-                .defaults(d -> d.extend(DeadLetterQueueConfiguration.class,
-                        () -> new DeadLetterQueueConfiguration()
-                                .enabled()
-                                .cacheMaxSize(2048)))
-                // This processor inherits the defaults
-                .processor(EventProcessorModule
-                        .pooledStreaming("processor-with-dlq")
-                        .eventHandlingComponents(/* ... */)
-                        .notCustomized())
-                // This processor explicitly disables DLQ
-                .processor(EventProcessorModule
-                        .pooledStreaming("processor-without-dlq")
-                        .eventHandlingComponents(/* ... */)
-                        .customized((cfg, c) -> c
-                                .extend(DeadLetterQueueConfiguration.class,
-                                        () -> new DeadLetterQueueConfiguration().disabled())))
-        ));
-    }
-}
+include::example$deadletterqueue/index/defaults/AxonConfig.java[tag=configure-dead-letter-queue-defaults,indent=0]
 ----
 
 === Configuring DLQ with an `EventProcessorDefinition` bean
@@ -355,26 +305,7 @@ For example, if `assigningHandlers` matches beans `orderProjection` and `orderNo
 
 [source,java]
 ----
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
-import org.axonframework.extension.spring.config.EventProcessorDefinition;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
-@Configuration
-public class ProcessorConfig {
-
-    @Bean
-    EventProcessorDefinition orderProcessor() {
-        return EventProcessorDefinition.pooledStreaming("order-processor")
-                .assigningHandlers(descriptor ->
-                        descriptor.beanName().startsWith("order"))
-                .customized(config -> config
-                        .extend(DeadLetterQueueConfiguration.class,
-                                () -> new DeadLetterQueueConfiguration()
-                                        .enabled()
-                                        .cacheMaxSize(2048)));
-    }
-}
+include::example$deadletterqueue/index/definitionbean/ProcessorConfig.java[tag=event-processor-definition,indent=0]
 ----
 
 Properties-based DLQ configuration (`axon.eventhandling.processors.<name>.dlq.enabled=true`) is applied _before_ the `EventProcessorDefinition` customization.
@@ -406,34 +337,7 @@ Process the oldest dead-letter sequence matching a message name::
 --
 [source,java]
 ----
-import org.axonframework.common.configuration.Configuration;
-import org.axonframework.messaging.core.QualifiedName;
-import io.axoniq.framework.messaging.deadletter.DeadLetter;
-import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
-import org.axonframework.messaging.eventhandling.EventMessage;
-import java.util.concurrent.TimeUnit;
-
-public class DeadLetterProcessor {
-
-    private static final QualifiedName ERROR_EVENT_NAME =
-            new QualifiedName("YourApplicationEvent");
-
-    private final Configuration configuration;
-
-    public void retryErrorEventSequence(String processorName, String componentName) {
-        // dead letter processor names follow the pattern `EventHandlingComponent[" + processorName + "][" + componentName + "]`
-        var dlqEhc = "EventHandlingComponent[" + processorName + "][" + componentName + "]";
-        configuration.getModuleConfiguration(processorName)
-                .flatMap(m -> m.getOptionalComponent(SequencedDeadLetterProcessor.class, dlqEhc))
-                .ifPresent(dlp ->
-                        dlp.process(letter -> letter.message()
-                                                    .type()
-                                                    .qualifiedName()
-                                                    .equals(ERROR_EVENT_TYPE))
-                           .orTimeout(30, TimeUnit.SECONDS)
-                           .join());
-    }
-}
+include::example$deadletterqueue/index/processmatching/DeadLetterProcessor.java[tag=process-matching,indent=0]
 ----
 --
 Process the oldest dead-letter sequence in the queue::
@@ -441,25 +345,7 @@ Process the oldest dead-letter sequence in the queue::
 --
 [source,java]
 ----
-import org.axonframework.common.configuration.Configuration;
-import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
-import java.util.concurrent.TimeUnit;
-
-public class DeadLetterProcessor {
-
-    private final Configuration configuration;
-
-    public void retryAnySequence(String processorName, String componentName) {
-        // dead letter processor names follow the pattern `EventHandlingComponent[" + processorName + "][" + componentName + "]`
-        var dlqEhc = "EventHandlingComponent[" + processorName + "][" + componentName + "]";
-        configuration.getModuleConfiguration(processorName)
-                .flatMap(m -> m.getOptionalComponent(SequencedDeadLetterProcessor.class, dlqEhc))
-                .ifPresent(dlp ->
-                        dlp.processAny()
-                           .orTimeout(30, TimeUnit.SECONDS)
-                           .join());
-    }
-}
+include::example$deadletterqueue/index/processany/DeadLetterProcessor.java[tag=process-any,indent=0]
 ----
 --
 Process all dead-letter sequences in the queue::
@@ -467,31 +353,7 @@ Process all dead-letter sequences in the queue::
 --
 [source,java]
 ----
-import org.axonframework.common.configuration.Configuration;
-import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
-import java.util.concurrent.TimeUnit;
-
-public class DeadLetterProcessor {
-
-    private final Configuration configuration;
-
-    public void retryAllSequences(String processorName, String componentName) {
-        // dead letter processor names follow the pattern `EventHandlingComponent[" + processorName + "][" + componentName + "]`
-        var dlqEhc = "EventHandlingComponent[" + processorName + "][" + componentName + "]";
-        configuration.getModuleConfiguration(processorName)
-                .flatMap(m -> m.getOptionalComponent(SequencedDeadLetterProcessor.class, dlqEhc))
-                .ifPresent(this::processUntilEmpty);
-    }
-
-    private void processUntilEmpty(SequencedDeadLetterProcessor<?> dlp) {
-        boolean processed = true;
-        while (processed) {
-            processed = dlp.processAny()
-                           .orTimeout(30, TimeUnit.SECONDS)
-                           .join();
-        }
-    }
-}
+include::example$deadletterqueue/index/processall/DeadLetterProcessor.java[tag=process-all,indent=0]
 ----
 --
 ====
@@ -506,31 +368,7 @@ The `DeadLetter` parameter is _nullable_: it is `null` during normal event handl
 
 [source,java]
 ----
-import io.axoniq.framework.messaging.deadletter.DeadLetter;
-import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.annotation.EventHandler;
-
-class MyEventHandler {
-
-    // SomeEvent is your application-defined event class.
-    @EventHandler
-    public void on(SomeEvent event, DeadLetter<EventMessage> deadLetter) {
-        if (deadLetter != null) {
-            // Retrying a dead letter: inspect why it was parked and how many times it was tried
-            int retries = (int) deadLetter.diagnostics().getOrDefault("retries", 0);
-            deadLetter.cause().ifPresent(cause ->
-                    log.warn("Retrying dead-lettered {} (attempt {}): {} - {}",
-                             event.getClass().getSimpleName(),
-                             retries + 1,
-                             cause.type(),
-                             cause.message()));
-        }
-
-        // The same handler logic runs for both initial processing and retries.
-        // Ensure this method is idempotent.
-        updateProjection(event);
-    }
-}
+include::example$deadletterqueue/index/MyEventHandler.java[tag=detect-dead-letter,indent=0]
 ----
 
 == Attributes
@@ -585,6 +423,7 @@ You can also modify the stored exception, for example, to truncate a cause that 
 
 You can customize the policy to exclude some events when handling fails.
 As a consequence, these events will be skipped.
+Next to controlling what gets parked, the policy is the main tool for keeping the queue within its <<_capacity_and_overflow,capacity>>.
 
 Axon Framework evaluates the policy at two points: when initial event handling fails, and again when <<Processing sequences,dead-letter processing>> fails.
 This means a letter that keeps failing can be evicted or enriched with additional diagnostic metadata (such as a retry count) rather than staying in the queue forever.
@@ -593,44 +432,7 @@ See the sample `EnqueuePolicy` below for an example of retry-count-based evictio
 
 [source,java]
 ----
-import org.axonframework.messaging.core.QualifiedName;
-import io.axoniq.framework.messaging.deadletter.DeadLetter;
-import io.axoniq.framework.messaging.deadletter.Decisions;
-import io.axoniq.framework.messaging.deadletter.EnqueueDecision;
-import io.axoniq.framework.messaging.deadletter.EnqueuePolicy;
-import org.axonframework.messaging.eventhandling.EventMessage;
-
-// ErrorEvent is your application-defined event class.
-public class CustomEnqueuePolicy implements EnqueuePolicy<EventMessage> {
-
-    private static final QualifiedName ERROR_EVENT_TYPE =
-            new QualifiedName(ErrorEvent.class);
-
-    @Override
-    public EnqueueDecision<EventMessage> decide(DeadLetter<? extends EventMessage> letter,
-                                                Throwable cause) {
-        if (cause instanceof NullPointerException) {
-            // It's pointless:
-            return Decisions.doNotEnqueue();
-        }
-
-
-        if (letter.message().type().qualifiedName().equals(ERROR_EVENT_TYPE)) {
-            // Always enqueue this:
-            return Decisions.enqueue(cause);
-        }
-
-        // All others retry max 10 times:
-        int retries = (int) letter.diagnostics().getOrDefault("retries", -1);
-        if (retries < 10) {
-            // Let's continue and increase retries:
-            return Decisions.requeue(cause, l -> l.diagnostics().and("retries", retries + 1));
-        }
-
-        // Exhausted all retries:
-        return Decisions.evict();
-    }
-}
+include::example$deadletterqueue/index/CustomEnqueuePolicy.java[tag=enqueue-policy,indent=0]
 ----
 
 The `Decisions` utility class provides factory methods for the five possible outcomes:
@@ -660,26 +462,7 @@ Configuration API::
 --
 [source,java]
 ----
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
-
-public class AxonConfig {
-
-    public void configureDeadLetterQueue(MessagingConfigurer configurer) {
-        configurer.eventProcessing(ep -> ep.pooledStreaming(ps -> ps
-                .processor(
-                        EventProcessorModule
-                                .pooledStreaming("my-processor")
-                                .eventHandlingComponents(/* ... */)
-                                .customized((cfg, processorConfig) -> processorConfig
-                                        .extend(DeadLetterQueueConfiguration.class,
-                                                () -> new DeadLetterQueueConfiguration()
-                                                        .enabled()
-                                                        .enqueuePolicy(new CustomEnqueuePolicy()))))
-        ));
-    }
-}
+include::example$deadletterqueue/index/custompolicy/AxonConfig.java[tag=configure-custom-enqueue-policy,indent=0]
 ----
 --
 
@@ -688,26 +471,7 @@ Spring Boot::
 --
 [source,java]
 ----
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
-import org.axonframework.extension.spring.config.EventProcessorDefinition;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
-@Configuration
-public class ProcessorConfig {
-
-    @Bean
-    EventProcessorDefinition myProcessor() {
-        return EventProcessorDefinition.pooledStreaming("my-processor")
-                .assigningHandlers(descriptor ->
-                        descriptor.beanName().startsWith("my"))
-                .customized(config -> config
-                        .extend(DeadLetterQueueConfiguration.class,
-                                () -> new DeadLetterQueueConfiguration()
-                                        .enabled()
-                                        .enqueuePolicy(new CustomEnqueuePolicy())));
-    }
-}
+include::example$deadletterqueue/index/custompolicybean/ProcessorConfig.java[tag=event-processor-definition-policy,indent=0]
 ----
 --
 ====

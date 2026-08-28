@@ -1,0 +1,48 @@
+[.axoniq-feature]
+= Tenant-Aware Command Processing
+:navtitle: Tenant-aware command processing
+:reftext: Tenant-aware command processing
+:demo-core: https://github.com/AxonIQ/AxonFramework/blob/main/examples/university-multi-tenancy-examples/university-multi-tenancy-core/src/main/java/org/axonframework/examples/demo/multitenancy
+
+Tenant-aware command handling covers how commands can be dispatched and handled in a tenant aware Axon application.
+
+== Command dispatching
+
+With multi-tenancy enabled, command dispatching is automatically tenant-aware. No changes to how you use the `CommandGateway` or `CommandBus` are required.
+
+Each known tenant has its own Axon Server connection. When a command handler is subscribed, that subscription is applied across every known tenant, so a single subscription serves commands for all tenants. A tenant that becomes known after a handler was subscribed, automatically receives that same subscription, so newly added tenants are served without any extra configuration.
+
+When a command is dispatched, the tenant is resolved as described in the xref:tenant-management.adoc#tenant-resolution[tenant resolution] section, and the command is routed to the Axon Server context of that tenant.
+
+A command dispatched from within another message's handler, without naming a tenant of its own, keeps the tenant of that message across this hop: see xref:tenant-management.adoc#tenant-propagation[propagating the tenant across a dispatch hop].
+
+[NOTE]
+====
+The tenant resolved for a command must be one of the currently known tenants.
+If the resolved tenant is not currently known, for example because its context was removed after the tenant was resolved, dispatch fails with a `TenantNotResolvedException`.
+====
+
+
+[#command-handling]
+== Command handling
+
+Command handling methods are registered the same way as in a single-tenant application. No change to how you declare or register a command handler is required.
+
+During handling, the tenant of the command is resolved again on the handling side and made available for the rest of that message's processing.
+This is what allows a tenant-scoped component, such as a per-tenant external service, to be injected into a handler's parameters: the framework knows which tenant's instance to provide because the tenant has already been established for that message.
+
+[source,java]
+----
+include::example$multitenancy/tenantcommandhandling/CourseSubscriptionCommandHandler.java[tag=tenant-scoped-command-handler,indent=0]
+----
+<1> `notificationService` is the `NotificationService` instance specific for the current tenant. The `@TenantScoped` annotation marks it as tenant scoped, transparently resolved by a tenant aware parameter resolver.
+
+See xref:tenant-scoped-components.adoc[Tenant-scoped components] for more details on how to register such components and inject them into a handler.
+
+TIP: To see this running, the xref:multi-tenancy:demo.adoc[university demo] enrolls a student through link:{demo-core}/university/write/enrollstudent/EnrollStudentCommandHandler.java[`EnrollStudentCommandHandler`], which sources the course from, and appends to, the command's own tenant.
+
+[NOTE]
+====
+If the tenant cannot be resolved on the handling side, handling proceeds without a tenant available for that message.
+Injecting a tenant-scoped component parameter then fails with a `TenantNotResolvedException`, as described in xref:tenant-scoped-components.adoc[Tenant-scoped components].
+====

@@ -29,7 +29,7 @@ import org.axonframework.integrationtests.testsuite.student.CommandSequencingIT;
  */
 public class CommandSequencingAxonServerIT extends CommandSequencingIT {
 
-    private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
+    private static final TestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.singleTenant();
 
     @Override
     protected TestInfrastructure testInfrastructure() {

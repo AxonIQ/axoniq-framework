@@ -1,0 +1,124 @@
+[.axoniq-feature]
+= Tenant-Scoped Components
+:navtitle: Tenant-scoped components
+:reftext: Tenant-scoped components
+:demo-core: https://github.com/AxonIQ/AxonFramework/blob/main/examples/university-multi-tenancy-examples/university-multi-tenancy-core/src/main/java/org/axonframework/examples/demo/multitenancy
+:demo-declarative: https://github.com/AxonIQ/AxonFramework/blob/main/examples/university-multi-tenancy-examples/university-multi-tenancy-declarative/src/main/java/org/axonframework/examples/demo/multitenancy
+:demo-springboot: https://github.com/AxonIQ/AxonFramework/blob/main/examples/university-multi-tenancy-examples/university-multi-tenancy-springboot/src/main/java/org/axonframework/examples/demo/multitenancy
+
+A multi-tenant application usually has its own tenant-scoped resources: a read-model store, a SQL datasource, or any service that must not mix data between tenants.
+A tenant-scoped component lets you register such a resource once and have the correct tenant's instance injected into your message handling methods, so a handler never has to look up the tenant itself.
+The resource itself stays passive: you describe how it is built for a tenant, and the framework holds one instance per tenant and injects the matching one into the handler.
+
+A tenant-scoped component is described by two types:
+
+* `TenantComponentFactory<T>` builds (and cleans up) the instance of your component for a single tenant.
+* `TenantComponentProvider<T>` holds one instance of the component type `T` per tenant, creating each instance lazily through the factory on first use.
+
+Each provider is generic over a single component type. To expose several tenant-scoped types, register one provider per type. Each provider is matched to handler parameters by its component type.
+
+[#registering-a-provider]
+== Registering a tenant-scoped component
+
+Implement a `TenantComponentFactory` describing how the component is built for a tenant, and register the provider obtained through `TenantComponentProvider.withFactory`.
+
+[tabs]
+====
+Declarative - Configuration API::
++
+--
+Register the provider as a component on your `MessagingConfigurer`, passed in from the place it is created:
+
+[source,java]
+----
+include::example$multitenancy/tenantscopedcomponents/DeclarativeComponentConfiguration.java[tag=register-provider,indent=0]
+----
+<1> Register the provider under the `TenantComponentProvider` type so it is discovered during parameter resolution.
+<2> The component type, used to match the provider against handler parameters. The lambda is the `TenantComponentFactory` building the tenant's instance.
+--
+Autodetected - Spring Boot::
++
+--
+Expose the provider as a bean of type `TenantComponentProvider`:
+
+[source,java]
+----
+include::example$multitenancy/tenantscopedcomponents/SpringComponentConfiguration.java[tag=register-provider,indent=0]
+----
+<1> The bean type is `TenantComponentProvider`, which is how it is discovered during parameter resolution.
+<2> The component type, used to match the provider against handler parameters. The lambda is the `TenantComponentFactory` building the tenant's instance.
+--
+====
+
+Message handlers can then declare the component type as a parameter.
+
+TIP: The xref:multi-tenancy:demo.adoc[university demo] builds its providers in link:{demo-core}/shared/tenant/TenantComponents.java[`TenantComponents`] and registers them from the `UniversityConfiguration` of its link:{demo-declarative}/UniversityConfiguration.java[declarative] and link:{demo-springboot}/UniversityConfiguration.java[Spring Boot] variants.
+
+[#injecting-into-a-handler]
+== Injecting the tenant's instance into a handler
+
+Declare an `@TenantScoped`-annotated parameter of the component type on a message handling method.
+During handling, the parameter is resolved to the instance belonging to the tenant of the message being handled.
+
+[source,java]
+----
+include::example$multitenancy/tenantscopedcomponents/CourseStatisticsProjection.java[tag=inject-into-handler,indent=0]
+----
+
+<1> `store` is the `CourseStatisticsStore` instance of the current tenant.
+The `@TenantScoped` annotation marks it as tenant scoped.
+
+The tenant whose instance is injected is the tenant resolved for the message being handled.
+See xref:multi-tenancy:tenant-management.adoc#tenant-resolution[Tenant resolution] for how the tenant of a message is resolved and how to customize that resolution.
+When no tenant can be resolved for the message, injecting the parameter fails with a `TenantNotResolvedException`, so a tenant-scoped resource is never created for an unresolved tenant.
+
+TIP: The demo injects tenant-scoped components into all three handler kinds: link:{demo-core}/university/write/enrollstudent/EnrollStudentCommandHandler.java[a command handler], link:{demo-core}/university/read/statistics/CourseStatisticsProjection.java[an event handler] and link:{demo-core}/university/read/statistics/TenantStatisticsQueryHandler.java[a query handler].
+
+[#registering-multiple-types]
+== Registering multiple component types
+
+An application can register several tenant-scoped components, one provider per type.
+Each provider is matched to a handler parameter by its component type.
+Register a single provider per component type: registering two providers for the same type, or a parameter type that matches several providers, results in an `AxonConfigurationException`.
+
+[tabs]
+====
+Declarative - Configuration API::
++
+--
+Register each provider under its own name:
+
+[source,java]
+----
+include::example$multitenancy/tenantscopedcomponents/DeclarativeComponentConfiguration.java[tag=register-multiple,indent=0]
+----
+<1> A provider for the `CourseStatisticsStore` read model.
+<2> A second provider, for a per-tenant reporting `DataSource`, registered under a different name.
+--
+Autodetected - Spring Boot::
++
+--
+Declare one bean per component type. The bean name distinguishes them:
+
+[source,java]
+----
+include::example$multitenancy/tenantscopedcomponents/SpringMultipleComponentConfiguration.java[tag=register-multiple,indent=0]
+----
+<1> A provider for the `CourseStatisticsStore` read model.
+<2> A second provider, for a per-tenant reporting `DataSource`.
+--
+====
+
+[#lifecycle-and-cleanup]
+== Lifecycle and cleanup
+
+Providers follow the tenant lifecycle automatically.
+A tenant's component is created the first time a handler for that tenant needs it, cached for later messages, and destroyed through `TenantComponentFactory#destroy` when the tenant is removed.
+
+The default `destroy` closes components that implement `AutoCloseable`, which covers pooled datasource implementations and other connection-backed resources.
+Override it to release other resources or to add custom shutdown logic.
+
+[source,java]
+----
+include::example$multitenancy/tenantscopedcomponents/ComponentLifecycle.java[tag=factory-destroy,indent=0]
+----

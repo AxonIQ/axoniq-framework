@@ -1,0 +1,84 @@
+[.axoniq-feature]
+= University Multi-Tenancy Example
+:navtitle: Example
+:demo-tree: https://github.com/AxonIQ/AxonFramework/tree/main/examples/university-multi-tenancy-examples
+:demo-blob: https://github.com/AxonIQ/AxonFramework/blob/main/examples/university-multi-tenancy-examples
+
+A runnable example application exercises multi-tenancy end to end.
+The `university-multi-tenancy-examples` demo opens courses and enrolls students for several tenants at once, and shows that each tenant keeps its own events, snapshots, projections and read models while no handler names a tenant.
+
+The samples on the other pages are written for the documentation, so each one shows a single idea on its own.
+This demo wires the same features into a working application, which is the place to look for how they fit together.
+
+See the link:{demo-tree}[`university-multi-tenancy-examples` example] for the full source.
+Its link:{demo-blob}/README.md[README] covers running it in memory or against a multi-context Axon Server.
+
+== How it is put together
+
+The demo is three Maven modules, so the same domain can be configured in both styles:
+
+[cols="1,3", options="header"]
+|===
+| Module | Contents
+
+| link:{demo-tree}/university-multi-tenancy-core[`university-multi-tenancy-core`]
+| The university domain and everything both variants share: the write slices, the statistics projection and read model, the audit log, and the tenant-scoped providers in `TenantComponents`.
+
+| link:{demo-tree}/university-multi-tenancy-declarative[`university-multi-tenancy-declarative`]
+| The Configuration API variant. Its `UniversityConfiguration` registers the providers explicitly and runs either fully in memory or against Axon Server.
+
+| link:{demo-tree}/university-multi-tenancy-springboot[`university-multi-tenancy-springboot`]
+| The Spring Boot variant. Its `UniversityConfiguration` declares the same providers as beans and lets auto-configuration do the rest. Tenants are Axon Server contexts, so this variant needs a running Axon Server.
+|===
+
+== What it demonstrates
+
+[cols="2,3", options="header"]
+|===
+| Demo element | Feature
+
+| `TenantProvisioning`, `AxonServerTenantContextManager`
+| xref:multi-tenancy:tenant-management.adoc#how-tenants-become-known[The tenant lifecycle], with tenants known at startup, added at runtime, and removed again
+
+| `MultiTenancyDisabledTest`
+| xref:multi-tenancy:tenant-management.adoc#enabling-multi-tenancy[Disabling multi-tenancy] through `axon.multitenancy.enabled=false`
+
+| `TenantMetadataFactory`
+| xref:multi-tenancy:tenant-management.adoc#default-resolver[Tenant resolution] from message metadata, the default resolver's source
+
+| `TenantRejections`
+| xref:multi-tenancy:tenant-management.adoc#tenant-resolution[Refusal to resolve a tenant], identical for an unknown tenant, a removed one, and a message naming none
+
+| `TenantComponents`
+| xref:multi-tenancy:tenant-scoped-components.adoc#registering-a-provider[Describing a tenant-scoped component] with a `TenantComponentFactory`
+
+| `UniversityConfiguration` in both variants
+| xref:multi-tenancy:tenant-scoped-components.adoc#registering-a-provider[Registering providers], declaratively and as Spring beans
+
+| `ProviderAmbiguityGuardrail`
+| xref:multi-tenancy:tenant-scoped-components.adoc#registering-multiple-types[One provider per component type], with a second provider for the same type refused at configuration time
+
+| `EnrollStudentCommandHandler`
+| xref:multi-tenancy:tenant-command-handling.adoc#command-handling[Tenant-aware command handling], with the course sourced from and appended to the command's tenant
+
+| `EventStorageOutcome`
+| xref:multi-tenancy:tenant-event-storage.adoc#sourcing-and-appending[Per-tenant event storage], with the same course identifier full in one tenant, and still open in another
+
+| `EnrollStudentCommandHandler.State`, `TenantSnapshots`
+| xref:multi-tenancy:tenant-event-storage.adoc#snapshots[Per-tenant snapshots], stored in and read from the snapshot store of the entity's own tenant
+
+| `CourseStatisticsProjection`
+| xref:multi-tenancy:tenant-event-processing.adoc#handling-events-per-tenant[Tenant-aware event processing], one processor projecting every tenant's events into that tenant's own read model
+
+| `ReadModelWrites`
+| xref:multi-tenancy:tenant-event-processing.adoc#idempotent-handlers[An idempotent projection], deriving statistics from the identifiers in the event so a redelivery changes nothing
+
+| `UniversityConfiguration` in both variants
+| xref:multi-tenancy:tenant-event-processing.adoc#configuring-restart-timeout[The processor restart timeout], registered at its default so the knob is visible
+
+| `TenantStatisticsQueryHandler`
+| xref:multi-tenancy:tenant-query-handling.adoc#query-handling[Tenant-aware query handling], reading back only the querying tenant's data
+
+| `StatisticsSubscription`
+| xref:multi-tenancy:tenant-query-handling.adoc#query-dispatching[Tenant-aware subscription queries], where an update reaches only the subscriptions of the tenant it was emitted for
+|===
