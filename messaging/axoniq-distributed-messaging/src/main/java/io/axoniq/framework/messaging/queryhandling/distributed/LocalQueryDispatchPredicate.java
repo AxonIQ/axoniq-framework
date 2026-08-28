@@ -38,7 +38,7 @@ import org.axonframework.messaging.queryhandling.QueryMessage;
  *
  * @author Allard Buijze
  * @see LocalShortcutQueryBusConnector
- * @since 5.3.0
+ * @since 5.4.0
  */
 @FunctionalInterface
 public interface LocalQueryDispatchPredicate {

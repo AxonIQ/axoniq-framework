@@ -45,7 +45,7 @@ import static org.axonframework.common.configuration.DecoratorDefinition.forType
  * @author Allard Buijze
  * @see LocalShortcutCommandBusConnector
  * @see LocalCommandDispatchPredicate
- * @since 5.3.0
+ * @since 5.4.0
  */
 @Internal
 public class LocalShortcutCommandBusConnectorConfigurationEnhancer implements ConfigurationEnhancer {

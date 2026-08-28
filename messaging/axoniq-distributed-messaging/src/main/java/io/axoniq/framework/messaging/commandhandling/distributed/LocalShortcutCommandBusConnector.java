@@ -57,7 +57,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author Allard Buijze
  * @see LocalCommandDispatchPredicate
  * @see LocalShortcutCommandBusConnectorConfigurationEnhancer
- * @since 5.3.0
+ * @since 5.4.0
  */
 public class LocalShortcutCommandBusConnector extends DelegatingCommandBusConnector {
 

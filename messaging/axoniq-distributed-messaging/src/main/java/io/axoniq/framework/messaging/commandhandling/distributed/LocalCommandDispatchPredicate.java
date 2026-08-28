@@ -38,7 +38,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
  *
  * @author Allard Buijze
  * @see LocalShortcutCommandBusConnector
- * @since 5.3.0
+ * @since 5.4.0
  */
 @FunctionalInterface
 public interface LocalCommandDispatchPredicate {

@@ -62,7 +62,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author Allard Buijze
  * @see LocalQueryDispatchPredicate
  * @see LocalShortcutQueryBusConnectorConfigurationEnhancer
- * @since 5.3.0
+ * @since 5.4.0
  */
 public class LocalShortcutQueryBusConnector extends DelegatingQueryBusConnector {
 

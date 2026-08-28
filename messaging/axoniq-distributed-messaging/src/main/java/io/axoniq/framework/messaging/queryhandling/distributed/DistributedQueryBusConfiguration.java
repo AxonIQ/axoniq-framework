@@ -147,7 +147,7 @@ public record DistributedQueryBusConfiguration(
      * {@code true}; disabling it is equivalent to registering no predicate. Both settings continue to work by
      * installing a {@link LocalShortcutQueryBusConnector} on the {@link QueryBusConnector}.
      */
-    @Deprecated(since = "5.3.0", forRemoval = true)
+    @Deprecated(since = "5.4.0", forRemoval = true)
     public DistributedQueryBusConfiguration preferLocalQueryHandler(boolean preferLocalQueryHandler) {
         return new DistributedQueryBusConfiguration(
                 queryThreads, queryQueueCapacity, executorServiceFactory, preferLocalQueryHandler
