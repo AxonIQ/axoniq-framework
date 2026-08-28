@@ -20,8 +20,9 @@
 package distributedmessaging.distributedquerybus.customize;
 
 // tag::customize-query-bus-configuration[]
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
+import io.axoniq.framework.messaging.queryhandling.distributed.LocalQueryDispatchPredicate;
+import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 
 public class AxonConfig {
     public void configureQueryBus(MessagingConfigurer configurer) {
@@ -32,7 +33,13 @@ public class AxonConfig {
                 .preferLocalQueryHandler(true);         // Enable local handler shortcut (default)
 
         // Register the custom configuration
-        configurer.componentRegistry(cr -> cr.registerComponent(DistributedQueryBusConfiguration.class, c -> config));
+        configurer.componentRegistry(
+                cr -> cr.registerComponent(DistributedQueryBusConfiguration.class, c -> config)
+                        .registerComponent(
+                                LocalQueryDispatchPredicate.class,
+                                c -> (query, context) -> true
+                        )
+        );
     }
 }
 // end::customize-query-bus-configuration[]

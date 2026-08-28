@@ -590,6 +590,7 @@ class DistributedQueryBusTest {
         final Set<QualifiedName> subscribedQueries = new HashSet<>();
         final AtomicInteger queryCount = new AtomicInteger(0);
         final AtomicInteger subscriptionQueryCount = new AtomicInteger(0);
+        Handler incomingHandler;
 
         @NonNull
         @Override
@@ -623,7 +624,7 @@ class DistributedQueryBusTest {
 
         @Override
         public void onIncomingQuery(@NonNull Handler handler) {
-            // No-op for tests
+            this.incomingHandler = handler;
         }
 
         @Override

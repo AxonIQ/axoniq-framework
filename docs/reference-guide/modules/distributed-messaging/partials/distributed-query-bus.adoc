@@ -75,14 +75,7 @@ Customize the distributed query bus configuration:
 include::example$distributedmessaging/distributedquerybus/customize/AxonConfig.java[tag=customize-query-bus-configuration,indent=0]
 ----
 
-TODO
 To control the local handler shortcut, register a `LocalQueryDispatchPredicate` as shown above rather than using the deprecated `preferLocalQueryHandler` setting.
-To disable the local handler shortcut:
-
-[source,java]
-----
-include::example$distributedmessaging/distributedquerybus/disableshortcut/DisableLocalShortcut.java[tag=disable-local-shortcut,indent=0]
-----
 --
 
 Spring Boot::
@@ -101,15 +94,7 @@ axon.axonserver.query-threads=20
 [source,java]
 ----
 include::example$distributedmessaging/distributedquerybus/spring/AxonConfig.java[tag=query-bus-configuration-bean,indent=0]
-
-    @Bean
-    public LocalQueryDispatchPredicate localQueryDispatchPredicate() {
-        // Prefer the local handler for every query that this node can handle.
-        return (query, context) -> true;
-    }
 ----
-
-TODO
 --
 ====
 
