@@ -24,17 +24,7 @@ Short-cut commands are handled on the same bounded, priority-ordered worker pool
 
 [source,java]
 ----
-import org.axonframework.messaging.core.configuration.MessagingConfigurer;
-import io.axoniq.framework.messaging.commandhandling.distributed.LocalCommandDispatchPredicate;
-
-public class AxonConfig {
-    public void configureLocalCommandShortcut(MessagingConfigurer configurer) {
-        configurer.componentRegistry(registry -> registry.registerComponent(
-                LocalCommandDispatchPredicate.class,
-                config -> (command, context) -> true   // prefer the local handler when subscribed
-        ));
-    }
-}
+include::example$distributedmessaging/distributedcommandbus/localshortcut/AxonConfig.java[tag=configure-local-command-shortcut,indent=0]
 ----
 
 The shortcut is opt-in: without a `LocalCommandDispatchPredicate`, commands are always routed through the connector, leaving the default distributed behavior unchanged.

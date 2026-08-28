@@ -28,9 +28,8 @@ public class AxonConfig {
     public void configureQueryBus(MessagingConfigurer configurer) {
         // Customize the configuration
         DistributedQueryBusConfiguration config = DistributedQueryBusConfiguration.DEFAULT
-                .queryThreads(20)                        // Set number of query processing threads
-                .queryQueueCapacity(2000)                // Set queue capacity
-                .preferLocalQueryHandler(true);         // Enable local handler shortcut (default)
+                .queryThreads(20)          // Set number of query processing threads
+                .queryQueueCapacity(2000); // Set queue capacity
 
         // Register the custom configuration
         configurer.componentRegistry(
