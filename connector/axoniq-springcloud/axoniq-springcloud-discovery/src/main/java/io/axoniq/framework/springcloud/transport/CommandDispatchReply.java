@@ -47,8 +47,7 @@ import java.util.Objects;
  * @param requestIdentifier the {@link CommandDispatchRequest#identifier() identifier} of the command this replies to
  * @param type              the {@link MessageType#toString() string form} of the result's
  *                          {@link CommandResultMessage#type() type}, or {@code null} when there is no result.
- * @param payload           the Base64-encoded {@code byte[]} payload of the result, or {@code null} when there is
- *                          none.
+ * @param payload           the result's payload as its converter wrote it, or {@code null} when there is none.
  * @param metadata          the {@link CommandResultMessage#metadata() metadata} of the result
  * @param errorCode         the kind of failure that occurred, or {@code null} when handling succeeded
  * @param errorMessage      a description of the failure, or {@code null} when handling succeeded

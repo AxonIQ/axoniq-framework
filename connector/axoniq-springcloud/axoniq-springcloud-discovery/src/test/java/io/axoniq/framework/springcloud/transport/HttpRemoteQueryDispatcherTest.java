@@ -24,9 +24,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import io.axoniq.framework.springcloud.routing.Member;
 import org.axonframework.common.ExceptionUtils;
+import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.conversion.DelegatingMessageConverter;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
@@ -77,10 +80,13 @@ class HttpRemoteQueryDispatcherTest {
 
     private static final MessageType FIND_COURSE_TYPE = new MessageType("university.FindCourse", "1.0.0");
     private static final MessageType RESPONSE_TYPE = new MessageType("university.Course", "1.0.0");
-    private static final byte[] PAYLOAD = "{\"id\":\"course-1\"}".getBytes(UTF_8);
+    private static final String PAYLOAD = "{\"id\":\"course-1\"}";
     private static final String ENDPOINT = "/axoniq-springcloud/query";
     private static final Member MEMBER = new Member("node-b", URI.create("http://node-b:8080"), false);
 
+    private final MessageConverter converter = new DelegatingMessageConverter(new JacksonConverter());
+    // Writes what the answering member would, standing in for the other end of the stream. Deliberately not the
+    // converter under test, so that what is read is asserted against plain JSON rather than against itself.
     private final ObjectMapper objectMapper =
             JsonMapper.builder().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
 
@@ -109,10 +115,9 @@ class HttpRemoteQueryDispatcherTest {
 
     private HttpRemoteQueryDispatcher dispatcher(int bufferSize, Duration responseTimeout) {
         return new HttpRemoteQueryDispatcher(RestClient.builder().requestFactory(requestFactory).build(),
-                                             objectMapper,
                                              ENDPOINT,
                                              executor,
-                                             null,
+                                             converter,
                                              bufferSize,
                                              responseTimeout,
                                              scheduler);
@@ -123,17 +128,17 @@ class HttpRemoteQueryDispatcherTest {
     }
 
     private String responseEvent(String identifier) throws IOException {
-        QueryResponseEvent response = new QueryResponseEvent(identifier,
+        QueryDispatchResponse response = new QueryDispatchResponse(identifier,
                                                              "query-1",
                                                              RESPONSE_TYPE.toString(),
-                                                             Base64.getEncoder().encodeToString(PAYLOAD),
+                                                             PAYLOAD,
                                                              Map.of());
         return "event: " + QueryConverter.RESPONSE_EVENT + "\ndata: "
                 + objectMapper.writeValueAsString(response) + "\n\n";
     }
 
     private String errorEvent(QueryErrorCode code) throws IOException {
-        QueryErrorEvent error = new QueryErrorEvent("query-1",
+        QueryDispatchFailure error = new QueryDispatchFailure("query-1",
                                                     code,
                                                     "The course store is unavailable.",
                                                     List.of("The course store is unavailable."),
@@ -241,6 +246,53 @@ class HttpRemoteQueryDispatcherTest {
             awaitUntil(() -> !requestFactory.requests().isEmpty());
             assertThat(requestFactory.requests().getFirst().getURI())
                     .hasToString("http://node-b:8080" + ENDPOINT);
+        }
+    }
+
+    @Nested
+    class ReadingFromAMemberOnANewerVersion {
+
+        @Test
+        void readsAResponseCarryingAFieldItDoesNotKnow() throws IOException {
+            // given a response as a later version of the connector might write it
+            body.write("""
+                               event: response
+                               data: {"identifier":"response-1","requestIdentifier":"query-1",\
+                               "type":"university.Course#1.0.0","payload":null,"metadata":{},\
+                               "somethingAddedLater":"whatever"}
+
+                               """);
+            body.end();
+
+            // when
+            MessageStream<QueryResponseMessage> responses = dispatcher(1024).dispatch(MEMBER, query());
+
+            // then a field this member does not know about is no reason to fail the query
+            assertThat(awaitAnswer(responses)).extracting(QueryResponseMessage::identifier)
+                                              .containsExactly("response-1");
+            assertThat(responses.error()).isEmpty();
+        }
+
+        @Test
+        void reportsAFailureWhoseCodeItDoesNotKnow() throws IOException {
+            // given a failure reported with an error code a later version of the connector might add
+            body.write("""
+                               event: error
+                               data: {"requestIdentifier":"query-1","errorCode":"SOMETHING_ADDED_LATER",\
+                               "errorMessage":"The course store is unavailable.","errorDetails":[],\
+                               "errorOrigin":"node-b"}
+
+                               """);
+            body.end();
+
+            // when
+            MessageStream<QueryResponseMessage> responses = dispatcher(1024).dispatch(MEMBER, query());
+
+            // then the failure is reported as what it is rather than lost behind a failure to read it
+            awaitAnswer(responses);
+            assertThat(responses.error()).isPresent();
+            assertThat(responses.error().orElseThrow())
+                    .hasMessageContaining("The course store is unavailable.");
         }
     }
 

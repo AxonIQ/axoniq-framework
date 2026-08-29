@@ -19,9 +19,6 @@
 
 package io.axoniq.framework.springboot.springcloud.autoconfig;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
 import io.axoniq.framework.springboot.springcloud.SpringCloudProperties;
 import io.axoniq.framework.springcloud.SpringCloudCommandBusConnector;
 import io.axoniq.framework.springcloud.SpringCloudConfigurationEnhancer;
@@ -97,11 +94,6 @@ public class SpringCloudAutoConfiguration {
      * The name of the {@link Executor} bean inter-member command and query dispatches run on.
      */
     public static final String DISPATCH_EXECUTOR_BEAN = "axoniqSpringCloudDispatchExecutor";
-
-    /**
-     * The name of the {@link ObjectMapper} bean the events of a query's response stream are written and read with.
-     */
-    public static final String OBJECT_MAPPER_BEAN = "axoniqSpringCloudObjectMapper";
 
     /**
      * The name of the {@link ScheduledExecutorService} bean the deadline of each dispatched query runs on.
@@ -235,30 +227,6 @@ public class SpringCloudAutoConfiguration {
         @ConditionalOnMissingBean(name = REST_CLIENT_BEAN)
         public RestClient axoniqSpringCloudRestClient(ObjectProvider<RestClient.Builder> builderProvider) {
             return builderProvider.getIfAvailable(RestClient::builder).build();
-        }
-
-        /**
-         * Bean creation method for the {@link ObjectMapper} the events of a query's response stream are written and
-         * read with.
-         * <p>
-         * Deliberately not the application's own {@code ObjectMapper}. What members write to each other is this
-         * connector's format, not the application's, and an application that customises its mapper -- a naming
-         * strategy, a visibility rule -- would otherwise stop understanding members that customise theirs differently
-         * or not at all.
-         * <p>
-         * Unknown properties are ignored, and an unrecognised enum value reads as {@code null}, so that members running
-         * different versions of the connector still read each other: neither a field nor an error code one of them
-         * does not know about is a reason to fail the query.
-         *
-         * @return the mapper the events of a query's response stream are written and read with
-         */
-        @Bean(OBJECT_MAPPER_BEAN)
-        @ConditionalOnMissingBean(name = OBJECT_MAPPER_BEAN)
-        public ObjectMapper axoniqSpringCloudObjectMapper() {
-            return JsonMapper.builder()
-                             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                             .enable(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_AS_NULL)
-                             .build();
         }
 
         /**
@@ -425,29 +393,26 @@ public class SpringCloudAutoConfiguration {
         /**
          * Bean creation method for the {@link RemoteQueryDispatcher} sending queries to other members.
          *
-         * @param restClient        the client sending the queries
-         * @param objectMapper      the mapper reading the data of each response event
-         * @param executor          the executor each query's response stream is read on
-         * @param scheduler         the scheduler each query's deadline runs on
-         * @param converterProvider provides the {@link MessageConverter}, if one is available
-         * @param properties        the connector's properties
+         * @param restClient the client sending the queries
+         * @param executor   the executor each query's response stream is read on
+         * @param scheduler  the scheduler each query's deadline runs on
+         * @param converter  the converter the events of a query's response stream are read with
+         * @param properties the connector's properties
          * @return the dispatcher sending queries to other members
          */
         @Bean
         @ConditionalOnMissingBean
         public RemoteQueryDispatcher axoniqSpringCloudRemoteQueryDispatcher(
                 @Qualifier(REST_CLIENT_BEAN) RestClient restClient,
-                @Qualifier(OBJECT_MAPPER_BEAN) ObjectMapper objectMapper,
                 @Qualifier(DISPATCH_EXECUTOR_BEAN) Executor executor,
                 @Qualifier(DEADLINE_SCHEDULER_BEAN) ScheduledExecutorService scheduler,
-                ObjectProvider<MessageConverter> converterProvider,
+                MessageConverter converter,
                 SpringCloudProperties properties
         ) {
             return new HttpRemoteQueryDispatcher(restClient,
-                                                 objectMapper,
                                                  properties.getQueryEndpoint(),
                                                  executor,
-                                                 converterProvider.getIfAvailable(),
+                                                 converter,
                                                  properties.getQueryBufferSize(),
                                                  properties.getQueryResponseTimeout(),
                                                  scheduler);
@@ -456,9 +421,8 @@ public class SpringCloudAutoConfiguration {
         /**
          * Bean creation method for the controller answering queries from other members.
          *
-         * @param gateway      the gateway answering queries sent by other members
-         * @param objectMapper the mapper writing the data of each response event
-         * @param properties   the connector's properties
+         * @param gateway    the gateway answering queries sent by other members
+         * @param properties the connector's properties
          * @return the controller answering queries from other members
          */
         @Bean
@@ -466,10 +430,9 @@ public class SpringCloudAutoConfiguration {
         @ConditionalOnWebApplication(type = Type.SERVLET)
         public SpringCloudQueryController axoniqSpringCloudQueryController(
                 IncomingQueryGateway gateway,
-                @Qualifier(OBJECT_MAPPER_BEAN) ObjectMapper objectMapper,
                 SpringCloudProperties properties
         ) {
-            return new SpringCloudQueryController(gateway, objectMapper, properties.getQueryTimeout());
+            return new SpringCloudQueryController(gateway, properties.getQueryTimeout());
         }
 
         /**

@@ -19,8 +19,8 @@
 
 package io.axoniq.framework.springcloud.transport;
 
-import io.axoniq.framework.messaging.queryhandling.distributed.PayloadConvertingQueryBusConnector;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.conversion.ConversionException;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.HandlerExecutionException;
@@ -52,6 +52,11 @@ import static io.axoniq.framework.springcloud.transport.WireCodec.serializedDeta
  * A query is sent as one request and answered with a stream of events, because a query may be answered any number of
  * times. Each response is one {@link #RESPONSE_EVENT} event; a failure ending the stream is one {@link #ERROR_EVENT}
  * event. A stream that ends without an error event completed normally, however many responses it carried.
+ * <p>
+ * A payload travels as the text its {@link org.axonframework.messaging.core.conversion.MessageConverter} writes it
+ * as, which is what the {@code PayloadConvertingQueryBusConnector} wrapped around the connector converts it to before
+ * it gets here. A received payload is handed to the message exactly as it arrived, leaving the converter attached to
+ * that message to read it as whatever the handler asks for.
  *
  * @author Allard Buijze
  * @since 5.4.0
@@ -70,7 +75,6 @@ final class QueryConverter {
     public static final String ERROR_EVENT = "error";
 
     private static final boolean WRITABLE_STACK_TRACE = false;
-    private static final String PAYLOAD_DECORATOR = PayloadConvertingQueryBusConnector.class.getSimpleName();
 
     private QueryConverter() {
         // Utility class, not meant to be instantiated.
@@ -81,13 +85,13 @@ final class QueryConverter {
      *
      * @param query the query to send
      * @return the wire representation of the given {@code query}
-     * @throws IllegalArgumentException when the given {@code query}'s payload is not a {@code byte[]}
+     * @throws ConversionException when the given {@code query}'s payload cannot be written as text
      */
     public static QueryDispatchRequest convertQueryMessage(QueryMessage query) {
         return new QueryDispatchRequest(
                 query.identifier(),
                 query.type().toString(),
-                encode(WireCodec.payloadAsBytes(query.payload(), query.payloadType(), PAYLOAD_DECORATOR)),
+                query.payloadAs(String.class),
                 copyOf(query.metadata()),
                 query.priority().isPresent() ? query.priority().getAsInt() : null
         );
@@ -106,7 +110,7 @@ final class QueryConverter {
                 new GenericMessage(
                         request.identifier(),
                         MessageType.fromString(request.type()),
-                        decode(request.payload()),
+                        request.payload(),
                         copyOf(request.metadata())
                 ),
                 request.priority()
@@ -119,33 +123,33 @@ final class QueryConverter {
      * @param response          one response to the query being answered
      * @param requestIdentifier the identifier of the query being answered
      * @return the wire representation of the given {@code response}
-     * @throws IllegalArgumentException when the given {@code response}'s payload is not a {@code byte[]}
+     * @throws ConversionException when the given {@code response}'s payload cannot be written as text
      */
-    public static QueryResponseEvent convertResponseMessage(QueryResponseMessage response, String requestIdentifier) {
-        return new QueryResponseEvent(
+    public static QueryDispatchResponse convertResponseMessage(QueryResponseMessage response, String requestIdentifier) {
+        return new QueryDispatchResponse(
                 response.identifier(),
                 requestIdentifier,
                 response.type().toString(),
-                encode(WireCodec.payloadAsBytes(response.payload(), response.payloadType(), PAYLOAD_DECORATOR)),
+                response.payloadAs(String.class),
                 copyOf(response.metadata())
         );
     }
 
     /**
-     * Converts the given {@code event}, received from the member answering a query, into a response.
+     * Converts the given {@code response}, received from the member answering a query, into a response message.
      *
-     * @param event     one response event received from the answering member
+     * @param response  one response received from the answering member
      * @param converter the converter to attach to the response for inline payload conversion, or {@code null} when
      *                  none is available.
-     * @return the response the given {@code event} represents
+     * @return the response the given {@code response} represents
      */
-    public static QueryResponseMessage convertResponseEvent(QueryResponseEvent event,
-                                                            @Nullable Converter converter) {
+    public static QueryResponseMessage convertResponse(QueryDispatchResponse response,
+                                                       @Nullable Converter converter) {
         return new GenericQueryResponseMessage(new GenericMessage(
-                event.identifier(),
-                MessageType.fromString(event.type()),
-                decode(event.payload()),
-                copyOf(event.metadata())
+                response.identifier(),
+                MessageType.fromString(response.type()),
+                response.payload(),
+                copyOf(response.metadata())
         )).withConverter(converter);
     }
 
@@ -161,13 +165,13 @@ final class QueryConverter {
      *                          when none is available.
      * @return the wire representation of the given {@code cause}
      */
-    public static QueryErrorEvent convertErrorResult(Throwable cause,
+    public static QueryDispatchFailure convertErrorResult(Throwable cause,
                                                      String requestIdentifier,
                                                      String origin,
                                                      @Nullable Converter converter) {
         byte[] details = serializedDetailsOf(cause, converter);
         Object rawDetails = HandlerExecutionException.resolveDetails(cause).orElse(null);
-        return new QueryErrorEvent(
+        return new QueryDispatchFailure(
                 requestIdentifier,
                 QueryErrorCode.classify(cause),
                 messageOf(cause),
@@ -179,23 +183,24 @@ final class QueryConverter {
     }
 
     /**
-     * Reconstructs the failure the given {@code event} reports.
+     * Reconstructs the failure the given {@code failure} reports.
      * <p>
      * The original exception type is not carried, as the member reading it need not have the class. What it does carry
      * is the distinction the dispatching member acts on: whether the failure is worth retrying.
      *
-     * @param event the event reporting a failure
-     * @return the failure the given {@code event} reports
+     * @param failure the failure reported by the answering member
+     * @return the exception the given {@code failure} represents
      */
-    public static RuntimeException convertError(QueryErrorEvent event) {
-        String message = event.errorMessage() == null
+    public static RuntimeException convertError(QueryDispatchFailure failure) {
+        String message = failure.errorMessage() == null
                 ? "The member handling the query reported a failure without a message."
-                : event.errorMessage();
-        String described = event.errorOrigin() == null ? message : message + " [origin: " + event.errorOrigin() + "]";
-        List<String> descriptions = event.errorDetails().isEmpty() ? List.of(message) : event.errorDetails();
-        byte[] details = decode(event.errorDetailsPayload());
+                : failure.errorMessage();
+        String described =
+                failure.errorOrigin() == null ? message : message + " [origin: " + failure.errorOrigin() + "]";
+        List<String> descriptions = failure.errorDetails().isEmpty() ? List.of(message) : failure.errorDetails();
+        byte[] details = decode(failure.errorDetailsPayload());
 
-        return switch (event.errorCode()) {
+        return switch (failure.errorCode()) {
             case null -> new QueryExecutionException(
                     "The member handling the query reported a failure of an unrecognised kind. " + described,
                     new RemoteHandlingException(new RemoteExceptionDescription(descriptions)),

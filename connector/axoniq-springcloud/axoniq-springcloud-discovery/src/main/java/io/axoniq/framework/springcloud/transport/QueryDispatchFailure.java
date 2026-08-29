@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.springcloud.transport;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -45,8 +46,12 @@ import java.util.Objects;
  * @author Allard Buijze
  * @since 5.4.0
  */
-public record QueryErrorEvent(
+public record QueryDispatchFailure(
         String requestIdentifier,
+        // A code added by a later version of the connector reads as null rather than failing the whole event, so
+        // that the failure it reports still reaches the query that caused it. Declared here rather than configured
+        // on a converter, so that it holds however this event is read.
+        @JsonFormat(with = JsonFormat.Feature.READ_UNKNOWN_ENUM_VALUES_AS_NULL)
         @Nullable QueryErrorCode errorCode,
         @Nullable String errorMessage,
         List<String> errorDetails,
@@ -60,7 +65,7 @@ public record QueryErrorEvent(
      * empty list so a failure reported by a member that omits the field still reads.
      */
     @SuppressWarnings("MissingJavadoc")
-    public QueryErrorEvent {
+    public QueryDispatchFailure {
         Objects.requireNonNull(requestIdentifier, "The request identifier must not be null.");
         errorDetails = errorDetails == null ? List.of() : List.copyOf(errorDetails);
     }

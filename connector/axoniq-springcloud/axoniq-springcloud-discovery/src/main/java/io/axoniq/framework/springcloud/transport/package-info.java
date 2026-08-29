@@ -30,8 +30,8 @@
  * <p>
  * A query may be answered any number of times, so it is one request answered by a stream of Server-Sent Events:
  * {@link io.axoniq.framework.springcloud.transport.QueryDispatchRequest} carries it out, {@link
- * io.axoniq.framework.springcloud.transport.QueryResponseEvent} and {@link
- * io.axoniq.framework.springcloud.transport.QueryErrorEvent} carry the answer back, and {@link
+ * io.axoniq.framework.springcloud.transport.QueryDispatchResponse} and {@link
+ * io.axoniq.framework.springcloud.transport.QueryDispatchFailure} carry the answer back, and {@link
  * io.axoniq.framework.springcloud.transport.ServerSentEventReader} reads them without a reactive stack.
  */
 @NullMarked

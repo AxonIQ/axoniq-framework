@@ -25,7 +25,7 @@ package io.axoniq.framework.springcloud.transport;
  * This is what keeps answering a query testable without a web stack: the endpoint adapts a response stream to this,
  * and everything deciding what to write works against it rather than against the stream itself.
  * <p>
- * A sink is written to until it is terminated, which either {@link #error(QueryErrorEvent)} or {@link #complete()}
+ * A sink is written to until it is terminated, which either {@link #error(QueryDispatchFailure)} or {@link #complete()}
  * does. Nothing is written after that.
  *
  * @author Allard Buijze
@@ -51,14 +51,14 @@ public interface QueryResponseSink {
      *
      * @param response the response to write
      */
-    void response(QueryResponseEvent response);
+    void response(QueryDispatchResponse response);
 
     /**
      * Ends the response stream, reporting that the query failed.
      *
      * @param error the failure that ended the response stream
      */
-    void error(QueryErrorEvent error);
+    void error(QueryDispatchFailure error);
 
     /**
      * Ends the response stream, reporting that the query was answered in full.

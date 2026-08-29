@@ -32,12 +32,12 @@ import java.util.Objects;
  * @param identifier        the response's own identifier
  * @param requestIdentifier the identifier of the query being answered
  * @param type              the response's {@code MessageType}, as its string form
- * @param payload           the response's payload, Base64-encoded, or {@code null} when it carries none
+ * @param payload           the response's payload as its converter wrote it, or {@code null} when it carries none
  * @param metadata          the response's metadata
  * @author Allard Buijze
  * @since 5.4.0
  */
-public record QueryResponseEvent(
+public record QueryDispatchResponse(
         String identifier,
         String requestIdentifier,
         String type,
@@ -50,7 +50,7 @@ public record QueryResponseEvent(
      * {@code null} metadata to empty so a response from a member that omits the field still reads.
      */
     @SuppressWarnings("MissingJavadoc")
-    public QueryResponseEvent {
+    public QueryDispatchResponse {
         Objects.requireNonNull(identifier, "The response identifier must not be null.");
         Objects.requireNonNull(requestIdentifier, "The request identifier must not be null.");
         Objects.requireNonNull(type, "The response type must not be null.");

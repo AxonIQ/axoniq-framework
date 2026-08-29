@@ -70,8 +70,9 @@ class SseQueryResponseSinkFramingTest {
 
     private static final MessageType FIND_COURSE_TYPE = new MessageType("university.FindCourse", "1.0.0");
     private static final MessageType RESPONSE_TYPE = new MessageType("university.Course", "1.0.0");
-    private static final byte[] PAYLOAD = "{\"id\":\"course-1\"}".getBytes(StandardCharsets.UTF_8);
+    private static final String PAYLOAD = "{\"id\":\"course-1\"}";
 
+    // Reads back what the container wrote, standing in for the member on the other end of the stream.
     private final ObjectMapper objectMapper =
             JsonMapper.builder().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
 
@@ -82,14 +83,14 @@ class SseQueryResponseSinkFramingTest {
     void setUp() {
         gateway = new IncomingQueryGateway(() -> "node-b", null);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new SpringCloudQueryController(gateway, objectMapper, Duration.ofSeconds(30)))
+                .standaloneSetup(new SpringCloudQueryController(gateway, Duration.ofSeconds(30)))
                 .build();
     }
 
     private static QueryDispatchRequest request() {
         return new QueryDispatchRequest("query-1",
                                         FIND_COURSE_TYPE.toString(),
-                                        Base64.getEncoder().encodeToString(PAYLOAD),
+                                        PAYLOAD,
                                         Map.of(),
                                         null);
     }
@@ -123,8 +124,8 @@ class SseQueryResponseSinkFramingTest {
         return events;
     }
 
-    private QueryResponseEvent parse(ServerSentEvent event) throws IOException {
-        return objectMapper.readValue(event.data(), QueryResponseEvent.class);
+    private QueryDispatchResponse parse(ServerSentEvent event) throws IOException {
+        return objectMapper.readValue(event.data(), QueryDispatchResponse.class);
     }
 
     @Nested
@@ -156,13 +157,13 @@ class SseQueryResponseSinkFramingTest {
             List<ServerSentEvent> wire = wireOf(dispatch());
 
             // then each event carries exactly one response, in the order the handler produced them
-            List<QueryResponseEvent> responses = new ArrayList<>();
+            List<QueryDispatchResponse> responses = new ArrayList<>();
             for (ServerSentEvent event : wire) {
                 responses.add(parse(event));
             }
-            assertThat(responses).extracting(QueryResponseEvent::identifier)
+            assertThat(responses).extracting(QueryDispatchResponse::identifier)
                                  .containsExactly("response-1", "response-2");
-            assertThat(responses).extracting(QueryResponseEvent::requestIdentifier).containsOnly("query-1");
+            assertThat(responses).extracting(QueryDispatchResponse::requestIdentifier).containsOnly("query-1");
         }
 
         @Test
@@ -283,7 +284,7 @@ class SseQueryResponseSinkFramingTest {
 
             // then
             assertThat(wire).hasSize(1);
-            QueryErrorEvent error = objectMapper.readValue(wire.getFirst().data(), QueryErrorEvent.class);
+            QueryDispatchFailure error = objectMapper.readValue(wire.getFirst().data(), QueryDispatchFailure.class);
             assertThat(error.errorCode()).isEqualTo(QueryErrorCode.QUERY_EXECUTION_ERROR);
             assertThat(error.errorOrigin()).isEqualTo("node-b");
             assertThat(error.requestIdentifier()).isEqualTo("query-1");
@@ -298,7 +299,7 @@ class SseQueryResponseSinkFramingTest {
 
             // then
             assertThat(wire).hasSize(1);
-            assertThat(objectMapper.readValue(wire.getFirst().data(), QueryErrorEvent.class).errorCode())
+            assertThat(objectMapper.readValue(wire.getFirst().data(), QueryDispatchFailure.class).errorCode())
                     .isEqualTo(QueryErrorCode.NO_HANDLER_FOR_QUERY);
         }
     }
@@ -308,13 +309,7 @@ class SseQueryResponseSinkFramingTest {
 
         @Test
         void rejectsAMissingEmitter() {
-            assertThatThrownBy(() -> new SseQueryResponseSink(null, objectMapper))
-                    .isInstanceOf(NullPointerException.class);
-        }
-
-        @Test
-        void rejectsAMissingObjectMapper() {
-            assertThatThrownBy(() -> new SseQueryResponseSink(new SseEmitter(), null))
+            assertThatThrownBy(() -> new SseQueryResponseSink(null))
                     .isInstanceOf(NullPointerException.class);
         }
     }

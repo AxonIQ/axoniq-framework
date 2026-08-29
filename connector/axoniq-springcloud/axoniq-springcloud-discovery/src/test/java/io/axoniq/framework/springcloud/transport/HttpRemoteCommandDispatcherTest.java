@@ -21,6 +21,7 @@ package io.axoniq.framework.springcloud.transport;
 
 import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.util.StubClientHttpRequestFactory;
+import org.axonframework.conversion.ConversionException;
 import org.axonframework.messaging.commandhandling.CommandDispatchException;
 import org.axonframework.messaging.commandhandling.CommandExecutionException;
 import org.axonframework.messaging.commandhandling.CommandMessage;
@@ -52,7 +53,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class HttpRemoteCommandDispatcherTest {
 
     private static final MessageType COMMAND_TYPE = new MessageType("university.CreateCourse", "1.0.0");
-    private static final byte[] PAYLOAD = "{\"name\":\"Axon 5\"}".getBytes(StandardCharsets.UTF_8);
+    private static final String PAYLOAD = "{\"name\":\"Axon 5\"}";
     private static final Member REMOTE_MEMBER =
             new Member("UNIVERSITY[http://node-b:8080]", URI.create("http://node-b:8080"), false);
 
@@ -69,6 +70,13 @@ class HttpRemoteCommandDispatcherTest {
                                                      SpringCloudCommandController.DEFAULT_COMMAND_ENDPOINT,
                                                      directExecutor,
                                                      null);
+    }
+
+    /**
+     * Quotes the given {@code text} as a JSON string, the way the answering member writes a payload into its reply.
+     */
+    private static String asJsonString(String text) {
+        return '"' + text.replace("\\", "\\\\").replace("\"", "\\\"") + '"';
     }
 
     private static CommandMessage command() {
@@ -128,10 +136,10 @@ class HttpRemoteCommandDispatcherTest {
         @Test
         void completesWithTheResultTheMemberReturned() {
             // given
-            String payload = Base64.getEncoder().encodeToString(PAYLOAD);
             requestFactory.respondingWith(
                     "{\"identifier\":\"reply-1\",\"requestIdentifier\":\"command-1\","
-                            + "\"type\":\"university.CourseId#1.0.0\",\"payload\":\"" + payload + "\"}", null);
+                            + "\"type\":\"university.CourseId#1.0.0\",\"payload\":" + asJsonString(PAYLOAD) + "}",
+                    null);
 
             // when
             CommandResultMessage result = testSubject.dispatch(REMOTE_MEMBER, command()).join();
@@ -139,7 +147,7 @@ class HttpRemoteCommandDispatcherTest {
             // then
             assertThat(result).isNotNull();
             assertThat(result.type()).isEqualTo(new MessageType("university.CourseId", "1.0.0"));
-            assertThat((byte[]) result.payload()).isEqualTo(PAYLOAD);
+            assertThat(result.payload()).isEqualTo(PAYLOAD);
         }
     }
 
@@ -228,13 +236,13 @@ class HttpRemoteCommandDispatcherTest {
     class Validation {
 
         @Test
-        void failsWhenThePayloadIsNotBytes() {
+        void failsWhenThePayloadWasNeverConverted() {
             // given — a connector not wrapped in a PayloadConvertingCommandBusConnector would produce this
-            CommandMessage unconverted = new GenericCommandMessage(COMMAND_TYPE, "not bytes");
+            CommandMessage unconverted = new GenericCommandMessage(COMMAND_TYPE, Map.of("name", "Axon 5"));
 
-            // when / then
+            // when / then the command is not sent at all, rather than sent in a form no member can read
             assertThatThrownBy(() -> testSubject.dispatch(REMOTE_MEMBER, unconverted).join())
-                    .hasCauseInstanceOf(IllegalArgumentException.class);
+                    .hasCauseInstanceOf(ConversionException.class);
             assertThat(requestFactory.requests()).isEmpty();
         }
 

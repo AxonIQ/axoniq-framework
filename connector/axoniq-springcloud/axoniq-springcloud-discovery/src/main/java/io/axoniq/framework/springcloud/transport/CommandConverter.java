@@ -19,8 +19,8 @@
 
 package io.axoniq.framework.springcloud.transport;
 
-import io.axoniq.framework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.conversion.ConversionException;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.commandhandling.CommandDispatchException;
 import org.axonframework.messaging.commandhandling.CommandExecutionException;
@@ -52,9 +52,10 @@ import static io.axoniq.framework.springcloud.transport.WireCodec.serializedDeta
  * Converts commands and their outcomes between {@link CommandMessage}/{@link CommandResultMessage} and the
  * {@link CommandDispatchRequest}/{@link CommandDispatchReply} carried over HTTP.
  * <p>
- * Payloads are expected to be {@code byte[]} by the time they reach this converter, which is what the
- * {@code PayloadConvertingCommandBusConnector} wrapped around the connector guarantees. They are Base64-encoded so
- * they survive JSON.
+ * A payload travels as the text its {@link org.axonframework.messaging.core.conversion.MessageConverter} writes it
+ * as, which is what the {@code PayloadConvertingCommandBusConnector} wrapped around the connector converts it to
+ * before it gets here. A received payload is handed to the message exactly as it arrived, leaving the converter
+ * attached to that message to read it as whatever the handler asks for.
  * <p>
  * Marked {@link Internal} as the wire format it produces is specific to this connector, and both ends of any one
  * cluster are expected to run the same version of it.
@@ -71,20 +72,19 @@ final class CommandConverter {
      * says nothing about where the command actually failed, and the descriptions carried in the reply do.
      */
     private static final boolean WRITABLE_STACK_TRACE = false;
-    private static final String PAYLOAD_DECORATOR = PayloadConvertingCommandBusConnector.class.getSimpleName();
 
     /**
      * Converts the given {@code command} into the request to send to another member.
      *
      * @param command the command to send
      * @return the wire representation of the given {@code command}
-     * @throws IllegalArgumentException when the given {@code command}'s payload is not a {@code byte[]}
+     * @throws ConversionException when the given {@code command}'s payload cannot be written as text
      */
     public static CommandDispatchRequest convertCommandMessage(CommandMessage command) {
         return new CommandDispatchRequest(
                 command.identifier(),
                 command.type().toString(),
-                encode(WireCodec.payloadAsBytes(command.payload(), command.payloadType(), PAYLOAD_DECORATOR)),
+                command.payloadAs(String.class),
                 copyOf(command.metadata()),
                 command.routingKey().orElse(null),
                 command.priority().isPresent() ? command.priority().getAsInt() : null
@@ -104,7 +104,7 @@ final class CommandConverter {
                 new GenericMessage(
                         request.identifier(),
                         MessageType.fromString(request.type()),
-                        decode(request.payload()),
+                        request.payload(),
                         copyOf(request.metadata())
                 ),
                 request.routingKey(),
@@ -119,28 +119,17 @@ final class CommandConverter {
      * @param resultMessage     the result of handling the command, or {@code null} when the handler returned none
      * @param requestIdentifier the identifier of the command being replied to
      * @return the wire representation of the given {@code resultMessage}
-     * @throws IllegalArgumentException when the given {@code resultMessage}'s payload is not a {@code byte[]}
+     * @throws ConversionException when the given {@code resultMessage}'s payload cannot be written as text
      */
     public static CommandDispatchReply convertResultMessage(@Nullable CommandResultMessage resultMessage,
                                                             String requestIdentifier) {
         if (resultMessage == null) {
             return emptyReply(requestIdentifier);
         }
-        Object payload = resultMessage.payload();
-        if (payload == null) {
-            return new CommandDispatchReply(resultMessage.identifier(),
-                                            requestIdentifier,
-                                            resultMessage.type().toString(),
-                                            null,
-                                            copyOf(resultMessage.metadata()),
-                                            null, null, List.of(), null, null, null);
-        }
         return new CommandDispatchReply(resultMessage.identifier(),
                                         requestIdentifier,
                                         resultMessage.type().toString(),
-                                        encode(WireCodec.payloadAsBytes(payload,
-                                                                        resultMessage.payloadType(),
-                                                                        PAYLOAD_DECORATOR)),
+                                        resultMessage.payloadAs(String.class),
                                         copyOf(resultMessage.metadata()),
                                         null, null, List.of(), null, null, null);
     }
@@ -200,7 +189,7 @@ final class CommandConverter {
         return new GenericCommandResultMessage(new GenericMessage(
                 reply.identifier(),
                 MessageType.fromString(type),
-                decode(reply.payload()),
+                reply.payload(),
                 copyOf(reply.metadata())
         )).withConverter(converter);
     }

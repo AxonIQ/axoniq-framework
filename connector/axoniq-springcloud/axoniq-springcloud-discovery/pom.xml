@@ -95,9 +95,16 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <!-- Optional, like the Spring dependencies: members exchange query responses as JSON events, which this
-                 reads and writes directly rather than through content negotiation. Any Spring Boot web application
-                 already has it. -->
+            <!-- Optional, like the Spring dependencies: commands and their replies travel through the RestClient's
+                 own message converters, which read and write them as JSON. Any Spring Boot web application already
+                 has it. -->
+            <optional>true</optional>
+        </dependency>
+        <!-- The wire records declare how a value a later version of the connector may add is to be read, so that
+             members running different versions still understand each other whichever converter reads them. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
             <optional>true</optional>
         </dependency>
         <dependency>

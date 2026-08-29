@@ -48,7 +48,7 @@ class IncomingQueryGatewayTest {
 
     private static final MessageType FIND_COURSE_TYPE = new MessageType("university.FindCourse", "1.0.0");
     private static final MessageType RESPONSE_TYPE = new MessageType("university.Course", "1.0.0");
-    private static final byte[] PAYLOAD = "{\"id\":\"course-1\"}".getBytes(StandardCharsets.UTF_8);
+    private static final String PAYLOAD = "{\"id\":\"course-1\"}";
 
     private RecordingQueryHandler handler;
     private RecordingQueryResponseSink sink;
@@ -65,7 +65,7 @@ class IncomingQueryGatewayTest {
     private static QueryDispatchRequest request() {
         return new QueryDispatchRequest("query-1",
                                         FIND_COURSE_TYPE.toString(),
-                                        Base64.getEncoder().encodeToString(PAYLOAD),
+                                        PAYLOAD,
                                         Map.of(),
                                         null);
     }
@@ -88,7 +88,7 @@ class IncomingQueryGatewayTest {
             testSubject.handle(request(), sink);
 
             // then
-            assertThat(sink.responses()).extracting(QueryResponseEvent::identifier)
+            assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier)
                                         .containsExactly("response-1", "response-2", "response-3");
             assertThat(sink.completed()).isTrue();
             assertThat(sink.error()).isNull();
@@ -104,7 +104,7 @@ class IncomingQueryGatewayTest {
 
             // then the member that asked matches the responses to the query it sent
             assertThat(sink.responses()).singleElement()
-                                        .extracting(QueryResponseEvent::requestIdentifier)
+                                        .extracting(QueryDispatchResponse::requestIdentifier)
                                         .isEqualTo("query-1");
         }
 
@@ -156,7 +156,7 @@ class IncomingQueryGatewayTest {
             responses.seal();
 
             // then
-            assertThat(sink.responses()).extracting(QueryResponseEvent::identifier)
+            assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier)
                                         .containsExactly("response-1", "response-2");
             assertThat(sink.completed()).isTrue();
         }
@@ -203,7 +203,7 @@ class IncomingQueryGatewayTest {
             responses.offer(response("response-2"), Context.empty());
 
             // then
-            assertThat(sink.responses()).extracting(QueryResponseEvent::identifier).containsExactly("response-1");
+            assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier).containsExactly("response-1");
         }
 
         @Test
@@ -230,7 +230,7 @@ class IncomingQueryGatewayTest {
             sink.becomeUnavailable();
 
             // then the answer that was already delivered stands
-            assertThat(sink.responses()).extracting(QueryResponseEvent::identifier).containsExactly("response-1");
+            assertThat(sink.responses()).extracting(QueryDispatchResponse::identifier).containsExactly("response-1");
             assertThat(sink.completed()).isTrue();
         }
     }

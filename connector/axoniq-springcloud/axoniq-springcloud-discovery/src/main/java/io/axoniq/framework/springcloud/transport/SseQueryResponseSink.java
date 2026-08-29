@@ -19,7 +19,7 @@
 
 package io.axoniq.framework.springcloud.transport;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.http.MediaType;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -28,8 +28,8 @@ import java.util.Objects;
 /**
  * Writes a query's responses to the member that asked, as events of a Server-Sent Events stream.
  * <p>
- * Each response is written as one event whose data is the JSON the reading member parses. The JSON is written here
- * rather than left to content negotiation, so that both ends of the stream agree on the encoding by construction.
+ * Each response is written as one event, whose data the container writes with the same message converters that write
+ * the body of any other response. Nothing is serialized here.
  * <p>
  * A write that fails is raised rather than swallowed: it means the member that asked is no longer reading, and the
  * caller releases the query's response stream on the strength of it.
@@ -40,17 +40,14 @@ import java.util.Objects;
 public class SseQueryResponseSink implements QueryResponseSink {
 
     private final SseEmitter emitter;
-    private final ObjectMapper objectMapper;
 
     /**
      * Constructs an {@code SseQueryResponseSink} writing to the given {@code emitter}.
      *
-     * @param emitter      the emitter carrying the response stream to the member that asked
-     * @param objectMapper the mapper writing each event's data
+     * @param emitter the emitter carrying the response stream to the member that asked
      */
-    public SseQueryResponseSink(SseEmitter emitter, ObjectMapper objectMapper) {
+    public SseQueryResponseSink(SseEmitter emitter) {
         this.emitter = Objects.requireNonNull(emitter, "The emitter must not be null.");
-        this.objectMapper = Objects.requireNonNull(objectMapper, "The objectMapper must not be null.");
     }
 
     @Override
@@ -65,12 +62,12 @@ public class SseQueryResponseSink implements QueryResponseSink {
     }
 
     @Override
-    public void response(QueryResponseEvent response) {
+    public void response(QueryDispatchResponse response) {
         write(QueryConverter.RESPONSE_EVENT, response);
     }
 
     @Override
-    public void error(QueryErrorEvent error) {
+    public void error(QueryDispatchFailure error) {
         write(QueryConverter.ERROR_EVENT, error);
         emitter.complete();
     }
@@ -82,7 +79,9 @@ public class SseQueryResponseSink implements QueryResponseSink {
 
     private void write(String eventType, Object data) {
         try {
-            emitter.send(SseEmitter.event().name(eventType).data(objectMapper.writeValueAsString(data)));
+            // The media type is named rather than negotiated: the stream itself is text/event-stream, so there is no
+            // content negotiation left to decide what the data of an event within it is written as.
+            emitter.send(SseEmitter.event().name(eventType).data(data, MediaType.APPLICATION_JSON));
         } catch (IOException | IllegalStateException e) {
             // The member that asked has stopped reading, so there is nowhere to report this. Raising it lets the
             // caller release the query rather than go on producing responses nothing will receive.

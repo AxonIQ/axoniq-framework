@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.springcloud.transport;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.axoniq.framework.springcloud.routing.Member;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
@@ -83,10 +82,9 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
     public static final Duration DEFAULT_RESPONSE_TIMEOUT = Duration.ofMinutes(6);
 
     private final RestClient restClient;
-    private final ObjectMapper objectMapper;
     private final String queryEndpoint;
     private final Executor executor;
-    private final @Nullable MessageConverter converter;
+    private final MessageConverter converter;
     private final int bufferSize;
     private final Duration responseTimeout;
     private final ScheduledExecutorService scheduler;
@@ -95,18 +93,16 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
      * Constructs an {@code HttpRemoteQueryDispatcher} buffering {@link #DEFAULT_BUFFER_SIZE} responses per query.
      *
      * @param restClient    the client sending the queries
-     * @param objectMapper  the mapper reading the data of each response event
      * @param queryEndpoint the path other members receive queries under
      * @param executor      the executor each query's response stream is read on
-     * @param converter     the converter attached to received responses for inline payload conversion, or
-     *                      {@code null} when none is available.
+     * @param converter     the converter reading the data of each response event, and attached to the responses read
+     *                      from it for inline payload conversion
      */
     public HttpRemoteQueryDispatcher(RestClient restClient,
-                                     ObjectMapper objectMapper,
                                      String queryEndpoint,
                                      Executor executor,
-                                     @Nullable MessageConverter converter) {
-        this(restClient, objectMapper, queryEndpoint, executor, converter, DEFAULT_BUFFER_SIZE,
+                                     MessageConverter converter) {
+        this(restClient, queryEndpoint, executor, converter, DEFAULT_BUFFER_SIZE,
              DEFAULT_RESPONSE_TIMEOUT, defaultScheduler());
     }
 
@@ -114,11 +110,10 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
      * Constructs an {@code HttpRemoteQueryDispatcher} buffering {@code bufferSize} responses per query.
      *
      * @param restClient      the client sending the queries
-     * @param objectMapper    the mapper reading the data of each response event
      * @param queryEndpoint   the path other members receive queries under
      * @param executor        the executor each query's response stream is read on
-     * @param converter       the converter attached to received responses for inline payload conversion, or
-     *                        {@code null} when none is available.
+     * @param converter       the converter reading the data of each response event, and attached to the responses
+     *                        read from it for inline payload conversion
      * @param bufferSize      how many responses to a single query are held before the answering member outpacing
      *                        this application fails the query.
      * @param responseTimeout how long a query's responses are waited for before it is given up on. Should exceed the
@@ -129,10 +124,9 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
      *                        have elapsed.
      */
     public HttpRemoteQueryDispatcher(RestClient restClient,
-                                     ObjectMapper objectMapper,
                                      String queryEndpoint,
                                      Executor executor,
-                                     @Nullable MessageConverter converter,
+                                     MessageConverter converter,
                                      int bufferSize,
                                      Duration responseTimeout,
                                      ScheduledExecutorService scheduler) {
@@ -146,10 +140,9 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
             );
         }
         this.restClient = Objects.requireNonNull(restClient, "The restClient must not be null.");
-        this.objectMapper = Objects.requireNonNull(objectMapper, "The objectMapper must not be null.");
         this.queryEndpoint = Objects.requireNonNull(queryEndpoint, "The queryEndpoint must not be null.");
         this.executor = Objects.requireNonNull(executor, "The executor must not be null.");
-        this.converter = converter;
+        this.converter = Objects.requireNonNull(converter, "The converter must not be null.");
         this.bufferSize = bufferSize;
         this.responseTimeout = responseTimeout;
         this.scheduler = Objects.requireNonNull(scheduler, "The scheduler must not be null.");
@@ -278,8 +271,8 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
     private void onEvent(ServerSentEvent event, QueueMessageStream<QueryResponseMessage> responses) {
         switch (event.event()) {
             case QueryConverter.RESPONSE_EVENT -> {
-                QueryResponseEvent response = parse(event.data(), QueryResponseEvent.class);
-                if (!responses.offer(QueryConverter.convertResponseEvent(response, converter), Context.empty())) {
+                QueryDispatchResponse response = parse(event.data(), QueryDispatchResponse.class);
+                if (!responses.offer(QueryConverter.convertResponse(response, converter), Context.empty())) {
                     throw new IllegalStateException(
                             ("The answering member produced more than %d responses ahead of this application "
                                     + "consuming them. Consume the responses sooner, or raise the buffer size.")
@@ -287,19 +280,25 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
                     );
                 }
             }
-            case QueryConverter.ERROR_EVENT ->
-                    responses.sealExceptionally(QueryConverter.convertError(parse(event.data(),
-                                                                                 QueryErrorEvent.class)));
+            case QueryConverter.ERROR_EVENT -> {
+                QueryDispatchFailure failure = parse(event.data(), QueryDispatchFailure.class);
+                responses.sealExceptionally(QueryConverter.convertError(failure));
+            }
             default -> logger.debug("Ignoring event of unrecognised type [{}].", event.event());
         }
     }
 
     private <T> T parse(String data, Class<T> type) {
+        T parsed;
         try {
-            return objectMapper.readValue(data, type);
+            parsed = converter.convert(data, type);
         } catch (Exception e) {
             throw new IllegalStateException("Could not read a [" + type.getSimpleName() + "] from the stream.", e);
         }
+        if (parsed == null) {
+            throw new IllegalStateException("Read an empty [" + type.getSimpleName() + "] from the stream.");
+        }
+        return parsed;
     }
 
     private static void close(@Nullable Closeable closeable) {

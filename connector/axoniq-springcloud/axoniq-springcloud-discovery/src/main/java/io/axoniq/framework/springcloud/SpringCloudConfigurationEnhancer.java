@@ -137,7 +137,9 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
         return (config, name, delegate) -> new PayloadConvertingQueryBusConnector(
                 delegate,
                 config.getComponent(MessageConverter.class),
-                byte[].class
+                // Text, not bytes: a query's responses travel as the data of Server-Sent Events, which is text, and
+                // the request and reply bodies are read and written as text as well.
+                String.class
         );
     }
 
@@ -165,7 +167,8 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
         return (config, name, delegate) -> new PayloadConvertingCommandBusConnector(
                 delegate,
                 config.getComponent(MessageConverter.class),
-                byte[].class
+                // Text, not bytes, matching how the query side travels; see the query decorator.
+                String.class
         );
     }
 

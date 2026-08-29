@@ -32,7 +32,7 @@ import java.util.Objects;
  *
  * @param identifier the query's identifier, which the answering member reports back on every response
  * @param type       the query's {@code MessageType}, as its string form
- * @param payload    the query's payload, Base64-encoded, or {@code null} when the query carries none
+ * @param payload    the query's payload as its converter wrote it, or {@code null} when the query carries none
  * @param metadata   the query's metadata
  * @param priority   the query's priority, or {@code null} when it declares none
  * @author Allard Buijze

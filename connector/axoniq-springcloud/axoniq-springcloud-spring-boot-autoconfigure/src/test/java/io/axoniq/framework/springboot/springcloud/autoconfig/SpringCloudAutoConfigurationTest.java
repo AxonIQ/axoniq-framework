@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.springboot.springcloud.autoconfig;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.springboot.springcloud.SpringCloudProperties;
 import io.axoniq.framework.springcloud.SpringCloudMemberRegistry;
@@ -32,6 +31,9 @@ import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.transport.SpringCloudCommandController;
 import io.axoniq.framework.springcloud.transport.SpringCloudQueryController;
+import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.messaging.core.conversion.DelegatingMessageConverter;
+import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
@@ -67,7 +69,10 @@ class SpringCloudAutoConfigurationTest {
         // A web application, as members reach each other over HTTP and the connector refuses to start without one.
         contextRunner = new WebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
-                .withUserConfiguration(DiscoveryConfiguration.class);
+                .withUserConfiguration(DiscoveryConfiguration.class)
+                // The converter the application converts its messages with, which the framework's own
+                // autoconfiguration contributes and this connector writes the wire format with.
+                .withBean(MessageConverter.class, () -> new DelegatingMessageConverter(new JacksonConverter()));
     }
 
     @Nested
@@ -155,13 +160,16 @@ class SpringCloudAutoConfigurationTest {
         }
 
         @Test
-        void keepsTheWireFormatOutOfTheApplicationsHands() {
-            // What members write to each other is the connector's format, so it is not written with the mapper the
-            // application configured for its own purposes.
-            contextRunner.withUserConfiguration(CustomObjectMapperConfiguration.class)
-                         .run(context -> assertThat(context)
-                                 .getBean(SpringCloudAutoConfiguration.OBJECT_MAPPER_BEAN)
-                                 .isNotSameAs(context.getBean("applicationObjectMapper")));
+        void saysWhatIsMissingWhenNothingCanConvertTheWireFormat() {
+            // The connector writes what members send each other with the application's MessageConverter, so it
+            // cannot be built without one rather than starting and failing every query.
+            new WebApplicationContextRunner()
+                    .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
+                    .withUserConfiguration(DiscoveryConfiguration.class)
+                    .run(context -> assertThat(context)
+                            .hasFailed()
+                            .getFailure()
+                            .hasMessageContaining(MessageConverter.class.getSimpleName()));
         }
 
         @Test
@@ -230,6 +238,7 @@ class SpringCloudAutoConfigurationTest {
             // commands that are silently never distributed.
             new WebApplicationContextRunner()
                     .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
+                    .withBean(MessageConverter.class, () -> new DelegatingMessageConverter(new JacksonConverter()))
                     .run(context -> assertThat(context)
                             .hasFailed()
                             .getFailure()
@@ -262,6 +271,7 @@ class SpringCloudAutoConfigurationTest {
             new ApplicationContextRunner()
                     .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
                     .withUserConfiguration(DiscoveryConfiguration.class)
+                    .withBean(MessageConverter.class, () -> new DelegatingMessageConverter(new JacksonConverter()))
                     .run(context -> assertThat(context)
                             .hasFailed()
                             .getFailure()
@@ -294,6 +304,7 @@ class SpringCloudAutoConfigurationTest {
             new ReactiveWebApplicationContextRunner()
                     .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
                     .withUserConfiguration(DiscoveryConfiguration.class)
+                    .withBean(MessageConverter.class, () -> new DelegatingMessageConverter(new JacksonConverter()))
                     .run(context -> assertThat(context)
                             .hasFailed()
                             .getFailure()
@@ -310,15 +321,6 @@ class SpringCloudAutoConfigurationTest {
                     .withUserConfiguration(DiscoveryConfiguration.class)
                     .withPropertyValues("axon.springcloud.enabled=false")
                     .run(context -> assertThat(context).hasNotFailed());
-        }
-    }
-
-    @Configuration(proxyBeanMethods = false)
-    static class CustomObjectMapperConfiguration {
-
-        @Bean
-        ObjectMapper applicationObjectMapper() {
-            return new ObjectMapper();
         }
     }
 

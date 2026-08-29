@@ -20,6 +20,7 @@
 package io.axoniq.framework.springcloud.transport;
 
 import org.axonframework.common.AxonNonTransientException;
+import org.axonframework.conversion.ConversionException;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.HandlerExecutionException;
 import org.axonframework.messaging.core.MessageType;
@@ -48,7 +49,7 @@ class QueryConverterTest {
 
     private static final MessageType FIND_COURSE_TYPE = new MessageType("university.FindCourse", "1.0.0");
     private static final MessageType RESPONSE_TYPE = new MessageType("university.Course", "1.0.0");
-    private static final byte[] PAYLOAD = "{\"id\":\"course-1\"}".getBytes(StandardCharsets.UTF_8);
+    private static final String PAYLOAD = "{\"id\":\"course-1\"}";
 
     private static QueryMessage query(Map<String, String> metadata) {
         return new GenericQueryMessage(
@@ -88,7 +89,7 @@ class QueryConverterTest {
             assertThat(received.identifier()).isEqualTo("query-1");
             assertThat(received.type()).isEqualTo(FIND_COURSE_TYPE);
             assertThat(received.metadata()).containsEntry("tenant", "acme");
-            assertThat((byte[]) received.payload()).isEqualTo(PAYLOAD);
+            assertThat(received.payload()).isEqualTo(PAYLOAD);
         }
 
         @Test
@@ -107,15 +108,15 @@ class QueryConverterTest {
 
         @Test
         void refusesAPayloadThatWasNeverConverted() {
-            // given a query whose payload is not yet bytes
+            // given a query whose payload is still in its domain form, with no converter to write it as text
             QueryMessage unconverted = new GenericQueryMessage(
-                    new GenericMessage("query-1", FIND_COURSE_TYPE, "not bytes", Map.of()), null
+                    new GenericMessage("query-1", FIND_COURSE_TYPE, Map.of("id", "course-1"), Map.of()), null
             );
 
-            // when / then the message names the decorator that should have converted it
+            // when / then
             assertThatThrownBy(() -> QueryConverter.convertQueryMessage(unconverted))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("PayloadConvertingQueryBusConnector");
+                    .isInstanceOf(ConversionException.class)
+                    .hasMessageContaining("java.lang.String");
         }
     }
 
@@ -125,7 +126,7 @@ class QueryConverterTest {
         @Test
         void namesTheQueryEachResponseAnswers() {
             // when
-            QueryResponseEvent event = QueryConverter.convertResponseMessage(response(), "query-1");
+            QueryDispatchResponse event = QueryConverter.convertResponseMessage(response(), "query-1");
 
             // then
             assertThat(event.identifier()).isEqualTo("response-1");
@@ -136,16 +137,16 @@ class QueryConverterTest {
         @Test
         void rebuildsTheResponseTheMemberSent() {
             // given
-            QueryResponseEvent event = QueryConverter.convertResponseMessage(response(), "query-1");
+            QueryDispatchResponse event = QueryConverter.convertResponseMessage(response(), "query-1");
 
             // when
-            QueryResponseMessage received = QueryConverter.convertResponseEvent(event, null);
+            QueryResponseMessage received = QueryConverter.convertResponse(event, null);
 
             // then
             assertThat(received.identifier()).isEqualTo("response-1");
             assertThat(received.type()).isEqualTo(RESPONSE_TYPE);
             assertThat(received.metadata()).containsEntry("tenant", "acme");
-            assertThat((byte[]) received.payload()).isEqualTo(PAYLOAD);
+            assertThat(received.payload()).isEqualTo(PAYLOAD);
         }
     }
 
@@ -155,7 +156,7 @@ class QueryConverterTest {
         @Test
         void keepsAMissingHandlerRetryable() {
             // given
-            QueryErrorEvent event = QueryConverter.convertErrorResult(
+            QueryDispatchFailure event = QueryConverter.convertErrorResult(
                     new NoHandlerForQueryException("Still starting up."), "query-1", "node-b", null
             );
 
@@ -170,7 +171,7 @@ class QueryConverterTest {
         @Test
         void marksAFailureThatWillRepeatAsNotWorthRetrying() {
             // given
-            QueryErrorEvent event = QueryConverter.convertErrorResult(
+            QueryDispatchFailure event = QueryConverter.convertErrorResult(
                     new UnreadableQueryException("Cannot read it.", new IllegalStateException()),
                     "query-1", "node-b", null
             );
@@ -187,7 +188,7 @@ class QueryConverterTest {
         @Test
         void pointsAtTheMemberTheFailureOccurredOn() {
             // when
-            QueryErrorEvent event = QueryConverter.convertErrorResult(
+            QueryDispatchFailure event = QueryConverter.convertErrorResult(
                     new QueryExecutionException("The course store is unavailable.", null),
                     "query-1", "node-b", null
             );
@@ -201,7 +202,7 @@ class QueryConverterTest {
         void carriesTheDetailsAHandlerAttached() {
             // given a handler that rejected the query with details of its own
             byte[] details = "{\"reason\":\"closed\"}".getBytes(StandardCharsets.UTF_8);
-            QueryErrorEvent event = QueryConverter.convertErrorResult(
+            QueryDispatchFailure event = QueryConverter.convertErrorResult(
                     new QueryExecutionException("Rejected.", null, details), "query-1", "node-b", null
             );
 
@@ -215,7 +216,7 @@ class QueryConverterTest {
         @Test
         void describesTheChainOfCausesBehindAFailure() {
             // given
-            QueryErrorEvent event = QueryConverter.convertErrorResult(
+            QueryDispatchFailure event = QueryConverter.convertErrorResult(
                     new QueryExecutionException("Outer.", new IllegalStateException("Inner.")),
                     "query-1", "node-b", null
             );
@@ -227,7 +228,7 @@ class QueryConverterTest {
         @Test
         void readsAFailureFromAMemberReportingACodeThisOneDoesNotKnow() {
             // given a member running a newer version, whose error code did not survive deserialization
-            QueryErrorEvent unknown = new QueryErrorEvent(
+            QueryDispatchFailure unknown = new QueryDispatchFailure(
                     "query-1", null, "Something went wrong.", java.util.List.of("Something went wrong."),
                     "node-b", null, null
             );
@@ -243,7 +244,7 @@ class QueryConverterTest {
         @Test
         void describesAFailureThatCarriesNoMessage() {
             // when
-            QueryErrorEvent event = QueryConverter.convertErrorResult(
+            QueryDispatchFailure event = QueryConverter.convertErrorResult(
                     new IllegalStateException(), "query-1", "node-b", null
             );
 

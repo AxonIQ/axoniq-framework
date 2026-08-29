@@ -31,11 +31,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public class RecordingQueryResponseSink implements QueryResponseSink {
 
-    private final List<QueryResponseEvent> responses = new CopyOnWriteArrayList<>();
+    private final List<QueryDispatchResponse> responses = new CopyOnWriteArrayList<>();
 
     private final List<Runnable> unavailableListeners = new CopyOnWriteArrayList<>();
 
-    private volatile @Nullable QueryErrorEvent error;
+    private volatile @Nullable QueryDispatchFailure error;
     private volatile boolean completed;
     private volatile @Nullable RuntimeException failOnWrite;
 
@@ -55,11 +55,11 @@ public class RecordingQueryResponseSink implements QueryResponseSink {
         unavailableListeners.forEach(Runnable::run);
     }
 
-    public List<QueryResponseEvent> responses() {
+    public List<QueryDispatchResponse> responses() {
         return List.copyOf(responses);
     }
 
-    public @Nullable QueryErrorEvent error() {
+    public @Nullable QueryDispatchFailure error() {
         return error;
     }
 
@@ -73,7 +73,7 @@ public class RecordingQueryResponseSink implements QueryResponseSink {
     }
 
     @Override
-    public void response(QueryResponseEvent response) {
+    public void response(QueryDispatchResponse response) {
         RuntimeException failure = failOnWrite;
         if (failure != null) {
             throw failure;
@@ -82,7 +82,7 @@ public class RecordingQueryResponseSink implements QueryResponseSink {
     }
 
     @Override
-    public void error(QueryErrorEvent error) {
+    public void error(QueryDispatchFailure error) {
         this.error = error;
     }
 
