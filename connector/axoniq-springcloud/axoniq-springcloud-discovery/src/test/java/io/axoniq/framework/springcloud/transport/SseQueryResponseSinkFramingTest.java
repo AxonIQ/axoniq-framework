@@ -48,6 +48,8 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -78,13 +80,23 @@ class SseQueryResponseSinkFramingTest {
 
     private IncomingQueryGateway gateway;
     private MockMvc mockMvc;
+    private ScheduledExecutorService scheduler;
 
     @BeforeEach
     void setUp() {
+        scheduler = Executors.newSingleThreadScheduledExecutor();
         gateway = new IncomingQueryGateway(() -> "node-b", null);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new SpringCloudQueryController(gateway, Duration.ofSeconds(30)))
+                .standaloneSetup(new SpringCloudQueryController(gateway,
+                                                                Duration.ofSeconds(30),
+                                                                Duration.ofSeconds(20),
+                                                                scheduler))
                 .build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        scheduler.shutdownNow();
     }
 
     private static QueryDispatchRequest request() {

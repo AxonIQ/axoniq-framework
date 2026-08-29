@@ -26,7 +26,10 @@ import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesPayload;
 import io.axoniq.framework.springcloud.routing.Member;
 import org.awaitility.Awaitility;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.queryhandling.GenericSubscriptionQueryUpdateMessage;
+import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.gateway.QueryGateway;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.WebApplicationType;
@@ -44,13 +47,16 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -357,16 +363,42 @@ class SpringCloudMessageDistributionIT {
         }
 
         @Test
-        void reportsThatSubscriptionQueriesAreNotCarried() {
-            // given
+        void answersASubscriptionQueryWithItsInitialResultAndThenTheUpdates() {
+            // given a subscription opened from the node that does not handle the query
             converge();
+            Flux<String> answers = Flux.from(queryGatewayOf(nodeA)
+                                                     .subscriptionQuery(new FindCourses("axon"), String.class));
+            List<String> received = new CopyOnWriteArrayList<>();
+            Disposable subscription = answers.subscribe(received::add);
 
-            // when — degrading to a query answered once would look like a subscription that never updates
-            assertThatThrownBy(() -> Flux.from(queryGatewayOf(nodeA)
-                                                       .subscriptionQuery(new FindCourses("axon"), String.class))
-                                         .blockFirst(Duration.ofSeconds(20)))
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("subscription queries");
+            try {
+                // when the initial result has arrived and the handling node emits an update
+                await().atMost(Duration.ofSeconds(20)).until(() -> received.size() == 3);
+                emitUpdateOn(nodeB, "course-4@" + NODE_B);
+
+                // then it crosses the wire onto the same stream the initial result arrived on
+                await().atMost(Duration.ofSeconds(20)).until(() -> received.size() == 4);
+                assertThat(received).containsExactly("course-1@" + NODE_B,
+                                                     "course-2@" + NODE_B,
+                                                     "course-3@" + NODE_B,
+                                                     "course-4@" + NODE_B);
+            } finally {
+                subscription.dispose();
+            }
+        }
+
+        /**
+         * Emits an update for every open {@link FindCourses} subscription, on the given {@code node}.
+         */
+        private void emitUpdateOn(ConfigurableApplicationContext node, String course) {
+            node.getBean(QueryBus.class)
+                .emitUpdate(query -> SpringCloudNodes.FIND_COURSES.equals(query.type().qualifiedName()),
+                            () -> new GenericSubscriptionQueryUpdateMessage(
+                                    new MessageType(String.class), course
+                            ),
+                            null)
+                .orTimeout(20, TimeUnit.SECONDS)
+                .join();
         }
 
         private QueryGateway queryGatewayOf(ConfigurableApplicationContext node) {

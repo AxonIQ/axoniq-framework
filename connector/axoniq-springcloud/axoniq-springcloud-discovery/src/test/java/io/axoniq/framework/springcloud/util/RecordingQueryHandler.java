@@ -24,6 +24,7 @@ import org.axonframework.common.Registration;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -36,6 +37,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class RecordingQueryHandler implements QueryBusConnector.Handler {
 
     private final List<QueryMessage> queries = new CopyOnWriteArrayList<>();
+    private final List<Subscription> subscriptions = new CopyOnWriteArrayList<>();
+    private final List<Subscription> cancelled = new CopyOnWriteArrayList<>();
 
     private volatile List<QueryResponseMessage> responses = List.of();
     private volatile Throwable cause;
@@ -67,6 +70,61 @@ public class RecordingQueryHandler implements QueryBusConnector.Handler {
     @Override
     public Registration registerUpdateHandler(QueryMessage subscriptionQueryMessage,
                                               QueryBusConnector.UpdateCallback updateCallback) {
-        throw new UnsupportedOperationException("Subscription queries are not exercised by this handler.");
+        Subscription subscription = new Subscription(subscriptionQueryMessage, updateCallback);
+        subscriptions.add(subscription);
+        return () -> {
+            subscription.cancelled = true;
+            cancelled.add(subscription);
+            return subscriptions.remove(subscription);
+        };
+    }
+
+    /**
+     * Returns the subscriptions registered on this handler and not yet cancelled.
+     */
+    public List<Subscription> subscriptions() {
+        return List.copyOf(subscriptions);
+    }
+
+    /**
+     * Returns the subscriptions that were cancelled, in the order they were registered.
+     */
+    public List<Subscription> cancelledSubscriptions() {
+        return cancelled.stream().filter(Subscription::cancelled).toList();
+    }
+
+    /**
+     * Emits the given {@code update} on every subscription registered on this handler.
+     */
+    public void emit(SubscriptionQueryUpdateMessage update) {
+        subscriptions.forEach(subscription -> subscription.callback().sendUpdate(update));
+    }
+
+    /**
+     * One subscription registered on this handler.
+     */
+    public static final class Subscription {
+
+        private final QueryMessage query;
+        private final QueryBusConnector.UpdateCallback callback;
+
+        private volatile boolean cancelled;
+
+        private Subscription(QueryMessage query, QueryBusConnector.UpdateCallback callback) {
+            this.query = query;
+            this.callback = callback;
+        }
+
+        public QueryMessage query() {
+            return query;
+        }
+
+        public QueryBusConnector.UpdateCallback callback() {
+            return callback;
+        }
+
+        public boolean cancelled() {
+            return cancelled;
+        }
     }
 }

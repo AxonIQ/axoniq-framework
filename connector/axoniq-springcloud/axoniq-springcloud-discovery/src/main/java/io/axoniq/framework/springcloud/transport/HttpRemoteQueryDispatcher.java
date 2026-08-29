@@ -34,17 +34,21 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.Closeable;
+import java.io.FilterInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -81,12 +85,23 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
      */
     public static final Duration DEFAULT_RESPONSE_TIMEOUT = Duration.ofMinutes(6);
 
+    /**
+     * How long a subscription may hear nothing at all from the answering member before it is given up on, when no
+     * other window is configured.
+     * <p>
+     * Not a deadline on the subscription, which lasts as long as the subscriber wants it to, but on silence: the
+     * answering member sends a keep-alive well inside this window, so a subscription that hears nothing for the whole
+     * of it is one whose member is gone.
+     */
+    public static final Duration DEFAULT_SUBSCRIPTION_INACTIVITY_TIMEOUT = Duration.ofSeconds(60);
+
     private final RestClient restClient;
     private final String queryEndpoint;
     private final Executor executor;
     private final MessageConverter converter;
     private final int bufferSize;
     private final Duration responseTimeout;
+    private final Duration subscriptionInactivityTimeout;
     private final ScheduledExecutorService scheduler;
 
     /**
@@ -103,7 +118,7 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
                                      Executor executor,
                                      MessageConverter converter) {
         this(restClient, queryEndpoint, executor, converter, DEFAULT_BUFFER_SIZE,
-             DEFAULT_RESPONSE_TIMEOUT, defaultScheduler());
+             DEFAULT_RESPONSE_TIMEOUT, DEFAULT_SUBSCRIPTION_INACTIVITY_TIMEOUT, defaultScheduler());
     }
 
     /**
@@ -119,9 +134,12 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
      * @param responseTimeout how long a query's responses are waited for before it is given up on. Should exceed the
      *                        timeout the answering members apply to their own response streams, so that a member
      *                        which is merely slow ends the query itself rather than being given up on here.
-     * @param scheduler       runs the deadline of each query. Cancelled deadlines are removed from it, so a query
-     *                        that completes quickly does not leave its responses reachable until the deadline would
-     *                        have elapsed.
+     * @param subscriptionInactivityTimeout
+     *                        how long a subscription may hear nothing at all from the answering member before it is
+     *                        given up on. Must exceed the interval at which members keep an idle subscription alive.
+     * @param scheduler       runs the deadline of each query and the silence check of each subscription. Cancelled
+     *                        deadlines are removed from it, so a query that completes quickly does not leave its
+     *                        responses reachable until the deadline would have elapsed.
      */
     public HttpRemoteQueryDispatcher(RestClient restClient,
                                      String queryEndpoint,
@@ -129,6 +147,7 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
                                      MessageConverter converter,
                                      int bufferSize,
                                      Duration responseTimeout,
+                                     Duration subscriptionInactivityTimeout,
                                      ScheduledExecutorService scheduler) {
         if (bufferSize < 1) {
             throw new IllegalArgumentException("The buffer size must be at least 1, but was [" + bufferSize + "].");
@@ -145,7 +164,17 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
         this.converter = Objects.requireNonNull(converter, "The converter must not be null.");
         this.bufferSize = bufferSize;
         this.responseTimeout = responseTimeout;
+        this.subscriptionInactivityTimeout = requirePositive(subscriptionInactivityTimeout,
+                                                             "subscription inactivity timeout");
         this.scheduler = Objects.requireNonNull(scheduler, "The scheduler must not be null.");
+    }
+
+    private static Duration requirePositive(Duration value, String what) {
+        Objects.requireNonNull(value, "The " + what + " must not be null.");
+        if (value.isNegative() || value.isZero()) {
+            throw new IllegalArgumentException("The " + what + " must be positive, but was [" + value + "].");
+        }
+        return value;
     }
 
     /**
@@ -266,6 +295,204 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
                 },
                 responseTimeout.toMillis(), TimeUnit.MILLISECONDS
         );
+    }
+
+    @Override
+    public MessageStream<QueryResponseMessage> openSubscriptionQueryUpdateStream(Member member,
+                                                                                 QueryMessage query,
+                                                                                 int updateBufferSize,
+                                                                                 SubscriptionListener listener) {
+        Objects.requireNonNull(member, "The member must not be null.");
+        Objects.requireNonNull(query, "The query must not be null.");
+        Objects.requireNonNull(listener, "The listener must not be null.");
+        if (updateBufferSize < 1) {
+            throw new IllegalArgumentException(
+                    "The update buffer size must be at least 1, but was [" + updateBufferSize + "]."
+            );
+        }
+
+        URI endpoint = member.endpoint();
+        if (endpoint == null) {
+            return MessageStream.failed(new QueryDispatchException(
+                    "Member [" + member.name() + "] has no endpoint to subscribe query [" + query.type() + "] on."
+            ));
+        }
+        SubscriptionQueryRequest request;
+        try {
+            request = QueryConverter.convertSubscriptionMessage(query, updateBufferSize);
+        } catch (Exception e) {
+            return MessageStream.failed(e);
+        }
+
+        URI destination = UriComponentsBuilder.fromUri(endpoint)
+                                              .path(queryEndpoint)
+                                              .path(SpringCloudQueryController.SUBSCRIPTION_PATH)
+                                              .build()
+                                              .toUri();
+        QueueMessageStream<QueryResponseMessage> updates =
+                new QueueMessageStream<>(new ArrayBlockingQueue<>(updateBufferSize));
+        AtomicReference<@Nullable InputStream> body = new AtomicReference<>();
+        AtomicBoolean released = new AtomicBoolean();
+        AtomicLong lastActivity = new AtomicLong(System.nanoTime());
+
+        ScheduledFuture<?> silence = scheduleSilenceCheck(destination, query, updates, body, released, lastActivity);
+        executor.execute(() -> readSubscription(destination, request, query, updates,
+                                                body, released, lastActivity, silence, listener));
+
+        // Releasing the subscription stops the member from being read any further. Closing the body is what
+        // interrupts the read, which is blocked on the socket and reachable no other way.
+        return updates.onClose(() -> {
+            released.set(true);
+            silence.cancel(false);
+            close(body.get());
+        });
+    }
+
+    private void readSubscription(URI destination,
+                                  SubscriptionQueryRequest request,
+                                  QueryMessage query,
+                                  QueueMessageStream<QueryResponseMessage> updates,
+                                  AtomicReference<@Nullable InputStream> body,
+                                  AtomicBoolean released,
+                                  AtomicLong lastActivity,
+                                  ScheduledFuture<?> silence,
+                                  SubscriptionListener listener) {
+        logger.debug("Opening the update stream of query [{}] on [{}]", query.type(), destination);
+        try {
+            restClient.post()
+                      .uri(destination)
+                      .accept(MediaType.TEXT_EVENT_STREAM)
+                      .body(request)
+                      .exchange((outgoing, response) -> {
+                          if (response.getStatusCode().isError()) {
+                              throw new IllegalStateException(
+                                      "Member at [" + destination + "] answered with status "
+                                              + response.getStatusCode() + "."
+                              );
+                          }
+                          // The member registers the subscription before it answers at all, so a response means the
+                          // subscription is in place and the initial result may now be asked for.
+                          listener.opened();
+                          // Wrapped so that the keep-alive a member sends over an otherwise idle subscription counts
+                          // as the sign of life it is meant to be, even though the reader discards it.
+                          InputStream stream = new ActivityRecordingInputStream(response.getBody(), lastActivity);
+                          body.set(stream);
+                          if (!released.get()) {
+                              ServerSentEventReader.read(
+                                      stream,
+                                      event -> onUpdate(event, updates, request.updateBufferSize(), listener)
+                              );
+                          }
+                          return null;
+                      });
+            updates.seal();
+        } catch (Exception e) {
+            if (released.get()) {
+                // The subscriber released it, so the read ending is the intended outcome rather than a failure.
+                updates.seal();
+            } else {
+                updates.sealExceptionally(new QueryDispatchException(
+                        "Lost the subscription for query [" + query.type() + "] on [" + destination + "].", e
+                ));
+            }
+        } finally {
+            silence.cancel(false);
+        }
+    }
+
+    /**
+     * Schedules the abandoning of a subscription that has gone quiet.
+     * <p>
+     * A subscription has no deadline of its own, since it lasts for as long as the subscriber wants it to. What it
+     * cannot survive is the answering member disappearing without the socket reporting it, which reads as an
+     * indefinitely idle stream. The answering member sends a keep-alive well inside this window, so silence for the
+     * whole of it means the member is gone rather than merely quiet.
+     */
+    private ScheduledFuture<?> scheduleSilenceCheck(URI destination,
+                                                    QueryMessage query,
+                                                    QueueMessageStream<QueryResponseMessage> updates,
+                                                    AtomicReference<@Nullable InputStream> body,
+                                                    AtomicBoolean released,
+                                                    AtomicLong lastActivity) {
+        long periodMillis = Math.max(1, subscriptionInactivityTimeout.toMillis() / 2);
+        return scheduler.scheduleWithFixedDelay(
+                () -> {
+                    if (System.nanoTime() - lastActivity.get() < subscriptionInactivityTimeout.toNanos()) {
+                        return;
+                    }
+                    logger.info("Giving up on the subscription for query [{}] on [{}], which sent nothing for {}.",
+                                query.type(), destination, subscriptionInactivityTimeout);
+                    released.set(true);
+                    updates.sealExceptionally(new QueryDispatchException(
+                            "Member at [%s] sent nothing for subscription query [%s] within %s."
+                                    .formatted(destination, query.type(), subscriptionInactivityTimeout)
+                    ));
+                    close(body.get());
+                },
+                periodMillis, periodMillis, TimeUnit.MILLISECONDS
+        );
+    }
+
+    private void onUpdate(ServerSentEvent event,
+                          QueueMessageStream<QueryResponseMessage> updates,
+                          int updateBufferSize,
+                          SubscriptionListener listener) {
+        switch (event.event()) {
+            case QueryConverter.UPDATE_EVENT -> {
+                QueryDispatchResponse update = parse(event.data(), QueryDispatchResponse.class);
+                if (!updates.offer(QueryConverter.convertResponse(update, converter), Context.empty())) {
+                    throw new IllegalStateException(
+                            ("The answering member produced more than %d updates ahead of this application consuming "
+                                    + "them. Consume the updates sooner, or raise the update buffer size.")
+                                    .formatted(updateBufferSize)
+                    );
+                }
+            }
+            case QueryConverter.COMPLETE_EVENT -> {
+                // The member says the subscription has run its course, which is more than this member's part in it
+                // ending. Reported before sealing, so the subscriber stops waiting on every other member too.
+                listener.completed();
+                updates.seal();
+            }
+            case QueryConverter.ERROR_EVENT ->
+                    updates.sealExceptionally(QueryConverter.convertError(parse(event.data(),
+                                                                               QueryDispatchFailure.class)));
+            default -> logger.debug("Ignoring event of unrecognised type [{}].", event.event());
+        }
+    }
+
+    /**
+     * Records when the answering member was last heard from, whatever it sent.
+     * <p>
+     * Wraps the response body rather than the reader, so that a keep-alive comment counts as activity even though
+     * the reader discards it without reporting an event.
+     */
+    private static final class ActivityRecordingInputStream extends FilterInputStream {
+
+        private final AtomicLong lastActivity;
+
+        private ActivityRecordingInputStream(InputStream delegate, AtomicLong lastActivity) {
+            super(delegate);
+            this.lastActivity = lastActivity;
+        }
+
+        @Override
+        public int read() throws IOException {
+            int read = super.read();
+            if (read >= 0) {
+                lastActivity.set(System.nanoTime());
+            }
+            return read;
+        }
+
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            int read = super.read(buffer, offset, length);
+            if (read > 0) {
+                lastActivity.set(System.nanoTime());
+            }
+            return read;
+        }
     }
 
     private void onEvent(ServerSentEvent event, QueueMessageStream<QueryResponseMessage> responses) {

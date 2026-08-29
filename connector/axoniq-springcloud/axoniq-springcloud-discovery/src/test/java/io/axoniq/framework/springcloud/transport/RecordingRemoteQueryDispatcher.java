@@ -20,7 +20,10 @@
 package io.axoniq.framework.springcloud.transport;
 
 import io.axoniq.framework.springcloud.routing.Member;
+import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher.SubscriptionListener;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.QueueMessageStream;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 
@@ -35,10 +38,12 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class RecordingRemoteQueryDispatcher implements RemoteQueryDispatcher {
 
     private final List<Dispatch> dispatches = new CopyOnWriteArrayList<>();
+    private final List<Subscription> subscriptions = new CopyOnWriteArrayList<>();
 
     private volatile List<QueryResponseMessage> responses = List.of();
     private volatile Throwable cause;
     private volatile MessageStream<QueryResponseMessage> stream;
+    private volatile boolean opensImmediately = true;
 
     public RecordingRemoteQueryDispatcher answeringWith(QueryResponseMessage... responses) {
         this.responses = List.of(responses);
@@ -79,7 +84,130 @@ public class RecordingRemoteQueryDispatcher implements RemoteQueryDispatcher {
         return answer == null ? MessageStream.fromIterable(responses) : answer;
     }
 
+    @Override
+    public MessageStream<QueryResponseMessage> openSubscriptionQueryUpdateStream(Member member,
+                                                                                 QueryMessage query,
+                                                                                 int updateBufferSize,
+                                                                                 SubscriptionListener listener) {
+        Subscription subscription = new Subscription(member, query, updateBufferSize, listener);
+        subscriptions.add(subscription);
+        Throwable failure = cause;
+        if (failure != null) {
+            return MessageStream.failed(failure);
+        }
+        if (opensImmediately) {
+            subscription.open();
+        }
+        return subscription.updates;
+    }
+
+    /**
+     * Leaves every subscription unopened until {@link #open(Member)} says so, as a member that has not answered yet
+     * leaves it.
+     */
+    public RecordingRemoteQueryDispatcher openingOnDemand() {
+        this.opensImmediately = false;
+        return this;
+    }
+
+    /**
+     * Reports the subscription opened for the given {@code member} as registered on that member.
+     */
+    public void open(Member member) {
+        subscriptionOn(member).open();
+    }
+
+    /**
+     * Returns the subscriptions opened, in the order they were opened.
+     */
+    public List<Subscription> subscriptions() {
+        return List.copyOf(subscriptions);
+    }
+
+    /**
+     * Emits the given {@code update} on the subscription opened for the given {@code member}.
+     */
+    public void emit(Member member, QueryResponseMessage update) {
+        subscriptionOn(member).updates.offer(update, Context.empty());
+    }
+
+    /**
+     * Ends the subscription opened for the given {@code member} with the given {@code failure}.
+     */
+    public void fail(Member member, Throwable failure) {
+        subscriptionOn(member).updates.sealExceptionally(failure);
+    }
+
+    /**
+     * Ends the stream opened for the given {@code member} without a failure, as a member leaving the cluster does.
+     * Says nothing about the subscription itself.
+     */
+    public void stopAnswering(Member member) {
+        subscriptionOn(member).updates.seal();
+    }
+
+    /**
+     * Reports, on behalf of the given {@code member}, that the subscription is over: there will never be another
+     * update to it.
+     */
+    public void completeSubscription(Member member) {
+        Subscription subscription = subscriptionOn(member);
+        subscription.listener.completed();
+        subscription.updates.seal();
+    }
+
+    private Subscription subscriptionOn(Member member) {
+        return subscriptions.stream()
+                            .filter(subscription -> subscription.member().equals(member))
+                            .findFirst()
+                            .orElseThrow(() -> new IllegalStateException(
+                                    "No subscription was opened on [" + member.name() + "]."
+                            ));
+    }
+
     public record Dispatch(Member member, QueryMessage query) {
 
+    }
+
+    /**
+     * One subscription this dispatcher was asked to open, and the stream of updates answering it.
+     */
+    public static final class Subscription {
+
+        private final Member member;
+        private final QueryMessage query;
+        private final int updateBufferSize;
+        private final SubscriptionListener listener;
+        private final QueueMessageStream<QueryResponseMessage> updates = new QueueMessageStream<>();
+
+        private Subscription(Member member,
+                             QueryMessage query,
+                             int updateBufferSize,
+                             SubscriptionListener listener) {
+            this.member = member;
+            this.query = query;
+            this.updateBufferSize = updateBufferSize;
+            this.listener = listener;
+        }
+
+        private void open() {
+            listener.opened();
+        }
+
+        public Member member() {
+            return member;
+        }
+
+        public QueryMessage query() {
+            return query;
+        }
+
+        public int updateBufferSize() {
+            return updateBufferSize;
+        }
+
+        public boolean released() {
+            return updates.isCompleted();
+        }
     }
 }

@@ -96,7 +96,8 @@ public class SpringCloudAutoConfiguration {
     public static final String DISPATCH_EXECUTOR_BEAN = "axoniqSpringCloudDispatchExecutor";
 
     /**
-     * The name of the {@link ScheduledExecutorService} bean the deadline of each dispatched query runs on.
+     * The name of the {@link ScheduledExecutorService} bean the deadline of each dispatched query, the silence check
+     * of each subscription, and the keep-alive of each subscription being answered run on.
      */
     public static final String DEADLINE_SCHEDULER_BEAN = "axoniqSpringCloudDeadlineScheduler";
 
@@ -415,6 +416,7 @@ public class SpringCloudAutoConfiguration {
                                                  converter,
                                                  properties.getQueryBufferSize(),
                                                  properties.getQueryResponseTimeout(),
+                                                 properties.getSubscriptionInactivityTimeout(),
                                                  scheduler);
         }
 
@@ -422,6 +424,7 @@ public class SpringCloudAutoConfiguration {
          * Bean creation method for the controller answering queries from other members.
          *
          * @param gateway    the gateway answering queries sent by other members
+         * @param scheduler  the scheduler the keep-alive of each open subscription runs on
          * @param properties the connector's properties
          * @return the controller answering queries from other members
          */
@@ -430,9 +433,13 @@ public class SpringCloudAutoConfiguration {
         @ConditionalOnWebApplication(type = Type.SERVLET)
         public SpringCloudQueryController axoniqSpringCloudQueryController(
                 IncomingQueryGateway gateway,
+                @Qualifier(DEADLINE_SCHEDULER_BEAN) ScheduledExecutorService scheduler,
                 SpringCloudProperties properties
         ) {
-            return new SpringCloudQueryController(gateway, properties.getQueryTimeout());
+            return new SpringCloudQueryController(gateway,
+                                                  properties.getQueryTimeout(),
+                                                  properties.getSubscriptionKeepAliveInterval(),
+                                                  scheduler);
         }
 
         /**

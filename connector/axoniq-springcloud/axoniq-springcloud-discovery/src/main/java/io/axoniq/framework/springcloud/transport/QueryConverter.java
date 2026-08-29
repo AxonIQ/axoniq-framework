@@ -74,6 +74,23 @@ final class QueryConverter {
      */
     public static final String ERROR_EVENT = "error";
 
+    /**
+     * The event type carrying one update to a subscription query.
+     * <p>
+     * Told apart from a {@link #RESPONSE_EVENT} because the two mean different things to the subscriber even though
+     * they carry the same shape: a response is part of the initial result, an update is a change after it.
+     */
+    public static final String UPDATE_EVENT = "update";
+
+    /**
+     * The event type reporting that a subscription query is over: there will never be another update to it.
+     * <p>
+     * Written rather than left to the stream simply ending, because the two mean different things. A member that
+     * shuts down or is partitioned away ends the stream as well, and that says only that this member has stopped
+     * answering, not that the subscription has run its course.
+     */
+    public static final String COMPLETE_EVENT = "complete";
+
     private static final boolean WRITABLE_STACK_TRACE = false;
 
     private QueryConverter() {
@@ -106,6 +123,46 @@ final class QueryConverter {
      * @return the query the given {@code request} represents
      */
     public static QueryMessage convertRequest(QueryDispatchRequest request, @Nullable Converter converter) {
+        return new GenericQueryMessage(
+                new GenericMessage(
+                        request.identifier(),
+                        MessageType.fromString(request.type()),
+                        request.payload(),
+                        copyOf(request.metadata())
+                ),
+                request.priority()
+        ).withConverter(converter);
+    }
+
+    /**
+     * Converts the given {@code query} into the subscription to open on another member.
+     *
+     * @param query            the query to subscribe with
+     * @param updateBufferSize how many updates the answering member may hold for this subscriber
+     * @return the wire representation of the given {@code query} as a subscription
+     * @throws ConversionException when the given {@code query}'s payload cannot be written as text
+     */
+    static SubscriptionQueryRequest convertSubscriptionMessage(QueryMessage query, int updateBufferSize) {
+        return new SubscriptionQueryRequest(
+                query.identifier(),
+                query.type().toString(),
+                query.payloadAs(String.class),
+                copyOf(query.metadata()),
+                query.priority().isPresent() ? query.priority().getAsInt() : null,
+                updateBufferSize
+        );
+    }
+
+    /**
+     * Converts the given subscription {@code request}, received from another member, into the query to handle
+     * locally.
+     *
+     * @param request   the subscription query received from another member
+     * @param converter the converter to attach to the resulting query for inline payload conversion, or {@code null}
+     *                  when none is available
+     * @return the query the given {@code request} represents
+     */
+    static QueryMessage convertSubscriptionRequest(SubscriptionQueryRequest request, @Nullable Converter converter) {
         return new GenericQueryMessage(
                 new GenericMessage(
                         request.identifier(),

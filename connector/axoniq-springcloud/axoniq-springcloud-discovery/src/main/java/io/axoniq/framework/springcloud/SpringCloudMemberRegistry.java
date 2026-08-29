@@ -49,7 +49,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -97,6 +99,9 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
     private volatile Set<QualifiedName> localQueries = Set.of();
 
     private final AtomicInteger queryRotation = new AtomicInteger();
+    // Notified after every ring replacement. A subscription query has to know when a member that advertises its name
+    // appears, because it cannot have received the updates that member emitted before it was subscribed to.
+    private final List<Consumer<ConsistentHash>> membershipListeners = new CopyOnWriteArrayList<>();
     // Resolving a query's candidates means filtering and sorting every member, which is too much to repeat on every
     // dispatch. Replaced wholesale whenever the ring changes, rather than keyed on the ring: hashing a ring means
     // walking every member and every position it claims, which would cost more per dispatch than it saves.
@@ -193,6 +198,59 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
         return Optional.of(candidates.get(index));
     }
 
+    /**
+     * Returns every member advertising the given {@code queryName}, in a stable order.
+     * <p>
+     * Where {@link #findQueryDestination(QualifiedName)} picks one member to answer a query, a subscription query
+     * needs them all: an update is emitted on whichever member's state changed, and a member only matches a
+     * subscription it holds a registration for. A subscriber that reached only one member would miss every update
+     * emitted on the others.
+     *
+     * @param queryName the {@link QualifiedName} of the query to resolve members for
+     * @return every member advertising the given {@code queryName}, empty when none does
+     */
+    public List<Member> findAllQueryDestinations(QualifiedName queryName) {
+        Objects.requireNonNull(queryName, "The queryName must not be null.");
+        Map<QualifiedName, List<Member>> candidatesByName = queryCandidates;
+        ConsistentHash currentRing = ring;
+        return candidatesByName.computeIfAbsent(queryName, name -> candidatesFor(currentRing, name));
+    }
+
+    /**
+     * Registers a {@code listener} to be notified after every change to the ring, with the ring that replaced the
+     * previous one.
+     * <p>
+     * Notified outside the lock the ring is replaced under, so a listener may read the registry freely. It runs on
+     * whichever thread made the change, which for a discovery round is the thread delivering the heartbeat.
+     *
+     * @param listener notified with the new ring after every membership change
+     * @return a registration cancelling the notification
+     */
+    // Fully qualified because Spring Cloud's own Registration, which this class takes as its local registration, has
+    // the same simple name.
+    public org.axonframework.common.Registration onMembershipChanged(Consumer<ConsistentHash> listener) {
+        Objects.requireNonNull(listener, "The listener must not be null.");
+        membershipListeners.add(listener);
+        return () -> membershipListeners.remove(listener);
+    }
+
+    /**
+     * Notifies the membership listeners of the given {@code current} ring.
+     * <p>
+     * A listener that throws must not stop the others from being told, nor break the discovery round that led here.
+     *
+     * @param current the ring that replaced the previous one
+     */
+    private void notifyMembershipChanged(ConsistentHash current) {
+        for (Consumer<ConsistentHash> listener : membershipListeners) {
+            try {
+                listener.accept(current);
+            } catch (Exception e) {
+                logger.warn("A membership listener failed. The ring is unaffected.", e);
+            }
+        }
+    }
+
     private static List<Member> candidatesFor(ConsistentHash ring, QualifiedName queryName) {
         return ring.getMembers()
                    .stream()
@@ -244,11 +302,13 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
         discoveryMode.updateLocalCapabilities(localRegistration, capabilities);
         // Updating the local member immediately, rather than waiting for the next heartbeat, means a message
         // dispatched right after its handler subscribed can already be routed to this member.
+        ConsistentHash updated;
         synchronized (this) {
-            ring = ring.with(localMember(), currentLocalCapabilities());
+            updated = ring = ring.with(localMember(), currentLocalCapabilities());
             queryCandidates = new ConcurrentHashMap<>();
         }
         logger.debug("Published local capabilities [{}]; ring is now [{}]", capabilities, ring);
+        notifyMembershipChanged(updated);
     }
 
     /**
@@ -330,17 +390,19 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
         discoveryMode.retainOnly(instances.stream()
                                           .map(ServiceInstanceKey::of)
                                           .collect(Collectors.toUnmodifiableSet()));
+        ConsistentHash updated;
         synchronized (this) {
             // Re-applying this member's own capabilities, rather than trusting the rebuild to carry them: the rebuild
             // read them before taking the lock, so a handler that subscribed in between would be lost until the next
             // heartbeat. Only refreshed where the rebuild already placed this member, so that a member discovery left
             // out stays out.
             Member local = localMember();
-            ring = rebuilt.capabilitiesOf(local).isPresent()
+            updated = ring = rebuilt.capabilitiesOf(local).isPresent()
                     ? rebuilt.with(local, currentLocalCapabilities())
                     : rebuilt;
             queryCandidates = new ConcurrentHashMap<>();
         }
+        notifyMembershipChanged(updated);
         logger.debug("Rebuilt the ring from [{}] discovered instances: [{}]", instances.size(), rebuilt);
     }
 

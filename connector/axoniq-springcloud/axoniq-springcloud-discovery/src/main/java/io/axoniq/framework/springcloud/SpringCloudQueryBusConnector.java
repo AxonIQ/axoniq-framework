@@ -24,32 +24,44 @@ import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.transport.IncomingQueryGateway;
 import io.axoniq.framework.springcloud.transport.QueryDispatchException;
 import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher;
+import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher.SubscriptionListener;
+import io.axoniq.framework.springcloud.transport.SubscriptionQueryMembersChangedException;
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.license.entitlement.EntitlementMessageType;
 import org.axonframework.common.FutureUtils;
+import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.common.lifecycle.ShutdownInProgressException;
 import org.axonframework.common.lifecycle.ShutdownLatch;
+import org.axonframework.messaging.core.Context;
+import org.axonframework.messaging.core.DelayedMessageStream;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.QueueMessageStream;
 import org.axonframework.messaging.core.conversion.MessageConverter;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
+import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
 import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A {@link QueryBusConnector} distributing queries over the members a Spring Cloud discovery implementation reports.
@@ -62,8 +74,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * produced. A member answering faster than this application consumes fails the query rather than buffering without
  * limit; see {@code HttpRemoteQueryDispatcher}.
  * <p>
- * Subscription queries are not carried by this connector. Rather than degrade into a query answered once, they are
- * rejected outright, so an application relying on updates learns that at the point it asks.
+ * A subscription query reaches every member advertising its name, not just the one a plain query would route to: an
+ * update is emitted on whichever member's state changed, and only reaches subscriptions that member holds a
+ * registration for. One of them answers the initial result as well, so a subscriber gets one initial result and the
+ * updates of the whole cluster. A member that starts advertising the query while a subscription is active fails that
+ * subscription rather than joining it late; see {@link SubscriptionQueryMembersChangedException}.
  *
  * @author Allard Buijze
  * @since 5.4.0
@@ -174,6 +189,197 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
     }
 
     /**
+     * The updates of every member subscribed to for one subscription query, drained into a single stream.
+     * <p>
+     * A subscriber sees one stream of updates however many members produce them. There is no meaningful order across
+     * members -- an update belongs to whichever member's state changed -- so they are drained as they arrive rather
+     * than interleaved by any rule.
+     * <p>
+     * A member failing fails the whole subscription. Carrying on with the rest would leave the subscriber receiving
+     * some of the updates and believing it received all of them.
+     */
+    private static final class SubscriptionUpdates {
+
+        private final QueryMessage query;
+        private final QueueMessageStream<QueryResponseMessage> merged;
+        private final List<Source> sources = new CopyOnWriteArrayList<>();
+        private final AtomicInteger openSources;
+        // Failed alongside the merged updates, so that a subscription whose answering member could not be reached
+        // does not leave the initial result waiting on a stream that will never open.
+        private final CompletableFuture<Void> answeringMemberOpen;
+
+        private SubscriptionUpdates(QueryMessage query,
+                                    int updateBufferSize,
+                                    int memberCount,
+                                    CompletableFuture<Void> answeringMemberOpen) {
+            this.query = query;
+            this.answeringMemberOpen = answeringMemberOpen;
+            this.merged = new QueueMessageStream<>(new ArrayBlockingQueue<>(updateBufferSize));
+            // Counted up front rather than as members are added: members are subscribed to concurrently, and one
+            // completing before the next is added would otherwise look like the last of them.
+            this.openSources = new AtomicInteger(memberCount);
+        }
+
+        private void add(Member member, MessageStream<QueryResponseMessage> updates) {
+            Source source = new Source(member, updates);
+            sources.add(source);
+            updates.setCallback(() -> drain(source));
+            drain(source);
+        }
+
+        /**
+         * Moves what the given {@code source} has available onto the merged stream.
+         * <p>
+         * Synchronised on the source, because a stream reports availability on whichever thread produced the update
+         * and two of those draining the same source would take entries out from under each other.
+         */
+        private void drain(Source source) {
+            synchronized (source) {
+                if (source.counted) {
+                    return;
+                }
+                try {
+                    while (source.stream.hasNextAvailable()) {
+                        Optional<MessageStream.Entry<QueryResponseMessage>> next = source.stream.next();
+                        if (next.isEmpty()) {
+                            break;
+                        }
+                        if (!merged.offer(next.get().message(), Context.empty())) {
+                            end(source, () -> fail(new IllegalStateException(
+                                    ("The members answering query [%s] produced more updates than this application "
+                                            + "consumed. Consume them sooner, or raise the update buffer size.")
+                                            .formatted(query.type())
+                            )));
+                            return;
+                        }
+                    }
+                    if (!source.stream.hasNextAvailable() && source.stream.isCompleted()) {
+                        end(source, () -> source.stream.error().ifPresentOrElse(this::fail, this::sourceCompleted));
+                    }
+                } catch (Exception e) {
+                    logger.debug("Failed to read the updates member [{}] produced for query [{}].",
+                                 source.member.name(), query.type(), e);
+                    end(source, () -> fail(e));
+                }
+            }
+        }
+
+        /**
+         * Accounts for the given {@code source} having ended, unless it already has been.
+         * <p>
+         * Reading a stream that has just been sealed reports its completion, which drains that same source again
+         * from inside this drain. Checking on the way in is not enough, because the nested drain reaches the end
+         * first and the outer one has already passed that check: both would count the same member, taking the tally
+         * past zero and cutting off the members still holding subscriptions.
+         */
+        private static void end(Source source, Runnable ended) {
+            if (!source.counted) {
+                source.counted = true;
+                ended.run();
+            }
+        }
+
+        /**
+         * Ends the subscription because a member reported it over, however many members still hold one.
+         * <p>
+         * A member saying so means there will never be another update, which is not what a member merely ceasing to
+         * answer means. Waiting for the rest would leave the subscriber holding a subscription that has run its
+         * course.
+         */
+        private void completeAll() {
+            merged.seal();
+        }
+
+        private void sourceCompleted() {
+            if (openSources.decrementAndGet() == 0) {
+                merged.seal();
+            }
+        }
+
+        /**
+         * Fails the whole subscription, and with it every member's part in it.
+         * <p>
+         * Releasing the others rides on the merged updates being closed, which failing them leads to: the subscriber
+         * observes the failure, and closing what it was reading releases every member's subscription.
+         */
+        private void fail(Throwable cause) {
+            merged.sealExceptionally(cause);
+            answeringMemberOpen.completeExceptionally(cause);
+        }
+
+        /**
+         * Returns the merged updates, releasing every member's subscription when closed.
+         */
+        private MessageStream<QueryResponseMessage> stream() {
+            return merged.onClose(this::release);
+        }
+
+        private void release() {
+            sources.forEach(source -> source.stream.close());
+        }
+
+        /**
+         * One member's part in a subscription, and whether its end has already been counted.
+         */
+        private static final class Source {
+
+            private final Member member;
+            private final MessageStream<QueryResponseMessage> stream;
+
+            // Guarded by this source's monitor, which every drain holds.
+            private boolean counted;
+
+            private Source(Member member, MessageStream<QueryResponseMessage> stream) {
+                this.member = member;
+                this.stream = stream;
+            }
+        }
+    }
+
+    /**
+     * Offers the updates of a subscription handled on this member onto the stream carrying them to the subscriber.
+     */
+    private static final class QueueingUpdateCallback implements UpdateCallback {
+
+        private final QueueMessageStream<QueryResponseMessage> updates;
+        private final QueryMessage query;
+        private final SubscriptionListener listener;
+
+        private QueueingUpdateCallback(QueueMessageStream<QueryResponseMessage> updates,
+                                       QueryMessage query,
+                                       SubscriptionListener listener) {
+            this.updates = updates;
+            this.query = query;
+            this.listener = listener;
+        }
+
+        @Override
+        public CompletableFuture<Void> sendUpdate(SubscriptionQueryUpdateMessage update) {
+            if (!updates.offer(new GenericQueryResponseMessage(update), Context.empty())) {
+                return CompletableFuture.failedFuture(new IllegalStateException(
+                        ("This member produced more updates to query [%s] than the subscriber consumed. Consume them "
+                                + "sooner, or raise the update buffer size.").formatted(query.type())
+                ));
+            }
+            return FutureUtils.emptyCompletedFuture();
+        }
+
+        @Override
+        public CompletableFuture<Void> complete() {
+            // Reported before sealing, so the subscription ends rather than only this member's part in it.
+            listener.completed();
+            updates.seal();
+            return FutureUtils.emptyCompletedFuture();
+        }
+
+        @Override
+        public CompletableFuture<Void> completeExceptionally(Throwable cause) {
+            updates.sealExceptionally(cause);
+            return FutureUtils.emptyCompletedFuture();
+        }
+    }
+
+    /**
      * Takes the given {@code member} out of the routing ring when the query failed because it could not be reached.
      * <p>
      * Mirrors what the command connector does with a member it could not reach: a member that is briefly unreachable
@@ -231,11 +437,154 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                                                                  @Nullable ProcessingContext context,
                                                                  int updateBufferSize) {
         Objects.requireNonNull(query, "The query must not be null.");
-        return MessageStream.failed(new UnsupportedOperationException(
-                ("The Spring Cloud connector does not distribute subscription queries, so query [%s] cannot be "
-                        + "answered with updates. Handle it as a regular query, or distribute with a connector that "
-                        + "carries subscription queries.").formatted(query.type())
-        ));
+        if (updateBufferSize < 1) {
+            throw new IllegalArgumentException(
+                    "The update buffer size must be at least 1, but was [" + updateBufferSize + "]."
+            );
+        }
+        if (shutdownLatch.isShuttingDown()) {
+            return MessageStream.failed(new ShutdownInProgressException(
+                    "Cannot dispatch new queries as this connector is shutting down."
+            ));
+        }
+
+        QualifiedName queryName = query.type().qualifiedName();
+        // Every member advertising the name, not just the one a plain query would route to: an update is emitted on
+        // whichever member's state changed, and only reaches subscriptions that member holds a registration for.
+        List<Member> members = registry.findAllQueryDestinations(queryName);
+        if (members.isEmpty()) {
+            return MessageStream.failed(new NoHandlerForQueryException(
+                    "No member of the cluster handles queries of type [" + query.type() + "]."
+            ));
+        }
+        Member answering = registry.findQueryDestination(queryName).orElseGet(members::getFirst);
+
+        entitlementManager.claimMessage(SpringCloudAxoniqAddon.IDENTIFIER, EntitlementMessageType.QUERY, 1);
+
+        // Registered and ended within this method, unlike a plain query, which stays in flight until its responses
+        // have arrived. A subscription has no such end: waiting for one at shutdown would be waiting for the
+        // subscriber to lose interest. What registering buys here is refusing a subscription started while this
+        // connector is already going down.
+        try (ShutdownLatch.ActivityHandle ignored = shutdownLatch.registerActivity()) {
+            return openSubscription(query, queryName, members, answering, updateBufferSize);
+        } catch (ShutdownInProgressException e) {
+            return MessageStream.failed(e);
+        }
+    }
+
+    private MessageStream<QueryResponseMessage> openSubscription(QueryMessage query,
+                                                                 QualifiedName queryName,
+                                                                 List<Member> members,
+                                                                 Member answering,
+                                                                 int updateBufferSize) {
+        // Two activities, in this order. Opening the update streams comes first, and the initial result waits for
+        // the answering member's to be open, so that an update emitted while that result is being produced still has
+        // somewhere to arrive. Only the answering member is waited for: no other member is asked for a result, so
+        // there is nothing its updates could arrive ahead of.
+        CompletableFuture<Void> answeringMemberOpen = new CompletableFuture<>();
+        SubscriptionUpdates updates =
+                new SubscriptionUpdates(query, updateBufferSize, members.size(), answeringMemberOpen);
+        for (Member member : members) {
+            // Only the answering member's opening is waited on; every member's completion ends the subscription.
+            boolean answersInitialResult = member.equals(answering);
+            SubscriptionListener listener = new SubscriptionListener() {
+                @Override
+                public void opened() {
+                    if (answersInitialResult) {
+                        answeringMemberOpen.complete(null);
+                    }
+                }
+
+                @Override
+                public void completed() {
+                    updates.completeAll();
+                }
+            };
+            updates.add(member, updateStreamOn(member, query, updateBufferSize, listener));
+        }
+        MessageStream<QueryResponseMessage> initialResult = DelayedMessageStream.create(
+                answeringMemberOpen.thenApply(open -> initialResultFrom(answering, query))
+        );
+
+        Registration watch = watchMembership(query, queryName, members, updates);
+        return initialResult.concatWith(updates.stream())
+                            // Releasing every member's subscription rides on the merged updates being closed, which
+                            // concatenating does however the composed stream ends.
+                            .onClose(watch::cancel);
+    }
+
+    private MessageStream<QueryResponseMessage> updateStreamOn(Member member,
+                                                              QueryMessage query,
+                                                              int updateBufferSize,
+                                                              SubscriptionListener listener) {
+        return member.local()
+                ? localUpdateStream(query, updateBufferSize, listener)
+                : dispatcher.openSubscriptionQueryUpdateStream(member, query, updateBufferSize, listener);
+    }
+
+    /**
+     * Opens the update stream of a subscription handled on this member, without the wire.
+     * <p>
+     * Registering is immediate here, so the subscription is open by the time this returns.
+     */
+    private MessageStream<QueryResponseMessage> localUpdateStream(QueryMessage query,
+                                                                  int updateBufferSize,
+                                                                  SubscriptionListener listener) {
+        Handler handler = incomingHandler;
+        if (handler == null) {
+            return MessageStream.failed(new NoHandlerForQueryException(
+                    "This member resolved as a destination for query [" + query.type()
+                            + "], but no query handler is registered on the connector yet."
+            ));
+        }
+        QueueMessageStream<QueryResponseMessage> updates =
+                new QueueMessageStream<>(new ArrayBlockingQueue<>(updateBufferSize));
+        Registration registration;
+        try {
+            registration = handler.registerUpdateHandler(withConverterAttached(query),
+                                                         new QueueingUpdateCallback(updates, query, listener));
+        } catch (Exception e) {
+            return MessageStream.failed(e);
+        }
+        listener.opened();
+        return updates.onClose(registration::cancel);
+    }
+
+    /**
+     * Asks the given {@code member} for the initial result, which is a query like any other.
+     */
+    private MessageStream<QueryResponseMessage> initialResultFrom(Member member, QueryMessage query) {
+        return member.local() ? handleLocally(query) : dispatcher.dispatch(member, query);
+    }
+
+    /**
+     * Fails the subscription when a member starts advertising the query while it is active.
+     * <p>
+     * Such a member has been emitting updates since before it was subscribed to, and those updates are gone. Failing
+     * lets the subscriber establish the query again and get a complete stream from that point, rather than carrying
+     * on silently incomplete.
+     */
+    private Registration watchMembership(QueryMessage query,
+                                         QualifiedName queryName,
+                                         List<Member> subscribedTo,
+                                         SubscriptionUpdates updates) {
+        Set<Member> known = Set.copyOf(subscribedTo);
+        return registry.onMembershipChanged(ring -> {
+            List<Member> current = registry.findAllQueryDestinations(queryName);
+            for (Member member : current) {
+                if (!known.contains(member)) {
+                    logger.info("Member [{}] started handling query [{}] while a subscription for it was active; "
+                                        + "failing that subscription.", member.name(), query.type());
+                    updates.fail(new SubscriptionQueryMembersChangedException(
+                            ("Member [%s] started handling query [%s] after this subscription began, so the updates "
+                                    + "it emitted before being subscribed to are lost. Establish the subscription "
+                                    + "query again to receive a complete stream.")
+                                    .formatted(member.name(), query.type())
+                    ));
+                    return;
+                }
+            }
+        });
     }
 
     private MessageStream<QueryResponseMessage> handleLocally(QueryMessage query) {

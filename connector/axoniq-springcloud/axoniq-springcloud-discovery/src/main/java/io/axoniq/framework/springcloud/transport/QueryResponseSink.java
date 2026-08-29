@@ -54,6 +54,27 @@ public interface QueryResponseSink {
     void response(QueryDispatchResponse response);
 
     /**
+     * Writes one update to the subscription query being answered.
+     * <p>
+     * Distinct from {@link #response(QueryDispatchResponse)} because the subscriber acts on the two differently: a
+     * response belongs to the initial result, an update is a change after it.
+     *
+     * @param update the update to write
+     */
+    void update(QueryDispatchResponse update);
+
+    /**
+     * Reports that the subscription query being answered is over: there will never be another update to it.
+     * <p>
+     * Distinct from the stream ending, which is also what a member leaving the cluster does. That says this member
+     * has stopped answering; this says the subscription itself has run its course, and the subscriber stops waiting
+     * on every other member too.
+     *
+     * @param requestIdentifier the identifier of the subscription query that is over
+     */
+    void subscriptionComplete(String requestIdentifier);
+
+    /**
      * Ends the response stream, reporting that the query failed.
      *
      * @param error the failure that ended the response stream

@@ -115,6 +115,27 @@ public class SpringCloudProperties {
     private int queryBufferSize = HttpRemoteQueryDispatcher.DEFAULT_BUFFER_SIZE;
 
     /**
+     * How often this application writes to a subscription query it is answering while it has no update to send.
+     * <p>
+     * A subscription may go a long time without an update, and an idle connection is what a load balancer, proxy or
+     * NAT table reclaims. Keeping it comfortably below the idle timeout of whatever sits between members -- sixty
+     * seconds, commonly -- is what stops a healthy subscription being cut. Defaults to
+     * {@link SpringCloudQueryController#DEFAULT_KEEP_ALIVE_INTERVAL}.
+     */
+    private Duration subscriptionKeepAliveInterval = SpringCloudQueryController.DEFAULT_KEEP_ALIVE_INTERVAL;
+
+    /**
+     * How long a subscription this application opened may hear nothing at all before it is given up on.
+     * <p>
+     * Not a deadline on the subscription, which lasts as long as the subscriber wants it to, but on silence. The
+     * answering member writes a keep-alive every {@link #subscriptionKeepAliveInterval}, so hearing nothing for the
+     * whole of this window means that member is gone rather than merely quiet. Keep it a few keep-alives wide.
+     * Defaults to {@link HttpRemoteQueryDispatcher#DEFAULT_SUBSCRIPTION_INACTIVITY_TIMEOUT}.
+     */
+    private Duration subscriptionInactivityTimeout =
+            HttpRemoteQueryDispatcher.DEFAULT_SUBSCRIPTION_INACTIVITY_TIMEOUT;
+
+    /**
      * How long a service instance is left alone after answering a capabilities request with a client error.
      * <p>
      * Spring Cloud Discovery reports every registered service, not only those running this connector. An instance that
@@ -255,6 +276,42 @@ public class SpringCloudProperties {
      */
     public void setQueryResponseTimeout(Duration queryResponseTimeout) {
         this.queryResponseTimeout = queryResponseTimeout;
+    }
+
+    /**
+     * Returns how often an idle subscription query is written to.
+     *
+     * @return how often an idle subscription query is written to
+     */
+    public Duration getSubscriptionKeepAliveInterval() {
+        return subscriptionKeepAliveInterval;
+    }
+
+    /**
+     * Sets how often an idle subscription query is written to.
+     *
+     * @param subscriptionKeepAliveInterval how often an idle subscription query is written to
+     */
+    public void setSubscriptionKeepAliveInterval(Duration subscriptionKeepAliveInterval) {
+        this.subscriptionKeepAliveInterval = subscriptionKeepAliveInterval;
+    }
+
+    /**
+     * Returns how long a subscription may hear nothing before it is given up on.
+     *
+     * @return how long a subscription may hear nothing before it is given up on
+     */
+    public Duration getSubscriptionInactivityTimeout() {
+        return subscriptionInactivityTimeout;
+    }
+
+    /**
+     * Sets how long a subscription may hear nothing before it is given up on.
+     *
+     * @param subscriptionInactivityTimeout how long a subscription may hear nothing before it is given up on
+     */
+    public void setSubscriptionInactivityTimeout(Duration subscriptionInactivityTimeout) {
+        this.subscriptionInactivityTimeout = subscriptionInactivityTimeout;
     }
 
     /**

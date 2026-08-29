@@ -20,9 +20,11 @@
 package io.axoniq.framework.springcloud;
 
 import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMode;
+import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
 import io.axoniq.framework.springcloud.transport.IncomingQueryGateway;
 import io.axoniq.framework.springcloud.transport.RecordingRemoteQueryDispatcher;
+import io.axoniq.framework.springcloud.transport.SubscriptionQueryMembersChangedException;
 import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
 import io.axoniq.framework.springcloud.util.RecordingEntitlementManager;
 import io.axoniq.framework.springcloud.util.RecordingQueryHandler;
@@ -37,10 +39,12 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.QueueMessageStream;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.GenericQueryResponseMessage;
+import org.axonframework.messaging.queryhandling.GenericSubscriptionQueryUpdateMessage;
 import org.axonframework.messaging.queryhandling.NoHandlerForQueryException;
 import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
@@ -110,6 +114,39 @@ class SpringCloudQueryBusConnectorTest {
             stream.next().ifPresent(entry -> collected.add(entry.message()));
         }
         return collected;
+    }
+
+    private static SubscriptionQueryUpdateMessage update(String identifier) {
+        return new GenericSubscriptionQueryUpdateMessage(
+                new GenericMessage(identifier, RESPONSE_TYPE, PAYLOAD, Map.of())
+        );
+    }
+
+    private Member remoteMember() {
+        return registry.ring().getMembers().stream()
+                       .filter(member -> !member.local())
+                       .filter(member -> member.name().contains("node-b"))
+                       .findFirst()
+                       .orElseThrow();
+    }
+
+    private Member otherRemoteMember() {
+        return registry.ring().getMembers().stream()
+                       .filter(member -> !member.local())
+                       .filter(member -> member.name().contains("node-c"))
+                       .findFirst()
+                       .orElseThrow();
+    }
+
+    /**
+     * Makes two other members advertise the query, so that a subscription has to reach both.
+     */
+    private void twoRemoteMembersHandleTheQuery() {
+        TestServiceInstance other = TestServiceInstance.instance("university", "node-c", 8080);
+        discoveryClient.register("university", localInstance, remoteInstance, other);
+        discoveryMode.answering(remoteInstance, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
+        discoveryMode.answering(other, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
+        registry.updateMemberships();
     }
 
     /**
@@ -273,13 +310,272 @@ class SpringCloudQueryBusConnectorTest {
     class SubscriptionQueries {
 
         @Test
-        void areRejectedRatherThanAnsweredOnce() {
-            // when — degrading to a single answer would look like a subscription that never updates
+        void subscribeToEveryMemberAdvertisingTheQuery() {
+            // given two other members both handling the query
+            twoRemoteMembersHandleTheQuery();
+
+            // when
+            testSubject.subscriptionQuery(query(), null, 16);
+
+            // then an update is emitted on whichever member's state changed, so none of them may be left out
+            assertThat(dispatcher.subscriptions()).extracting(subscription -> subscription.member().name())
+                                                  .containsExactlyInAnyOrder(remoteMember().name(),
+                                                                             otherRemoteMember().name());
+        }
+
+        @Test
+        void askOneMemberForTheInitialResult() {
+            // given
+            twoRemoteMembersHandleTheQuery();
+            dispatcher.answeringWith(response("initial-1"));
+
+            // when
+            drain(testSubject.subscriptionQuery(query(), null, 16));
+
+            // then the initial result is a query like any other, answered once however many members are subscribed to
+            assertThat(dispatcher.dispatches()).hasSize(1);
+        }
+
+        @Test
+        void waitForTheAnsweringMembersSubscriptionBeforeAskingForTheInitialResult() {
+            // given a member that has not registered the subscription yet
+            remoteMemberHandlesTheQuery();
+            dispatcher.openingOnDemand().answeringWith(response("initial-1"));
+
+            // when
             MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            drain(responses);
+
+            // then asking now would leave an update emitted while the result is produced with nowhere to arrive
+            assertThat(dispatcher.subscriptions()).hasSize(1);
+            assertThat(dispatcher.dispatches()).isEmpty();
+
+            // when the member reports the subscription registered
+            dispatcher.open(remoteMember());
 
             // then
-            assertThat(responses.error()).containsInstanceOf(UnsupportedOperationException.class);
-            assertThat(responses.error().orElseThrow()).hasMessageContaining("subscription queries");
+            assertThat(dispatcher.dispatches()).hasSize(1);
+            assertThat(drain(responses)).extracting(QueryResponseMessage::identifier).containsExactly("initial-1");
+        }
+
+        @Test
+        void failWhenTheAnsweringMembersSubscriptionCannotBeOpened() {
+            // given a member that cannot be subscribed to at all
+            remoteMemberHandlesTheQuery();
+            dispatcher.openingOnDemand().failingWith(new QueryExecutionException("node-b is unreachable.", null));
+
+            // when
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+
+            // then the initial result is not left waiting on a subscription that will never open
+            drain(responses);
+            assertThat(dispatcher.dispatches()).isEmpty();
+            assertThat(responses.error()).isPresent();
+            assertThat(responses.error().orElseThrow()).hasMessageContaining("node-b is unreachable.");
+        }
+
+        @Test
+        void answerWithTheInitialResultBeforeTheUpdates() {
+            // given
+            remoteMemberHandlesTheQuery();
+            dispatcher.answeringWith(response("initial-1"));
+
+            // when
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            List<QueryResponseMessage> received = new ArrayList<>(drain(responses));
+            dispatcher.emit(remoteMember(), response("update-1"));
+            received.addAll(drain(responses));
+
+            // then
+            assertThat(received).extracting(QueryResponseMessage::identifier)
+                                .containsExactly("initial-1", "update-1");
+        }
+
+        @Test
+        void carryTheUpdatesOfEveryMember() {
+            // given
+            twoRemoteMembersHandleTheQuery();
+
+            // when
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            drain(responses);
+            dispatcher.emit(remoteMember(), response("update-from-b"));
+            dispatcher.emit(otherRemoteMember(), response("update-from-c"));
+
+            // then a subscriber sees one stream of updates however many members produce them
+            assertThat(drain(responses)).extracting(QueryResponseMessage::identifier)
+                                        .containsExactlyInAnyOrder("update-from-b", "update-from-c");
+        }
+
+        @Test
+        void failWhenAMemberStartsHandlingTheQuery() {
+            // given a subscription across the members that handle the query today
+            remoteMemberHandlesTheQuery();
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            drain(responses);
+
+            // when another member starts advertising it
+            TestServiceInstance joining = TestServiceInstance.instance("university", "node-c", 8080);
+            discoveryClient.register("university", localInstance, remoteInstance, joining);
+            discoveryMode.answering(joining, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
+            registry.updateMemberships();
+
+            // then the updates it emitted before being subscribed to are gone, so carrying on would be silently
+            // incomplete
+            drain(responses);
+            assertThat(responses.error()).containsInstanceOf(SubscriptionQueryMembersChangedException.class);
+        }
+
+        @Test
+        void carryOnWhenAMemberThatDoesNotHandleTheQueryJoins() {
+            // given
+            remoteMemberHandlesTheQuery();
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            drain(responses);
+
+            // when a member joins that advertises something else entirely
+            TestServiceInstance joining = TestServiceInstance.instance("university", "node-c", 8080);
+            discoveryClient.register("university", localInstance, remoteInstance, joining);
+            discoveryMode.answering(joining, new MemberCapabilities(0, Set.of(), Set.of(LIST_COURSES)));
+            registry.updateMemberships();
+
+            // then it emits no updates for this query, so there is nothing to have missed
+            drain(responses);
+            assertThat(responses.error()).isEmpty();
+        }
+
+        @Test
+        void failWhenAMemberEndsTheSubscription() {
+            // given
+            remoteMemberHandlesTheQuery();
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            drain(responses);
+
+            // when one member fails, the subscriber would otherwise receive some of the updates and believe it
+            // received all of them
+            dispatcher.fail(remoteMember(), new QueryExecutionException("The course store is unavailable.", null));
+
+            // then
+            drain(responses);
+            assertThat(responses.error()).isPresent();
+            assertThat(responses.error().orElseThrow()).hasMessageContaining("The course store is unavailable.");
+        }
+
+        @Test
+        void releaseTheOtherMembersSubscriptionsWhenOneOfThemFails() {
+            // given a subscription across two members
+            twoRemoteMembersHandleTheQuery();
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            drain(responses);
+
+            // when one of them fails
+            dispatcher.fail(remoteMember(), new QueryExecutionException("The course store is unavailable.", null));
+            drain(responses);
+
+            // then the member still standing is not left emitting into a subscription that has already failed
+            assertThat(dispatcher.subscriptions()).allMatch(RecordingRemoteQueryDispatcher.Subscription::released);
+        }
+
+        @Test
+        void keepTheSubscriptionOpenWhileAnyMemberStillHoldsIt() {
+            // given a subscription across two members
+            twoRemoteMembersHandleTheQuery();
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            drain(responses);
+
+            // when one of them stops answering, as a member leaving the cluster does
+            dispatcher.stopAnswering(remoteMember());
+            drain(responses);
+
+            // then the other still has updates to give
+            assertThat(responses.isCompleted()).isFalse();
+            dispatcher.emit(otherRemoteMember(), response("update-from-c"));
+            assertThat(drain(responses)).extracting(QueryResponseMessage::identifier)
+                                        .containsExactly("update-from-c");
+        }
+
+        @Test
+        void endTheWholeSubscriptionWhenAMemberReportsItOver() {
+            // given a subscription across two members
+            twoRemoteMembersHandleTheQuery();
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            drain(responses);
+
+            // when one of them reports the subscription over, which says there will never be another update
+            dispatcher.completeSubscription(remoteMember());
+            drain(responses);
+
+            // then waiting on the other members would be waiting for updates that are never coming
+            assertThat(responses.isCompleted()).isTrue();
+            assertThat(responses.error()).isEmpty();
+        }
+
+        @Test
+        void completeOnceEveryMemberHasCompleted() {
+            // given
+            twoRemoteMembersHandleTheQuery();
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            drain(responses);
+
+            // when
+            dispatcher.stopAnswering(remoteMember());
+            dispatcher.stopAnswering(otherRemoteMember());
+            drain(responses);
+
+            // then
+            assertThat(responses.isCompleted()).isTrue();
+            assertThat(responses.error()).isEmpty();
+        }
+
+        @Test
+        void subscribeOnThisMemberWhenItHandlesTheQuery() {
+            // given this member is the only one advertising the query
+            testSubject.subscribe(FIND_COURSE);
+
+            // when
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            drain(responses);
+            handler.emit(update("update-1"));
+
+            // then a local subscription carries updates just as a remote one does
+            assertThat(handler.subscriptions()).hasSize(1);
+            assertThat(drain(responses)).extracting(QueryResponseMessage::identifier).containsExactly("update-1");
+        }
+
+        @Test
+        void releaseEverySubscriptionWhenTheStreamIsClosed() {
+            // given
+            remoteMemberHandlesTheQuery();
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            drain(responses);
+
+            // when
+            responses.close();
+
+            // then the answering member is not left emitting into nothing
+            assertThat(dispatcher.subscriptions()).allMatch(RecordingRemoteQueryDispatcher.Subscription::released);
+        }
+
+        @Test
+        void reportNoHandlerWhenNoMemberAdvertisesTheQuery() {
+            // given a query nothing in the cluster handles
+            QueryMessage unhandled = new GenericQueryMessage(
+                    new GenericMessage("query-2", new MessageType("university.Unknown", "1.0.0"), PAYLOAD, Map.of()),
+                    null
+            );
+
+            // when
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(unhandled, null, 16);
+
+            // then
+            assertThat(responses.error()).containsInstanceOf(NoHandlerForQueryException.class);
+        }
+
+        @Test
+        void rejectANonPositiveUpdateBufferSize() {
+            assertThatThrownBy(() -> testSubject.subscriptionQuery(query(), null, 0))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("update buffer size");
         }
     }
 
@@ -302,6 +598,33 @@ class SpringCloudQueryBusConnectorTest {
             // then other members stop routing queries here rather than discovering it went away by timing out
             assertThat(discoveryMode.localCapabilities().queries()).isEmpty();
             assertThat(registry.findQueryDestination(FIND_COURSE)).isEmpty();
+        }
+
+        @Test
+        void doesNotWaitOnAnOpenSubscriptionQuery() {
+            // given a subscription that is behaving correctly, which is to say lasting until the subscriber ends it
+            remoteMemberHandlesTheQuery();
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+            drain(responses);
+
+            // when
+            CompletableFuture<Void> shutdown = testSubject.shutdownDispatching();
+
+            // then waiting for it would be waiting for the subscriber, which has no reason to ever finish
+            assertThat(shutdown).isCompleted();
+        }
+
+        @Test
+        void refusesNewSubscriptionQueriesOnceDispatchingIsShutDown() {
+            // given
+            remoteMemberHandlesTheQuery();
+            testSubject.shutdownDispatching();
+
+            // when
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+
+            // then
+            assertThat(responses.error()).containsInstanceOf(ShutdownInProgressException.class);
         }
 
         @Test

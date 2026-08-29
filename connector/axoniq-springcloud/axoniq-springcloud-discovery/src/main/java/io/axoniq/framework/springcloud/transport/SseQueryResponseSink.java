@@ -67,6 +67,19 @@ public class SseQueryResponseSink implements QueryResponseSink {
     }
 
     @Override
+    public void update(QueryDispatchResponse update) {
+        write(QueryConverter.UPDATE_EVENT, update);
+    }
+
+    @Override
+    public void subscriptionComplete(String requestIdentifier) {
+        // The identifier is written as the event's data because an event without data is not an event at all: a
+        // reader following the Server-Sent Events specification discards it.
+        write(QueryConverter.COMPLETE_EVENT, requestIdentifier);
+        emitter.complete();
+    }
+
+    @Override
     public void error(QueryDispatchFailure error) {
         write(QueryConverter.ERROR_EVENT, error);
         emitter.complete();
@@ -75,6 +88,25 @@ public class SseQueryResponseSink implements QueryResponseSink {
     @Override
     public void complete() {
         emitter.complete();
+    }
+
+    /**
+     * Writes a comment, which carries nothing but keeps an otherwise idle stream from being closed.
+     * <p>
+     * A subscription query may go a long time without producing an update, and an idle connection is what a load
+     * balancer, proxy or NAT table reclaims. A comment is the Server-Sent Events way of saying nothing: a reader
+     * following the specification discards it, and this member learns the subscriber is gone when the write fails.
+     *
+     * @throws ResponseStreamClosedException when the member that asked has stopped reading
+     */
+    public void keepAlive() {
+        try {
+            emitter.send(SseEmitter.event().comment("keep-alive"));
+        } catch (IOException | IllegalStateException e) {
+            throw new ResponseStreamClosedException(
+                    "Could not keep the response stream of the member that asked alive.", e
+            );
+        }
     }
 
     private void write(String eventType, Object data) {
