@@ -19,7 +19,7 @@
 package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
-import io.axoniq.workflow.runtime.util.FutureResolver;
+import io.axoniq.workflow.runtime.util.DefaultTimeoutFutureResolver;
 import org.axonframework.common.configuration.Component;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentFactory;
@@ -71,13 +71,13 @@ class WorkflowConfigurationDefaultsTest {
     }
 
     @Test
-    void registersServiceLoadedFutureResolver() {
+    void registersDefaultFutureResolver() {
         var registry = new CapturingComponentRegistry();
 
         subject.registerFutureResolver(registry);
 
         var component = ((ComponentDefinition.ComponentCreator<?>) registry.componentDefinition).createComponent();
-        assertThat(component.resolve(mock(Configuration.class))).isSameAs(FutureResolver.getInstance());
+        assertThat(component.resolve(mock(Configuration.class))).isInstanceOf(DefaultTimeoutFutureResolver.class);
     }
 
     @Test

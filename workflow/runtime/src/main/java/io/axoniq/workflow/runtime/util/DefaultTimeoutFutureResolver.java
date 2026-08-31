@@ -26,16 +26,20 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Default {@link FutureResolver} that waits for future or a default timeout, throwing an exception if the future has
- * not completed.
+ * Default {@link FutureResolver} that applies a 30-second safety-net timeout to future resolution.
+ * <p>
+ * Thirty seconds is long enough for legitimate synchronous workflow work, including in-memory, local database, and
+ * unit-of-work execution. It is short enough to surface a hung dependency, such as connection-pool exhaustion,
+ * deadlock, or network partition, before blocked workflow threads cascade into a broader outage. Callers that
+ * legitimately expect a longer wait must configure it explicitly.
  *
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public class DefaultTimeoutFutureResolver extends FutureResolver {
+public class DefaultTimeoutFutureResolver implements FutureResolver {
 
     /**
-     * Default timeout for joining a future.
+     * Default safety-net timeout for joining a future.
      */
     public static final Duration DEFAULT_JOIN_TIMEOUT = Duration.ofSeconds(30);
 
@@ -58,11 +62,14 @@ public class DefaultTimeoutFutureResolver extends FutureResolver {
     }
 
     /**
-     * Waits for the future until it completes or the given {@code timeout} elapses, whichever comes first, and
-     * propagates its failure.
+     * Waits for the future until it completes or the configured timeout elapses, whichever comes first.
+     * <p>
+     * Delegates to {@link FutureUtils#joinAndUnwrap(CompletableFuture, Duration)}. A completed future does not incur
+     * timeout work, exceptional completion is rethrown as its original cause, and timeout expiry throws
+     * {@link TimeoutException}.
      *
      * @param future future to resolve
-     * @throws TimeoutException if the future does not complete within the given {@code timeout}.
+     * @throws TimeoutException if the future does not complete within the configured timeout
      * @throws Throwable        the unwrapped cause if the future completed exceptionally (exact type preserved).
      */
     @Override
