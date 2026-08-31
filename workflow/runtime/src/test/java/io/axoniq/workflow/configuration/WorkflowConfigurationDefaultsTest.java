@@ -40,6 +40,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -79,6 +80,21 @@ class WorkflowConfigurationDefaultsTest {
 
         var component = ((ComponentDefinition.ComponentCreator<?>) registry.componentDefinition).createComponent();
         assertThat(component.resolve(mock(Configuration.class))).isInstanceOf(DefaultTimeoutFutureResolver.class);
+    }
+
+    @Test
+    void defaultWorkflowEngineExecutorUsesDedicatedVirtualThreads() throws Exception {
+        var registry = new CapturingComponentRegistry();
+
+        subject.registerWorkflowEngineExecutor(registry);
+
+        var component = ((ComponentDefinition.ComponentCreator<?>) registry.componentDefinition).createComponent();
+        ExecutorService executor = (ExecutorService) component.resolve(mock(Configuration.class));
+        try {
+            assertThat(executor.submit(Thread::currentThread).get().isVirtual()).isTrue();
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test

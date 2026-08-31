@@ -52,3 +52,7 @@ has timed out.
 
 The public workflow surface remains blocking by default. A future `CompletionDriver` decision must change that surface
 deliberately rather than treating this resolver as a substitute for asynchronous completion.
+
+Workflow event publication is scheduled on the named workflow-engine executor. Its default is a virtual thread per
+task, so a resolver wait blocks only the workflow task and does not exhaust event-processor workers. An application
+that replaces this executor must retain that isolation or provision it for the resolver's timeout.
