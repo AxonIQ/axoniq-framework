@@ -142,7 +142,7 @@ final class QueryConverter {
      * @return the wire representation of the given {@code query} as a subscription
      * @throws ConversionException when the given {@code query}'s payload cannot be written as text
      */
-    static SubscriptionQueryRequest convertSubscriptionMessage(QueryMessage query, int updateBufferSize) {
+    public static SubscriptionQueryRequest convertSubscriptionMessage(QueryMessage query, int updateBufferSize) {
         return new SubscriptionQueryRequest(
                 query.identifier(),
                 query.type().toString(),
@@ -162,7 +162,8 @@ final class QueryConverter {
      *                  when none is available
      * @return the query the given {@code request} represents
      */
-    static QueryMessage convertSubscriptionRequest(SubscriptionQueryRequest request, @Nullable Converter converter) {
+    public static QueryMessage convertSubscriptionRequest(SubscriptionQueryRequest request,
+                                                          @Nullable Converter converter) {
         return new GenericQueryMessage(
                 new GenericMessage(
                         request.identifier(),

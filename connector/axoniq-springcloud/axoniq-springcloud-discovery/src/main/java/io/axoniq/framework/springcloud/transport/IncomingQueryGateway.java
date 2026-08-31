@@ -210,7 +210,7 @@ public class IncomingQueryGateway {
     /**
      * Writes the updates a subscription query produces to the sink carrying them to the subscribing member.
      */
-    private class SinkUpdateCallback implements QueryBusConnector.UpdateCallback {
+    private final class SinkUpdateCallback implements QueryBusConnector.UpdateCallback {
 
         private final String requestIdentifier;
         private final QueryResponseSink sink;

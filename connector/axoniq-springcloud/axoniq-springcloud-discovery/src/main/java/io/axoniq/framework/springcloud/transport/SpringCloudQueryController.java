@@ -90,6 +90,23 @@ public class SpringCloudQueryController {
     private final Executor keepAliveExecutor;
 
     /**
+     * Constructs a {@code SpringCloudQueryController} writing to an idle subscription every
+     * {@link #DEFAULT_KEEP_ALIVE_INTERVAL}.
+     *
+     * @param gateway           the gateway invoking this application's local query handler
+     * @param timeout           how long a response stream may stay open before the container closes it. Does not
+     *                          apply to a subscription query, which lasts as long as the subscriber wants it to.
+     * @param scheduler         decides when each open subscription is due a keep-alive
+     * @param keepAliveExecutor performs the keep-alive writes
+     */
+    public SpringCloudQueryController(IncomingQueryGateway gateway,
+                                      Duration timeout,
+                                      ScheduledExecutorService scheduler,
+                                      Executor keepAliveExecutor) {
+        this(gateway, timeout, DEFAULT_KEEP_ALIVE_INTERVAL, scheduler, keepAliveExecutor);
+    }
+
+    /**
      * Constructs a {@code SpringCloudQueryController} handing received queries to the given {@code gateway}.
      *
      * @param gateway           the gateway invoking this application's local query handler

@@ -344,7 +344,7 @@ class SpringCloudQueryBusConnectorTest {
     class SubscriptionQueries {
 
         @Test
-        void subscribeToEveryMemberAdvertisingTheQuery() {
+        void subscribesToEveryMemberAdvertisingTheQuery() {
             // given two other members both handling the query
             twoRemoteMembersHandleTheQuery();
 
@@ -358,7 +358,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void askOneMemberForTheInitialResult() {
+        void asksOneMemberForTheInitialResult() {
             // given
             twoRemoteMembersHandleTheQuery();
             dispatcher.answeringWith(response("initial-1"));
@@ -371,7 +371,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void waitForTheAnsweringMembersSubscriptionBeforeAskingForTheInitialResult() {
+        void waitsForTheAnsweringMembersSubscriptionBeforeAskingForTheInitialResult() {
             // given a member that has not registered the subscription yet
             remoteMemberHandlesTheQuery();
             dispatcher.openingOnDemand().answeringWith(response("initial-1"));
@@ -393,7 +393,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void failWhenTheAnsweringMembersSubscriptionCannotBeOpened() {
+        void failsWhenTheAnsweringMembersSubscriptionCannotBeOpened() {
             // given a member that cannot be subscribed to at all
             remoteMemberHandlesTheQuery();
             dispatcher.openingOnDemand().failingWith(new QueryExecutionException("node-b is unreachable.", null));
@@ -409,7 +409,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void answerWithTheInitialResultBeforeTheUpdates() {
+        void answersWithTheInitialResultBeforeTheUpdates() {
             // given
             remoteMemberHandlesTheQuery();
             dispatcher.answeringWith(response("initial-1"));
@@ -426,7 +426,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void carryTheUpdatesOfEveryMember() {
+        void carriesTheUpdatesOfEveryMember() {
             // given
             twoRemoteMembersHandleTheQuery();
 
@@ -442,7 +442,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void failWhenAMemberStartsHandlingTheQuery() {
+        void failsWhenAMemberStartsHandlingTheQuery() {
             // given a subscription across the members that handle the query today
             remoteMemberHandlesTheQuery();
             MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
@@ -461,7 +461,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void failWhenAMemberStartsHandlingTheQueryWhileTheSubscriptionIsStillBeingOpened() {
+        void failsWhenAMemberStartsHandlingTheQueryWhileTheSubscriptionIsStillBeingOpened() {
             // given a member that starts advertising the query while the other members are still being reached,
             // which is a change no membership listener registered afterwards would ever hear
             remoteMemberHandlesTheQuery();
@@ -481,7 +481,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void askAMemberItOpenedASubscriptionOnForTheInitialResult() {
+        void asksAMemberItOpenedASubscriptionOnForTheInitialResult() {
             // given a registry whose ring changes in the instant between resolving every member advertising the query
             // and resolving the one to ask for the initial result
             JoiningBetweenResolutions joining =
@@ -516,7 +516,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void carryOnWhenAMemberThatDoesNotHandleTheQueryJoins() {
+        void carriesOnWhenAMemberThatDoesNotHandleTheQueryJoins() {
             // given
             remoteMemberHandlesTheQuery();
             MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
@@ -534,7 +534,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void failWhenAMemberEndsTheSubscription() {
+        void failsWhenAMemberEndsTheSubscription() {
             // given
             remoteMemberHandlesTheQuery();
             MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
@@ -551,7 +551,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void releaseTheOtherMembersSubscriptionsWhenOneOfThemFails() {
+        void releasesTheOtherMembersSubscriptionsWhenOneOfThemFails() {
             // given a subscription across two members
             twoRemoteMembersHandleTheQuery();
             MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
@@ -566,7 +566,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void keepTheSubscriptionOpenWhileAnyMemberStillHoldsIt() {
+        void keepsTheSubscriptionOpenWhileAnyMemberStillHoldsIt() {
             // given a subscription across two members
             twoRemoteMembersHandleTheQuery();
             MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
@@ -584,7 +584,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void endTheWholeSubscriptionWhenAMemberReportsItOver() {
+        void endsTheWholeSubscriptionWhenAMemberReportsItOver() {
             // given a subscription across two members
             twoRemoteMembersHandleTheQuery();
             MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
@@ -600,7 +600,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void completeOnceEveryMemberHasCompleted() {
+        void completesOnceEveryMemberHasCompleted() {
             // given
             twoRemoteMembersHandleTheQuery();
             MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
@@ -617,7 +617,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void subscribeOnThisMemberWhenItHandlesTheQuery() {
+        void subscribesOnThisMemberWhenItHandlesTheQuery() {
             // given this member is the only one advertising the query
             testSubject.subscribe(FIND_COURSE);
 
@@ -632,7 +632,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void failWhenThisMembersHandlerOutpacesTheSubscriber() {
+        void failsWhenThisMembersHandlerOutpacesTheSubscriber() {
             // given a handler on this member emitting, while it registers, more updates than the subscriber left
             // room for -- before anything is reading what it produces
             testSubject.subscribe(FIND_COURSE);
@@ -653,7 +653,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void releaseEverySubscriptionWhenTheStreamIsClosed() {
+        void releasesEverySubscriptionWhenTheStreamIsClosed() {
             // given
             remoteMemberHandlesTheQuery();
             MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
@@ -667,7 +667,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void reportNoHandlerWhenNoMemberAdvertisesTheQuery() {
+        void reportsNoHandlerWhenNoMemberAdvertisesTheQuery() {
             // given a query nothing in the cluster handles
             QueryMessage unhandled = new GenericQueryMessage(
                     new GenericMessage("query-2", new MessageType("university.Unknown", "1.0.0"), PAYLOAD, Map.of()),
@@ -682,7 +682,7 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
-        void rejectANonPositiveUpdateBufferSize() {
+        void rejectsANonPositiveUpdateBufferSize() {
             assertThatThrownBy(() -> testSubject.subscriptionQuery(query(), null, 0))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("update buffer size");

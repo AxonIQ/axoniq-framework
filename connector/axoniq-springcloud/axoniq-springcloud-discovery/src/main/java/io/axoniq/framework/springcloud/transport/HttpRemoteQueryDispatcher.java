@@ -92,6 +92,9 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
      * Not a deadline on the subscription, which lasts as long as the subscriber wants it to, but on silence: the
      * answering member sends a keep-alive well inside this window, so a subscription that hears nothing for the whole
      * of it is one whose member is gone.
+     * <p>
+     * Silence is measured by looking every half a window, so a departed member is given up on somewhere between one
+     * and one and a half times this. It is the order of magnitude that matters, not the exact moment.
      */
     public static final Duration DEFAULT_SUBSCRIPTION_INACTIVITY_TIMEOUT = Duration.ofSeconds(60);
 
@@ -152,27 +155,21 @@ public class HttpRemoteQueryDispatcher implements RemoteQueryDispatcher {
         if (bufferSize < 1) {
             throw new IllegalArgumentException("The buffer size must be at least 1, but was [" + bufferSize + "].");
         }
-        Objects.requireNonNull(responseTimeout, "The responseTimeout must not be null.");
-        if (responseTimeout.isNegative() || responseTimeout.isZero()) {
-            throw new IllegalArgumentException(
-                    "The response timeout must be positive, but was [" + responseTimeout + "]."
-            );
-        }
         this.restClient = Objects.requireNonNull(restClient, "The restClient must not be null.");
         this.queryEndpoint = Objects.requireNonNull(queryEndpoint, "The queryEndpoint must not be null.");
         this.executor = Objects.requireNonNull(executor, "The executor must not be null.");
         this.converter = Objects.requireNonNull(converter, "The converter must not be null.");
         this.bufferSize = bufferSize;
-        this.responseTimeout = responseTimeout;
+        this.responseTimeout = requirePositive(responseTimeout, "response timeout");
         this.subscriptionInactivityTimeout = requirePositive(subscriptionInactivityTimeout,
                                                              "subscription inactivity timeout");
         this.scheduler = Objects.requireNonNull(scheduler, "The scheduler must not be null.");
     }
 
-    private static Duration requirePositive(Duration value, String what) {
-        Objects.requireNonNull(value, "The " + what + " must not be null.");
+    private static Duration requirePositive(Duration value, String description) {
+        Objects.requireNonNull(value, "The " + description + " must not be null.");
         if (value.isNegative() || value.isZero()) {
-            throw new IllegalArgumentException("The " + what + " must be positive, but was [" + value + "].");
+            throw new IllegalArgumentException("The " + description + " must be positive, but was [" + value + "].");
         }
         return value;
     }

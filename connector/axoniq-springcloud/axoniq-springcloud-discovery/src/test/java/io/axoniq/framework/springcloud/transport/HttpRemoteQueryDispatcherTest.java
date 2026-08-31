@@ -307,7 +307,10 @@ class HttpRemoteQueryDispatcherTest {
             requestFactory.holdingResponses();
 
             // when the member has not answered yet
-            dispatcher(1024).openSubscriptionQueryUpdateStream(MEMBER, query(), 16, listening(opened, new AtomicBoolean()));
+            dispatcher(1024).openSubscriptionQueryUpdateStream(MEMBER,
+                                                               query(),
+                                                               16,
+                                                               listening(opened, new AtomicBoolean()));
 
             // then the initial result must not be asked for, as this member could still miss an update
             awaitUntil(() -> !requestFactory.requests().isEmpty());
