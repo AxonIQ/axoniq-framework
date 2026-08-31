@@ -494,6 +494,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     private CompletableFuture<Void> sendWorkflowEvent(EventMessage eventMessage,
                                                       ProcessingContext processingContext) {
+        // Publication runs on the dedicated workflow executor, whose default is virtual-thread-per-task. A bounded
+        // FutureResolver wait thus cannot occupy an event-processor or other shared worker thread.
         // TODO: make sure the consistency marker is used
         return ProcessingContextUtils
                 .executeWithResult(

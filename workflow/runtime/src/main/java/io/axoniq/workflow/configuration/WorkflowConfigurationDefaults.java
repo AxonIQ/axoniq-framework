@@ -93,7 +93,11 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     public static final String COMPONENT_WORKFLOW_ENGINE = "WorkflowEngine";
 
     /**
-     * Name of the executor service component.
+     * Name of the dedicated executor service component used for workflow-body work and workflow-event publication.
+     * <p>
+     * The default uses a virtual thread per task. A bounded future-resolution wait therefore blocks only its workflow
+     * task, not an event processor or another shared executor. Applications that replace this component should retain
+     * that isolation or size their executor for the configured resolver timeout.
      */
     public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngineExecutor";
 
