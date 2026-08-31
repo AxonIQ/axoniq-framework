@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
@@ -213,14 +214,27 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                             }
                             logger.trace("Thread: {}, ProcessingContext {}", currentThread(), ctx);
 
-                            publishStartWorkflow(ctx);
-
+                            var publicationResolutionTimedOut = false;
                             try {
+                                publishStartWorkflow(ctx);
                                 executeWorkflow(ctx);
+                            } catch (FutureResolutionTimeoutException timeout) {
+                                publicationResolutionTimedOut = true;
+                                logPublicationResolutionTimeout(timeout);
+                                throw timeout;
                             } catch (Throwable e) {
-                                handleWorkflowException(ctx, e);
+                                try {
+                                    handleWorkflowException(ctx, e);
+                                } catch (FutureResolutionTimeoutException timeout) {
+                                    publicationResolutionTimedOut = true;
+                                    logPublicationResolutionTimeout(timeout);
+                                    throw timeout;
+                                }
+                            } finally {
+                                if (!publicationResolutionTimedOut) {
+                                    finishWorkflow(terminationHandler);
+                                }
                             }
-                            finishWorkflow(terminationHandler);
                             return CompletableFuture.completedFuture(null);
                         }
                 );
@@ -294,6 +308,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     /**
      * Handles exceptions thrown during workflow execution.
+     * <p>
+     * This method applies the workflow exception policy and may publish terminal events. A
+     * {@link FutureResolutionTimeoutException} raised by one of those publication attempts propagates to the workflow
+     * driver, which stops runtime execution without publishing another terminal event.
      *
      * @param ctx       processing context.
      * @param exception exception to handle.
@@ -349,6 +367,14 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         }
     }
 
+    private void logPublicationResolutionTimeout(@Nonnull FutureResolutionTimeoutException timeout) {
+        logger.error("Stopping runtime execution for workflow {} because a durable publication did not complete before "
+                             + "the resolution timeout. The workflow remains non-terminal and must be recovered from "
+                             + "durable history after the processing node restarts.",
+                     workflowId,
+                     timeout);
+    }
+
     /**
      * Completes a pending cancellation request registered by the cancellation coordinator.
      * <p>
@@ -366,11 +392,16 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
             return false;
         }
         Thread.interrupted();
-        terminalTransition.transition(() -> {
-            publishWorkflowEvent(ctx, cancelledWorkflow(this.workflowContext(), workflowName, cancellation.cause(),
-                                                        workflowState.workflowDefinitionId(),
-                                                        workflowConfiguration.eventNameCustomizer()));
-        });
+        try {
+            terminalTransition.transition(() -> {
+                publishWorkflowEvent(ctx, cancelledWorkflow(this.workflowContext(), workflowName, cancellation.cause(),
+                                                            workflowState.workflowDefinitionId(),
+                                                            workflowConfiguration.eventNameCustomizer()));
+            });
+        } catch (RuntimeException | Error failure) {
+            cancellation.callback().completeExceptionally(failure);
+            throw failure;
+        }
         cancellation.callback().complete(null);
         return true;
     }

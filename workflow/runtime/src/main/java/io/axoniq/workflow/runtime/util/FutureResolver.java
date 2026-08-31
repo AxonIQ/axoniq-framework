@@ -18,12 +18,14 @@
  */
 package io.axoniq.workflow.runtime.util;
 
+import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Resolves a {@link CompletableFuture} according to a configurable waiting policy.
@@ -45,6 +47,8 @@ public interface FutureResolver {
      * Resolves a future through the resolver registered in the processing context.
      * <p>
      * A default resolver is used as a fallback for contexts created in tests or outside configured workflow processing.
+     * A resolver timeout is always exposed as a {@link FutureResolutionTimeoutException}; this prevents it from being
+     * interpreted as a workflow timeout.
      *
      * @param processingContext context containing the configured resolver
      * @param future            future to resolve
@@ -59,13 +63,29 @@ public interface FutureResolver {
         } catch (ComponentNotFoundException cnfe) {
             // Contexts created outside workflow configuration have no resolver component.
         }
-        (resolver == null ? new DefaultTimeoutFutureResolver() : resolver).resolve(future);
+        try {
+            (resolver == null ? new DefaultTimeoutFutureResolver() : resolver).resolve(future);
+        } catch (Throwable failure) {
+            if (failure instanceof TimeoutException timeoutException) {
+                throw new FutureResolutionTimeoutException(timeoutException);
+            }
+            throwUnchecked(failure);
+        }
     }
 
     /**
      * Resolves the given future according to this resolver's policy.
+     * <p>
+     * Implementations should throw {@link FutureResolutionTimeoutException} when their resolution timeout expires.
+     * The context-based {@link #resolve(ProcessingContext, CompletableFuture)} overload also normalizes a raw
+     * {@link TimeoutException} for implementations that cannot yet do so.
      *
      * @param future future to resolve
      */
     void resolve(@Nonnull CompletableFuture<?> future);
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void throwUnchecked(Throwable failure) throws T {
+        throw (T) failure;
+    }
 }

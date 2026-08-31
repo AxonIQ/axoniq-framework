@@ -27,10 +27,20 @@ The resolver is discovered through Java `ServiceLoader` while the workflow compo
 selected resolver is registered in that registry, and waiting paths obtain it from their `ProcessingContext`.
 `DefaultTimeoutFutureResolver` is used when no service is available. It delegates to
 `FutureUtils.joinAndUnwrap(future, timeout)`: a completed future does not incur timeout work, exceptional completion
-is rethrown as its original cause, and expiry fails with `TimeoutException`.
+is rethrown as its original cause, and expiry is represented by `FutureResolutionTimeoutException`. This keeps an
+infrastructure publication timeout distinct from a durable workflow timeout.
 
 All relevant workflow paths that wait for completion delegate to this component. A custom resolver must be thread-safe
 and may impose a deadline, translate failures, or record metrics.
+
+### Publication-resolution failure policy
+
+| Situation | Runtime action | Durable workflow state |
+| --- | --- | --- |
+| Publication resolves | Continue execution | Apply the published event |
+| Publication resolution times out | Stop live runtime execution | Leave the workflow non-terminal for recovery from durable history after restart |
+| Cancellation publication resolution times out | Complete the cancellation request exceptionally and stop live runtime execution | Leave the workflow non-terminal for recovery from durable history after restart |
+| Workflow body is parked for an event or timer | Keep the workflow driver parked; do not use `FutureResolver` | Unchanged until the awaited event or timer resumes the body |
 
 ### Alternatives considered
 

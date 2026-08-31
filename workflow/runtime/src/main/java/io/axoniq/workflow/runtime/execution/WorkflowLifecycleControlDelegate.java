@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
@@ -217,7 +218,8 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
      * <p>
      * Terminal transitions must not proceed before their event is durable. {@link FutureResolver} centralizes the
      * bounded waiting policy introduced for issue #280. Publication failures, including an unwrapped publication
-     * exception or timeout, are logged and rethrown.
+     * exception or timeout, are logged and rethrown. A resolver timeout is normalized to
+     * {@link FutureResolutionTimeoutException}, so workflow execution does not mistake it for a workflow timeout.
      *
      * @param publication    asynchronous terminal-event publication
      * @param terminalStatus terminal status represented by the event
@@ -226,11 +228,16 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
                                                @Nonnull String terminalStatus) {
         try {
             FutureResolver.resolve(workflowContext.processingContext(), publication);
-        } catch (Exception exception) {
+        } catch (Throwable exception) {
             logger.error("Failed to publish {} terminal event for workflow '{}'", terminalStatus,
                          workflowExecution.workflowId(), exception);
-            throw exception;
+            rethrowUnchecked(exception);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void rethrowUnchecked(Throwable exception) throws T {
+        throw (T) exception;
     }
 
     @Nonnull

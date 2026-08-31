@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
@@ -178,6 +179,8 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                                               awaited.payloadReducer().name(),
                                               awaited.eventNameCustomizer())
                 );
+            } catch (FutureResolutionTimeoutException timeout) {
+                throw timeout;
             } catch (Exception e) {
                 logger.warn("Failed to publish completed event for step '{}': {}",
                             awaited.stepName(),
