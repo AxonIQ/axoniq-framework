@@ -40,9 +40,11 @@ import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowScheduler;
 import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
-import io.axoniq.workflow.runtime.util.FutureResolver;
 import io.axoniq.workflow.runtime.execution.WorkflowStore;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
+import io.axoniq.workflow.runtime.util.DefaultTimeoutFutureResolver;
+import io.axoniq.workflow.runtime.util.FutureResolver;
+import jakarta.annotation.Nullable;
 import org.axonframework.common.ClockUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
@@ -59,7 +61,9 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.modelling.repository.Repository;
 
 import java.time.Clock;
+import java.util.Iterator;
 import java.util.NoSuchElementException;
+import java.util.ServiceLoader;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -136,7 +140,25 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     void registerFutureResolver(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(FutureResolver.class, cfg -> FutureResolver.getInstance());
+        componentRegistry.registerIfNotPresent(FutureResolver.class, cfg -> loadFutureResolver());
+    }
+
+    private static FutureResolver loadFutureResolver() {
+        var contextClassLoader = Thread.currentThread().getContextClassLoader();
+        var resolver = findFutureResolver(contextClassLoader);
+        if (resolver == null && contextClassLoader != FutureResolver.class.getClassLoader()) {
+            resolver = findFutureResolver(FutureResolver.class.getClassLoader());
+        }
+        return resolver != null ? resolver : new DefaultTimeoutFutureResolver();
+    }
+
+    @Nullable
+    private static FutureResolver findFutureResolver(@Nullable ClassLoader classLoader) {
+        if (classLoader == null) {
+            return null;
+        }
+        Iterator<FutureResolver> resolvers = ServiceLoader.load(FutureResolver.class, classLoader).iterator();
+        return resolvers.hasNext() ? resolvers.next() : null;
     }
 
     void registerEventNameCustomizer(ComponentRegistry componentRegistry) {

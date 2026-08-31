@@ -24,8 +24,8 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.FutureResolver;
+import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
@@ -108,13 +108,14 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
                                                                               sanitize(newPayload),
                                                                               NAME, // replace later the entire payload
                                                                               merge(parentEventNameCustomizer, eventNameCustomizer));
+                                             var processingContext = workflowExecution.processingContext();
                                              FutureResolver.resolve(
-                                                     workflowExecution.processingContext(),
+                                                     processingContext,
                                                      ProcessingContextUtils.executeWithResult(
                                                              workflowExecution.workflowId(),
                                                              unitOfWorkFactory,
                                                              executor,
-                                                             workflowExecution.processingContext(),
+                                                             processingContext,
                                                              ctx -> eventSink.publish(ctx, payloadEvent)
                                                      )
                                              );

@@ -28,8 +28,8 @@ import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionCheckpointingSupport.ExecutionTaskQueue;
-import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.FutureResolver;
+import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -246,13 +246,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private void publishStartWorkflow(@Nonnull ProcessingContext ctx) {
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         if (this.state().workflowStatus() == WorkflowStatus.NONE) {
-            FutureResolver.resolve(
-                    ctx,
-                    sendWorkflowEvent(startedWorkflow(this.workflowContext(),
+            publishWorkflowEvent(ctx, startedWorkflow(this.workflowContext(),
                                                       workflowName,
                                                       workflowState.workflowDefinitionId(),
-                                                      eventNameCustomizer), ctx)
-            );
+                                                      eventNameCustomizer));
             try {
                 awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
             } catch (Exception e) {
@@ -288,13 +285,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         }
         if (!this.state().workflowStatus().isTerminal()) {
             terminalTransition.transition(() -> {
-                FutureResolver.resolve(
-                        ctx,
-                        sendWorkflowEvent(
-                                completedWorkflow(this.workflowContext(), workflowName,
-                                                  workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
-                        )
-                );
+                publishWorkflowEvent(ctx, completedWorkflow(this.workflowContext(), workflowName,
+                                                            workflowState.workflowDefinitionId(), eventNameCustomizer));
             });
         }
         logger.info("Workflow executed. Resulting workflow payload {}.", this.workflowContext().workflowPayload());
@@ -316,12 +308,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 // if events are already sent by WorkflowLifecycleControlDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
-                        FutureResolver.resolve(
-                                ctx,
-                                sendWorkflowEvent(failedWorkflow(
-                                        this.workflowContext(), workflowName, wfe,
-                                        workflowState.workflowDefinitionId(), eventNameCustomizer), ctx)
-                        );
+                        publishWorkflowEvent(ctx, failedWorkflow(this.workflowContext(), workflowName, wfe,
+                                                                 workflowState.workflowDefinitionId(), eventNameCustomizer));
                     });
                 }
             }
@@ -329,24 +317,17 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 // if events are already sent by WorkflowLifecycleControlDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
-                        FutureResolver.resolve(
-                                ctx,
-                                sendWorkflowEvent(cancelledWorkflow(
-                                        this.workflowContext(), workflowName, wce,
-                                        workflowState.workflowDefinitionId(), eventNameCustomizer), ctx)
-                        );
+                        publishWorkflowEvent(ctx, cancelledWorkflow(this.workflowContext(), workflowName, wce,
+                                                                    workflowState.workflowDefinitionId(), eventNameCustomizer));
                     });
                 }
             }
             case TimeoutException te -> {
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
-                        FutureResolver.resolve(
-                                ctx,
-                                sendWorkflowEvent(timeoutWorkflow(
-                                        this.workflowContext(), workflowName, contextDelegate.clock().instant(),
-                                        workflowState.workflowDefinitionId(), eventNameCustomizer), ctx)
-                        );
+                        publishWorkflowEvent(ctx, timeoutWorkflow(this.workflowContext(), workflowName,
+                                                                  contextDelegate.clock().instant(),
+                                                                  workflowState.workflowDefinitionId(), eventNameCustomizer));
                     });
                 }
             }
@@ -361,33 +342,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
             }
             case InterruptedException ie -> {
                 Thread.currentThread().interrupt();
-        /*
-                // we agreed not to drive the workflow to terminal state on interrupted exception
-                FutureResolver.resolve(
-                    this.workflowContext(),
-                    sendWorkflowEvent(
-                        cancelledWorkflow(this.workflowContext(),
-                                          workflowName,
-                                          eventNameCustomizer),
-                        ctx
-                    )
-                );
-         */
             }
             default -> {
                 logger.error("Error occurred in workflow {}", workflowId, exception);
-                // we agreed not to drive the workflow to terminal state on any other exception
-                /*
-                FutureResolver.resolve(
-                    this.workflowContext(),
-                    sendWorkflowEvent(failedWorkflow(
-                                              this.workflowContext(),
-                                              workflowName,
-                                              exception instanceof Exception ? (Exception) exception : new RuntimeException(exception),
-                                              eventNameCustomizer),
-                                      ctx)
-                );
-                 */
             }
         }
     }
@@ -410,12 +367,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         }
         Thread.interrupted();
         terminalTransition.transition(() -> {
-            FutureResolver.resolve(
-                    ctx,
-                    sendWorkflowEvent(cancelledWorkflow(
-                            this.workflowContext(), workflowName, cancellation.cause(),
-                            workflowState.workflowDefinitionId(), workflowConfiguration.eventNameCustomizer()), ctx)
-            );
+            publishWorkflowEvent(ctx, cancelledWorkflow(this.workflowContext(), workflowName, cancellation.cause(),
+                                                        workflowState.workflowDefinitionId(),
+                                                        workflowConfiguration.eventNameCustomizer()));
         });
         cancellation.callback().complete(null);
         return true;
@@ -555,6 +509,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                             return contextDelegate.publishEvent(childCtx, eventMessage);
                         }
                 );
+    }
+
+    private void publishWorkflowEvent(@Nonnull ProcessingContext processingContext,
+                                      @Nonnull EventMessage eventMessage) {
+        FutureResolver.resolve(processingContext, sendWorkflowEvent(eventMessage, processingContext));
     }
 
     @Override

@@ -22,8 +22,9 @@ import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -60,6 +61,14 @@ class FutureResolverTest {
     }
 
     @Test
+    void defaultResolverTimesOutForIncompletePublication() {
+        var resolver = new DefaultTimeoutFutureResolver(Duration.ofMillis(50));
+
+        assertThatThrownBy(() -> resolver.resolve(new CompletableFuture<>()))
+                .isInstanceOf(TimeoutException.class);
+    }
+
+    @Test
     void resolvesPublicationThroughProcessingContextComponent() {
         var context = mock(ProcessingContext.class);
         var resolver = mock(FutureResolver.class);
@@ -83,7 +92,13 @@ class FutureResolverTest {
     }
 
     @Test
-    void serviceLoadedResolverFallsBackToDefaultImplementation() {
-        assertThat(FutureResolver.getInstance()).isInstanceOf(DefaultTimeoutFutureResolver.class);
+    void resolvesPublicationWhenComponentIsNull() {
+        var context = mock(ProcessingContext.class);
+        var publication = CompletableFuture.completedFuture(null);
+        when(context.component(FutureResolver.class)).thenReturn(null);
+
+        FutureResolver.resolve(context, publication);
+
+        assertThat(publication).isCompleted();
     }
 }

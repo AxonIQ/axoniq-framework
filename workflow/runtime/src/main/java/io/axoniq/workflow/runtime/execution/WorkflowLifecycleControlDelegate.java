@@ -24,8 +24,8 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
-import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.FutureResolver;
+import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -37,7 +37,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.cancelledWorkflow;
@@ -216,8 +215,9 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     /**
      * Awaits durable publication of a workflow terminal event.
      * <p>
-     * Terminal transitions must not proceed before their event is durable. The configured resolver owns the waiting
-     * policy and its failure semantics.
+     * Terminal transitions must not proceed before their event is durable. {@link FutureResolver} centralizes the
+     * bounded waiting policy introduced for issue #280. Publication failures, including an unwrapped publication
+     * exception or timeout, are logged and rethrown.
      *
      * @param publication    asynchronous terminal-event publication
      * @param terminalStatus terminal status represented by the event
@@ -226,7 +226,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
                                                @Nonnull String terminalStatus) {
         try {
             FutureResolver.resolve(workflowContext.processingContext(), publication);
-        } catch (CompletionException exception) {
+        } catch (Exception exception) {
             logger.error("Failed to publish {} terminal event for workflow '{}'", terminalStatus,
                          workflowExecution.workflowId(), exception);
             throw exception;
