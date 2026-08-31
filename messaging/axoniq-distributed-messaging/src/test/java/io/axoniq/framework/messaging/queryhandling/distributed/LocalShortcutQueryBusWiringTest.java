@@ -43,8 +43,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Wiring test that assembles a full {@link MessagingConfigurer} stack - {@link DistributedQueryBus} over a
- * {@link LocalShortcutQueryBusConnector} decorating a recording connector - and verifies end-to-end that point-to-point
+ * Wiring test that assembles a full {@link MessagingConfigurer} stack, {@link DistributedQueryBus} over a
+ * {@link LocalShortcutQueryBusConnector} decorating a recording connector, and verifies end-to-end that point-to-point
  * queries take the local shortcut exactly when the {@link LocalQueryDispatchPredicate} and a local subscription allow
  * it, and are routed through the connector otherwise.
  *

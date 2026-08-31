@@ -24,7 +24,7 @@ import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.junit.jupiter.api.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.*;
 
 /**
  * Test class validating the {@link LocalShortcutQueryBusConnectorConfigurationEnhancer}.
@@ -75,7 +75,9 @@ class LocalShortcutQueryBusConnectorConfigurationEnhancerTest {
                                        cr.registerComponent(QueryBusConnector.class, c -> mockConnector);
                                        cr.registerComponent(
                                                DistributedQueryBusConfiguration.class,
-                                               c -> DistributedQueryBusConfiguration.DEFAULT.preferLocalQueryHandler(false)
+                                               c -> DistributedQueryBusConfiguration.DEFAULT.preferLocalQueryHandler(
+                                                       false
+                                               )
                                        );
                                        cr.registerEnhancer(new LocalShortcutQueryBusConnectorConfigurationEnhancer());
                                    })
@@ -96,7 +98,9 @@ class LocalShortcutQueryBusConnectorConfigurationEnhancerTest {
                                        cr.registerComponent(LocalQueryDispatchPredicate.class, c -> predicate);
                                        cr.registerComponent(
                                                DistributedQueryBusConfiguration.class,
-                                               c -> DistributedQueryBusConfiguration.DEFAULT.preferLocalQueryHandler(false)
+                                               c -> DistributedQueryBusConfiguration.DEFAULT.preferLocalQueryHandler(
+                                                       false
+                                               )
                                        );
                                        cr.registerEnhancer(new LocalShortcutQueryBusConnectorConfigurationEnhancer());
                                    })

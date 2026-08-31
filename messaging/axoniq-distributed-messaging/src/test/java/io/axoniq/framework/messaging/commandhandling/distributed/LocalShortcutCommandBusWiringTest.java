@@ -44,10 +44,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Wiring test that assembles a full {@link MessagingConfigurer} stack - {@link DistributedCommandBus} over a
- * {@link LocalShortcutCommandBusConnector} decorating a recording connector - and verifies end-to-end that commands
- * take the local shortcut exactly when the {@link LocalCommandDispatchPredicate} and a local subscription allow it, and
- * are routed through the connector otherwise.
+ * Wiring test that assembles a full {@link MessagingConfigurer} stack, {@link DistributedCommandBus} over a
+ * {@link LocalShortcutCommandBusConnector} decorating a recording connector, and verifies end-to-end that commands take
+ * the local shortcut exactly when the {@link LocalCommandDispatchPredicate} and a local subscription allow it, and are
+ * routed through the connector otherwise.
  *
  * @author Allard Buijze
  */

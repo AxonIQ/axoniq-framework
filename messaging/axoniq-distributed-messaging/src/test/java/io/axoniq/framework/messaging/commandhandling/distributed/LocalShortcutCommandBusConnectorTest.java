@@ -226,11 +226,11 @@ class LocalShortcutCommandBusConnectorTest {
     }
 
     private CommandMessage asCommandMessage(String payload) {
-        return new GenericCommandMessage(MessageType.fromString("commandmessage#1.0"), payload);
+        return new GenericCommandMessage(MessageType.fromString("command-message#1.0"), payload);
     }
 
     private CommandResultMessage asCommandResultMessage(String payload) {
-        return new GenericCommandResultMessage(MessageType.fromString("commandresult#1.0"), payload);
+        return new GenericCommandResultMessage(MessageType.fromString("command-result#1.0"), payload);
     }
 
     /**

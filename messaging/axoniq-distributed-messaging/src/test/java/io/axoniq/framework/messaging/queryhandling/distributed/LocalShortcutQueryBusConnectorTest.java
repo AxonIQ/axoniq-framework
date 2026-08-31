@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.messaging.queryhandling.distributed;
 
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.Registration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.MessageStream;
@@ -29,6 +28,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
@@ -194,8 +194,8 @@ class LocalShortcutQueryBusConnectorTest {
     }
 
     /**
-     * Recording {@link QueryBusConnector} that counts dispatches and captures subscriptions, standing in for the wrapped
-     * connector.
+     * Recording {@link QueryBusConnector} that counts dispatches and captures subscriptions, standing in for the
+     * wrapped connector.
      */
     private static class RecordingQueryBusConnector implements QueryBusConnector {
 
@@ -263,8 +263,8 @@ class LocalShortcutQueryBusConnectorTest {
     }
 
     /**
-     * Recording {@link ComponentDescriptor} capturing the properties described to it, so the wrapper relationship can be
-     * asserted without mocking.
+     * Recording {@link ComponentDescriptor} capturing the properties described to it, so the wrapper relationship can
+     * be asserted without mocking.
      */
     private static class RecordingComponentDescriptor implements ComponentDescriptor {
 

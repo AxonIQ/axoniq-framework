@@ -35,7 +35,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * @author Allard Buijze
  * @since 5.0.0
  */
-@SuppressWarnings("removal") // exercises the deprecated preferLocalQueryHandler setting on purpose
 class DistributedQueryBusConfigurationTest {
 
     @Test

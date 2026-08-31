@@ -19,9 +19,9 @@
 
 package io.axoniq.framework.messaging.commandhandling.distributed;
 
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.commandhandling.CommandBus;
 import org.axonframework.messaging.commandhandling.interception.InterceptingCommandBus;
-import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.junit.jupiter.api.*;
 
