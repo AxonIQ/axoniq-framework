@@ -23,7 +23,8 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
-import org.jspecify.annotations.Nullable;
+
+import java.util.Optional;
 
 /**
  * A {@link ConfigurationEnhancer} that when a {@link QueryBusConnector} is present in the configuration may decorate it
@@ -58,15 +59,13 @@ public class LocalShortcutQueryBusConnectorConfigurationEnhancer implements Conf
         if (!componentRegistry.hasComponent(QueryBusConnector.class)) {
             return;
         }
+
         componentRegistry.registerDecorator(
                 QueryBusConnector.class,
                 LOCAL_SHORTCUT_CONNECTOR_ORDER,
-                (config, name, delegate) -> {
-                    LocalQueryDispatchPredicate predicate = effectivePredicate(config);
-                    return predicate == null
-                            ? delegate
-                            : new LocalShortcutQueryBusConnector(delegate, predicate);
-                }
+                (config, name, delegate) -> effectivePredicate(config)
+                        .<QueryBusConnector>map(predicate -> new LocalShortcutQueryBusConnector(delegate, predicate))
+                        .orElse(delegate)
         );
     }
 
@@ -75,9 +74,9 @@ public class LocalShortcutQueryBusConnectorConfigurationEnhancer implements Conf
      * {@link LocalQueryDispatchPredicate} takes precedence, falling back to an "always local" predicate when the
      * deprecated {@link DistributedQueryBusConfiguration#preferLocalQueryHandler()} setting is enabled.
      */
-    private static @Nullable LocalQueryDispatchPredicate effectivePredicate(Configuration config) {
+    private static Optional<LocalQueryDispatchPredicate> effectivePredicate(Configuration config) {
         return config.getOptionalComponent(LocalQueryDispatchPredicate.class)
-                     .orElseGet(() -> preferLocalQueryHandler(config) ? ALWAYS_LOCAL : null);
+                     .or(() -> Optional.ofNullable(preferLocalQueryHandler(config) ? ALWAYS_LOCAL : null));
     }
 
     @SuppressWarnings("removal")
