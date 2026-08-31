@@ -48,6 +48,7 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -81,22 +82,26 @@ class SseQueryResponseSinkFramingTest {
     private IncomingQueryGateway gateway;
     private MockMvc mockMvc;
     private ScheduledExecutorService scheduler;
+    private ExecutorService keepAliveExecutor;
 
     @BeforeEach
     void setUp() {
         scheduler = Executors.newSingleThreadScheduledExecutor();
+        keepAliveExecutor = Executors.newVirtualThreadPerTaskExecutor();
         gateway = new IncomingQueryGateway(() -> "node-b", null);
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new SpringCloudQueryController(gateway,
                                                                 Duration.ofSeconds(30),
                                                                 Duration.ofSeconds(20),
-                                                                scheduler))
+                                                                scheduler,
+                                                                keepAliveExecutor))
                 .build();
     }
 
     @AfterEach
     void tearDown() {
         scheduler.shutdownNow();
+        keepAliveExecutor.shutdownNow();
     }
 
     private static QueryDispatchRequest request() {

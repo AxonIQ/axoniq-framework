@@ -31,9 +31,12 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Receives queries sent by other members of the cluster over HTTP, answering them with a stream of responses.
@@ -84,6 +87,7 @@ public class SpringCloudQueryController {
     private final Duration timeout;
     private final Duration keepAliveInterval;
     private final ScheduledExecutorService scheduler;
+    private final Executor keepAliveExecutor;
 
     /**
      * Constructs a {@code SpringCloudQueryController} handing received queries to the given {@code gateway}.
@@ -97,12 +101,18 @@ public class SpringCloudQueryController {
      *                          nor the intermediaries between the two mistake a quiet subscription for a dead one.
      *                          Must be comfortably below the window subscribing members give a subscription to say
      *                          something.
-     * @param scheduler         runs the keep-alive of each open subscription
+     * @param scheduler         decides when each open subscription is due a keep-alive. Only ever schedules the
+     *                          write, never performs it, so that a subscriber which has stopped reading cannot block
+     *                          whatever else the scheduler carries.
+     * @param keepAliveExecutor performs the keep-alive writes. Each is a blocking write to one subscriber, so an
+     *                          executor that can hold as many blocked threads as there are open subscriptions suits
+     *                          it -- a virtual-thread-per-task executor, for instance.
      */
     public SpringCloudQueryController(IncomingQueryGateway gateway,
                                       Duration timeout,
                                       Duration keepAliveInterval,
-                                      ScheduledExecutorService scheduler) {
+                                      ScheduledExecutorService scheduler,
+                                      Executor keepAliveExecutor) {
         this.gateway = Objects.requireNonNull(gateway, "The gateway must not be null.");
         this.timeout = Objects.requireNonNull(timeout, "The timeout must not be null.");
         Objects.requireNonNull(keepAliveInterval, "The keepAliveInterval must not be null.");
@@ -113,6 +123,7 @@ public class SpringCloudQueryController {
         }
         this.keepAliveInterval = keepAliveInterval;
         this.scheduler = Objects.requireNonNull(scheduler, "The scheduler must not be null.");
+        this.keepAliveExecutor = Objects.requireNonNull(keepAliveExecutor, "The keepAliveExecutor must not be null.");
     }
 
     /**
@@ -152,10 +163,11 @@ public class SpringCloudQueryController {
     /**
      * Writes to a subscription while it has nothing of its own to say, and stops once it can no longer be written to.
      */
-    private final class KeepAlive implements Runnable {
+    private final class KeepAlive {
 
         private final SseQueryResponseSink sink;
         private final String requestIdentifier;
+        private final AtomicBoolean writing = new AtomicBoolean();
 
         private volatile @Nullable ScheduledFuture<?> beat;
 
@@ -165,19 +177,58 @@ public class SpringCloudQueryController {
         }
 
         private void start() {
-            // Beaten at once rather than only after the first interval. A stream nothing has been written to does
-            // not reach the subscribing member at all, and until it does that member cannot know the subscription
-            // is registered, nor ask for the initial result without risking an update emitted in between.
-            run();
+            // Scheduled and registered before the first beat, so that a beat failing straight away has something to
+            // cancel. A subscriber already gone by the time it is written to would otherwise leave the beat running
+            // against a stream nobody reads until its next turn came round.
             long intervalMillis = keepAliveInterval.toMillis();
-            beat = scheduler.scheduleWithFixedDelay(this, intervalMillis, intervalMillis, TimeUnit.MILLISECONDS);
-            // Registered after the beat exists, so that a subscription the container has already given up on stops
-            // this rather than leaving it running against a stream nobody reads.
+            beat = scheduler.scheduleWithFixedDelay(this::submit,
+                                                    intervalMillis,
+                                                    intervalMillis,
+                                                    TimeUnit.MILLISECONDS);
             sink.onUnavailable(this::stop);
+            // Beaten at once rather than only after the first interval, and on this thread rather than the
+            // executor's. A stream nothing has been written to does not reach the subscribing member at all, and
+            // until it does that member cannot know the subscription is registered, nor ask for the initial result
+            // without risking an update emitted in between. Writing it here keeps that ordering: the response and
+            // the request that carried it end together.
+            write();
         }
 
-        @Override
-        public void run() {
+        /**
+         * Hands a beat to the executor, so that the scheduler is never the thread a write blocks on.
+         * <p>
+         * Writing to a subscriber that has stopped reading blocks until the connection gives way, and the scheduler
+         * runs the beat of every open subscription as well as the deadline of every dispatched query. One subscriber
+         * that has gone quiet without closing must not hold up any of them.
+         * <p>
+         * Skipped while a beat is still being written. Handing the write to another thread gives up the scheduler's
+         * guarantee that a run never overlaps its predecessor, and a stalled subscriber would otherwise collect a
+         * thread per interval for as long as it stayed stalled.
+         */
+        private void submit() {
+            if (!writing.compareAndSet(false, true)) {
+                logger.debug("Skipped a keep-alive for subscription query [{}]; the previous one is still being "
+                                     + "written.", requestIdentifier);
+                return;
+            }
+            try {
+                keepAliveExecutor.execute(() -> {
+                    try {
+                        write();
+                    } finally {
+                        writing.set(false);
+                    }
+                });
+            } catch (RejectedExecutionException e) {
+                // Nothing will run the beat, so there is no keeping this subscription alive. The subscribing member
+                // measures the silence that follows and gives up on it.
+                writing.set(false);
+                logger.debug("Could not hand off a keep-alive for subscription query [{}].", requestIdentifier, e);
+                stop();
+            }
+        }
+
+        private void write() {
             try {
                 sink.keepAlive();
             } catch (Exception e) {

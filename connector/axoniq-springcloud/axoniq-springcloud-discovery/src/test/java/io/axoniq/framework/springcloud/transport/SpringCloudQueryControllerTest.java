@@ -1,0 +1,224 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+
+package io.axoniq.framework.springcloud.transport;
+
+import io.axoniq.framework.springcloud.util.RecordingQueryHandler;
+import org.axonframework.messaging.core.MessageType;
+import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.*;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * Tests how {@link SpringCloudQueryController} keeps an otherwise idle subscription alive.
+ * <p>
+ * The writes themselves are covered by {@link SseQueryResponseSinkFramingTest}, which reads back what came out on the
+ * wire. What is pinned here is when they are attempted and on whose thread, because a keep-alive is a blocking write
+ * to one subscriber while the scheduler that decides it is due carries every other subscription and every dispatched
+ * query's deadline besides.
+ *
+ * @author Allard Buijze
+ */
+class SpringCloudQueryControllerTest {
+
+    private static final MessageType FIND_COURSE_TYPE = new MessageType("university.FindCourse", "1.0.0");
+    private static final Duration BEAT_OFTEN = Duration.ofMillis(50);
+    private static final Duration NEVER_REACHED = Duration.ofHours(1);
+
+    private IncomingQueryGateway gateway;
+    private ScheduledExecutorService scheduler;
+
+    @BeforeEach
+    void setUp() {
+        gateway = new IncomingQueryGateway(() -> "node-b", null);
+        scheduler = Executors.newSingleThreadScheduledExecutor();
+    }
+
+    @AfterEach
+    void tearDown() {
+        scheduler.shutdownNow();
+    }
+
+    private SpringCloudQueryController controller(Duration keepAliveInterval, Executor keepAliveExecutor) {
+        return new SpringCloudQueryController(gateway,
+                                              Duration.ofSeconds(30),
+                                              keepAliveInterval,
+                                              scheduler,
+                                              keepAliveExecutor);
+    }
+
+    private static SubscriptionQueryRequest request() {
+        return new SubscriptionQueryRequest("query-1",
+                                            FIND_COURSE_TYPE.toString(),
+                                            "{\"id\":\"course-1\"}",
+                                            Map.of(),
+                                            null,
+                                            16);
+    }
+
+    /**
+     * An {@link Executor} recording what it was handed, and either running it on a thread of its own or holding on to
+     * it, so that a test can leave a keep-alive in mid-write.
+     */
+    private static final class RecordingExecutor implements Executor {
+
+        private final List<Runnable> handed = new CopyOnWriteArrayList<>();
+        private final @Nullable ExecutorService delegate;
+        private final CountDownLatch handoffs;
+
+        private RecordingExecutor(@Nullable ExecutorService delegate, int expectedHandoffs) {
+            this.delegate = delegate;
+            this.handoffs = new CountDownLatch(expectedHandoffs);
+        }
+
+        private static RecordingExecutor running(int expectedHandoffs) {
+            return new RecordingExecutor(Executors.newVirtualThreadPerTaskExecutor(), expectedHandoffs);
+        }
+
+        /**
+         * Records what it is handed and never runs it, leaving every keep-alive perpetually mid-write.
+         */
+        private static RecordingExecutor holding() {
+            return new RecordingExecutor(null, 1);
+        }
+
+        @Override
+        public void execute(Runnable command) {
+            handed.add(command);
+            handoffs.countDown();
+            if (delegate != null) {
+                delegate.execute(command);
+            }
+        }
+
+        private boolean awaitHandoffs(Duration timeout) throws InterruptedException {
+            return handoffs.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        }
+
+        private int handedOff() {
+            return handed.size();
+        }
+
+        private void shutdown() {
+            if (delegate != null) {
+                delegate.shutdownNow();
+            }
+        }
+    }
+
+    @Nested
+    class KeepingASubscriptionAlive {
+
+        @Test
+        void writeTheFirstKeepAliveWithoutTheExecutor() {
+            // given a bound handler, so that the subscription is registered rather than refused
+            gateway.bind(new RecordingQueryHandler());
+            RecordingExecutor executor = RecordingExecutor.holding();
+
+            // when the subscription is received
+            controller(NEVER_REACHED, executor).receiveSubscriptionQuery(request());
+
+            // then the first beat went out on the request's own thread. A stream nothing has been written to does not
+            // reach the subscribing member at all, and that member asks for the initial result on the strength of it
+            assertThat(executor.handedOff()).isZero();
+        }
+
+        @Test
+        void handTheBeatsThatFollowToTheExecutor() throws InterruptedException {
+            // given
+            gateway.bind(new RecordingQueryHandler());
+            RecordingExecutor executor = RecordingExecutor.running(2);
+            try {
+                // when
+                controller(BEAT_OFTEN, executor).receiveSubscriptionQuery(request());
+
+                // then the scheduler only ever decides a beat is due. Writing one blocks on a subscriber that has
+                // stopped reading, and the scheduler carries every other subscription and query deadline besides
+                assertThat(executor.awaitHandoffs(Duration.ofSeconds(5))).isTrue();
+            } finally {
+                executor.shutdown();
+            }
+        }
+
+        @Test
+        void skipABeatWhileThePreviousOneIsStillBeingWritten() throws InterruptedException {
+            // given an executor that never finishes a keep-alive, as a subscriber that stopped reading leaves one
+            gateway.bind(new RecordingQueryHandler());
+            RecordingExecutor executor = RecordingExecutor.holding();
+
+            // when several intervals pass
+            controller(BEAT_OFTEN, executor).receiveSubscriptionQuery(request());
+            assertThat(executor.awaitHandoffs(Duration.ofSeconds(5))).isTrue();
+            Thread.sleep(300);
+
+            // then a stalled subscriber collects one thread rather than one per interval, which is what handing the
+            // write elsewhere gives up of the scheduler's own guarantee that a run never overlaps its predecessor
+            assertThat(executor.handedOff()).isEqualTo(1);
+        }
+
+        @Test
+        void stopBeatingWhenTheFirstKeepAliveCannotBeWritten() throws InterruptedException {
+            // given no handler bound, so the gateway reports the subscription unhandled and ends the stream before
+            // the first keep-alive is attempted
+            RecordingExecutor executor = RecordingExecutor.running(1);
+            try {
+                // when
+                controller(BEAT_OFTEN, executor).receiveSubscriptionQuery(request());
+
+                // then a beat that fails on its very first write has to have something to cancel, or it goes on
+                // writing to a stream nobody reads for as long as the application lives
+                assertThat(executor.awaitHandoffs(Duration.ofMillis(500))).isFalse();
+                assertThat(executor.handedOff()).isZero();
+            } finally {
+                executor.shutdown();
+            }
+        }
+    }
+
+    @Nested
+    class Validation {
+
+        @Test
+        void rejectsAMissingKeepAliveExecutor() {
+            assertThatThrownBy(() -> controller(BEAT_OFTEN, null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("keepAliveExecutor");
+        }
+
+        @Test
+        void rejectsAKeepAliveIntervalThatWouldNeverBeat() {
+            assertThatThrownBy(() -> controller(Duration.ZERO, RecordingExecutor.holding()))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("must be positive");
+        }
+    }
+}
