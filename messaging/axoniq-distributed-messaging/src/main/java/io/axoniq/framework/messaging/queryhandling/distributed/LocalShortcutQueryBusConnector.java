@@ -33,29 +33,22 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A {@link QueryBusConnector} that offers a "local shortcut": for point-to-point queries matching a
- * {@link LocalQueryDispatchPredicate}, and for which the local segment subscribed a handler, the query is handed to the
- * local segment directly instead of being {@link #query(QueryMessage, ProcessingContext) routed} through the wrapped
- * connector.
+ * A {@link QueryBusConnector} that offers a "local shortcut".
  * <p>
- * The shortcut reuses the very same local-handling path that the {@link DistributedQueryBus} exposes to incoming,
- * remotely-routed queries: the {@link Handler} registered through {@link #onIncomingQuery(Handler)}. A short-cut query
- * therefore behaves exactly as if it had been routed to this segment - same handler invocation, same response handling
- * - only without leaving the JVM. Because this connector wraps the payload-converting connector (rather than the other
- * way around), the shortcut also avoids the payload serialization round-trip.
+ * This shortcut triggers for
+ * {@link org.axonframework.messaging.queryhandling.QueryBus#query(QueryMessage, ProcessingContext) point-to-point
+ * queries} matching a {@link LocalQueryDispatchPredicate}, and for which the local segment subscribed a handler, the
+ * query is handed to the local segment directly instead of being {@link #query(QueryMessage, ProcessingContext) routed}
+ * through the wrapped connector. Furthermore, the shortcut only activates when the local segment can actually handle
+ * the command, tracked through the {@link #subscribe(QualifiedName)}/{@link #unsubscribe(QualifiedName)} calls this
+ * connector observes.
  * <p>
- * Because short-cut queries are handled through this same {@link Handler}, they are queued onto and executed by the
- * same bounded, priority-ordered worker pool as queries arriving from remote segments. A burst of locally-preferred
- * queries is therefore subject to the same back-pressure and cannot flood the local segment beyond what it would
- * already accept from remote traffic.
+ * Short-cut queries are handled through the same {@link QueryBusConnector.Handler} as any other
+ * {@code QueryBusConnector}. As such, they are queued onto and executed by the same bounded, priority-ordered worker
+ * pool as commands arriving from remote segments. A burst of locally-preferred commands is therefore subject to the
+ * same back-pressure and cannot flood the local segment beyond what it would already accept from remote traffic.
  * <p>
- * The shortcut only kicks in when the local segment can actually handle the query, tracked through the
- * {@link #subscribe(QualifiedName)}/{@link #unsubscribe(QualifiedName)} calls this connector observes. When the query's
- * {@link QueryMessage#type() type} is not locally subscribed, the query is routed through the wrapped connector as
- * usual, regardless of the predicate. This prevents a locally-preferred query that this node does not handle from
- * failing instead of being routed to a segment that does.
- * <p>
- * The shortcut applies to point-to-point {@link #query(QueryMessage, ProcessingContext) queries} only.
+ * The shortcut applies to point-to-point {@link #query(QueryMessage, ProcessingContext) queries} <b>only</b>.
  * {@link #subscriptionQuery(QueryMessage, ProcessingContext, int) Subscription queries} are always routed through the
  * wrapped connector, as their update registrations must be coordinated across all segments.
  *
@@ -66,46 +59,49 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class LocalShortcutQueryBusConnector extends DelegatingQueryBusConnector {
 
-    private final LocalQueryDispatchPredicate localDispatchPredicate;
-    private final Set<QualifiedName> localSubscriptions = ConcurrentHashMap.newKeySet();
+    private final LocalQueryDispatchPredicate shortcutPredicate;
+    private final Set<QualifiedName> subscriptions = ConcurrentHashMap.newKeySet();
 
     private volatile @Nullable Handler localHandler;
 
     /**
-     * Initialize the connector to delegate to the given {@code delegate}, taking a local shortcut for queries accepted
-     * by the given {@code localDispatchPredicate} that are also handled by the local segment.
+     * Initialize a connector with the given {@code delegate}, using the given {@code shortcutPredicate} to decide
+     * whether to shortcut a query yes or no.
      *
-     * @param delegate               the {@link QueryBusConnector} to delegate to when not querying locally
-     * @param localDispatchPredicate the predicate deciding whether a query should be dispatched to the local segment
-     *                               directly
+     * @param delegate          the {@link QueryBusConnector} to delegate to when not querying locally
+     * @param shortcutPredicate the predicate deciding whether a query should be dispatched to the local segment
+     *                          directly
      */
     public LocalShortcutQueryBusConnector(QueryBusConnector delegate,
-                                          LocalQueryDispatchPredicate localDispatchPredicate) {
+                                          LocalQueryDispatchPredicate shortcutPredicate) {
         super(delegate);
-        this.localDispatchPredicate =
-                Objects.requireNonNull(localDispatchPredicate, "The localDispatchPredicate must not be null.");
+        this.shortcutPredicate = Objects.requireNonNull(
+                shortcutPredicate, "The LocalQueryDispatchPredicate must not be null."
+        );
     }
 
     @Override
     public MessageStream<QueryResponseMessage> query(QueryMessage query, @Nullable ProcessingContext context) {
         Handler handler = this.localHandler;
+
         if (handler != null
-                && localSubscriptions.contains(query.type().qualifiedName())
-                && localDispatchPredicate.shouldDispatchLocally(query, context)) {
+                && subscriptions.contains(query.type().qualifiedName())
+                && shortcutPredicate.shouldDispatchLocally(query, context)) {
             return handler.query(query);
         }
+
         return super.query(query, context);
     }
 
     @Override
     public CompletableFuture<Void> subscribe(QualifiedName name) {
-        localSubscriptions.add(name);
+        subscriptions.add(name);
         return super.subscribe(name);
     }
 
     @Override
     public boolean unsubscribe(QualifiedName name) {
-        localSubscriptions.remove(name);
+        subscriptions.remove(name);
         return super.unsubscribe(name);
     }
 
@@ -118,7 +114,7 @@ public class LocalShortcutQueryBusConnector extends DelegatingQueryBusConnector 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeWrapperOf(delegate);
-        descriptor.describeProperty("localDispatchPredicate", localDispatchPredicate);
-        descriptor.describeProperty("localSubscriptions", localSubscriptions);
+        descriptor.describeProperty("shortcutPredicate", shortcutPredicate);
+        descriptor.describeProperty("subscriptions", subscriptions);
     }
 }

@@ -32,27 +32,18 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A {@link CommandBusConnector} that offers a "local shortcut": for commands matching a
- * {@link LocalCommandDispatchPredicate}, and for which the local segment subscribed a handler, the command is handed to
- * the local segment directly instead of being {@link #dispatch(CommandMessage, ProcessingContext) dispatched} through
- * the wrapped connector.
+ * A {@link CommandBusConnector} that offers a "local shortcut".
  * <p>
- * The shortcut reuses the very same local-handling path that the {@link DistributedCommandBus} exposes to incoming,
- * remotely-routed commands: the {@link Handler} registered through {@link #onIncomingCommand(Handler)}. A short-cut
- * command therefore behaves exactly as if it had been routed to this segment - same handler invocation, same result
- * handling - only without leaving the JVM. Because this connector wraps the payload-converting connector (rather than
- * the other way around), the shortcut also avoids the payload serialization round-trip.
+ * This shortcut triggers for commands matching a {@link LocalCommandDispatchPredicate}, and for which the local segment
+ * subscribed a handler, the command is handed to the local segment directly instead of being
+ * {@link #dispatch(CommandMessage, ProcessingContext) dispatched} through the wrapped connector. Furthermore, the
+ * shortcut only activates when the local segment can actually handle the command, tracked through the
+ * {@link #subscribe(QualifiedName, int)}/{@link #unsubscribe(QualifiedName)} calls this connector observes.
  * <p>
- * Because short-cut commands are handled through this same {@link Handler}, they are queued onto and executed by the
- * same bounded, priority-ordered worker pool as commands arriving from remote segments. A burst of locally-preferred
- * commands is therefore subject to the same back-pressure and cannot flood the local segment beyond what it would
- * already accept from remote traffic.
- * <p>
- * The shortcut only kicks in when the local segment can actually handle the command, tracked through the
- * {@link #subscribe(QualifiedName, int)}/{@link #unsubscribe(QualifiedName)} calls this connector observes. When the
- * command's {@link CommandMessage#type() type} is not locally subscribed, the command is routed through the wrapped
- * connector as usual, regardless of the predicate. This prevents a locally-preferred command that this node does not
- * handle from failing instead of being routed to a segment that does.
+ * Short-cut commands are handled through the same {@link Handler} as any other {@code CommandBusConnector}. As such,
+ * they are queued onto and executed by the same bounded, priority-ordered worker pool as commands arriving from remote
+ * segments. A burst of locally-preferred commands is therefore subject to the same back-pressure and cannot flood the
+ * local segment beyond what it would already accept from remote traffic.
  *
  * @author Allard Buijze
  * @see LocalCommandDispatchPredicate
@@ -61,40 +52,42 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class LocalShortcutCommandBusConnector extends DelegatingCommandBusConnector {
 
-    private final LocalCommandDispatchPredicate localDispatchPredicate;
-    private final Set<QualifiedName> localSubscriptions = ConcurrentHashMap.newKeySet();
+    private final LocalCommandDispatchPredicate shortcutPredicate;
+    private final Set<QualifiedName> subscriptions = ConcurrentHashMap.newKeySet();
 
     private volatile @Nullable Handler localHandler;
 
     /**
-     * Initialize the connector to delegate to the given {@code delegate}, taking a local shortcut for commands accepted
-     * by the given {@code localDispatchPredicate} that are also handled by the local segment.
+     * Initialize a connector with the given {@code delegate}, using the given {@code shortcutPredicate} to decide
+     * whether to shortcut a command yes or no.
      *
-     * @param delegate               the {@link CommandBusConnector} to delegate to when not dispatching locally
-     * @param localDispatchPredicate the predicate deciding whether a command should be dispatched to the local segment
-     *                               directly
+     * @param delegate          the {@link CommandBusConnector} to delegate to when not dispatching locally
+     * @param shortcutPredicate the predicate deciding whether a command should be dispatched to the local segment
+     *                          directly
      */
     public LocalShortcutCommandBusConnector(CommandBusConnector delegate,
-                                            LocalCommandDispatchPredicate localDispatchPredicate) {
+                                            LocalCommandDispatchPredicate shortcutPredicate) {
         super(delegate);
-        this.localDispatchPredicate =
-                Objects.requireNonNull(localDispatchPredicate, "The localDispatchPredicate must not be null.");
+        this.shortcutPredicate = Objects.requireNonNull(
+                shortcutPredicate, "The LocalCommandDispatchPredicate must not be null."
+        );
     }
 
     @Override
     public CompletableFuture<CommandResultMessage> dispatch(CommandMessage command,
                                                             @Nullable ProcessingContext processingContext) {
         Handler handler = this.localHandler;
+
         if (handler != null
-                && localSubscriptions.contains(command.type().qualifiedName())
-                && localDispatchPredicate.shouldDispatchLocally(command, processingContext)) {
+                && subscriptions.contains(command.type().qualifiedName())
+                && shortcutPredicate.shouldDispatchLocally(command, processingContext)) {
             return dispatchLocally(command, handler);
         }
+
         return super.dispatch(command, processingContext);
     }
 
-    private static CompletableFuture<CommandResultMessage> dispatchLocally(CommandMessage command,
-                                                                           Handler handler) {
+    private static CompletableFuture<CommandResultMessage> dispatchLocally(CommandMessage command, Handler handler) {
         CompletableFuture<CommandResultMessage> result = new CompletableFuture<>();
         handler.handle(command, new ResultCallback() {
             @Override
@@ -112,13 +105,13 @@ public class LocalShortcutCommandBusConnector extends DelegatingCommandBusConnec
 
     @Override
     public CompletableFuture<Void> subscribe(QualifiedName commandName, int loadFactor) {
-        localSubscriptions.add(commandName);
+        subscriptions.add(commandName);
         return super.subscribe(commandName, loadFactor);
     }
 
     @Override
     public boolean unsubscribe(QualifiedName commandName) {
-        localSubscriptions.remove(commandName);
+        subscriptions.remove(commandName);
         return super.unsubscribe(commandName);
     }
 
@@ -131,7 +124,7 @@ public class LocalShortcutCommandBusConnector extends DelegatingCommandBusConnec
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeWrapperOf(delegate);
-        descriptor.describeProperty("localDispatchPredicate", localDispatchPredicate);
-        descriptor.describeProperty("localSubscriptions", localSubscriptions);
+        descriptor.describeProperty("shortcutPredicate", shortcutPredicate);
+        descriptor.describeProperty("subscriptions", subscriptions);
     }
 }

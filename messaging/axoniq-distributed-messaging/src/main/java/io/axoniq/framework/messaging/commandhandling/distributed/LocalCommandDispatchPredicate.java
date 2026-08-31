@@ -25,16 +25,15 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Predicate deciding whether a {@link CommandMessage} that is about to be dispatched through a
- * {@link CommandBusConnector} should be handled by the local segment directly - taking a "local shortcut" - instead of
- * being routed by the connector, which may hand the command to a different segment.
+ * {@link CommandBusConnector} should be handled by the local segment directly (taking a "local shortcut") instead of
+ * being routed by the connector, which might hand the command to a different segment.
  * <p>
- * Register an implementation as a component to activate the {@link LocalShortcutCommandBusConnector}. The predicate is
- * consulted for every outgoing dispatch, but only takes effect when the local segment actually subscribed a handler for
- * the command; when it did not, the command is routed as usual regardless of this predicate's outcome.
+ * Registering an implementation of this functional interface activates the {@link LocalShortcutCommandBusConnector}
+ * automatically.
  * <p>
- * Both the {@code command} and the (nullable) {@link ProcessingContext} of the dispatch are provided, allowing the
- * decision to be based on the command's payload, {@link CommandMessage#type() type}, metadata, or a flag placed on the
- * {@code ProcessingContext} by the dispatcher.
+ * The predicate is consulted for every outgoing dispatch, but only takes effect when the local segment actually
+ * subscribed a handler for the command. When it did not, the command is routed as usual regardless of this predicate's
+ * outcome.
  *
  * @author Allard Buijze
  * @see LocalShortcutCommandBusConnector

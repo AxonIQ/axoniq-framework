@@ -25,18 +25,17 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Predicate deciding whether a {@link QueryMessage} that is about to be dispatched through a {@link QueryBusConnector}
- * should be handled by the local segment directly - taking a "local shortcut" - instead of being routed by the
- * connector, which may hand the query to a different segment.
+ * should be handled by the local segment directly (taking a "local shortcut") instead of being routed by the connector,
+ * which may hand the query to a different segment.
  * <p>
- * Register an implementation as a component to activate the {@link LocalShortcutQueryBusConnector}. The predicate is
- * consulted for every outgoing direct (point-to-point) query, but only takes effect when the local segment actually
- * subscribed a handler for the query. When it did not, the query is routed as usual regardless of this predicate's
- * outcome. Subscription queries are never shortcut and never consult this predicate as their update registrations must
- * be coordinated across all nodes.
+ * Registering an implementation of this functional interface activates the {@link LocalShortcutQueryBusConnector}
+ * automatically.
  * <p>
- * Both the {@code query} and the (nullable) {@link ProcessingContext} of the dispatch are provided, allowing the
- * decision to be based on the query's payload, {@link QueryMessage#type() type}, metadata, or a flag placed on the
- * {@code ProcessingContext} by the dispatcher.
+ * The predicate is consulted for every outgoing
+ * {@link org.axonframework.messaging.queryhandling.QueryBus#query(QueryMessage, ProcessingContext) direct query}, but
+ * only takes effect when the local segment actually subscribed a handler for the query. When it did not, the query is
+ * routed as usual regardless of this predicate's outcome. Subscription queries are <b>never</b> shortcut and never
+ * consult this predicate as their update registrations must be coordinated across all nodes.
  *
  * @author Allard Buijze
  * @see LocalShortcutQueryBusConnector
