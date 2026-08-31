@@ -27,6 +27,7 @@ import org.axonframework.messaging.commandhandling.CommandBus;
 import org.axonframework.messaging.commandhandling.CommandHandler;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
+import org.axonframework.messaging.commandhandling.GenericCommandResultMessage;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.slf4j.Logger;
@@ -92,8 +93,8 @@ public class DistributedCommandBus implements CommandBus {
     }
 
     @Override
-    public CompletableFuture<@Nullable CommandResultMessage> dispatch(CommandMessage command,
-                                                                      @Nullable ProcessingContext processingContext) {
+    public CompletableFuture<CommandResultMessage> dispatch(CommandMessage command,
+                                                            @Nullable ProcessingContext processingContext) {
         return connector.dispatch(command, processingContext);
     }
 
@@ -155,9 +156,13 @@ public class DistributedCommandBus implements CommandBus {
 
         private void handleSuccess(CommandMessage commandMessage,
                                    CommandBusConnector.ResultCallback callback,
-                                   CommandResultMessage resultMessage) {
+                                   @Nullable CommandResultMessage resultMessage) {
             logger.debug("Successfully processed command [{}] with result [{}]", commandMessage.type(), resultMessage);
-            callback.onSuccess(resultMessage);
+            callback.onSuccess(
+                    resultMessage != null
+                            ? resultMessage
+                            : new GenericCommandResultMessage(commandMessage.type(), (Object) null)
+            );
         }
     }
 }

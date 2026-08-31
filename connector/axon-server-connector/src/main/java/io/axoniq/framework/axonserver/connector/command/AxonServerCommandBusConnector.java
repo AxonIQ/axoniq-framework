@@ -113,15 +113,15 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
     }
 
     @Override
-    public CompletableFuture<@Nullable CommandResultMessage> dispatch(CommandMessage command,
-                                                                      @Nullable ProcessingContext processingContext) {
+    public CompletableFuture<CommandResultMessage> dispatch(CommandMessage command,
+                                                            @Nullable ProcessingContext processingContext) {
         shutdownLatch.ifShuttingDown("Cannot dispatch new commands as this bus is being shutdown");
         try (ShutdownLatch.ActivityHandle commandInTransit = shutdownLatch.registerActivity()) {
             return connection.commandChannel()
                              .sendCommand(CommandConverter.convertCommandMessage(command, clientId, componentName))
                              .thenCompose(commandResponse -> CommandConverter.convertCommandResponse(
-                                     commandResponse,
-                                     converter))
+                                     commandResponse, converter, command.type()
+                             ))
                              .whenComplete((commandResponse, throwable) -> commandInTransit.end());
         }
     }
@@ -233,10 +233,8 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
         return new CommandBusConnector.ResultCallback() {
 
             @Override
-            public void onSuccess(@Nullable CommandResultMessage resultMessage) {
-                logger.debug("Command [{}] completed successfully with result [{}]",
-                             command.getName(),
-                             resultMessage);
+            public void onSuccess(CommandResultMessage resultMessage) {
+                logger.debug("Command [{}] completed successfully with result [{}]", command.getName(), resultMessage);
                 result.complete(CommandConverter.convertResultMessage(resultMessage, command.getMessageIdentifier()));
             }
 

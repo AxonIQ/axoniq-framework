@@ -27,6 +27,7 @@ import org.axonframework.messaging.commandhandling.GenericCommandResultMessage;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
@@ -79,7 +80,7 @@ class LocalShortcutCommandBusConnectorTest {
             localHandler.resultToReturn = resultMessage;
 
             // when
-            CompletableFuture<@Nullable CommandResultMessage> result = connector.dispatch(command, null);
+            CompletableFuture<CommandResultMessage> result = connector.dispatch(command, null);
 
             // then
             assertThat(result).isCompletedWithValue(resultMessage);
@@ -98,7 +99,7 @@ class LocalShortcutCommandBusConnectorTest {
             localHandler.errorToRaise = failure;
 
             // when
-            CompletableFuture<@Nullable CommandResultMessage> result = connector.dispatch(command, null);
+            CompletableFuture<CommandResultMessage> result = connector.dispatch(command, null);
 
             // then
             assertThat(result).isCompletedExceptionally();
@@ -238,33 +239,35 @@ class LocalShortcutCommandBusConnectorTest {
      */
     private static class RecordingCommandBusConnector implements CommandBusConnector {
 
-        private final CompletableFuture<@Nullable CommandResultMessage> dispatchResult = new CompletableFuture<>();
+        private final CompletableFuture<CommandResultMessage> dispatchResult = new CompletableFuture<>();
         private final AtomicInteger dispatchCount = new AtomicInteger();
         private final List<QualifiedName> subscribed = new ArrayList<>();
         private final List<QualifiedName> unsubscribed = new ArrayList<>();
         private Handler incomingHandler;
 
+        @NonNull
         @Override
-        public CompletableFuture<@Nullable CommandResultMessage> dispatch(CommandMessage command,
-                                                                          @Nullable ProcessingContext processingContext) {
+        public CompletableFuture<CommandResultMessage> dispatch(@NonNull CommandMessage command,
+                                                                @Nullable ProcessingContext processingContext) {
             dispatchCount.incrementAndGet();
             return dispatchResult;
         }
 
+        @NonNull
         @Override
-        public CompletableFuture<Void> subscribe(QualifiedName commandName, int loadFactor) {
+        public CompletableFuture<Void> subscribe(@NonNull QualifiedName commandName, int loadFactor) {
             subscribed.add(commandName);
             return CompletableFuture.completedFuture(null);
         }
 
         @Override
-        public boolean unsubscribe(QualifiedName commandName) {
+        public boolean unsubscribe(@NonNull QualifiedName commandName) {
             unsubscribed.add(commandName);
             return true;
         }
 
         @Override
-        public void onIncomingCommand(Handler handler) {
+        public void onIncomingCommand(@NonNull Handler handler) {
             this.incomingHandler = handler;
         }
 
@@ -281,11 +284,12 @@ class LocalShortcutCommandBusConnectorTest {
     private static class RecordingHandler implements CommandBusConnector.Handler {
 
         private final AtomicInteger handleCount = new AtomicInteger();
-        private @Nullable CommandResultMessage resultToReturn;
+        private CommandResultMessage resultToReturn;
         private @Nullable Throwable errorToRaise;
 
         @Override
-        public void handle(CommandMessage commandMessage, CommandBusConnector.ResultCallback callback) {
+        public void handle(@NonNull CommandMessage commandMessage,
+                           CommandBusConnector.@NonNull ResultCallback callback) {
             handleCount.incrementAndGet();
             if (errorToRaise != null) {
                 callback.onError(errorToRaise);
@@ -304,32 +308,32 @@ class LocalShortcutCommandBusConnectorTest {
         private final Map<String, Object> properties = new HashMap<>();
 
         @Override
-        public void describeProperty(String name, @Nullable Object object) {
+        public void describeProperty(@NonNull String name, @Nullable Object object) {
             properties.put(name, object);
         }
 
         @Override
-        public void describeProperty(String name, @Nullable Collection<?> collection) {
+        public void describeProperty(@NonNull String name, @Nullable Collection<?> collection) {
             properties.put(name, collection);
         }
 
         @Override
-        public void describeProperty(String name, @Nullable Map<?, ?> map) {
+        public void describeProperty(@NonNull String name, @Nullable Map<?, ?> map) {
             properties.put(name, map);
         }
 
         @Override
-        public void describeProperty(String name, @Nullable String value) {
+        public void describeProperty(@NonNull String name, @Nullable String value) {
             properties.put(name, value);
         }
 
         @Override
-        public void describeProperty(String name, @Nullable Long value) {
+        public void describeProperty(@NonNull String name, @Nullable Long value) {
             properties.put(name, value);
         }
 
         @Override
-        public void describeProperty(String name, @Nullable Boolean value) {
+        public void describeProperty(@NonNull String name, @Nullable Boolean value) {
             properties.put(name, value);
         }
     }

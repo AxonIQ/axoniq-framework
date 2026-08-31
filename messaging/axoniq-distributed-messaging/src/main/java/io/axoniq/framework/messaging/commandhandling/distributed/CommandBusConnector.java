@@ -35,9 +35,6 @@ import java.util.function.BiConsumer;
  * <p>
  * One connector can be wrapped with another through the {@link DelegatingCommandBusConnector}, upon which more
  * functionality can be added, such as payload conversion or conversion.
- * <p>
- * Implementations must be prepared for {@link #dispatch(CommandMessage, ProcessingContext)} to complete with a
- * {@code null} {@link CommandResultMessage}, as a command handler may legitimately produce no result.
  *
  * @author Allard Buijze
  * @author Mitchell Herrijgers
@@ -49,13 +46,12 @@ public interface CommandBusConnector extends DescribableComponent {
     /**
      * Dispatches the given {@code command} to the appropriate command bus, which may be local or remote.
      *
-     * @param command           The command message to dispatch.
-     * @param processingContext The processing context for the command.
-     * @return A {@link CompletableFuture} that will complete with the result of the command handling. The result may be
-     * {@code null} when the command handler produced no result message.
+     * @param command           the command message to dispatch
+     * @param processingContext the processing context for the command
+     * @return a {@link CompletableFuture} that will complete with the result of the command handling
      */
-    CompletableFuture<@Nullable CommandResultMessage> dispatch(CommandMessage command,
-                                                               @Nullable ProcessingContext processingContext);
+    CompletableFuture<CommandResultMessage> dispatch(CommandMessage command,
+                                                     @Nullable ProcessingContext processingContext);
 
     /**
      * Subscribes to a command with the given {@code commandName} and a {@code loadFactor}.
@@ -116,15 +112,16 @@ public interface CommandBusConnector extends DescribableComponent {
         /**
          * Called when the command processing is successful.
          *
-         * @param resultMessage The result message containing the outcome of the command processing. If the message
-         *                      handling yielded no result message, a {@code null} should be passed.
+         * @param resultMessage the result message containing the outcome of the command processing. If the message
+         *                      handling yielded no result message, a {@link CommandResultMessage} with a {@code null}
+         *                      {@link CommandResultMessage#payload()} is expected
          */
-        void onSuccess(@Nullable CommandResultMessage resultMessage);
+        void onSuccess(CommandResultMessage resultMessage);
 
         /**
          * Called when an error occurs during command processing.
          *
-         * @param cause The exception that caused the error.
+         * @param cause the exception that caused the error
          */
         void onError(Throwable cause);
     }

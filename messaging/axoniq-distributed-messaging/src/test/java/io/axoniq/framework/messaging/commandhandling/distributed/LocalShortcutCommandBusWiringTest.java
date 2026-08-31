@@ -31,6 +31,7 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
@@ -138,25 +139,27 @@ class LocalShortcutCommandBusWiringTest {
 
         private final AtomicInteger dispatchCount = new AtomicInteger();
 
+        @NonNull
         @Override
-        public CompletableFuture<@Nullable CommandResultMessage> dispatch(CommandMessage command,
-                                                                          @Nullable ProcessingContext processingContext) {
+        public CompletableFuture<CommandResultMessage> dispatch(@NonNull CommandMessage command,
+                                                                @Nullable ProcessingContext processingContext) {
             dispatchCount.incrementAndGet();
+            return CompletableFuture.completedFuture(new GenericCommandResultMessage(command.type(), (Object) null));
+        }
+
+        @NonNull
+        @Override
+        public CompletableFuture<Void> subscribe(@NonNull QualifiedName commandName, int loadFactor) {
             return CompletableFuture.completedFuture(null);
         }
 
         @Override
-        public CompletableFuture<Void> subscribe(QualifiedName commandName, int loadFactor) {
-            return CompletableFuture.completedFuture(null);
-        }
-
-        @Override
-        public boolean unsubscribe(QualifiedName commandName) {
+        public boolean unsubscribe(@NonNull QualifiedName commandName) {
             return true;
         }
 
         @Override
-        public void onIncomingCommand(Handler handler) {
+        public void onIncomingCommand(@NonNull Handler handler) {
             // No remote inbound handling needed for this test.
         }
 

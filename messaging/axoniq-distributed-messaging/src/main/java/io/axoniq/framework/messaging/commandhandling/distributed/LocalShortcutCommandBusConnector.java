@@ -82,8 +82,8 @@ public class LocalShortcutCommandBusConnector extends DelegatingCommandBusConnec
     }
 
     @Override
-    public CompletableFuture<@Nullable CommandResultMessage> dispatch(CommandMessage command,
-                                                                      @Nullable ProcessingContext processingContext) {
+    public CompletableFuture<CommandResultMessage> dispatch(CommandMessage command,
+                                                            @Nullable ProcessingContext processingContext) {
         Handler handler = this.localHandler;
         if (handler != null
                 && localSubscriptions.contains(command.type().qualifiedName())
@@ -93,12 +93,12 @@ public class LocalShortcutCommandBusConnector extends DelegatingCommandBusConnec
         return super.dispatch(command, processingContext);
     }
 
-    private static CompletableFuture<@Nullable CommandResultMessage> dispatchLocally(CommandMessage command,
-                                                                                     Handler handler) {
-        CompletableFuture<@Nullable CommandResultMessage> result = new CompletableFuture<>();
+    private static CompletableFuture<CommandResultMessage> dispatchLocally(CommandMessage command,
+                                                                           Handler handler) {
+        CompletableFuture<CommandResultMessage> result = new CompletableFuture<>();
         handler.handle(command, new ResultCallback() {
             @Override
-            public void onSuccess(@Nullable CommandResultMessage resultMessage) {
+            public void onSuccess(CommandResultMessage resultMessage) {
                 result.complete(resultMessage);
             }
 
