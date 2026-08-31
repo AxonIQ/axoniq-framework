@@ -356,10 +356,16 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
         @Override
         public CompletableFuture<Void> sendUpdate(SubscriptionQueryUpdateMessage update) {
             if (!updates.offer(new GenericQueryResponseMessage(update), Context.empty())) {
-                return CompletableFuture.failedFuture(new IllegalStateException(
+                IllegalStateException cause = new IllegalStateException(
                         ("This member produced more updates to query [%s] than the subscriber consumed. Consume them "
                                 + "sooner, or raise the update buffer size.").formatted(query.type())
-                ));
+                );
+                // Ends the subscription rather than only reporting back to the emitter. An update that was produced
+                // and not carried is one the subscriber will never see, and a subscription that continued would leave
+                // it holding some of the updates and the belief it has all of them -- which is what a member
+                // outpacing this application over the wire fails the subscription for.
+                updates.sealExceptionally(cause);
+                return CompletableFuture.failedFuture(cause);
             }
             return FutureUtils.emptyCompletedFuture();
         }

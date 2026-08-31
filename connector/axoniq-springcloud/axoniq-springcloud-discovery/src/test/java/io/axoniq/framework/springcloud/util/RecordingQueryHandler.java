@@ -28,6 +28,7 @@ import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 /**
  * A {@link QueryBusConnector.Handler} recording the queries handed to it, answering with what it was told to.
@@ -42,6 +43,8 @@ public class RecordingQueryHandler implements QueryBusConnector.Handler {
 
     private volatile List<QueryResponseMessage> responses = List.of();
     private volatile Throwable cause;
+    private volatile Consumer<QueryBusConnector.UpdateCallback> whileRegistering = callback -> {
+    };
 
     public RecordingQueryHandler answeringWith(QueryResponseMessage... responses) {
         this.responses = List.of(responses);
@@ -72,6 +75,7 @@ public class RecordingQueryHandler implements QueryBusConnector.Handler {
                                               QueryBusConnector.UpdateCallback updateCallback) {
         Subscription subscription = new Subscription(subscriptionQueryMessage, updateCallback);
         subscriptions.add(subscription);
+        whileRegistering.accept(updateCallback);
         return () -> {
             subscription.cancelled = true;
             cancelled.add(subscription);
@@ -91,6 +95,15 @@ public class RecordingQueryHandler implements QueryBusConnector.Handler {
      */
     public List<Subscription> cancelledSubscriptions() {
         return cancelled.stream().filter(Subscription::cancelled).toList();
+    }
+
+    /**
+     * Runs the given {@code action} while an update handler is being registered, as a handler emitting the state it
+     * is asked to watch does, before whatever registers it has wired up a reader.
+     */
+    public RecordingQueryHandler whileRegistering(Consumer<QueryBusConnector.UpdateCallback> action) {
+        this.whileRegistering = action;
+        return this;
     }
 
     /**

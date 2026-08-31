@@ -632,6 +632,27 @@ class SpringCloudQueryBusConnectorTest {
         }
 
         @Test
+        void failWhenThisMembersHandlerOutpacesTheSubscriber() {
+            // given a handler on this member emitting, while it registers, more updates than the subscriber left
+            // room for -- before anything is reading what it produces
+            testSubject.subscribe(FIND_COURSE);
+            handler.whileRegistering(callback -> {
+                callback.sendUpdate(update("update-1"));
+                callback.sendUpdate(update("update-2"));
+            });
+
+            // when
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 1);
+
+            // then an update produced and not carried is one the subscriber will never see, so the subscription ends
+            // rather than leaving it with some of the updates and the belief it has all of them, as a member
+            // outpacing this application over the wire does
+            drain(responses);
+            assertThat(responses.error()).isPresent();
+            assertThat(responses.error().orElseThrow()).hasMessageContaining("raise the update buffer size");
+        }
+
+        @Test
         void releaseEverySubscriptionWhenTheStreamIsClosed() {
             // given
             remoteMemberHandlesTheQuery();
