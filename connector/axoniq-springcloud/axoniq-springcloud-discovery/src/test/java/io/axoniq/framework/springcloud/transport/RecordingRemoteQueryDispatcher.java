@@ -44,6 +44,8 @@ public class RecordingRemoteQueryDispatcher implements RemoteQueryDispatcher {
     private volatile Throwable cause;
     private volatile MessageStream<QueryResponseMessage> stream;
     private volatile boolean opensImmediately = true;
+    private volatile Runnable whileOpening = () -> {
+    };
 
     public RecordingRemoteQueryDispatcher answeringWith(QueryResponseMessage... responses) {
         this.responses = List.of(responses);
@@ -91,6 +93,7 @@ public class RecordingRemoteQueryDispatcher implements RemoteQueryDispatcher {
                                                                                  SubscriptionListener listener) {
         Subscription subscription = new Subscription(member, query, updateBufferSize, listener);
         subscriptions.add(subscription);
+        whileOpening.run();
         Throwable failure = cause;
         if (failure != null) {
             return MessageStream.failed(failure);
@@ -107,6 +110,15 @@ public class RecordingRemoteQueryDispatcher implements RemoteQueryDispatcher {
      */
     public RecordingRemoteQueryDispatcher openingOnDemand() {
         this.opensImmediately = false;
+        return this;
+    }
+
+    /**
+     * Runs the given {@code action} each time a subscription is opened, so that a test can change the cluster while a
+     * subscription is still reaching the members it was told to reach.
+     */
+    public RecordingRemoteQueryDispatcher whileOpening(Runnable action) {
+        this.whileOpening = action;
         return this;
     }
 

@@ -457,7 +457,12 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                     "No member of the cluster handles queries of type [" + query.type() + "]."
             ));
         }
-        Member answering = registry.findQueryDestination(queryName).orElseGet(members::getFirst);
+        // Resolved against the members already snapshotted, rather than taken as whatever the registry answers now.
+        // A ring change between the two reads would otherwise name a member no update stream is opened on, leaving
+        // the initial result waiting on an opening that never comes.
+        Member answering = registry.findQueryDestination(queryName)
+                                   .filter(members::contains)
+                                   .orElseGet(members::getFirst);
 
         entitlementManager.claimMessage(SpringCloudAxoniqAddon.IDENTIFIER, EntitlementMessageType.QUERY, 1);
 
@@ -569,22 +574,39 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
                                          List<Member> subscribedTo,
                                          SubscriptionUpdates updates) {
         Set<Member> known = Set.copyOf(subscribedTo);
-        return registry.onMembershipChanged(ring -> {
-            List<Member> current = registry.findAllQueryDestinations(queryName);
-            for (Member member : current) {
-                if (!known.contains(member)) {
-                    logger.info("Member [{}] started handling query [{}] while a subscription for it was active; "
-                                        + "failing that subscription.", member.name(), query.type());
-                    updates.fail(new SubscriptionQueryMembersChangedException(
-                            ("Member [%s] started handling query [%s] after this subscription began, so the updates "
-                                    + "it emitted before being subscribed to are lost. Establish the subscription "
-                                    + "query again to receive a complete stream.")
-                                    .formatted(member.name(), query.type())
-                    ));
-                    return;
-                }
+        Registration watch =
+                registry.onMembershipChanged(ring -> failWhenAMemberJoined(query, queryName, known, updates));
+        // Checked once more now that the watch is in place. Opening a subscription on every member takes as long as
+        // reaching them all does, and a member that started advertising the query in that time changed the ring
+        // before there was a listener to hear it -- so the watch alone would never report it.
+        failWhenAMemberJoined(query, queryName, known, updates);
+        return watch;
+    }
+
+    /**
+     * Fails the subscription if any member now advertises the query that was not among those subscribed to.
+     * <p>
+     * Failing twice is harmless: the merged updates are sealed once, and sealing a stream that has already ended does
+     * nothing. So the watch and the check that follows registering it may both report the same member.
+     */
+    private void failWhenAMemberJoined(QueryMessage query,
+                                       QualifiedName queryName,
+                                       Set<Member> known,
+                                       SubscriptionUpdates updates) {
+        List<Member> current = registry.findAllQueryDestinations(queryName);
+        for (Member member : current) {
+            if (!known.contains(member)) {
+                logger.info("Member [{}] started handling query [{}] while a subscription for it was active; "
+                                    + "failing that subscription.", member.name(), query.type());
+                updates.fail(new SubscriptionQueryMembersChangedException(
+                        ("Member [%s] started handling query [%s] after this subscription began, so the updates "
+                                + "it emitted before being subscribed to are lost. Establish the subscription "
+                                + "query again to receive a complete stream.")
+                                .formatted(member.name(), query.type())
+                ));
+                return;
             }
-        });
+        }
     }
 
     private MessageStream<QueryResponseMessage> handleLocally(QueryMessage query) {

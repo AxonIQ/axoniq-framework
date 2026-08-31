@@ -45,6 +45,7 @@ import org.axonframework.messaging.queryhandling.QueryExecutionException;
 import org.axonframework.messaging.queryhandling.QueryMessage;
 import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
@@ -53,6 +54,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -147,6 +149,38 @@ class SpringCloudQueryBusConnectorTest {
         discoveryMode.answering(remoteInstance, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
         discoveryMode.answering(other, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
         registry.updateMemberships();
+    }
+
+    /**
+     * A registry that lets a member join in the instant between the two reads opening a subscription makes: the one
+     * resolving every member advertising the query, and the one resolving which of them answers the initial result.
+     */
+    private static final class JoiningBetweenResolutions extends SpringCloudMemberRegistry {
+
+        private final AtomicReference<@Nullable Runnable> pending = new AtomicReference<>();
+
+        private JoiningBetweenResolutions(RecordingDiscoveryClient discoveryClient,
+                                          TestServiceInstance localInstance,
+                                          RecordingCapabilityDiscoveryMode discoveryMode) {
+            super(discoveryClient, localInstance, discoveryMode);
+        }
+
+        /**
+         * Runs the given {@code action} once, right after the next resolution of every member advertising a query.
+         */
+        private void admitAfterResolvingAllDestinations(Runnable action) {
+            pending.set(action);
+        }
+
+        @Override
+        public List<Member> findAllQueryDestinations(QualifiedName queryName) {
+            List<Member> destinations = super.findAllQueryDestinations(queryName);
+            Runnable action = pending.getAndSet(null);
+            if (action != null) {
+                action.run();
+            }
+            return destinations;
+        }
     }
 
     /**
@@ -424,6 +458,61 @@ class SpringCloudQueryBusConnectorTest {
             // incomplete
             drain(responses);
             assertThat(responses.error()).containsInstanceOf(SubscriptionQueryMembersChangedException.class);
+        }
+
+        @Test
+        void failWhenAMemberStartsHandlingTheQueryWhileTheSubscriptionIsStillBeingOpened() {
+            // given a member that starts advertising the query while the other members are still being reached,
+            // which is a change no membership listener registered afterwards would ever hear
+            remoteMemberHandlesTheQuery();
+            dispatcher.whileOpening(() -> {
+                TestServiceInstance joining = TestServiceInstance.instance("university", "node-c", 8080);
+                discoveryClient.register("university", localInstance, remoteInstance, joining);
+                discoveryMode.answering(joining, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
+                registry.updateMemberships();
+            });
+
+            // when
+            MessageStream<QueryResponseMessage> responses = testSubject.subscriptionQuery(query(), null, 16);
+
+            // then the updates it emitted before being subscribed to are gone, however narrow the window it joined in
+            drain(responses);
+            assertThat(responses.error()).containsInstanceOf(SubscriptionQueryMembersChangedException.class);
+        }
+
+        @Test
+        void askAMemberItOpenedASubscriptionOnForTheInitialResult() {
+            // given a registry whose ring changes in the instant between resolving every member advertising the query
+            // and resolving the one to ask for the initial result
+            JoiningBetweenResolutions joining =
+                    new JoiningBetweenResolutions(discoveryClient, localInstance, discoveryMode);
+            SpringCloudQueryBusConnector connector = new SpringCloudQueryBusConnector(
+                    joining, new IncomingQueryGateway(() -> "node-a", null), dispatcher, null, entitlementManager
+            );
+            connector.onIncomingQuery(handler);
+            discoveryClient.register("university", localInstance, remoteInstance);
+            discoveryMode.answering(remoteInstance, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
+            joining.updateMemberships();
+            // Rotated on once, so that the member the rotation lands on next is the one about to join rather than the
+            // one already subscribed to. Without that, the two resolutions agree by luck and prove nothing.
+            joining.findQueryDestination(FIND_COURSE);
+            joining.admitAfterResolvingAllDestinations(() -> {
+                TestServiceInstance late = TestServiceInstance.instance("university", "node-c", 8080);
+                discoveryClient.register("university", localInstance, remoteInstance, late);
+                discoveryMode.answering(late, new MemberCapabilities(0, Set.of(), Set.of(FIND_COURSE)));
+                joining.updateMemberships();
+            });
+            dispatcher.answeringWith(response("initial-1"));
+
+            // when
+            MessageStream<QueryResponseMessage> responses = connector.subscriptionQuery(query(), null, 16);
+            drain(responses);
+
+            // then a member no update stream was opened on could never report its subscription registered, which
+            // would leave the initial result waiting on an opening that never comes
+            assertThat(dispatcher.dispatches()).hasSize(1);
+            assertThat(dispatcher.subscriptions()).extracting(subscription -> subscription.member().name())
+                                                  .contains(dispatcher.dispatches().getFirst().member().name());
         }
 
         @Test
