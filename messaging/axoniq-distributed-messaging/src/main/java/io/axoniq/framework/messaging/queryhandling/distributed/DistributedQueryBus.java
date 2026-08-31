@@ -59,7 +59,8 @@ import java.util.function.Supplier;
  * different segments of the {@code QueryBus}. Depending on the implementation used, each segment may run in a different
  * JVM.
  *
- * @author Steven van Beelen, Jan Galinski
+ * @author Jan Galinski
+ * @author Steven van Beelen
  * @since 5.0.0
  */
 public class DistributedQueryBus implements QueryBus {
@@ -79,10 +80,10 @@ public class DistributedQueryBus implements QueryBus {
      * {@link #subscribe(QualifiedName, QueryHandler) subscribing} handlers and the given {@code connector} to dispatch
      * and receive queries and query responses with, to and from different segments of the {@code QueryBus}.
      *
-     * @param localSegment  The local {@code QueryBus} used to subscribe handlers to.
-     * @param connector     The {@code QueryBusConnector} to dispatch and receive queries and query responses with.
-     * @param configuration The {@code DistributedQueryBusConfiguration} containing the
-     *                      {@link ExecutorService} for query processing.
+     * @param localSegment  the local {@code QueryBus} used to subscribe handlers to
+     * @param connector     the {@code QueryBusConnector} to dispatch and receive queries and query responses with
+     * @param configuration the {@code DistributedQueryBusConfiguration} containing the {@link ExecutorService} for
+     *                      query processing
      */
     public DistributedQueryBus(QueryBus localSegment,
                                QueryBusConnector connector,
