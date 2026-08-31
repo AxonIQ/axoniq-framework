@@ -100,21 +100,6 @@ class DistributedCommandBusTest {
     }
 
     @Test
-    void incomingCommandsFromAVoidHandlerReportANonNullResultWithNullPayload() {
-        testSubject.subscribe(testCommand.type().qualifiedName(),
-                              (command, context) -> MessageStream.<CommandResultMessage>empty());
-
-        CommandBusConnector.ResultCallback mockCallback = mock();
-        connector.handler.get().handle(testCommand, mockCallback);
-
-        await().untilAsserted(() -> verify(mockCallback).onSuccess(argThat(resultMessage ->
-                resultMessage != null
-                        && resultMessage.payload() == null
-                        && resultMessage.type().equals(testCommand.type())
-        )));
-    }
-
-    @Test
     void describeToMentionsConnector() {
         ComponentDescriptor mock = mock();
         testSubject.describeTo(mock);

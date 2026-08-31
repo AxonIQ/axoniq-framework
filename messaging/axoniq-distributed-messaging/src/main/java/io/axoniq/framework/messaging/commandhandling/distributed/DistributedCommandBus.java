@@ -156,13 +156,9 @@ public class DistributedCommandBus implements CommandBus {
 
         private void handleSuccess(CommandMessage commandMessage,
                                    CommandBusConnector.ResultCallback callback,
-                                   @Nullable CommandResultMessage resultMessage) {
+                                   CommandResultMessage resultMessage) {
             logger.debug("Successfully processed command [{}] with result [{}]", commandMessage.type(), resultMessage);
-            callback.onSuccess(
-                    resultMessage != null
-                            ? resultMessage
-                            : new GenericCommandResultMessage(commandMessage.type(), (Object) null)
-            );
+            callback.onSuccess(resultMessage);
         }
     }
 }
