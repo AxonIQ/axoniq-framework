@@ -28,7 +28,6 @@ import io.axoniq.workflow.runtime.execution.WorkflowCancellationService;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
-import io.axoniq.workflow.runtime.execution.WorkflowEngineReplaySupport;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowStore;
 import org.axonframework.common.annotation.Internal;
@@ -159,10 +158,8 @@ class SimpleWorkflowModule<C extends WorkflowContext>
                                                cfg.getComponent(UnitOfWorkFactory.class)
                                        ))
                                        .onStart(Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS, (config, engine) -> {
-                                           engine.setEngineSupportComponents(
-                                                   config.getComponent(WorkflowEngineReplaySupport.class),
-                                                   config.getComponent(WorkflowEngineCheckpointingSupport.class)
-                                           );
+                                           engine.setCheckpointingSupport(
+                                                   config.getComponent(WorkflowEngineCheckpointingSupport.class));
                                        })
             );
 

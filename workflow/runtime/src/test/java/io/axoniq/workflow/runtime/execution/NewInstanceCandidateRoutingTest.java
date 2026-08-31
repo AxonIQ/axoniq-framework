@@ -97,7 +97,6 @@ class NewInstanceCandidateRoutingTest {
     private WorkflowEngineSequencingPolicy routing;
     private WorkflowEngine engine;
     private InMemoryWorkflowExecutionRepository repository;
-    private WorkflowEngineReplaySupport replaySupport;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
     /**
@@ -120,10 +119,8 @@ class NewInstanceCandidateRoutingTest {
                                     mock(WorkflowCancellationService.class),
                                     mock(WorkflowStore.class),
                                     mock(UnitOfWorkFactory.class));
-        replaySupport = new WorkflowEngineReplaySupport(engine);
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(engine);
-        engine.setEngineSupportComponents(replaySupport, checkpointingSupport);
-        replaySupport.setInitialEngineTokens(token(0), token(STARTUP_LATEST_POSITION));
+        engine.setCheckpointingSupport(checkpointingSupport);
     }
 
     // ---------------------------------------------------------------------------------------------------------
@@ -151,7 +148,6 @@ class NewInstanceCandidateRoutingTest {
                 .as("each candidate must be started exactly once over all %d segments, by its owner alone",
                     SEGMENT_COUNT)
                 .containsExactlyInAnyOrder("alpha-1", "beta-1");
-        assertNoBodyStarted();
     }
 
     // ---------------------------------------------------------------------------------------------------------
@@ -302,7 +298,6 @@ class NewInstanceCandidateRoutingTest {
         assertThat(started)
                 .as("the healthy definition still starts exactly once, and the misconfigured one not at all")
                 .containsExactly("alpha-1");
-        assertNoBodyStarted();
     }
 
     @Test
@@ -415,7 +410,6 @@ class NewInstanceCandidateRoutingTest {
 
         assertThat(started).as("the broadcast reaches the owner, which is why widening after sequencing is safe")
                            .containsExactly("alpha-1");
-        assertNoBodyStarted();
     }
 
     /**
@@ -465,15 +459,6 @@ class NewInstanceCandidateRoutingTest {
         assertThat(started)
                 .as("only the highest version of each definition starts, and each of those exactly once")
                 .containsExactlyInAnyOrder("alpha-v2", "beta-v2");
-        assertNoBodyStarted();
-    }
-
-    private void assertNoBodyStarted() {
-        assertThat(startedExecutions)
-                .as("every segment is still behind the startup latest token, so the starts must be materialized "
-                            + "without their bodies running")
-                .isNotEmpty();
-        startedExecutions.forEach(execution -> verify(execution, never()).execute(any()));
     }
 
     private static BiPredicate<EventMessage, ProcessingContext> always() {

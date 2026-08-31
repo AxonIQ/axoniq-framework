@@ -118,8 +118,7 @@ class WorkflowEngineSegmentCallbackTest {
                                         cancellationService,
                                         workflowStore,
                                         mock(UnitOfWorkFactory.class));
-        engine.setEngineSupportComponents(new WorkflowEngineReplaySupport(engine),
-                                          new WorkflowEngineCheckpointingSupport(engine));
+        engine.setCheckpointingSupport(new WorkflowEngineCheckpointingSupport(engine));
         engine.restoreTimeout = SHORT_TIMEOUT;
         return engine;
     }

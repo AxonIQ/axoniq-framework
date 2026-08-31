@@ -56,8 +56,7 @@ class WorkflowEngineSegmentFailoverTest {
                 workflowStore,
                 mock(UnitOfWorkFactory.class)
         );
-        workflowEngine.setEngineSupportComponents(mock(WorkflowEngineReplaySupport.class),
-                                                  mock(WorkflowEngineCheckpointingSupport.class));
+        workflowEngine.setCheckpointingSupport(mock(WorkflowEngineCheckpointingSupport.class));
     }
 
     @Test

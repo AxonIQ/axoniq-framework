@@ -96,9 +96,7 @@ class WorkflowEngineRestoreFaultIsolationTest {
                 workflowStore,
                 mock(UnitOfWorkFactory.class)
         );
-        WorkflowEngineReplaySupport replaySupport = new WorkflowEngineReplaySupport(workflowEngine);
-        workflowEngine.setEngineSupportComponents(
-                replaySupport, new WorkflowEngineCheckpointingSupport(workflowEngine));
+        workflowEngine.setCheckpointingSupport(new WorkflowEngineCheckpointingSupport(workflowEngine));
         when(workflowStore.loadRunningWorkflows(any()))
                 .thenReturn(CompletableFuture.completedFuture(runningWorkflows));
     }

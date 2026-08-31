@@ -34,8 +34,6 @@ import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.axonframework.messaging.eventhandling.replay.ReplayStatusChanged;
-import org.axonframework.messaging.eventhandling.replay.ReplayStatusChangedHandler;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,8 +63,6 @@ public class EventHandlingComponentHandlingAny implements EventHandlingComponent
     private final SequencingPolicy<EventMessage> sequencingPolicy;
     @Nullable
     private final Checkpointing checkpointingHandler;
-    @Nullable
-    private final ReplayStatusChangedHandler replayStatusChangedHandler;
 
     /**
      * Constructs the component for a generic event handler.
@@ -80,18 +76,15 @@ public class EventHandlingComponentHandlingAny implements EventHandlingComponent
                 SequentialPolicy.INSTANCE
         );
         this.checkpointingHandler = null;
-        this.replayStatusChangedHandler = null;
     }
 
     /**
      * Constructs the component for a workflow engine.
      *
      * @param workflowEngine             workflow engine to deliver events to
-     * @param replayStatusChangedHandler handler to notify when replay status changes
      * @param checkpointingHandler       handler to notify when checkpointing is required
      */
     public EventHandlingComponentHandlingAny(WorkflowEngine workflowEngine,
-                                             ReplayStatusChangedHandler replayStatusChangedHandler,
                                              Checkpointing checkpointingHandler) {
         this.eventHandler = requireNonNull(workflowEngine, "Workflow engine handler must not be null");
         this.sequencingPolicy = new HierarchicalSequencingPolicy<>(
@@ -99,8 +92,6 @@ public class EventHandlingComponentHandlingAny implements EventHandlingComponent
                 SequentialPolicy.INSTANCE
         );
         this.checkpointingHandler = requireNonNull(checkpointingHandler, "Checkpointing handler must not be null");
-        this.replayStatusChangedHandler =
-                requireNonNull(replayStatusChangedHandler, "Replay status changed handler must not be null");
     }
 
     @Override
@@ -123,14 +114,6 @@ public class EventHandlingComponentHandlingAny implements EventHandlingComponent
     public Object sequenceIdentifierFor(EventMessage event,
                                         ProcessingContext context) {
         return sequencingPolicy.sequenceIdentifierFor(event, context);
-    }
-
-    @Override
-    public MessageStream.Empty<Message> handle(ReplayStatusChanged statusChange,
-                                               ProcessingContext context) {
-        return replayStatusChangedHandler != null
-                ? replayStatusChangedHandler.handle(statusChange, context)
-                : MessageStream.empty();
     }
 
     @Override
@@ -165,9 +148,6 @@ public class EventHandlingComponentHandlingAny implements EventHandlingComponent
         descriptor.describeProperty("eventHandler", eventHandler.getClass());
         if (checkpointingHandler != null) {
             descriptor.describeProperty("checkpointingHandler", checkpointingHandler.getClass());
-        }
-        if (replayStatusChangedHandler != null) {
-            descriptor.describeProperty("replayStatusChangedHandler", replayStatusChangedHandler.getClass());
         }
     }
 }
