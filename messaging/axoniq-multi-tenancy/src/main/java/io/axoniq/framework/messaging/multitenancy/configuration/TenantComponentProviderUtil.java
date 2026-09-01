@@ -41,7 +41,6 @@ import java.util.Optional;
  * @author Jan Galinski
  * @since 5.3.1
  */
-@Internal
 public final class TenantComponentProviderUtil {
 
     private TenantComponentProviderUtil() {
