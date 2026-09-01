@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.itest;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
@@ -30,7 +32,6 @@ import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
@@ -179,7 +180,7 @@ class StepTimeoutWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowConte
                 idProperty = "id",
                 startOnEventClass = RegistrationReceivedEvent.class
         )
-        public void execute(@Nonnull BaseWorkflowContext ctx) {
+        public void execute(BaseWorkflowContext ctx) {
             logger.info("StepTimeoutWorkflow started for {}", ctx.workflowPayload());
 
             boolean useRetry = "retry".equals(ctx.workflowPayload().get("status"));
@@ -206,7 +207,7 @@ class StepTimeoutWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowConte
             logger.info("StepTimeoutWorkflow completed");
         }
 
-        private Map<String, Object> slowAction(ProcessingContext context, Map<String, Object> payload) {
+        private Map<String, @Nullable Object> slowAction(ProcessingContext context, Map<String, @Nullable Object> payload) {
             int attempt = attempts.incrementAndGet();
             long started = System.currentTimeMillis();
             double random = Math.random();

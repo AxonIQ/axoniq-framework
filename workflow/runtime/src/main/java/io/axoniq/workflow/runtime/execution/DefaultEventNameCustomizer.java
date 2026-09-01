@@ -18,10 +18,11 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.QualifiedName;
@@ -271,7 +272,6 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     }
 
     @Override
-    @Nonnull
     public EventNameCustomizer forStepInheritance() {
         var inheritable = new DefaultEventNameCustomizer();
         inheritable.namespace(this.namespace);
@@ -282,11 +282,10 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     }
 
     @Override
-    @Nonnull
     public QualifiedName getEventName(
-            @Nonnull String stepName,
-            @Nonnull Map<String, Object> parameters,
-            @Nonnull StepStatus stepStatus
+            String stepName,
+            Map<String, @Nullable Object> parameters,
+            StepStatus stepStatus
     ) {
         String namespaceTemplate = namespace != null ? namespace : "";
         final StringBuilder eventNameTemplate = new StringBuilder();
@@ -303,11 +302,10 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     }
 
     @Override
-    @Nonnull
     public QualifiedName getEventName(
-            @Nonnull String stepName,
-            @Nonnull Map<String, Object> parameters,
-            @Nonnull WorkflowStatus workflowStatus
+            String stepName,
+            Map<String, @Nullable Object> parameters,
+            WorkflowStatus workflowStatus
     ) {
         String namespaceTemplate = namespace != null ? namespace : "";
         final StringBuilder eventNameTemplate = new StringBuilder();
@@ -327,10 +325,9 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     }
 
     @Override
-    @Nonnull
     public QualifiedName versionMigrationEventName(
-            @Nonnull String changeId,
-            @Nonnull Map<String, Object> parameters
+            String changeId,
+            Map<String, @Nullable Object> parameters
     ) {
         String namespaceTemplate = namespace != null ? namespace : "";
         // Version markers anchor on the developer-chosen changeId — never on the workflow baseName.
@@ -360,7 +357,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
      * @param localNameTemplate local name template.
      */
     public record PayloadCustomization(
-            Map<String, Object> payload,
+            Map<String, @Nullable Object> payload,
             String status,
             String namespaceTemplate,
             String localNameTemplate
@@ -392,7 +389,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
          * @param baseName base name of the step.
          * @return default event name customizer.
          */
-        public static DefaultEventNameCustomizer baseName(@Nonnull String baseName) {
+        public static DefaultEventNameCustomizer baseName(String baseName) {
             return defaults().baseName(baseName);
         }
 
@@ -402,7 +399,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
          * @param workflowBaseName base name for the workflow.
          * @return default event name customizer.
          */
-        public static DefaultEventNameCustomizer workflowBaseName(@Nonnull String workflowBaseName) {
+        public static DefaultEventNameCustomizer workflowBaseName(String workflowBaseName) {
             return defaults().workflowBaseName(workflowBaseName);
         }
 
@@ -412,7 +409,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
          * @param namespace namespace for the events.
          * @return default event name customizer.
          */
-        public static DefaultEventNameCustomizer namespace(@Nonnull String namespace) {
+        public static DefaultEventNameCustomizer namespace(String namespace) {
             return defaults().namespace(namespace);
         }
 
@@ -422,7 +419,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
          * @param retrying suffix appended to the stap base name if it is in retrying status.
          * @return default event name customizer.
          */
-        public static DefaultEventNameCustomizer stepRetrying(@Nonnull String retrying) {
+        public static DefaultEventNameCustomizer stepRetrying(String retrying) {
             return defaults().stepRetrying(retrying);
         }
 
@@ -432,7 +429,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
          * @param completed suffix appended to the stap base name if it is in completed status.
          * @return default event name customizer.
          */
-        public static DefaultEventNameCustomizer stepCompleted(@Nonnull String completed) {
+        public static DefaultEventNameCustomizer stepCompleted(String completed) {
             return defaults().stepCompleted(completed);
         }
 
@@ -442,7 +439,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
          * @param started suffix appended to the stap base name if it is in started status.
          * @return default event name customizer.
          */
-        public static DefaultEventNameCustomizer stepStarted(@Nonnull String started) {
+        public static DefaultEventNameCustomizer stepStarted(String started) {
             return defaults().stepStarted(started);
         }
 
@@ -452,7 +449,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
          * @param failed suffix appended to the stap base name if it is in failed status.
          * @return default event name customizer.
          */
-        public static DefaultEventNameCustomizer stepFailed(@Nonnull String failed) {
+        public static DefaultEventNameCustomizer stepFailed(String failed) {
             return defaults().stepFailed(failed);
         }
 
@@ -462,7 +459,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
          * @param timedOut suffix appended to the stap base name if it is in timed-out status.
          * @return default event name customizer.
          */
-        public static DefaultEventNameCustomizer stepTimedOut(@Nonnull String timedOut) {
+        public static DefaultEventNameCustomizer stepTimedOut(String timedOut) {
             return defaults().stepTimedOut(timedOut);
         }
 
@@ -507,14 +504,13 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
          * @return one resulting customizer.
          */
         @Internal
-        public static EventNameCustomizer merge(@Nonnull EventNameCustomizer parent,
-                                                @Nonnull EventNameCustomizer child) {
+        public static EventNameCustomizer merge(EventNameCustomizer parent,
+                                                EventNameCustomizer child) {
             var defaultCustomizer = new DefaultEventNameCustomizer();
             return new EventNameCustomizer() {
-                @Nonnull
                 @Override
-                public QualifiedName getEventName(@Nonnull String stepName, @Nonnull Map<String, Object> parameters,
-                                                  @Nonnull StepStatus stepStatus) {
+                public QualifiedName getEventName(String stepName, Map<String, @Nullable Object> parameters,
+                                                  StepStatus stepStatus) {
                     var defaultName = defaultCustomizer.getEventName(stepName, parameters, stepStatus);
                     var parentName = parent.getEventName(stepName, parameters, stepStatus);
                     var childName = child.getEventName(stepName, parameters, stepStatus);
@@ -537,10 +533,9 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
                     return new QualifiedName(resultingNamespace, resultingName);
                 }
 
-                @Nonnull
                 @Override
-                public QualifiedName getEventName(@Nonnull String stepName, @Nonnull Map<String, Object> parameters,
-                                                  @Nonnull WorkflowStatus stepStatus) {
+                public QualifiedName getEventName(String stepName, Map<String, @Nullable Object> parameters,
+                                                  WorkflowStatus stepStatus) {
                     var defaultName = defaultCustomizer.getEventName(stepName, parameters, stepStatus);
                     var parentName = parent.getEventName(stepName, parameters, stepStatus);
                     var childName = child.getEventName(stepName, parameters, stepStatus);
@@ -563,10 +558,9 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
                     return new QualifiedName(resultingNamespace, resultingName);
                 }
 
-                @Nonnull
                 @Override
-                public QualifiedName versionMigrationEventName(@Nonnull String changeId,
-                                                            @Nonnull Map<String, Object> parameters) {
+                public QualifiedName versionMigrationEventName(String changeId,
+                                                            Map<String, @Nullable Object> parameters) {
                     var defaultName = defaultCustomizer.versionMigrationEventName(changeId, parameters);
                     var parentName = parent.versionMigrationEventName(changeId, parameters);
                     var childName = child.versionMigrationEventName(changeId, parameters);
@@ -589,7 +583,6 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
                     return new QualifiedName(resultingNamespace, resultingName);
                 }
 
-                @Nonnull
                 @Override
                 public EventNameCustomizer forStepInheritance() {
                     return this;

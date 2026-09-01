@@ -18,6 +18,8 @@
  */
 package io.axoniq.example.simple.user;
 
+import org.jspecify.annotations.Nullable;
+
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +39,7 @@ public class UserService {
         return true;
     }
 
-    public static Map<String, Object> activateUser(ProcessingContext pc, Map<String, Object> payload) {
+    public static Map<String, @Nullable Object> activateUser(ProcessingContext pc, Map<String, @Nullable Object> payload) {
         Instant now = Instant.now();
         logger.info("Activating user with id: {}", payload.get("id"));
         waitWithProgress(1_000);

@@ -28,7 +28,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -78,8 +77,8 @@ class CompletedLifecycleHookWorkflowTest extends AbstractWorkflowTestBase<Simple
         var workflow = new VersionedWorkflow();
         WorkflowStatusChangeListener completedListener = new WorkflowStatusChangeListener() {
             @Override
-            public <C extends WorkflowContext> void onWorkflowStatus(@Nonnull WorkflowStatus state,
-                                                                     @Nonnull C context) {
+            public <C extends WorkflowContext> void onWorkflowStatus(WorkflowStatus state,
+                                                                     C context) {
                 observedStatus.set(state);
                 completedHookInvocations.incrementAndGet();
             }
@@ -124,7 +123,7 @@ class CompletedLifecycleHookWorkflowTest extends AbstractWorkflowTestBase<Simple
                 idProperty = "orderId",
                 startOnEventClass = OrderPlacedEvent.class
         )
-        public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        public void execute(SimpleWorkflowContext ctx) {
             ctx.awaitExecute("reserveStock", Boolean.class, () -> {
                 logger.info("Reserving stock for {}", ctx.workflowPayload());
                 return true;

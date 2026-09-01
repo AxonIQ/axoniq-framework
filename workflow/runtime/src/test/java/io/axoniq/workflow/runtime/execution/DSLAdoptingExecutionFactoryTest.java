@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
@@ -70,7 +72,7 @@ class DSLAdoptingExecutionFactoryTest {
      * Helper class for testing.
      */
     private abstract static class MyDSLContext extends AbstractDSLWorkflowContext {
-        public MyDSLContext(String workflowId, Map<String, Object> payload, ProcessingContext processingContext, WorkflowConfiguration<?> workflowConfiguration) {
+        public MyDSLContext(String workflowId, Map<String, @Nullable Object> payload, ProcessingContext processingContext, WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
         }
     }

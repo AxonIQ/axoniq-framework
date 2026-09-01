@@ -20,11 +20,9 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution.CheckpointWorkStateListener;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
-import org.jspecify.annotations.NonNull;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -143,7 +141,7 @@ final class WorkflowExecutionCheckpointingSupport {
      *
      * @param latch callback invoked after the queued checkpoint latch has been consumed
      */
-    public void addCheckpointLatch(@NonNull Runnable latch) {
+    public void addCheckpointLatch(Runnable latch) {
         requireNonNull(latch, "The when-complete runnable must not be null");
         if (!executionTaskQueue.isRunning()) {
             latch.run();
@@ -227,7 +225,7 @@ final class WorkflowExecutionCheckpointingSupport {
         reportCheckpointWorkState();
     }
 
-    void appendTask(@NonNull Consumer<WorkflowExecution> task) {
+    void appendTask(Consumer<WorkflowExecution> task) {
         synchronized (this) {
             reportCheckpointWorkUnsafe();
             try {
@@ -260,8 +258,8 @@ final class WorkflowExecutionCheckpointingSupport {
      * @param task      the queue task to run
      * @param execution the execution instance passed to the task
      */
-    void runTask(@NonNull Consumer<WorkflowExecution> task,
-                 @NonNull WorkflowExecution execution) {
+    void runTask(Consumer<WorkflowExecution> task,
+                 WorkflowExecution execution) {
         Runnable afterTask;
         taskActive.set(true);
         synchronized (this) {
@@ -300,7 +298,7 @@ final class WorkflowExecutionCheckpointingSupport {
      * @param task queued workflow task to inspect
      * @return {@code true} if the task is a checkpoint barrier
      */
-    boolean isCheckpointLatch(@Nonnull Consumer<WorkflowExecution> task) {
+    boolean isCheckpointLatch(Consumer<WorkflowExecution> task) {
         return task instanceof CheckpointLatch;
     }
 
@@ -358,7 +356,7 @@ final class WorkflowExecutionCheckpointingSupport {
          *
          * @param task the task to append
          */
-        void appendTask(@NonNull Consumer<WorkflowExecution> task);
+        void appendTask(Consumer<WorkflowExecution> task);
     }
 
     /**

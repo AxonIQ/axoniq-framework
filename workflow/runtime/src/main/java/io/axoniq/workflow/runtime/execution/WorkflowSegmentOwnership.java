@@ -18,8 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.StringUtils;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 
@@ -54,7 +53,7 @@ final class WorkflowSegmentOwnership {
      * @param workflowId id of the workflow instance
      * @return {@code true} when the segment matches the id's segment key, or no segment is given
      */
-    static boolean ownedBy(@Nullable Segment segment, @Nonnull String workflowId) {
+    static boolean ownedBy(@Nullable Segment segment, String workflowId) {
         if (segment == null) {
             return true;
         }
@@ -75,7 +74,7 @@ final class WorkflowSegmentOwnership {
      * @param workflowId id of the workflow instance, disambiguated or not
      * @return the segment key the id hashes with
      */
-    static String segmentKey(@Nonnull String workflowId) {
+    static String segmentKey(String workflowId) {
         var separator = workflowId.indexOf('#');
         return separator == -1 ? workflowId : workflowId.substring(0, separator);
     }

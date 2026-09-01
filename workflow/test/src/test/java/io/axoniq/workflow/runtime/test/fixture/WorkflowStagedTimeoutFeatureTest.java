@@ -25,7 +25,6 @@ import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 
@@ -118,7 +117,7 @@ class WorkflowStagedTimeoutFeatureTest {
                 idProperty = "paymentId",
                 startOnEventClass = PaymentRequested.class
         )
-        public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        public void execute(SimpleWorkflowContext ctx) {
             var confirmation = ctx.waitForEvent(
                     "waitForConfirmation",
                     EventConditions.never(),

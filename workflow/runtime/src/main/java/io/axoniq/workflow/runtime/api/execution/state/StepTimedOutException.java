@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
-import jakarta.annotation.Nonnull;
 
 /**
  * Exception thrown when an individual step reaches its configured timeout before completing.
@@ -39,7 +38,7 @@ public class StepTimedOutException extends StepFailedException {
      *
      * @param message the detail message describing which step timed out and how long it waited
      */
-    public StepTimedOutException(@Nonnull String message) {
+    public StepTimedOutException(String message) {
         super(message);
     }
 
@@ -49,7 +48,7 @@ public class StepTimedOutException extends StepFailedException {
      * @param message the detail message describing which step timed out
      * @param cause   the underlying cause of the timeout, if any
      */
-    public StepTimedOutException(@Nonnull String message, Throwable cause) {
+    public StepTimedOutException(String message, Throwable cause) {
         super(message, cause);
     }
 }

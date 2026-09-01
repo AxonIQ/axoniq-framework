@@ -18,8 +18,7 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 
 /**
@@ -43,7 +42,7 @@ public final class WorkflowExecutionException extends RuntimeException implement
      * @param message message of the originating throwable, or {@code null}.
      * @param cause   reconstructed cause, or {@code null}.
      */
-    public WorkflowExecutionException(@Nonnull String type,
+    public WorkflowExecutionException(String type,
                                       @Nullable String message,
                                       @Nullable Throwable cause) {
         super(message, cause);
@@ -51,7 +50,6 @@ public final class WorkflowExecutionException extends RuntimeException implement
     }
 
     @Override
-    @Nonnull
     public String type() {
         return type;
     }

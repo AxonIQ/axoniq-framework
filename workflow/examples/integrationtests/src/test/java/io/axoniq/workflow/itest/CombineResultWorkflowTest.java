@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.itest;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
@@ -27,7 +29,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
@@ -95,7 +96,7 @@ class CombineResultWorkflowTest
 
     public static class CombineWorkflowContext extends SimpleWorkflowContext {
 
-        public CombineWorkflowContext(String workflowId, Map<String, Object> payload,
+        public CombineWorkflowContext(String workflowId, Map<String, @Nullable Object> payload,
                                       ProcessingContext processingContext,
                                       WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
@@ -105,10 +106,9 @@ class CombineResultWorkflowTest
     public static class CombineWorkflowContextFactory implements WorkflowContextFactory<CombineWorkflowContext> {
 
         @Override
-        @Nonnull
-        public CombineWorkflowContext createContext(@Nonnull Map<String, Object> payload, @Nonnull String workflowId,
-                                                    @Nonnull ProcessingContext processingContext,
-                                                    @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
+        public CombineWorkflowContext createContext(Map<String, @Nullable Object> payload, String workflowId,
+                                                    ProcessingContext processingContext,
+                                                    WorkflowConfiguration<?> workflowConfiguration) {
             return new CombineWorkflowContext(workflowId, payload, processingContext, workflowConfiguration);
         }
     }

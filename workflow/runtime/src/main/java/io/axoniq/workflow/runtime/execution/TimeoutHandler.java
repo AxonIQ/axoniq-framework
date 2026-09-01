@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 /**
@@ -39,5 +38,5 @@ interface TimeoutHandler {
      * @param stepName            the name of the timed-out step.
      * @param eventNameCustomizer event name customizer.
      */
-    void onTimeout(@Nonnull String stepName, @Nonnull EventNameCustomizer eventNameCustomizer);
+    void onTimeout(String stepName, EventNameCustomizer eventNameCustomizer);
 }

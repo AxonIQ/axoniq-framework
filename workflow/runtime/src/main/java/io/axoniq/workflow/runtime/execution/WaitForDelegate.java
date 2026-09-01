@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
@@ -28,7 +30,6 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.util.FutureResolver;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -74,17 +75,17 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
      */
     @Internal
     public WaitForDelegate(
-            @Nonnull WorkflowContext workflowContext,
-            @Nonnull WorkflowExecution workflowExecution,
-            @Nonnull RunningSteps runningSteps,
-            @Nonnull EventWaitConditions eventWaitConditions,
-            @Nonnull ReachedSteps reachedSteps,
-            @Nonnull EventNameCustomizer parentEventNameCustomizer,
-            @Nonnull Clock clock,
-            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
-            @Nonnull EventSink eventSink,
-            @Nonnull Executor executor,
-            @Nonnull WorkflowScheduler timeoutScheduler
+            WorkflowContext workflowContext,
+            WorkflowExecution workflowExecution,
+            RunningSteps runningSteps,
+            EventWaitConditions eventWaitConditions,
+            ReachedSteps reachedSteps,
+            EventNameCustomizer parentEventNameCustomizer,
+            Clock clock,
+            UnitOfWorkFactory unitOfWorkFactory,
+            EventSink eventSink,
+            Executor executor,
+            WorkflowScheduler timeoutScheduler
     ) {
         super(workflowContext,
               workflowExecution,
@@ -100,8 +101,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     }
 
     @Override
-    @Nonnull
-    public WorkflowStepResult waitForEvent(@Nonnull WaitForPrimitive.WaitForCommand command) {
+    public WorkflowStepResult waitForEvent(WaitForPrimitive.WaitForCommand command) {
         var stepName = command.stepName();
         var eventCondition = command.eventCondition();
         var resultPayloadReducer = command.resultPayloadReducer();
@@ -166,7 +166,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
      *
      * @param awaited event arrival information.
      */
-    void eventReceived(@Nonnull EventWaitConditions.Awaited awaited) {
+    void eventReceived(EventWaitConditions.Awaited awaited) {
         // Cancel the timeout future since the awaited event has arrived
         runningSteps.cancelAndRemove(awaited.stepName(), false);
         var payload = eventMessagePayload(awaited.eventMessage());
@@ -189,11 +189,10 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         });
     }
 
-    @Nonnull
-    private Map<String, Object> startedPayload(@Nonnull EventCondition eventCondition,
-                                               @Nonnull Instant startedAt,
-                                               @Nonnull Duration timeout) {
-        var payload = new LinkedHashMap<String, Object>();
+    private Map<String, @Nullable Object> startedPayload(EventCondition eventCondition,
+                                               Instant startedAt,
+                                               Duration timeout) {
+        var payload = new LinkedHashMap<String, @Nullable Object>();
         payload.put("startTime", startedAt);
         payload.put("eventName", eventCondition.qualifiedName().toString());
         payload.put("associations", eventCondition.associations());

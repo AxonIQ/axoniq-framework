@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -41,7 +40,6 @@ public interface EventCondition {
      *
      * @return the constructed predicate
      */
-    @Nonnull
     BiPredicate<EventMessage, ProcessingContext> predicate();
 
     /**
@@ -49,7 +47,6 @@ public interface EventCondition {
      *
      * @return qualified name of the event
      */
-    @Nonnull
     QualifiedName qualifiedName();
 
     /**
@@ -57,7 +54,6 @@ public interface EventCondition {
      *
      * @return serialized association strings
      */
-    @Nonnull
     default Set<String> associations() {
         return Set.of();
     }

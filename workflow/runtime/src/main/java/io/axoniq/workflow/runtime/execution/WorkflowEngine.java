@@ -22,20 +22,17 @@ import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.sequencing.SequencingPolicy;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
-import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,12 +61,9 @@ import static java.util.Objects.requireNonNull;
 @Internal
 public class WorkflowEngine implements
         EventHandler,
-        WorkflowEngineReplaySupport.LiveModeActivatedCallback,
         WorkflowEngineCheckpointingSupport.CheckpointLatchCoordinator {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
-
-    private static final String AFTER_REPLAY_LOG = "after replay catch-up";
 
     /**
      * Time {@link #restoreWorkflowsFor(Segment, TrackingToken, ProcessingContext, ProcessingContext)} is given to load
@@ -86,8 +80,8 @@ public class WorkflowEngine implements
     private final WorkflowCancellationService workflowCancellationService;
     private final WorkflowStore workflowStore;
     private final UnitOfWorkFactory unitOfWorkFactory;
-    private WorkflowEngineReplaySupport replaySupport;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
+    private final WorkflowEngineCatchUpSupport catchUpSupport = new WorkflowEngineCatchUpSupport();
     private final WorkflowEngineSequencingPolicy segmentedRouting;
     private final UnsafeCheckpointWorkIndex checkpointWorkIndex = new UnsafeCheckpointWorkIndex();
     // Package-private so a test can shrink it instead of waiting out the production timeout.
@@ -95,8 +89,8 @@ public class WorkflowEngine implements
 
     /**
      * Creates a new workflow engine. Be sure to follow-up construction of a {@code WorkflowEngine} with an invocation
-     * of {@link #setEngineSupportComponents(WorkflowEngineReplaySupport, WorkflowEngineCheckpointingSupport)}, as
-     * otherwise replay and checkpointing support is unavailable.
+     * of {@link #setCheckpointingSupport(WorkflowEngineCheckpointingSupport)}, as otherwise checkpointing support is
+     * unavailable.
      *
      * @param workflowConfigurationRegistry registry containing a
      *                                      {@link
@@ -112,11 +106,11 @@ public class WorkflowEngine implements
      */
     @Internal
     public WorkflowEngine(
-            @Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
-            @Nonnull WorkflowExecutionRepository workflowExecutionRepository,
-            @Nonnull WorkflowCancellationService workflowCancellationService,
-            @Nonnull WorkflowStore workflowStore,
-            @Nonnull UnitOfWorkFactory unitOfWorkFactory
+            WorkflowConfigurationRegistry<?> workflowConfigurationRegistry,
+            WorkflowExecutionRepository workflowExecutionRepository,
+            WorkflowCancellationService workflowCancellationService,
+            WorkflowStore workflowStore,
+            UnitOfWorkFactory unitOfWorkFactory
     ) {
         this.workflowConfigurationRegistry = requireNonNull(
                 workflowConfigurationRegistry, "The WorkflowConfigurationRegistry must not be null."
@@ -134,30 +128,26 @@ public class WorkflowEngine implements
     }
 
     /**
-     * Sets {@code WorkflowEngine} support components which are <b>required</b> for the engine to work.
+     * Sets the checkpointing support required by this engine.
      * <p>
-     * Both {@code replaySupport} and {@code checkpointingSupport} are set outside the
+     * The component is set outside the
      * {@link #WorkflowEngine(WorkflowConfigurationRegistry, WorkflowExecutionRepository, WorkflowCancellationService,
      * WorkflowStore, UnitOfWorkFactory)}, because they require <b>this</b> {@code WorkflowEngine} itself to function.
      * Hence, a cyclic dependency would exist upon start-up if completion otherwise.
      *
-     * @param replaySupport        provides replayability support to this {@code WorkflowEngine}
      * @param checkpointingSupport provides checkpointing support to this {@code WorkflowEngine}
      */
     @Internal
-    public void setEngineSupportComponents(@Nonnull WorkflowEngineReplaySupport replaySupport,
-                                           @Nonnull WorkflowEngineCheckpointingSupport checkpointingSupport) {
-        this.replaySupport = requireNonNull(replaySupport, "The WorkflowEngineReplaySupport must not be null.");
+    public void setCheckpointingSupport(WorkflowEngineCheckpointingSupport checkpointingSupport) {
         this.checkpointingSupport = requireNonNull(
                 checkpointingSupport, "The WorkflowEngineCheckpointingSupport must not be null."
         );
     }
 
-    @Nonnull
     @Override
-    public MessageStream.Empty<Message> handle(@Nonnull EventMessage event,
-                                               @Nonnull ProcessingContext context) {
-        TrackingToken currentToken = replaySupport.getAndSetTokenFrom(context);
+    public MessageStream.Empty<Message> handle(EventMessage event,
+                                               ProcessingContext context) {
+        TrackingToken currentToken = TrackingToken.fromContext(context).orElse(null);
         logger.trace("Handling event [{}] with id [{}] and token [{}].",
                      event.type(), event.identifier(), currentToken);
         checkpointingSupport.getAndSetTriggerFrom(context);
@@ -170,7 +160,7 @@ public class WorkflowEngine implements
                 logger.debug("Ignoring event [{}] for workflowId [{}] - instance is owned by another segment than {}.",
                              event.type(), workflowId, segment);
                 checkpointingSupport.requestCheckpoint(segment, currentToken);
-                replaySupport.validateIfReplayFinished(currentToken, context);
+                activateSegmentWhenCaughtUp(segment, currentToken);
                 return MessageStream.empty();
             }
             // Skip events whose workflowId isn't owned by this engine (expected in multi-module setups).
@@ -179,7 +169,7 @@ public class WorkflowEngine implements
                 logger.debug("Ignoring event [{}] for workflowId [{}] - no matching execution in this engine.",
                              event.type(), workflowId);
                 checkpointingSupport.requestCheckpoint(segment, currentToken);
-                replaySupport.validateIfReplayFinished(currentToken, context);
+                activateSegmentWhenCaughtUp(segment, currentToken);
                 return MessageStream.empty();
             }
             executionOpt.get().onEvent(event, context);
@@ -197,13 +187,13 @@ public class WorkflowEngine implements
         }
 
         checkpointingSupport.requestCheckpoint(segment, currentToken);
-        replaySupport.validateIfReplayFinished(currentToken, context);
+        activateSegmentWhenCaughtUp(segment, currentToken);
         logger.trace("Event [{}] handled successfully.", event.identifier());
         return MessageStream.empty();
     }
 
-    private void checkAndCreateNewInstance(@Nonnull EventMessage eventMessage,
-                                           @Nonnull ProcessingContext processingContext) {
+    private void checkAndCreateNewInstance(EventMessage eventMessage,
+                                           ProcessingContext processingContext) {
         // For brand-new starts, only the highest-registered version starts instances.
         // Older registered versions stay available for replay routing (selected later in the execution path
         // based on state.workflowDefinitionId().version(), itself sourced from the workflow's started event metadata).
@@ -253,24 +243,14 @@ public class WorkflowEngine implements
             });
             registerCancellation(execution);
             checkpointWorkIndex.register(execution.workflowId(), execution::registerCheckpointWorkStateListener);
-            if (replaySupport.inLiveMode(segment)) {
+            if (isSegmentCaughtUp(segment)) {
                 execute(execution, segment);
             }
         });
     }
 
     @Override
-    public void invoke(@Nonnull ProcessingContext context) {
-        this.workflowConfigurationRegistry.warnAboutSameVersionDuplicates();
-        logger.info("Workflow instance replay finished. Switching to live mode.");
-        // Segments catch up independently, so this switch is per segment: it starts the executions of the segment
-        // that just caught up, never those of a segment still behind.
-        removeTerminalAndStartRestoredWorkflowExecutions(Segment.fromContext(context).orElse(null),
-                                                         AFTER_REPLAY_LOG);
-    }
-
-    @Override
-    public boolean hasUnsafeCheckpointWork(@Nonnull Segment segment) {
+    public boolean hasUnsafeCheckpointWork(Segment segment) {
         return unsafeWorkflowIdsOf(segment).findAny().isPresent();
     }
 
@@ -287,7 +267,7 @@ public class WorkflowEngine implements
      * @param latch   the latch to invoke after all unsafe {@link WorkflowExecution WorkflowExecutions} have reached it
      */
     @Override
-    public void addCheckpointLatch(@Nonnull Segment segment, @Nonnull Runnable latch) {
+    public void addCheckpointLatch(Segment segment, Runnable latch) {
         Set<WorkflowExecution> executions = new HashSet<>();
         unsafeWorkflowIdsOf(segment).forEach(
                 workflowId -> workflowExecutionRepository.findById(workflowId).ifPresentOrElse(
@@ -316,40 +296,20 @@ public class WorkflowEngine implements
      *
      * @return set of currently running workflow executions.
      */
-    @Nonnull
     public Set<WorkflowExecution> workflowExecutions() {
         return workflowExecutionRepository.findAll();
     }
 
     /**
-     * Initializes replay tracking before processor replay resumes.
-     * <p>
-     * Workflow executions are not restored here: they are restored per segment by
-     * {@link #restoreWorkflowsFor(Segment, TrackingToken, ProcessingContext, ProcessingContext)} as this node claims
-     * them.
+     * Records the stream position that restored segments must reach before their workflow bodies start.
      *
-     * @param processorToken processor token at startup; initializes replay tracking when no processor token has been
-     *                       observed yet
-     * @param replayRequired whether the processor must catch up before the engine goes live
-     * @return a future that completes when the engine is in the required replay or live mode
+     * @param latestToken latest token observed while starting the processor
+     * @return a completed future after startup validation
      */
-    public CompletableFuture<Void> start(@Nullable TrackingToken processorToken, boolean replayRequired) {
-        return unitOfWorkFactory.create("WorkflowRehydration").executeWithResult(
-                sourcingContext -> {
-                    replaySupport.setCurrentTokenIfNull(processorToken);
-                    UnitOfWork executionUnitOfWork = new SimpleUnitOfWorkFactory(sourcingContext).create();
-
-                    return executionUnitOfWork.executeWithResult(
-                            executionContext -> {
-                                replaySupport.initializeRestoreProcessingContext(null, null, executionContext);
-                                if (!replayRequired) {
-                                    replaySupport.switchToLiveMode(sourcingContext);
-                                }
-                                return CompletableFuture.<Void>completedFuture(null);
-                            }
-                    );
-                }
-        );
+    public CompletableFuture<Void> start(@Nullable TrackingToken latestToken) {
+        catchUpSupport.initialize(latestToken);
+        workflowConfigurationRegistry.warnAboutSameVersionDuplicates();
+        return CompletableFuture.completedFuture(null);
     }
 
     /**
@@ -359,10 +319,7 @@ public class WorkflowEngine implements
      * so a segment migrating between nodes carries its instances with it. When another node dies, the coordinator hands
      * its segments to a surviving node and this callback rebuilds their instances there, without restarting anything.
      * <p>
-     * The instances are materialized from their current durable state, which is the state at the end of the stream, not
-     * at the segment's position. Running their bodies while the segment is still replaying would let them act on events
-     * the segment has not delivered yet, so a segment known to be behind only materializes here; its bodies start when
-     * that segment catches up.
+     * The instances are materialized from their current durable state and started immediately.
      *
      * @param segment          the segment that was claimed
      * @param claimedFrom      the stored position the segment resumes from, or {@code null} when it has consumed
@@ -379,18 +336,21 @@ public class WorkflowEngine implements
      * replaying, started. It completes exceptionally when loading durable state does not finish within
      * {@link #DEFAULT_RESTORE_TIMEOUT}, failing the claim rather than holding the segment
      */
-    public CompletableFuture<Void> restoreWorkflowsFor(@Nonnull Segment segment,
+    public CompletableFuture<Void> restoreWorkflowsFor(Segment segment,
                                                        @Nullable TrackingToken claimedFrom,
-                                                       @Nonnull ProcessingContext sourcingContext,
-                                                       @Nonnull ProcessingContext executionContext) {
+                                                       ProcessingContext sourcingContext,
+                                                       ProcessingContext executionContext) {
         // Tags the restored executions with their segment, so that a completion arriving long after this callback
         // returned is attributed to the segment that owns the instance instead of being dropped without one. Only
         // safe because the start pass below is scoped to this segment: every body started here is owned by it.
         executionContext.putResource(Segment.RESOURCE_KEY, segment);
+        if (claimedFrom != null) {
+            executionContext.putResource(TrackingToken.RESOURCE_KEY, claimedFrom);
+        }
         return loadRunningWorkflows(segment, claimedFrom, sourcingContext, executionContext)
                 .orTimeout(restoreTimeout.toMillis(), TimeUnit.MILLISECONDS)
                 .whenComplete((restored, failure) -> logFailedRestore(segment, failure))
-                .thenRun(() -> startRestoredWorkflowsUnlessReplaying(segment, claimedFrom));
+                .thenRun(() -> startRestoredWorkflowsWhenCaughtUp(segment, claimedFrom));
     }
 
     /**
@@ -402,7 +362,7 @@ public class WorkflowEngine implements
      * @param segment the segment that was released
      * @return a future completed after this engine has requested every released execution to stop
      */
-    public CompletableFuture<Void> releaseWorkflowsFor(@Nonnull Segment segment) {
+    public CompletableFuture<Void> releaseWorkflowsFor(Segment segment) {
         var released = workflowExecutionRepository.findAll(ownedBy(segment));
         if (released.isEmpty()) {
             return CompletableFuture.completedFuture(null);
@@ -411,16 +371,8 @@ public class WorkflowEngine implements
                     segment.getSegmentId(), released.size());
         released.forEach(WorkflowExecution::stopForShutdown);
         workflowExecutionRepository.removeAll(ownedBy(segment));
+        catchUpSupport.release(segment);
         return CompletableFuture.completedFuture(null);
-    }
-
-    private void startRestoredWorkflowsUnlessReplaying(@Nonnull Segment segment, @Nullable TrackingToken claimedFrom) {
-        if (replaySupport.isReplaying(segment, claimedFrom)) {
-            logger.info("Segment {} is still replaying: restored workflow executions start once it catches up.",
-                        segment.getSegmentId());
-            return;
-        }
-        removeTerminalAndStartRestoredWorkflowExecutions(segment, "on claim of segment " + segment.getSegmentId());
     }
 
     private void logFailedRestore(Segment segment, @Nullable Throwable failure) {
@@ -431,15 +383,34 @@ public class WorkflowEngine implements
         }
     }
 
+    private void startRestoredWorkflowsWhenCaughtUp(Segment segment, @Nullable TrackingToken claimedFrom) {
+        if (!catchUpSupport.startsAfterClaim(segment, claimedFrom)) {
+            logger.info("Segment {} is catching up; restored workflow executions start after catch-up.",
+                        segment.getSegmentId());
+            return;
+        }
+        removeTerminalAndStartRestoredWorkflowExecutions(segment, "on claim of segment " + segment.getSegmentId());
+    }
+
+    private void activateSegmentWhenCaughtUp(@Nullable Segment segment, @Nullable TrackingToken currentToken) {
+        if (!catchUpSupport.recordDelivery(segment, currentToken)) {
+            return;
+        }
+        removeTerminalAndStartRestoredWorkflowExecutions(segment, "after catch-up");
+    }
+
+    private boolean isSegmentCaughtUp(@Nullable Segment segment) {
+        return catchUpSupport.isCaughtUp(segment);
+    }
+
     private Predicate<WorkflowExecution> ownedBy(@Nullable Segment segment) {
         return execution -> WorkflowSegmentOwnership.ownedBy(segment, execution.workflowId());
     }
 
-    private CompletableFuture<Void> loadRunningWorkflows(@Nonnull Segment segment,
+    private CompletableFuture<Void> loadRunningWorkflows(Segment segment,
                                                          @Nullable TrackingToken claimedFrom,
-                                                         @Nonnull ProcessingContext sourcingContext,
-                                                         @Nonnull ProcessingContext executionContext) {
-        replaySupport.initializeRestoreProcessingContext(segment, claimedFrom, executionContext);
+                                                         ProcessingContext sourcingContext,
+                                                         ProcessingContext executionContext) {
         return workflowStore.loadRunningWorkflows(sourcingContext)
                             .thenCompose(runningWorkflows -> {
                                 var ownedIds = runningWorkflows.workflowIds()
@@ -486,9 +457,9 @@ public class WorkflowEngine implements
                             });
     }
 
-    private void restoreWorkflow(@Nonnull String workflowId,
-                                 @Nonnull WorkflowState state,
-                                 @Nonnull ProcessingContext executionContext) {
+    private void restoreWorkflow(String workflowId,
+                                 WorkflowState state,
+                                 ProcessingContext executionContext) {
         var definitionId = state.workflowDefinitionId();
         var workflowName = definitionId.qualifiedName().toString();
         // Same routing as the replay path: a body may have moved its recorded version forward with
@@ -528,7 +499,7 @@ public class WorkflowEngine implements
      * @param segment the segment whose executions are considered, or {@code null} outside a segmented processor
      * @param phase   startup phase in which the executions are started
      */
-    private void removeTerminalAndStartRestoredWorkflowExecutions(@Nullable Segment segment, @Nonnull String phase) {
+    private void removeTerminalAndStartRestoredWorkflowExecutions(@Nullable Segment segment, String phase) {
         var owned = ownedBy(segment);
         var terminal = owned.and(execution -> execution.state().workflowStatus().isTerminal());
         var terminalExecutions = workflowExecutionRepository.findAll(terminal);
@@ -547,11 +518,12 @@ public class WorkflowEngine implements
         logger.debug("Started {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
     }
 
-    private void execute(@Nonnull WorkflowExecution execution, @Nullable Segment segment) {
+    private void execute(WorkflowExecution execution, @Nullable Segment segment) {
         execution.workflowContext()
                  .processingContext()
                  .whenComplete(context -> {
                      try {
+                         var executionToken = TrackingToken.fromContext(context).orElse(null);
                          logger.debug("Executing workflow execution with id: {}", execution.workflowId());
                          execution.execute(
                                  finished -> {
@@ -562,8 +534,7 @@ public class WorkflowEngine implements
                                      checkpointWorkIndex.markSafe(execution.workflowId());
                                      // The completion is safe for the segment that owns this instance and started its
                                      // body, at that segment's own position: never at another segment's.
-                                     checkpointingSupport.requestCheckpoint(segment,
-                                                                            replaySupport.currentToken(segment));
+                                     checkpointingSupport.requestCheckpoint(segment, executionToken);
                                  }
                          );
                      } catch (Throwable t) {
@@ -572,7 +543,7 @@ public class WorkflowEngine implements
                  });
     }
 
-    private void registerCancellation(@Nonnull WorkflowExecution execution) {
+    private void registerCancellation(WorkflowExecution execution) {
         if (execution instanceof WorkflowCancellationProvider provider) {
             workflowCancellationService.register(execution.workflowId(), provider.workflowCancellation());
         } else {
@@ -582,7 +553,7 @@ public class WorkflowEngine implements
         }
     }
 
-    private void removeExecution(@Nonnull String workflowId) {
+    private void removeExecution(String workflowId) {
         workflowExecutionRepository.remove(workflowId);
         workflowCancellationService.unregister(workflowId);
     }
@@ -614,7 +585,7 @@ public class WorkflowEngine implements
      * instances that segment owns, so executions of other segments must not hold it back, and their index entries must
      * not be marked safe on its behalf either.
      */
-    private Stream<String> unsafeWorkflowIdsOf(@Nonnull Segment segment) {
+    private Stream<String> unsafeWorkflowIdsOf(Segment segment) {
         return checkpointWorkIndex.unsafeWorkflowIds()
                                   .stream()
                                   .filter(workflowId -> WorkflowSegmentOwnership.ownedBy(segment, workflowId));
@@ -626,7 +597,6 @@ public class WorkflowEngine implements
      *
      * @return the sequencing policy of this engine.
      */
-    @Nonnull
     public SequencingPolicy<EventMessage> segmentedRouting() {
         return segmentedRouting;
     }

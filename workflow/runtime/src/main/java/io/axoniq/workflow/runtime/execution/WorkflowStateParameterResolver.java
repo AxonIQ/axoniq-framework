@@ -23,7 +23,6 @@ import io.axoniq.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.Message;
@@ -46,13 +45,12 @@ public class WorkflowStateParameterResolver implements ParameterResolver<Workflo
 
     private final Configuration configuration;
 
-    public WorkflowStateParameterResolver(@Nonnull Configuration configuration) {
+    public WorkflowStateParameterResolver(Configuration configuration) {
         this.configuration = requireNonNull(configuration, "The Configuration is required");
     }
 
-    @Nonnull
     @Override
-    public CompletableFuture<WorkflowState> resolveParameterValue(@Nonnull ProcessingContext context) {
+    public CompletableFuture<WorkflowState> resolveParameterValue(ProcessingContext context) {
         Message message = requireNonNullElseGet(Message.fromContext(context), GenericMessage::emptyMessage);
         if (MetadataUtils.hasWorkflowId().test(message.metadata())) {
             var workflowId = MetadataUtils.getWorkflowId(message.metadata());
@@ -76,7 +74,7 @@ public class WorkflowStateParameterResolver implements ParameterResolver<Workflo
     }
 
     @Override
-    public boolean matches(@Nonnull ProcessingContext context) {
+    public boolean matches(ProcessingContext context) {
         return Message.fromContext(context) != null
                 && MetadataUtils.hasWorkflowId().test(requireNonNull(Message.fromContext(context)).metadata());
     }

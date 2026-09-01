@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.api.execution.context;
 
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.MessageType;
 
 import java.util.Map;
@@ -46,7 +45,6 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
      *
      * @return workflow definition method expressed using workflow context.
      */
-    @Nonnull
     WorkflowDefinition<T> workflowDefinition();
 
     /**
@@ -54,7 +52,6 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
      *
      * @return factory for workflow context.
      */
-    @Nonnull
     WorkflowContextFactory<T> workflowContextFactory();
 
     /**
@@ -62,7 +59,6 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
      *
      * @return factory for workflow state.
      */
-    @Nonnull
     WorkflowExecutionFactory workflowExecutionFactory();
 
     /**
@@ -70,7 +66,6 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
      *
      * @return provider responsible for creation of workflow id out of initial event message.
      */
-    @Nonnull
     WorkflowIdProvider workflowIdProvider();
 
     /**
@@ -78,7 +73,6 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
      *
      * @return name of the workflow.
      */
-    @Nonnull
     default String workflowName() {
         return this.getClass().getSimpleName();
     }
@@ -89,7 +83,6 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
      *
      * @return workflow definition version.
      */
-    @Nonnull
     default String workflowVersion() {
         return MessageType.DEFAULT_VERSION;
     }
@@ -99,7 +92,6 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
      *
      * @return default customizer.
      */
-    @Nonnull
     EventNameCustomizer eventNameCustomizer();
 
     /**
@@ -107,7 +99,6 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
      *
      * @return map of workflow status change listeners.
      */
-    @Nonnull
     default Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners() {
         return Map.of();
     }

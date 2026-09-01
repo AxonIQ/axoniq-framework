@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import jakarta.annotation.Nonnull;
 
 /**
  * Exception thrown when a workflow fails.
@@ -33,7 +32,7 @@ public class WorkflowFailedException extends RuntimeException {
      *
      * @param message message describing the error.
      */
-    public WorkflowFailedException(@Nonnull String message) {
+    public WorkflowFailedException(String message) {
         super(message);
     }
 
@@ -43,7 +42,7 @@ public class WorkflowFailedException extends RuntimeException {
      * @param message message describing the error.
      * @param cause   cause of the error.
      */
-    public WorkflowFailedException(@Nonnull String message, Throwable cause) {
+    public WorkflowFailedException(String message, Throwable cause) {
         super(message, cause);
     }
 
@@ -52,7 +51,7 @@ public class WorkflowFailedException extends RuntimeException {
      *
      * @param cause cause of the error.
      */
-    public WorkflowFailedException(@Nonnull Throwable cause) {
+    public WorkflowFailedException(Throwable cause) {
         super(cause);
     }
 }

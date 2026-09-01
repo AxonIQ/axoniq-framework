@@ -18,7 +18,8 @@
  */
 package io.axoniq.workflow.runtime.api.payload;
 
-import jakarta.annotation.Nonnull;
+import org.jspecify.annotations.Nullable;
+
 
 import java.util.Map;
 import java.util.function.BiFunction;
@@ -34,14 +35,13 @@ import java.util.function.BiFunction;
  * @since 1.0.0
  */
 @FunctionalInterface
-public interface PayloadReducer extends BiFunction<Map<String, Object>, Map<String, Object>, Map<String, Object>> {
+public interface PayloadReducer extends BiFunction<Map<String, @Nullable Object>, Map<String, @Nullable Object>, Map<String, @Nullable Object>> {
 
     /**
      * Retrieves the name of the reducer.
      *
      * @return reducer name.
      */
-    @Nonnull
     default String name() {
         return this.getClass().getName();
     }

@@ -20,7 +20,6 @@ package io.axoniq.workflow.history.inmemory;
 
 import io.axoniq.workflow.history.api.WorkflowHistory;
 import io.axoniq.workflow.history.api.WorkflowHistoryRepository;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 /**
@@ -37,7 +36,7 @@ public interface MutableWorkflowHistoryRepository extends WorkflowHistoryReposit
      *
      * @param workflowHistory history element to store.
      */
-    void save(@Nonnull WorkflowHistory workflowHistory);
+    void save(WorkflowHistory workflowHistory);
 
     /**
      * Clears all entries.

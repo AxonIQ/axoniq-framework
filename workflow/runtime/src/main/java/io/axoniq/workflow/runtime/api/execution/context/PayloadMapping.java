@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.api.execution.context;
 
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
-import jakarta.annotation.Nonnull;
 
 /**
  * Reusable payload mapping shared by primitive specs.
@@ -30,8 +29,8 @@ import jakarta.annotation.Nonnull;
  * @since 1.0.0
  */
 public record PayloadMapping(
-        @Nonnull PayloadReducer parameterPayloadReducer,
-        @Nonnull PayloadReducer resultPayloadReducer
+        PayloadReducer parameterPayloadReducer,
+        PayloadReducer resultPayloadReducer
 ) {
 
     /**
@@ -40,7 +39,7 @@ public record PayloadMapping(
      * @param parameterPayloadReducer reducer used to prepare the step input payload
      * @return copied payload mapping with updated parameter reducer
      */
-    public PayloadMapping parameterPayloadReducer(@Nonnull PayloadReducer parameterPayloadReducer) {
+    public PayloadMapping parameterPayloadReducer(PayloadReducer parameterPayloadReducer) {
         return new PayloadMapping(parameterPayloadReducer, resultPayloadReducer);
     }
 
@@ -50,7 +49,7 @@ public record PayloadMapping(
      * @param resultPayloadReducer reducer used to update the workflow payload from the step result
      * @return copied payload mapping with updated result reducer
      */
-    public PayloadMapping resultPayloadReducer(@Nonnull PayloadReducer resultPayloadReducer) {
+    public PayloadMapping resultPayloadReducer(PayloadReducer resultPayloadReducer) {
         return new PayloadMapping(parameterPayloadReducer, resultPayloadReducer);
     }
 }

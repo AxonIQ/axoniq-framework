@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.slf4j.Logger;
@@ -51,34 +50,31 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
         logger.info("Using in-memory workflow execution repository.");
     }
 
-    @Nonnull
     @Override
-    public Optional<WorkflowExecution> findById(@Nonnull String workflowId) {
+    public Optional<WorkflowExecution> findById(String workflowId) {
         Objects.requireNonNull(workflowId, "workflowId must not be null");
         return Optional.ofNullable(workflowExecutions.get(workflowId));
     }
 
-    @Nonnull
     @Override
-    public Set<WorkflowExecution> findAll(@Nonnull Predicate<WorkflowExecution> predicate) {
+    public Set<WorkflowExecution> findAll(Predicate<WorkflowExecution> predicate) {
         return Set.copyOf(workflowExecutions.values().stream().filter(predicate).toList());
     }
 
-    @Nonnull
     @Override
-    public WorkflowExecution save(@Nonnull String workflowId, @Nonnull Supplier<WorkflowExecution> factory) {
+    public WorkflowExecution save(String workflowId, Supplier<WorkflowExecution> factory) {
         Objects.requireNonNull(factory, "factory must not be null");
         var workflowInstance = factory.get();
         return workflowExecutions.computeIfAbsent(workflowId, s -> workflowInstance);
     }
 
     @Override
-    public WorkflowExecution remove(@Nonnull String workflowId) {
+    public WorkflowExecution remove(String workflowId) {
         return workflowExecutions.remove(workflowId);
     }
 
     @Override
-    public void removeAll(@Nonnull Predicate<WorkflowExecution> predicate) {
+    public void removeAll(Predicate<WorkflowExecution> predicate) {
         workflowExecutions.values().removeIf(predicate);
     }
 
@@ -88,7 +84,7 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
     }
 
     @Override
-    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+    public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("size", workflowExecutions.size());
         descriptor.describeProperty("workflowIds", workflowExecutions.keySet().stream().toList());
     }

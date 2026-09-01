@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.association;
 
+import org.jspecify.annotations.Nullable;
+
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.*;
@@ -50,7 +52,7 @@ class PayloadPropertyValueRetrieverTest {
     void shouldRetrieveValueFromPayload() {
         String propertyName = "orderId";
         String expectedValue = "12345";
-        Map<String, Object> payload = new HashMap<>();
+        Map<String, @Nullable Object> payload = new HashMap<>();
         payload.put(propertyName, expectedValue);
 
         ValueRetriever retriever = PayloadPropertyValueRetriever.payloadProperty(propertyName);
@@ -68,7 +70,7 @@ class PayloadPropertyValueRetrieverTest {
     @Test
     void shouldReturnNullWhenPropertyIsMissing() {
         String propertyName = "missingProperty";
-        Map<String, Object> payload = new HashMap<>();
+        Map<String, @Nullable Object> payload = new HashMap<>();
         payload.put("someOtherProperty", "value");
 
         ValueRetriever retriever = PayloadPropertyValueRetriever.payloadProperty(propertyName);

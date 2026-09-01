@@ -19,6 +19,8 @@
 
 package io.axoniq.workflow.configuration;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
@@ -32,7 +34,6 @@ import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -171,27 +172,27 @@ class WorkflowConfigurerModuleComponentIsolationTest {
 
     static class TestContext1 extends AbstractDSLWorkflowContext {
 
-        public TestContext1(@Nonnull Map<String, Object> payload, @Nonnull String workflowId,
-                            @Nonnull ProcessingContext processingContext,
-                            @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
+        public TestContext1(Map<String, @Nullable Object> payload, String workflowId,
+                            ProcessingContext processingContext,
+                            WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
         }
     }
 
     static class TestContext2 extends AbstractDSLWorkflowContext {
 
-        public TestContext2(@Nonnull Map<String, Object> payload, @Nonnull String workflowId,
-                            @Nonnull ProcessingContext processingContext,
-                            @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
+        public TestContext2(Map<String, @Nullable Object> payload, String workflowId,
+                            ProcessingContext processingContext,
+                            WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
         }
     }
 
     static class TestContext extends AbstractDSLWorkflowContext {
 
-        public TestContext(@Nonnull Map<String, Object> payload, @Nonnull String workflowId,
-                           @Nonnull ProcessingContext processingContext,
-                           @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
+        public TestContext(Map<String, @Nullable Object> payload, String workflowId,
+                           ProcessingContext processingContext,
+                           WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
         }
     }

@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
@@ -25,7 +27,6 @@ import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -139,21 +140,21 @@ class WorkflowEventTagResolverTest {
     private static final class TestEventNameCustomizer implements EventNameCustomizer {
 
         @Override
-        public @Nonnull QualifiedName getEventName(@Nonnull String stepName,
-                                                   @Nonnull Map<String, Object> parameters,
-                                                   @Nonnull StepStatus stepStatus) {
+        public QualifiedName getEventName(String stepName,
+                                                   Map<String, @Nullable Object> parameters,
+                                                   StepStatus stepStatus) {
             return new QualifiedName("test", stepName + stepStatus.name());
         }
 
         @Override
-        public @Nonnull QualifiedName getEventName(@Nonnull String stepName,
-                                                   @Nonnull Map<String, Object> parameters,
-                                                   @Nonnull WorkflowStatus stepStatus) {
+        public QualifiedName getEventName(String stepName,
+                                                   Map<String, @Nullable Object> parameters,
+                                                   WorkflowStatus stepStatus) {
             return new QualifiedName("test", stepName + stepStatus.name());
         }
 
         @Override
-        public @Nonnull EventNameCustomizer forStepInheritance() {
+        public EventNameCustomizer forStepInheritance() {
             return this;
         }
     }

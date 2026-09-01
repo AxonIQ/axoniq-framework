@@ -19,16 +19,16 @@
 
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.AllMatchCombinator;
 import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.state.StepFailedException;
 import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
-import org.jspecify.annotations.NonNull;
 
 import java.lang.reflect.Type;
 import java.util.Arrays;
@@ -57,13 +57,12 @@ public class AllMatchCombinatorDelegate implements AllMatchCombinator {
      * @param workflowExecution the workflow executor.
      */
     @Internal
-    public AllMatchCombinatorDelegate(@Nonnull WorkflowExecution workflowExecution) {
+    public AllMatchCombinatorDelegate(WorkflowExecution workflowExecution) {
         this.workflowExecution = Objects.requireNonNull(workflowExecution,
                                                         "Workflow Execution must not be null");
     }
 
-    @Nonnull
-    public CombinatorWorkflowStepResult allMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+    public CombinatorWorkflowStepResult allMatch(Predicate<WorkflowStepResult> predicate,
                                                  WorkflowStepResult... results) {
         return new CombinatorWorkflowStepResult() {
 
@@ -124,21 +123,18 @@ public class AllMatchCombinatorDelegate implements AllMatchCombinator {
             }
 
             @Override
-            @Nonnull
             public List<WorkflowStepResult> matched() {
                 resolveViolator();
                 return categories().matched();
             }
 
             @Override
-            @Nonnull
             public List<WorkflowStepResult> unmatched() {
                 resolveViolator();
                 return categories().unmatched();
             }
 
             @Override
-            @Nonnull
             public String getStepName() {
                 return "allMatch(" + String.join(", ",
                                                  Arrays.stream(results).map(WorkflowStepResult::getStepName).toList())
@@ -154,8 +150,7 @@ public class AllMatchCombinatorDelegate implements AllMatchCombinator {
             }
 
             @Override
-            @Nonnull
-            public Optional<Map<String, Object>> result() {
+            public Optional<Map<String, @Nullable Object>> result() {
                 resolveViolator();
                 if (violator != null) {
                     return violator.result();
@@ -164,7 +159,7 @@ public class AllMatchCombinatorDelegate implements AllMatchCombinator {
             }
 
             @Override
-            public @NonNull <T> Optional<T> resultAs(@NonNull Type type) {
+            public <T> Optional<T> resultAs(Type type) {
                 resolveViolator();
                 if (violator != null) {
                     return violator.resultAs(type);
@@ -173,7 +168,7 @@ public class AllMatchCombinatorDelegate implements AllMatchCombinator {
             }
 
             @Override
-            public @NonNull <T> Optional<T> resultAs(@NonNull Type type, @NonNull Converter converter) {
+            public <T> Optional<T> resultAs(Type type, Converter converter) {
                 resolveViolator();
                 if (violator != null) {
                     return violator.resultAs(type, converter);
@@ -182,7 +177,6 @@ public class AllMatchCombinatorDelegate implements AllMatchCombinator {
             }
 
             @Override
-            @Nonnull
             public Optional<StepFailedException> error() {
                 resolveViolator();
                 if (violator != null) {
@@ -232,7 +226,7 @@ public class AllMatchCombinatorDelegate implements AllMatchCombinator {
             }
 
             @Override
-            public void cancel(@Nonnull String reason) {
+            public void cancel(String reason) {
                 Arrays.stream(results).forEach(r -> r.cancel(reason));
             }
         };

@@ -18,8 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
@@ -53,7 +52,7 @@ public final class WorkflowCancellationService implements DescribableComponent {
      * @param workflowId   identifier of the live workflow
      * @param cancellation cancellation coordinator to register
      */
-    void register(@Nonnull String workflowId, @Nonnull WorkflowCancellation cancellation) {
+    void register(String workflowId, WorkflowCancellation cancellation) {
         cancellations.put(Objects.requireNonNull(workflowId, "Workflow id is mandatory"),
                           Objects.requireNonNull(cancellation, "Workflow cancellation is mandatory"));
     }
@@ -63,7 +62,7 @@ public final class WorkflowCancellationService implements DescribableComponent {
      *
      * @param workflowId identifier of the workflow that is no longer live
      */
-    void unregister(@Nonnull String workflowId) {
+    void unregister(String workflowId) {
         var cancellation = cancellations.remove(Objects.requireNonNull(workflowId, "Workflow id is mandatory"));
         abortPendingWorkflowCancellation(cancellation,
                                          "Workflow execution completed before cancellation was performed");
@@ -87,9 +86,8 @@ public final class WorkflowCancellationService implements DescribableComponent {
      * @return a future completing with {@code true} when a terminal step cancellation was recorded, or {@code false}
      * when the step was unknown or already terminal
      */
-    @Nonnull
-    public CompletableFuture<Boolean> requestStepCancellation(@Nonnull String workflowId,
-                                                              @Nonnull String stepName,
+    public CompletableFuture<Boolean> requestStepCancellation(String workflowId,
+                                                              String stepName,
                                                               @Nullable Throwable cause) {
         return cancellationFor(workflowId).requestStepCancellation(stepName, cause);
     }
@@ -101,8 +99,7 @@ public final class WorkflowCancellationService implements DescribableComponent {
      * @param cause      optional reason for the cancellation
      * @return a future completing with the number of steps for which terminal cancellation was recorded
      */
-    @Nonnull
-    public CompletableFuture<Integer> requestCancellationOfAllSteps(@Nonnull String workflowId,
+    public CompletableFuture<Integer> requestCancellationOfAllSteps(String workflowId,
                                                                     @Nullable Throwable cause) {
         return cancellationFor(workflowId).requestCancellationOfAllSteps(cause);
     }
@@ -114,8 +111,7 @@ public final class WorkflowCancellationService implements DescribableComponent {
      * @param cause      optional reason for the cancellation
      * @return a future completing after the workflow cancellation event is durable and the workflow body was woken
      */
-    @Nonnull
-    public CompletableFuture<Void> requestWorkflowCancellation(@Nonnull String workflowId, @Nullable Throwable cause) {
+    public CompletableFuture<Void> requestWorkflowCancellation(String workflowId, @Nullable Throwable cause) {
         return cancellationFor(workflowId).requestWorkflowCancellation(cause);
     }
 
@@ -125,12 +121,11 @@ public final class WorkflowCancellationService implements DescribableComponent {
      * @param descriptor descriptor receiving the component properties
      */
     @Override
-    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+    public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("registeredWorkflowIds", cancellations.keySet().stream().toList());
     }
 
-    @Nonnull
-    private WorkflowCancellation cancellationFor(@Nonnull String workflowId) {
+    private WorkflowCancellation cancellationFor(String workflowId) {
         var cancellation = cancellations.get(Objects.requireNonNull(workflowId, "Workflow id is mandatory"));
         if (cancellation == null) {
             throw new NoSuchElementException("No running workflow found with id '" + workflowId + "'");
@@ -139,7 +134,7 @@ public final class WorkflowCancellationService implements DescribableComponent {
     }
 
     private static void abortPendingWorkflowCancellation(@Nullable WorkflowCancellation cancellation,
-                                                         @Nonnull String reason) {
+                                                         String reason) {
         if (cancellation instanceof WorkflowCancellation.Request request) {
             request.abortPendingWorkflowCancellation(new CancellationException(reason));
         }

@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.util;
 
 import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.FutureUtils;
 
 import java.time.Duration;
@@ -59,7 +58,7 @@ public class DefaultTimeoutFutureResolver implements FutureResolver {
      *
      * @param timeout timeout to use for future joining
      */
-    public DefaultTimeoutFutureResolver(@Nonnull Duration timeout) {
+    public DefaultTimeoutFutureResolver(Duration timeout) {
         this.timeout = timeout;
     }
 
@@ -76,7 +75,7 @@ public class DefaultTimeoutFutureResolver implements FutureResolver {
      * @throws Throwable        the unwrapped cause if the future completed exceptionally (exact type preserved).
      */
     @Override
-    public void resolve(@Nonnull CompletableFuture<?> future) {
+    public void resolve(CompletableFuture<?> future) {
         try {
             FutureUtils.joinAndUnwrap(Objects.requireNonNull(future, "Future must not be null").copy(), timeout);
         } catch (Exception exception) {

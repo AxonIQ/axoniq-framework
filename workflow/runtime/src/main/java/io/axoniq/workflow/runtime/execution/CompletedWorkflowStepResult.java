@@ -20,12 +20,10 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.state.StepFailedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.jspecify.annotations.NonNull;
 
 import java.lang.reflect.Type;
 import java.time.Duration;
@@ -52,7 +50,7 @@ class CompletedWorkflowStepResult implements WorkflowStepResult {
     private final boolean cancelled;
     private final Converter resultConverter;
 
-    CompletedWorkflowStepResult(@Nonnull String stepName,
+    CompletedWorkflowStepResult(String stepName,
                                 @Nullable Object payload,
                                 @Nullable Throwable error,
                                 @Nullable Duration timeout,
@@ -75,7 +73,6 @@ class CompletedWorkflowStepResult implements WorkflowStepResult {
     }
 
     @Override
-    @Nonnull
     public String getStepName() {
         return stepName;
     }
@@ -86,27 +83,25 @@ class CompletedWorkflowStepResult implements WorkflowStepResult {
     }
 
     @Override
-    @Nonnull
-    public Optional<Map<String, Object>> result() {
+    public Optional<Map<String, @Nullable Object>> result() {
         return Optional.ofNullable(payload)
                        .flatMap(p -> Optional.ofNullable(resultConverter)
                                              .map(c -> c.convert(p, PAYLOAD_TYPE.getType())));
     }
 
     @Override
-    public @NonNull <T> Optional<T> resultAs(@NonNull Type type) {
+    public <T> Optional<T> resultAs(Type type) {
         return Optional.ofNullable(payload)
                        .flatMap(p -> Optional.ofNullable(resultConverter)
                                              .map(c -> c.convert(p, type)));
     }
 
     @Override
-    public @NonNull <T> Optional<T> resultAs(@NonNull Type type, @NonNull Converter converter) {
+    public <T> Optional<T> resultAs(Type type, Converter converter) {
         return Optional.ofNullable(payload).map(p -> converter.convert(p, type));
     }
 
     @Override
-    @Nonnull
     public Optional<StepFailedException> error() {
         return Optional.ofNullable(error);
     }
@@ -141,7 +136,7 @@ class CompletedWorkflowStepResult implements WorkflowStepResult {
     }
 
     @Override
-    public void cancel(@Nonnull String reason) {
+    public void cancel(String reason) {
         // no-op: already in terminal state
     }
 }

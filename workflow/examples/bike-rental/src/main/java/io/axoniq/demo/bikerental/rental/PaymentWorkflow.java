@@ -18,6 +18,8 @@
  */
 package io.axoniq.demo.bikerental.rental;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.demo.bikerental.coreapi.payment.PaymentConfirmedEvent;
 import io.axoniq.demo.bikerental.coreapi.payment.PaymentPreparedEvent;
 import io.axoniq.demo.bikerental.coreapi.payment.PaymentRejectedEvent;
@@ -103,7 +105,7 @@ public class PaymentWorkflow {
                 paymentPrepared.await();
                 if (paymentPrepared.success()) {
                     paymentPending.set(false);
-                    var paymentDetails = paymentPrepared.<Map<String, Object>>result()
+                    var paymentDetails = paymentPrepared.<Map<String, @Nullable Object>>result()
                                                         .orElseThrow(() -> new IllegalStateException("No payload"));
                     ctx.awaitModifyPayload(
                             "setPaymentId",

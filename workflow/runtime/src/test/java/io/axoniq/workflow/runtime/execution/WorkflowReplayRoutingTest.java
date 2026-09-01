@@ -27,9 +27,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.QualifiedName;
-import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -204,12 +202,12 @@ class WorkflowReplayRoutingTest {
         }
 
         @Override
-        public @NonNull String workflowName() {
+        public String workflowName() {
             return name;
         }
 
         @Override
-        public @NonNull String workflowVersion() {
+        public String workflowVersion() {
             return version;
         }
 
@@ -218,13 +216,11 @@ class WorkflowReplayRoutingTest {
             return WorkflowContext.class;
         }
 
-        @Nonnull
         @Override
         public WorkflowDefinition<WorkflowContext> workflowDefinition() {
             return ctx -> { /* no-op for routing-only tests */ };
         }
 
-        @Nonnull
         @Override
         public WorkflowContextFactory<WorkflowContext> workflowContextFactory() {
             return (initialPayload, workflowId, processingContext, workflowConfiguration) -> {
@@ -232,14 +228,13 @@ class WorkflowReplayRoutingTest {
             };
         }
 
-        @Nonnull
         @Override
         public WorkflowExecutionFactory workflowExecutionFactory() {
             return new DSLAdoptingExecutionFactory<>(getWorkflowContextType());
         }
 
         @Override
-        public @NonNull WorkflowIdProvider workflowIdProvider() {
+        public WorkflowIdProvider workflowIdProvider() {
             return new MessageWorkflowIdProvider();
         }
 
@@ -249,7 +244,7 @@ class WorkflowReplayRoutingTest {
         }
 
         @Override
-        public @NonNull EventNameCustomizer eventNameCustomizer() {
+        public EventNameCustomizer eventNameCustomizer() {
             return defaults();
         }
     }

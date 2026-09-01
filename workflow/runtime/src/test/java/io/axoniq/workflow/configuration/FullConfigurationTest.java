@@ -19,6 +19,8 @@
 
 package io.axoniq.workflow.configuration;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
@@ -26,7 +28,6 @@ import io.axoniq.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -103,9 +104,9 @@ class FullConfigurationTest {
 
     static class TestContext extends AbstractDSLWorkflowContext {
 
-        public TestContext(@Nonnull Map<String, Object> payload, @Nonnull String workflowId,
-                           @Nonnull ProcessingContext processingContext,
-                           @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
+        public TestContext(Map<String, @Nullable Object> payload, String workflowId,
+                           ProcessingContext processingContext,
+                           WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
         }
     }

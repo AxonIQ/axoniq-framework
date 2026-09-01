@@ -18,8 +18,9 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageType;
@@ -41,7 +42,6 @@ public interface WorkflowState extends DescribableComponent {
      *
      * @return workflow identifier
      */
-    @Nonnull
     String workflowId();
 
     /**
@@ -51,7 +51,6 @@ public interface WorkflowState extends DescribableComponent {
      *
      * @return workflow definition identity
      */
-    @Nonnull
     MessageType workflowDefinitionId();
 
     /**
@@ -67,7 +66,7 @@ public interface WorkflowState extends DescribableComponent {
      * @param stepName name of the step
      * @return workflow step
      */
-    WorkflowStep getStep(@Nonnull String stepName);
+    WorkflowStep getStep(String stepName);
 
     /**
      * Checks if a step with the given name exists in the workflow execution.
@@ -75,14 +74,13 @@ public interface WorkflowState extends DescribableComponent {
      * @param stepName name of the step
      * @return true if the step exists, false otherwise
      */
-    boolean containsStep(@Nonnull String stepName);
+    boolean containsStep(String stepName);
 
     /**
      * Returns the status of the workflow execution.
      *
      * @return workflow status
      */
-    @Nonnull
     WorkflowStatus workflowStatus();
 
     /**
@@ -90,8 +88,7 @@ public interface WorkflowState extends DescribableComponent {
      *
      * @return payload of the workflow execution
      */
-    @Nonnull
-    Map<String, Object> payload();
+    Map<String, @Nullable Object> payload();
 
     /**
      * Returns the effective version for the given {@code changeId}.
@@ -104,8 +101,7 @@ public interface WorkflowState extends DescribableComponent {
      * @param changeId the change identifier to query
      * @return effective version for the change
      */
-    @Nonnull
-    String versionFor(@Nonnull String changeId);
+    String versionFor(String changeId);
 
     /**
      * Returns {@code true} iff a migration step has been projected into state for the given {@code changeId}.
@@ -117,7 +113,7 @@ public interface WorkflowState extends DescribableComponent {
      * @param changeId the change identifier to query
      * @return {@code true} iff a migration step was recorded for this {@code changeId}
      */
-    boolean hasVersionMigrationStep(@Nonnull String changeId);
+    boolean hasVersionMigrationStep(String changeId);
 
     /**
      * Guards against invoking any primitive when the workflow has already reached a terminal state. Rethrows the

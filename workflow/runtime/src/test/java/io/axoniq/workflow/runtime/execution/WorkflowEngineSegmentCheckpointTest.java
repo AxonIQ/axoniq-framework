@@ -60,7 +60,6 @@ class WorkflowEngineSegmentCheckpointTest {
     private static final QualifiedName START_EVENT = new QualifiedName("StartBusyWorkflow");
 
     private WorkflowEngine workflowEngine;
-    private WorkflowEngineReplaySupport replaySupport;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
     @BeforeEach
@@ -73,9 +72,8 @@ class WorkflowEngineSegmentCheckpointTest {
                 mock(WorkflowStore.class),
                 mock(UnitOfWorkFactory.class)
         );
-        replaySupport = new WorkflowEngineReplaySupport(workflowEngine);
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
-        workflowEngine.setEngineSupportComponents(replaySupport, checkpointingSupport);
+        workflowEngine.setCheckpointingSupport(checkpointingSupport);
         registerStartConfiguration(configurationRegistry);
         // Delivered on the segment that owns it, exactly as the routing sequences a unique start candidate.
         workflowEngine.handle(startEvent(), processingContext(owningSegment(BUSY_WORKFLOW_ID)));

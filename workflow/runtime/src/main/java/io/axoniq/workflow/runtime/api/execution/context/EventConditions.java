@@ -20,14 +20,12 @@ package io.axoniq.workflow.runtime.api.execution.context;
 
 import io.axoniq.workflow.runtime.association.Associations;
 import io.axoniq.workflow.runtime.association.SerializedAssociation;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.jspecify.annotations.NonNull;
 
 import java.util.Objects;
 import java.util.Set;
@@ -61,16 +59,16 @@ public class EventConditions {
      * @param clazz type of message (message type resolve will use this type to deduce the message type).
      * @return condition component builder.
      */
-    public static ComponentBuilder<EventCondition> fromType(@Nonnull Class<?> clazz) {
+    public static ComponentBuilder<EventCondition> fromType(Class<?> clazz) {
         return c -> new EventCondition() {
 
             @Override
-            public @NonNull BiPredicate<EventMessage, ProcessingContext> predicate() {
+            public BiPredicate<EventMessage, ProcessingContext> predicate() {
                 return ALWAYS;
             }
 
             @Override
-            public @NonNull QualifiedName qualifiedName() {
+            public QualifiedName qualifiedName() {
                 Objects.requireNonNull(clazz, "Class must not be null");
                 return c.getComponent(MessageTypeResolver.class).resolve(clazz)
                         .orElse(new MessageType(clazz))
@@ -87,8 +85,8 @@ public class EventConditions {
      * @return event condition builder
      */
     public static ComponentBuilder<EventCondition> fromType(
-            @Nonnull Class<?> clazz,
-            @Nonnull Associations associations
+            Class<?> clazz,
+            Associations associations
     ) {
         Objects.requireNonNull(clazz, "Class must not be null");
         Objects.requireNonNull(associations, "Associations must not be null");
@@ -107,15 +105,15 @@ public class EventConditions {
      * @param qualifiedName qualified name.
      * @return event condition.
      */
-    public static EventCondition fromQualifiedName(@Nonnull QualifiedName qualifiedName) {
+    public static EventCondition fromQualifiedName(QualifiedName qualifiedName) {
         return new EventCondition() {
             @Override
-            public @NonNull BiPredicate<EventMessage, ProcessingContext> predicate() {
+            public BiPredicate<EventMessage, ProcessingContext> predicate() {
                 return ALWAYS;
             }
 
             @Override
-            public @NonNull QualifiedName qualifiedName() {
+            public QualifiedName qualifiedName() {
                 return Objects.requireNonNull(qualifiedName, "Qualified name must not be null");
             }
         };
@@ -129,8 +127,8 @@ public class EventConditions {
      * @return event condition
      */
     public static EventCondition fromQualifiedName(
-            @Nonnull QualifiedName qualifiedName,
-            @Nonnull Associations associations
+            QualifiedName qualifiedName,
+            Associations associations
     ) {
         Objects.requireNonNull(qualifiedName, "Qualified name must not be null");
         Objects.requireNonNull(associations, "Associations must not be null");
@@ -153,16 +151,14 @@ public class EventConditions {
      * @param qualifiedName event qualified name.
      * @return event condition.
      */
-    public static EventCondition never(@Nonnull QualifiedName qualifiedName) {
+    public static EventCondition never(QualifiedName qualifiedName) {
         Objects.requireNonNull(qualifiedName, "Qualified name must not be null");
         return new EventCondition() {
-            @Nonnull
             @Override
             public BiPredicate<EventMessage, ProcessingContext> predicate() {
                 return NEVER;
             }
 
-            @Nonnull
             @Override
             public QualifiedName qualifiedName() {
                 return qualifiedName;
@@ -170,17 +166,16 @@ public class EventConditions {
         };
     }
 
-    @Nonnull
     private static EventCondition serializedAssociationCondition(
-            @Nonnull QualifiedName qualifiedName,
-            @Nonnull Associations associations
+            QualifiedName qualifiedName,
+            Associations associations
     ) {
         return new EventCondition() {
 
             private volatile BiPredicate<EventMessage, ProcessingContext> predicate;
 
             @Override
-            public @Nonnull BiPredicate<EventMessage, ProcessingContext> predicate() {
+            public BiPredicate<EventMessage, ProcessingContext> predicate() {
                 var current = predicate;
                 if (current == null) {
                     current = associationPredicate(associations);
@@ -190,20 +185,19 @@ public class EventConditions {
             }
 
             @Override
-            public @Nonnull QualifiedName qualifiedName() {
+            public QualifiedName qualifiedName() {
                 return qualifiedName;
             }
 
             @Override
-            public @Nonnull Set<String> associations() {
+            public Set<String> associations() {
                 return associations.criteria();
             }
         };
     }
 
-    @Nonnull
     private static BiPredicate<EventMessage, ProcessingContext> associationPredicate(
-            @Nonnull Associations associations
+            Associations associations
     ) {
         var registry = associations.registry();
         var predicates = associations.criteria().stream()

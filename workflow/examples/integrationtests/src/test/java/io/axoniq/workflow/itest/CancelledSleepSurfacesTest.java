@@ -29,7 +29,6 @@ import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -108,7 +107,7 @@ class CancelledSleepSurfacesTest extends AbstractWorkflowTestBase<SimpleWorkflow
                 idProperty = "id",
                 startOnEventClass = StartSleepEvent.class
         )
-        public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        public void execute(SimpleWorkflowContext ctx) {
             try {
                 ctx.awaitSleep("pacingDelay", step -> step.timeout(Duration.ofMinutes(5)));
                 ctx.awaitExecute("afterSleep", Map.of(), (c, p) -> Map.of("ranAfterSleep", true));

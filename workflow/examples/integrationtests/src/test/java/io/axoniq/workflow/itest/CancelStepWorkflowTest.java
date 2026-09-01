@@ -27,7 +27,6 @@ import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.workflow.runtime.test.utils.SleepUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -83,7 +82,7 @@ class CancelStepWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContex
                 idProperty = "id",
                 startOnEventClass = RegistrationReceivedEvent.class
         )
-        public void execute(@Nonnull BaseWorkflowContext ctx) {
+        public void execute(BaseWorkflowContext ctx) {
             logger.info("CancelStep workflow started for {}", ctx.workflowPayload());
 
             Duration fiveMin = Duration.ofMinutes(5);

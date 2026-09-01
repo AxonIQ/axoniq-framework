@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import jakarta.annotation.Nonnull;
 
 import java.util.List;
 import java.util.Objects;
@@ -54,9 +53,9 @@ public class WorkflowReplayDriftException extends RuntimeException {
      * @param orphans        terminal step names present in history but not referenced by the current
      *                       invocation — the corruption signal.
      */
-    public WorkflowReplayDriftException(@Nonnull String workflowId,
-                                        @Nonnull String aboutToExecute,
-                                        @Nonnull List<String> orphans) {
+    public WorkflowReplayDriftException(String workflowId,
+                                        String aboutToExecute,
+                                        List<String> orphans) {
         super(buildMessage(workflowId, aboutToExecute, orphans));
         this.workflowId = Objects.requireNonNull(workflowId, "workflowId must not be null");
         this.aboutToExecute = Objects.requireNonNull(aboutToExecute, "aboutToExecute must not be null");
@@ -68,7 +67,6 @@ public class WorkflowReplayDriftException extends RuntimeException {
      *
      * @return the workflow id.
      */
-    @Nonnull
     public String workflowId() {
         return workflowId;
     }
@@ -78,7 +76,6 @@ public class WorkflowReplayDriftException extends RuntimeException {
      *
      * @return the name of the step about to execute.
      */
-    @Nonnull
     public String aboutToExecute() {
         return aboutToExecute;
     }
@@ -89,7 +86,6 @@ public class WorkflowReplayDriftException extends RuntimeException {
      *
      * @return the unreferenced (orphan) terminal step names.
      */
-    @Nonnull
     public List<String> orphans() {
         return orphans;
     }

@@ -21,7 +21,6 @@ package io.axoniq.workflow.runtime.util;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.function.Predicate;
@@ -47,9 +46,9 @@ public final class WorkflowStateUtils {
      * @param predicate condition to test on the step
      * @return {@code true} if the step exists and matches the predicate, {@code false} otherwise
      */
-    public static boolean matchesStep(@Nonnull WorkflowState state,
-                                      @Nonnull String stepName,
-                                      @Nonnull Predicate<WorkflowStep> predicate) {
+    public static boolean matchesStep(WorkflowState state,
+                                      String stepName,
+                                      Predicate<WorkflowStep> predicate) {
         var step = state.getStep(stepName);
         return step != null && predicate.test(step);
     }
@@ -61,7 +60,7 @@ public final class WorkflowStateUtils {
      * @param stepName name of the step
      * @return {@code true} if the step exists and is terminal, {@code false} otherwise
      */
-    public static boolean isStepTerminal(@Nonnull WorkflowState state, @Nonnull String stepName) {
+    public static boolean isStepTerminal(WorkflowState state, String stepName) {
         return matchesStep(state, stepName, s -> s.status().isTerminal());
     }
 
@@ -72,7 +71,7 @@ public final class WorkflowStateUtils {
      * @param stepName name of the step
      * @return {@code true} if the step exists and is not terminal, {@code false} otherwise
      */
-    public static boolean isStepActive(@Nonnull WorkflowState state, @Nonnull String stepName) {
+    public static boolean isStepActive(WorkflowState state, String stepName) {
         return matchesStep(state, stepName, s -> !s.status().isTerminal());
     }
 
@@ -84,9 +83,9 @@ public final class WorkflowStateUtils {
      * @param status   expected step status
      * @return {@code true} if the step exists and matches the given status, {@code false} otherwise
      */
-    public static boolean isStepStatus(@Nonnull WorkflowState state,
-                                       @Nonnull String stepName,
-                                       @Nonnull StepStatus status) {
+    public static boolean isStepStatus(WorkflowState state,
+                                       String stepName,
+                                       StepStatus status) {
         return matchesStep(state, stepName, s -> s.status() == status);
     }
 
@@ -96,7 +95,7 @@ public final class WorkflowStateUtils {
      * @param stepName name of the step
      * @return predicate testing if the step exists and is terminal
      */
-    public static Predicate<WorkflowState> stepTerminal(@Nonnull String stepName) {
+    public static Predicate<WorkflowState> stepTerminal(String stepName) {
         return state -> isStepTerminal(state, stepName);
     }
 
@@ -106,7 +105,7 @@ public final class WorkflowStateUtils {
      * @param stepName name of the step
      * @return predicate testing if the step exists and is not terminal
      */
-    public static Predicate<WorkflowState> stepActive(@Nonnull String stepName) {
+    public static Predicate<WorkflowState> stepActive(String stepName) {
         return state -> isStepActive(state, stepName);
     }
 
@@ -117,7 +116,7 @@ public final class WorkflowStateUtils {
      * @param status   expected step status
      * @return predicate testing if the step exists and matches the given status
      */
-    public static Predicate<WorkflowState> stepStatus(@Nonnull String stepName, @Nonnull StepStatus status) {
+    public static Predicate<WorkflowState> stepStatus(String stepName, StepStatus status) {
         return state -> isStepStatus(state, stepName, status);
     }
 }

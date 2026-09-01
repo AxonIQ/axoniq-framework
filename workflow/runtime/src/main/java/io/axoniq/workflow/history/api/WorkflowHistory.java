@@ -19,7 +19,6 @@
 package io.axoniq.workflow.history.api;
 
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
-import jakarta.annotation.Nonnull;
 
 /**
  * Represents a workflow history of a passed execution.
@@ -31,8 +30,8 @@ import jakarta.annotation.Nonnull;
  * @since 1.0.0
  */
 public record WorkflowHistory(
-        @Nonnull String workflowId,
-        @Nonnull WorkflowState state
+        String workflowId,
+        WorkflowState state
 ) {
 
 }

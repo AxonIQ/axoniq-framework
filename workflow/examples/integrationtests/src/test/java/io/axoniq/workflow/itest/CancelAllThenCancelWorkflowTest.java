@@ -30,7 +30,6 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.workflow.runtime.test.utils.SleepUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -106,7 +105,7 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
         assertCancellationSequence("cancel-all-then-cancel-" + repetitionInfo.getCurrentRepetition());
     }
 
-    private void assertCancellationSequence(@Nonnull String id) {
+    private void assertCancellationSequence(String id) {
         delayedPublisher.addSchedules(List.of(ofMillis(100, new StartTwoRunningStepsEvent(id))));
         delayedPublisher.start();
 
@@ -134,7 +133,7 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
         logger.info("compensation ran, workflow {} CANCELLED", id);
     }
 
-    private void awaitParked(@Nonnull String workflowId) {
+    private void awaitParked(String workflowId) {
         var executionRepository = configuration.getComponent(WorkflowExecutionRepository.class);
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             var execution = executionRepository.findById(workflowId);
@@ -162,7 +161,7 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWor
                 idProperty = "id",
                 startOnEventClass = StartTwoRunningStepsEvent.class
         )
-        public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        public void execute(SimpleWorkflowContext ctx) {
             log.info("TwoRunningStepsWorkflow started for {}", ctx.workflowPayload());
 
             ctx.execute("backgroundStep", Map.of(),

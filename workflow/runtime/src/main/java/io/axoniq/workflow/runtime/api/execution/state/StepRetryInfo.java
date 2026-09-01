@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 /**
@@ -32,4 +31,4 @@ import org.axonframework.common.annotation.Internal;
  * @since 1.0.0
  */
 @Internal
-public record StepRetryInfo(int attempt, int maxRetries, @Nonnull WorkflowError error) {}
+public record StepRetryInfo(int attempt, int maxRetries, WorkflowError error) {}

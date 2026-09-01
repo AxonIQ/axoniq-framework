@@ -28,7 +28,6 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.workflow.runtime.test.utils.SleepUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -82,7 +81,7 @@ class AllMatchGuardWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowCon
                 idProperty = "id",
                 startOnEventClass = RegistrationReceivedEvent.class
         )
-        public void execute(@Nonnull BaseWorkflowContext ctx) {
+        public void execute(BaseWorkflowContext ctx) {
             logger.info("allMatch() workflow started for {}", ctx.workflowPayload());
 
             var successStep = ctx.execute(

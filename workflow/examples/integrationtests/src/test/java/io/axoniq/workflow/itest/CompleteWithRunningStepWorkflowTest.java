@@ -26,7 +26,6 @@ import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.workflow.runtime.test.utils.SleepUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -104,7 +103,7 @@ class CompleteWithRunningStepWorkflowTest extends AbstractWorkflowTestBase<Simpl
                 idProperty = "id",
                 startOnEventClass = RegistrationReceivedEvent.class
         )
-        public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        public void execute(SimpleWorkflowContext ctx) {
             logger.info("completeWithRunningStep workflow started for {}", ctx.workflowPayload());
 
             ctx.execute(

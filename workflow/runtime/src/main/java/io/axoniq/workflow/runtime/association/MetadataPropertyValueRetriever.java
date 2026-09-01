@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.association;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -46,7 +45,7 @@ public class MetadataPropertyValueRetriever implements ValueRetriever {
      * @param metadataPropertyName property to read from the message metadata.
      * @return value retriever.
      */
-    public static ValueRetriever metadataProperty(@Nonnull String metadataPropertyName) {
+    public static ValueRetriever metadataProperty(String metadataPropertyName) {
         return new MetadataPropertyValueRetriever(metadataPropertyName);
     }
 
@@ -56,23 +55,23 @@ public class MetadataPropertyValueRetriever implements ValueRetriever {
      * @param metadataPropertyName property to read from the message metadata.
      */
     @Internal
-    public MetadataPropertyValueRetriever(@Nonnull String metadataPropertyName) {
+    public MetadataPropertyValueRetriever(String metadataPropertyName) {
         this.metadataPropertyName = Objects.requireNonNull(metadataPropertyName,
                                                            "Metadata property name must not be null");
     }
 
     @Override
-    public Object apply(@Nonnull EventMessage eventMessage, @Nonnull ProcessingContext processingContext) {
+    public Object apply(EventMessage eventMessage, ProcessingContext processingContext) {
         return eventMessage.metadata().get(metadataPropertyName);
     }
 
     @Override
-    public @Nonnull String qualifier() {
+    public String qualifier() {
         return QUALIFIER;
     }
 
     @Override
-    public @Nonnull String path() {
+    public String path() {
         return metadataPropertyName;
     }
 }

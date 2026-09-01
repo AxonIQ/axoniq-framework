@@ -18,7 +18,8 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
-import jakarta.annotation.Nonnull;
+import org.jspecify.annotations.Nullable;
+
 import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.Converter;
 
@@ -31,7 +32,6 @@ import java.util.Optional;
  */
 public interface WorkflowStepResult {
 
-    @Nonnull
     String getStepName();
 
     /**
@@ -46,8 +46,7 @@ public interface WorkflowStepResult {
      *
      * @return result if the step has finished with a success. Will return empty optional, if the step is not finished.
      */
-    @Nonnull
-    Optional<Map<String, Object>> result();
+    Optional<Map<String, @Nullable Object>> result();
 
     /**
      * Retrieves an optional result as a specific type.
@@ -56,8 +55,7 @@ public interface WorkflowStepResult {
      * @param <T>  the type of the result
      * @return result if the step has finished with a success. Will return empty optional, if the step is not finished
      */
-    @Nonnull
-    default <T> Optional<T> resultAs(@Nonnull Class<T> type) {
+    default <T> Optional<T> resultAs(Class<T> type) {
         return resultAs((Type) type);
     }
 
@@ -68,8 +66,7 @@ public interface WorkflowStepResult {
      * @param <T>  the type of the result
      * @return result if the step has finished with a success. Will return empty optional, if the step is not finished
      */
-    @Nonnull
-    default <T> Optional<T> resultAs(@Nonnull TypeReference<T> type) {
+    default <T> Optional<T> resultAs(TypeReference<T> type) {
         return resultAs(type.getType());
     }
 
@@ -80,8 +77,7 @@ public interface WorkflowStepResult {
      * @param <T>  the type of the result
      * @return result if the step has finished with a success. Will return empty optional, if the step is not finished
      */
-    @Nonnull
-    <T> Optional<T> resultAs(@Nonnull Type type);
+    <T> Optional<T> resultAs(Type type);
 
     /**
      * Retrieves an optional result as a specific type using a converter.
@@ -91,8 +87,7 @@ public interface WorkflowStepResult {
      * @param <T>       the type of the result
      * @return result if the step has finished with a success. Will return empty optional, if the step is not finished
      */
-    @Nonnull
-    default <T> Optional<T> resultAs(@Nonnull Class<T> type, @Nonnull Converter converter) {
+    default <T> Optional<T> resultAs(Class<T> type, Converter converter) {
         return resultAs((Type) type, converter);
     }
 
@@ -103,8 +98,7 @@ public interface WorkflowStepResult {
      * @param <T>  the type of the result
      * @return result if the step has finished with a success. Will return empty optional, if the step is not finished
      */
-    @Nonnull
-    default <T> Optional<T> resultAs(@Nonnull TypeReference<T> type, @Nonnull Converter converter) {
+    default <T> Optional<T> resultAs(TypeReference<T> type, Converter converter) {
         return resultAs(type.getType(), converter);
     }
 
@@ -114,15 +108,13 @@ public interface WorkflowStepResult {
      * @param type the type to convert the result to
      * @return result if the step has finished with a success. Will return empty optional, if the step is not finished
      */
-    @Nonnull
-    <T> Optional<T> resultAs(@Nonnull Type type, @Nonnull Converter converter);
+    <T> Optional<T> resultAs(Type type, Converter converter);
 
     /**
      * Retrieves an optional error.
      *
      * @return error if the step has finished with an error. Will return empty optional, if the step is not finished
      */
-    @Nonnull
     Optional<StepFailedException> error();
 
     /**
@@ -168,5 +160,5 @@ public interface WorkflowStepResult {
      *
      * @param reason human-readable cancellation reason.
      */
-    void cancel(@Nonnull String reason);
+    void cancel(String reason);
 }

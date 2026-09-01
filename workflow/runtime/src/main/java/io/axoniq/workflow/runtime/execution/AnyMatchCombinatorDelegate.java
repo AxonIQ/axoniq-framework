@@ -19,16 +19,16 @@
 
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.AnyMatchCombinator;
 import io.axoniq.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.state.StepFailedException;
 import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
-import org.jspecify.annotations.NonNull;
 
 import java.lang.reflect.Type;
 import java.util.Arrays;
@@ -57,14 +57,13 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
      * @param workflowExecution the workflow execution.
      */
     @Internal
-    public AnyMatchCombinatorDelegate(@Nonnull WorkflowExecution workflowExecution) {
+    public AnyMatchCombinatorDelegate(WorkflowExecution workflowExecution) {
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "state must not be null");
     }
 
     @Override
-    @Nonnull
-    public CombinatorWorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
-                                                 @Nonnull WorkflowStepResult... results) {
+    public CombinatorWorkflowStepResult anyMatch(Predicate<WorkflowStepResult> predicate,
+                                                 WorkflowStepResult... results) {
 
         return new CombinatorWorkflowStepResult() {
 
@@ -130,21 +129,18 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
             }
 
             @Override
-            @Nonnull
             public List<WorkflowStepResult> matched() {
                 resolveWinner();
                 return categories().matched();
             }
 
             @Override
-            @Nonnull
             public List<WorkflowStepResult> unmatched() {
                 resolveWinner();
                 return categories().unmatched();
             }
 
             @Override
-            @Nonnull
             public String getStepName() {
                 return "anyMatch(" + String.join(", ",
                                                  Arrays.stream(results).map(WorkflowStepResult::getStepName).toList())
@@ -160,24 +156,22 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
             }
 
             @Override
-            @Nonnull
-            public Optional<Map<String, Object>> result() {
+            public Optional<Map<String, @Nullable Object>> result() {
                 return resolveWinner().result();
             }
 
             @Override
-            public @NonNull <T> Optional<T> resultAs(@NonNull Type type) {
+            public <T> Optional<T> resultAs(Type type) {
                 return resolveWinner().resultAs(type);
             }
 
             @Override
-            public @NonNull <T> Optional<T> resultAs(@NonNull Type type, @NonNull Converter converter) {
+            public <T> Optional<T> resultAs(Type type, Converter converter) {
                 return resolveWinner().resultAs(type, converter);
             }
 
 
             @Override
-            @Nonnull
             public Optional<StepFailedException> error() {
                 return resolveWinner().error();
             }
@@ -213,7 +207,7 @@ public class AnyMatchCombinatorDelegate implements AnyMatchCombinator {
             }
 
             @Override
-            public void cancel(@Nonnull String reason) {
+            public void cancel(String reason) {
                 Arrays.stream(results).forEach(r -> r.cancel(reason));
             }
         };

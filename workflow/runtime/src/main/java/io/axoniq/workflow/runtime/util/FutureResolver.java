@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.util;
 
 import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
@@ -53,8 +52,8 @@ public interface FutureResolver {
      * @param processingContext context containing the configured resolver
      * @param future            future to resolve
      */
-    static void resolve(@Nonnull ProcessingContext processingContext,
-                               @Nonnull CompletableFuture<?> future) {
+    static void resolve(ProcessingContext processingContext,
+                        CompletableFuture<?> future) {
         Objects.requireNonNull(processingContext, "Processing context must not be null");
         Objects.requireNonNull(future, "Future must not be null");
         FutureResolver resolver = null;
@@ -82,7 +81,7 @@ public interface FutureResolver {
      *
      * @param future future to resolve
      */
-    void resolve(@Nonnull CompletableFuture<?> future);
+    void resolve(CompletableFuture<?> future);
 
     @SuppressWarnings("unchecked")
     private static <T extends Throwable> void throwUnchecked(Throwable failure) throws T {

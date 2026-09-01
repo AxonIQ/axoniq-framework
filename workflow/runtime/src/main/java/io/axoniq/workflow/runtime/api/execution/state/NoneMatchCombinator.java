@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
-import jakarta.annotation.Nonnull;
 
 import java.util.function.Predicate;
 
@@ -67,7 +66,6 @@ public interface NoneMatchCombinator {
      * @param results   the step results to guard.
      * @return a composite result which succeeds when no result matches, or short-circuits on the first match.
      */
-    @Nonnull
-    CombinatorWorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+    CombinatorWorkflowStepResult noneMatch(Predicate<WorkflowStepResult> predicate,
                                            WorkflowStepResult... results);
 }

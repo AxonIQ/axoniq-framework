@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 import java.time.Clock;
@@ -48,16 +47,15 @@ public class DefaultWorkflowScheduler implements WorkflowScheduler {
      * @param clock workflow clock
      * @param timerExecutor executor used only for deadline delivery
      */
-    public DefaultWorkflowScheduler(@Nonnull Clock clock, @Nonnull ScheduledThreadPoolExecutor timerExecutor) {
+    public DefaultWorkflowScheduler(Clock clock, ScheduledThreadPoolExecutor timerExecutor) {
         this.clock = Objects.requireNonNull(clock, "Clock must not be null");
         this.timerExecutor = Objects.requireNonNull(timerExecutor, "Timer executor must not be null");
         this.timerExecutor.setRemoveOnCancelPolicy(true);
         this.timerExecutor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
     }
 
-    @Nonnull
     @Override
-    public ScheduledTask schedule(@Nonnull Instant deadline) {
+    public ScheduledTask schedule(Instant deadline) {
         var completion = new CompletableFuture<Void>();
         var delay = Duration.between(clock.instant(), deadline);
         var delayMillis = Math.max(0, delay.toMillis());
@@ -72,7 +70,6 @@ public class DefaultWorkflowScheduler implements WorkflowScheduler {
                 TimeUnit.MILLISECONDS
         );
         return new ScheduledTask() {
-            @Nonnull
             @Override
             public CompletableFuture<Void> completion() {
                 return completion;

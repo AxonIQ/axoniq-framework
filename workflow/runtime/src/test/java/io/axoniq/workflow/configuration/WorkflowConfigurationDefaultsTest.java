@@ -20,7 +20,6 @@ package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.workflow.runtime.util.DefaultTimeoutFutureResolver;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Component;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentFactory;
@@ -253,7 +252,7 @@ class WorkflowConfigurationDefaultsTest {
         }
 
         @Override
-        public void describeTo(@Nonnull org.axonframework.common.infra.ComponentDescriptor descriptor) {
+        public void describeTo(org.axonframework.common.infra.ComponentDescriptor descriptor) {
             // no-op for tests
         }
     }
@@ -294,7 +293,7 @@ class WorkflowConfigurationDefaultsTest {
         }
 
         @Override
-        public void describeTo(@Nonnull org.axonframework.common.infra.ComponentDescriptor descriptor) {
+        public void describeTo(org.axonframework.common.infra.ComponentDescriptor descriptor) {
             // no-op for tests
         }
     }

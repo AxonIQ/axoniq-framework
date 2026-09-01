@@ -21,7 +21,7 @@ package io.axoniq.workflow.runtime.util;
 import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
@@ -29,10 +29,7 @@ import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.same;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests for {@link FutureResolver}.
@@ -45,9 +42,7 @@ class FutureResolverTest {
     void defaultResolverWaitsForPublicationToComplete() {
         var resolver = new DefaultTimeoutFutureResolver();
         var publication = CompletableFuture.completedFuture(null);
-
         resolver.resolve(publication);
-
         assertThat(publication).isCompleted();
     }
 
@@ -55,7 +50,6 @@ class FutureResolverTest {
     void defaultResolverPropagatesPublicationFailure() {
         var resolver = new DefaultTimeoutFutureResolver();
         var failure = new IllegalStateException("publication failed");
-
         assertThatThrownBy(() -> resolver.resolve(CompletableFuture.failedFuture(failure)))
                 .isInstanceOf(IllegalStateException.class)
                 .satisfies(exception -> assertThat(exception).isSameAs(failure));
@@ -82,9 +76,7 @@ class FutureResolverTest {
         var resolver = mock(FutureResolver.class);
         var publication = new CompletableFuture<Void>();
         when(context.component(FutureResolver.class)).thenReturn(resolver);
-
         FutureResolver.resolve(context, publication);
-
         verify(resolver).resolve(same(publication));
     }
 
@@ -103,10 +95,9 @@ class FutureResolverTest {
     void resolvesPublicationWhenComponentNotFoundInProcessingContext() {
         var context = mock(ProcessingContext.class);
         var publication = CompletableFuture.completedFuture(null);
-        when(context.component(FutureResolver.class)).thenThrow(new ComponentNotFoundException(FutureResolver.class, "name"));
-
+        when(context.component(FutureResolver.class)).thenThrow(new ComponentNotFoundException(FutureResolver.class,
+                                                                                               "name"));
         FutureResolver.resolve(context, publication);
-
         assertThat(publication).isCompleted();
     }
 
@@ -120,7 +111,6 @@ class FutureResolverTest {
 
         assertThat(publication).isCompleted();
     }
-
     @SuppressWarnings("unchecked")
     private static <T extends Throwable> void throwUnchecked(Throwable failure) throws T {
         throw (T) failure;

@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
@@ -40,8 +39,7 @@ public interface WorkflowStore {
      * @param processingContext processing context used for sourcing
      * @return current running workflow ids
      */
-    @Nonnull
-    CompletableFuture<RunningWorkflows> loadRunningWorkflows(@Nonnull ProcessingContext processingContext);
+    CompletableFuture<RunningWorkflows> loadRunningWorkflows(ProcessingContext processingContext);
 
     /**
      * Loads the event-sourced durable state for a workflow id.
@@ -50,7 +48,6 @@ public interface WorkflowStore {
      * @param processingContext processing context used for sourcing
      * @return durable workflow state
      */
-    @Nonnull
-    CompletableFuture<WorkflowState> loadWorkflow(@Nonnull String workflowId,
-                                                  @Nonnull ProcessingContext processingContext);
+    CompletableFuture<WorkflowState> loadWorkflow(String workflowId,
+                                                  ProcessingContext processingContext);
 }

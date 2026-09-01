@@ -25,7 +25,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry.PredicatedWorkflowConfiguration;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
@@ -99,7 +99,6 @@ class WorkflowEngineCrossSegmentCheckpointTest {
     private WorkflowConfigurationRegistry<?> configurationRegistry;
     private WorkflowExecutionRepository repository;
     private WorkflowEngine workflowEngine;
-    private WorkflowEngineReplaySupport replaySupport;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
 
     private final AtomicReference<Consumer<WorkflowExecution>> stragglerTermination = new AtomicReference<>();
@@ -115,9 +114,8 @@ class WorkflowEngineCrossSegmentCheckpointTest {
                                             mock(WorkflowCancellationService.class),
                                             mock(WorkflowStore.class),
                                             mock(UnitOfWorkFactory.class));
-        replaySupport = new WorkflowEngineReplaySupport(workflowEngine);
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
-        workflowEngine.setEngineSupportComponents(replaySupport, checkpointingSupport);
+        workflowEngine.setCheckpointingSupport(checkpointingSupport);
     }
 
     /**
@@ -144,10 +142,6 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         var fastWorker = new SegmentWorker(fast, autoCheckpointing);
         var slowWorker = new SegmentWorker(slow, autoCheckpointing);
         var straggler = registerStartConfiguration();
-        replaySupport.setInitialEngineTokens(null, null);
-        // Live mode is per segment: each segment this test drives is declared live on its own.
-        replaySupport.switchToLiveMode(processingContext(fast, null));
-        replaySupport.switchToLiveMode(processingContext(slow, null));
 
         // 1. The node claims the fast segment and handles the straggler's start event at position 100.
         fastWorker.claim();

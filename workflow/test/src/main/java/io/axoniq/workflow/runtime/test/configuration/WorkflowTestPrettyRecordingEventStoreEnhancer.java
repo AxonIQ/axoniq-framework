@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.test.configuration;
 
 import io.axoniq.workflow.runtime.test.utils.PrettyPrintingRecordingEventStore;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.eventsourcing.eventstore.EventStore;
@@ -46,7 +45,7 @@ import org.axonframework.eventsourcing.eventstore.InterceptingEventStore;
 public class WorkflowTestPrettyRecordingEventStoreEnhancer implements ConfigurationEnhancer {
 
     @Override
-    public void enhance(@Nonnull ComponentRegistry registry) {
+    public void enhance(ComponentRegistry registry) {
         registry.registerDecorator(EventStore.class,
                                    InterceptingEventStore.DECORATION_ORDER - 1,
                                    (configuration, name, delegate) ->

@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import jakarta.annotation.Nonnull;
 
 /**
  * Specification for terminating a workflow with failure.
@@ -39,7 +38,7 @@ public record FailWorkflowDefinition(
      * @param primitiveMetadata metadata of the primitive
      * @return copied workflow definition with updated metadata
      */
-    public FailWorkflowDefinition primitiveMetadata(@Nonnull PrimitiveMetadata primitiveMetadata) {
+    public FailWorkflowDefinition primitiveMetadata(PrimitiveMetadata primitiveMetadata) {
         return new FailWorkflowDefinition(primitiveMetadata, cause);
     }
 
@@ -49,7 +48,7 @@ public record FailWorkflowDefinition(
      * @param eventNameCustomizer customizer for published event names
      * @return copied workflow definition with updated event naming
      */
-    public FailWorkflowDefinition eventNameCustomizer(@Nonnull EventNameCustomizer eventNameCustomizer) {
+    public FailWorkflowDefinition eventNameCustomizer(EventNameCustomizer eventNameCustomizer) {
         return primitiveMetadata(primitiveMetadata.eventNameCustomizer(eventNameCustomizer));
     }
 
@@ -59,7 +58,7 @@ public record FailWorkflowDefinition(
      * @param cause failure cause
      * @return copied workflow definition with updated failure cause
      */
-    public FailWorkflowDefinition cause(@Nonnull Throwable cause) {
+    public FailWorkflowDefinition cause(Throwable cause) {
         return new FailWorkflowDefinition(primitiveMetadata, cause);
     }
 }

@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.itest;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
@@ -28,7 +30,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.annotation.Event;
@@ -113,7 +114,7 @@ class WaitForCombineResultWorkflowTest
 
     public static class WaitForCombineWorkflowContext extends SimpleWorkflowContext {
 
-        public WaitForCombineWorkflowContext(String workflowId, Map<String, Object> payload,
+        public WaitForCombineWorkflowContext(String workflowId, Map<String, @Nullable Object> payload,
                                              ProcessingContext processingContext,
                                              WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
@@ -124,11 +125,10 @@ class WaitForCombineResultWorkflowTest
             implements WorkflowContextFactory<WaitForCombineWorkflowContext> {
 
         @Override
-        @Nonnull
-        public WaitForCombineWorkflowContext createContext(@Nonnull Map<String, Object> payload,
-                                                           @Nonnull String workflowId,
-                                                           @Nonnull ProcessingContext processingContext,
-                                                           @Nonnull WorkflowConfiguration<?> workflowConfiguration) {
+        public WaitForCombineWorkflowContext createContext(Map<String, @Nullable Object> payload,
+                                                           String workflowId,
+                                                           ProcessingContext processingContext,
+                                                           WorkflowConfiguration<?> workflowConfiguration) {
             return new WaitForCombineWorkflowContext(workflowId, payload, processingContext, workflowConfiguration);
         }
     }

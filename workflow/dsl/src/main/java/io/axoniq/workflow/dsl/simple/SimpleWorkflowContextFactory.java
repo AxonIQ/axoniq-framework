@@ -18,9 +18,10 @@
  */
 package io.axoniq.workflow.dsl.simple;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
 import java.util.Map;
@@ -43,13 +44,12 @@ public class SimpleWorkflowContextFactory implements WorkflowContextFactory<Simp
      * @param workflowConfiguration runtime configuration for this workflow
      * @return workflow context passed to the simple Java DSL definition
      */
-    @Nonnull
     @Override
     public SimpleWorkflowContext createContext(
-            @Nonnull Map<String, Object> initialPayload,
-            @Nonnull String workflowId,
-            @Nonnull ProcessingContext processingContext,
-            @Nonnull WorkflowConfiguration<?> workflowConfiguration
+            Map<String, @Nullable Object> initialPayload,
+            String workflowId,
+            ProcessingContext processingContext,
+            WorkflowConfiguration<?> workflowConfiguration
     ) {
         return new SimpleWorkflowContext(
                 workflowId,

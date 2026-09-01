@@ -18,8 +18,7 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Lifecycle control contract for programmatically changing workflow and step lifecycle state.
@@ -38,14 +37,14 @@ public interface WorkflowLifecycleControl {
      *
      * @param command cancellation command.
      */
-    void cancelWorkflow(@Nonnull CancelWorkflowCommand command);
+    void cancelWorkflow(CancelWorkflowCommand command);
 
     /**
      * Fails the entire workflow, publishing the terminal {@code <workflow>:FAILED} event.
      *
      * @param command failure command.
      */
-    void failWorkflow(@Nonnull FailWorkflowCommand command);
+    void failWorkflow(FailWorkflowCommand command);
 
     /**
      * Cancels a single running step while the workflow itself stays non-terminal.
@@ -56,7 +55,7 @@ public interface WorkflowLifecycleControl {
      * @param command step cancellation command.
      * @return {@code true} if cancellation was initiated for a running, non-terminal step, otherwise {@code false}
      */
-    boolean cancelStep(@Nonnull CancelStepCommand command);
+    boolean cancelStep(CancelStepCommand command);
 
     /**
      * Command carrying the intent to cancel an entire workflow.
@@ -79,7 +78,6 @@ public interface WorkflowLifecycleControl {
          *
          * @return event name customizer
          */
-        @Nonnull
         EventNameCustomizer eventNameCustomizer();
     }
 
@@ -104,7 +102,6 @@ public interface WorkflowLifecycleControl {
          *
          * @return event name customizer
          */
-        @Nonnull
         EventNameCustomizer eventNameCustomizer();
     }
 
@@ -121,7 +118,6 @@ public interface WorkflowLifecycleControl {
          *
          * @return step name
          */
-        @Nonnull
         String stepName();
 
         /**
@@ -137,7 +133,6 @@ public interface WorkflowLifecycleControl {
          *
          * @return event name customizer
          */
-        @Nonnull
         EventNameCustomizer eventNameCustomizer();
     }
 }

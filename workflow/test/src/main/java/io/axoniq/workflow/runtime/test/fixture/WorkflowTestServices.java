@@ -27,8 +27,7 @@ import io.axoniq.workflow.runtime.test.utils.ManualExecuteStepActionResolver;
 import io.axoniq.workflow.runtime.test.utils.ManualWorkflowScheduler;
 import io.axoniq.workflow.runtime.test.utils.TestClock;
 import io.axoniq.workflow.runtime.test.utils.TestEventPublisher;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.configuration.AxonConfiguration;
 
 import java.util.Objects;
@@ -67,11 +66,11 @@ public class WorkflowTestServices {
      * @param configuration configuration to use
      * @return initialized services
      */
-    public static WorkflowTestServices from(@Nonnull AxonConfiguration configuration) {
+    public static WorkflowTestServices from(AxonConfiguration configuration) {
         return new WorkflowTestServices(Objects.requireNonNull(configuration, "Configuration must not be null"));
     }
 
-    private WorkflowTestServices(@Nonnull AxonConfiguration configuration) {
+    private WorkflowTestServices(AxonConfiguration configuration) {
         this.configuration = Objects.requireNonNull(configuration, "Configuration must not be null");
         this.workflowEngine = configuration.getComponent(WorkflowEngine.class);
         this.delayedPublisher = configuration.getComponent(DelayedPublisher.class);
@@ -90,7 +89,6 @@ public class WorkflowTestServices {
      *
      * @return configuration backing these test services
      */
-    @Nonnull
     public AxonConfiguration configuration() {
         return configuration;
     }
@@ -100,7 +98,6 @@ public class WorkflowTestServices {
      *
      * @return workflow engine
      */
-    @Nonnull
     public WorkflowEngine workflowEngine() {
         return workflowEngine;
     }
@@ -110,7 +107,6 @@ public class WorkflowTestServices {
      *
      * @return delayed publisher
      */
-    @Nonnull
     public DelayedPublisher delayedPublisher() {
         return delayedPublisher;
     }
@@ -120,7 +116,6 @@ public class WorkflowTestServices {
      *
      * @return test event publisher
      */
-    @Nonnull
     public TestEventPublisher eventPublisher() {
         return eventPublisher;
     }
@@ -130,7 +125,6 @@ public class WorkflowTestServices {
      *
      * @return workflow configuration registry
      */
-    @Nonnull
     public WorkflowConfigurationRegistry<?> workflowRegistry() {
         return workflowRegistry;
     }
@@ -140,7 +134,6 @@ public class WorkflowTestServices {
      *
      * @return workflow history repository
      */
-    @Nonnull
     public WorkflowHistoryRepository workflowHistoryRepository() {
         return workflowHistoryRepository;
     }
@@ -150,7 +143,6 @@ public class WorkflowTestServices {
      *
      * @return optional mutable test clock
      */
-    @Nonnull
     public Optional<TestClock> clock() {
         return Optional.ofNullable(clock);
     }
@@ -160,7 +152,6 @@ public class WorkflowTestServices {
      *
      * @return optional manual execute-step action resolver
      */
-    @Nonnull
     public Optional<ManualExecuteStepActionResolver> executeStepActionResolver() {
         return Optional.ofNullable(executeStepActionResolver);
     }
@@ -170,7 +161,6 @@ public class WorkflowTestServices {
      *
      * @return optional manual workflow scheduler
      */
-    @Nonnull
     public Optional<ManualWorkflowScheduler> timeoutScheduler() {
         return Optional.ofNullable(timeoutScheduler);
     }

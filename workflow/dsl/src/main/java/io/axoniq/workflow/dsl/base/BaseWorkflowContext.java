@@ -19,6 +19,8 @@
 
 package io.axoniq.workflow.dsl.base;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.dsl.api.EventAssociationsUtils;
 import io.axoniq.workflow.runtime.api.execution.context.CancelStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.CancelWorkflowDefinition;
@@ -44,7 +46,6 @@ import io.axoniq.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
 import io.axoniq.workflow.runtime.api.execution.context.Version;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
@@ -91,10 +92,10 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param workflowConfiguration runtime configuration for this workflow
      */
     public BaseWorkflowContext(
-            @Nonnull String workflowId,
-            @Nonnull Map<String, Object> payload,
-            @Nonnull ProcessingContext processingContext,
-            @Nonnull WorkflowConfiguration<?> workflowConfiguration
+            String workflowId,
+            Map<String, @Nullable Object> payload,
+            ProcessingContext processingContext,
+            WorkflowConfiguration<?> workflowConfiguration
     ) {
         super(workflowId, payload, processingContext, workflowConfiguration);
         this.messageTypeResolver = processingContext().component(MessageTypeResolver.class);
@@ -120,7 +121,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @deprecated use {@link EventAssociationsUtils#payloadProperty(String)} instead.
      */
     @Deprecated(since = "0.2.0", forRemoval = true)
-    public static ValueRetriever payloadProperty(@Nonnull String propertyName) {
+    public static ValueRetriever payloadProperty(String propertyName) {
         return EventAssociationsUtils.payloadProperty(propertyName);
     }
 
@@ -132,7 +133,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @deprecated use {@link EventAssociationsUtils#metadataProperty(String)} instead.
      */
     @Deprecated(since = "0.2.0", forRemoval = true)
-    public static ValueRetriever metadataProperty(@Nonnull String propertyName) {
+    public static ValueRetriever metadataProperty(String propertyName) {
         return EventAssociationsUtils.metadataProperty(propertyName);
     }
 
@@ -145,7 +146,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param <T>            concrete step definition type
      * @return customized step definition
      */
-    public static <T> T apply(@Nonnull T stepDefinition, @Nonnull UnaryOperator<T> customizer) {
+    public static <T> T apply(T stepDefinition, UnaryOperator<T> customizer) {
         return Objects.requireNonNull(customizer, "Customizer must not be null")
                       .apply(Objects.requireNonNull(stepDefinition, "Step definition must not be null"));
     }
@@ -163,12 +164,11 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param customizer   customizer for timeout, mapping, retries, or metadata
      * @return handle for the running step
      */
-    @Nonnull
     public WorkflowStepResult execute(
-            @Nonnull String stepName,
-            @Nonnull Map<String, Object> inputPayload,
-            @Nonnull PayloadProcessor processor,
-            @Nonnull UnaryOperator<ExecuteStepDefinition> customizer
+            String stepName,
+            Map<String, @Nullable Object> inputPayload,
+            PayloadProcessor processor,
+            UnaryOperator<ExecuteStepDefinition> customizer
     ) {
         return super.execute(apply(defaultExecuteStepDefinition(stepName, inputPayload, processor), customizer));
     }
@@ -181,11 +181,10 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param processor    function that performs the step work
      * @return handle for the running step
      */
-    @Nonnull
     public WorkflowStepResult execute(
-            @Nonnull String stepName,
-            @Nonnull Map<String, Object> inputPayload,
-            @Nonnull PayloadProcessor processor
+            String stepName,
+            Map<String, @Nullable Object> inputPayload,
+            PayloadProcessor processor
     ) {
         return execute(stepName, inputPayload, processor, UnaryOperator.identity());
     }
@@ -201,12 +200,11 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @return payload produced by the completed step
      * @see #execute(String, Map, PayloadProcessor, UnaryOperator)
      */
-    @Nonnull
-    public Map<String, Object> awaitExecute(
-            @Nonnull String stepName,
-            @Nonnull Map<String, Object> inputPayload,
-            @Nonnull PayloadProcessor processor,
-            @Nonnull UnaryOperator<ExecuteStepDefinition> customizer
+    public Map<String, @Nullable Object> awaitExecute(
+            String stepName,
+            Map<String, @Nullable Object> inputPayload,
+            PayloadProcessor processor,
+            UnaryOperator<ExecuteStepDefinition> customizer
     ) {
         return super.awaitExecute(apply(defaultExecuteStepDefinition(stepName, inputPayload, processor),
                                         customizer));
@@ -221,11 +219,10 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @return payload produced by the completed step
      * @see #execute(String, Map, PayloadProcessor)
      */
-    @Nonnull
-    public Map<String, Object> awaitExecute(
-            @Nonnull String stepName,
-            @Nonnull Map<String, Object> inputPayload,
-            @Nonnull PayloadProcessor processor
+    public Map<String, @Nullable Object> awaitExecute(
+            String stepName,
+            Map<String, @Nullable Object> inputPayload,
+            PayloadProcessor processor
     ) {
         return awaitExecute(stepName, inputPayload, processor, UnaryOperator.identity());
     }
@@ -240,11 +237,10 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param customizer     customizer for timeout, mapping, or metadata
      * @return handle for the waiting step
      */
-    @Nonnull
     public WorkflowStepResult waitForEvent(
-            @Nonnull String stepName,
-            @Nonnull EventCondition eventCondition,
-            @Nonnull UnaryOperator<WaitForStepDefinition> customizer
+            String stepName,
+            EventCondition eventCondition,
+            UnaryOperator<WaitForStepDefinition> customizer
     ) {
         return super.waitForEvent(apply(defaultWaitForStepDefinition(stepName, eventCondition), customizer));
     }
@@ -256,10 +252,9 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param eventCondition event selection criteria
      * @return handle for the waiting step
      */
-    @Nonnull
     public WorkflowStepResult waitForEvent(
-            @Nonnull String stepName,
-            @Nonnull EventCondition eventCondition
+            String stepName,
+            EventCondition eventCondition
     ) {
         return waitForEvent(stepName, eventCondition, UnaryOperator.identity());
     }
@@ -274,11 +269,10 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @return payload extracted from the matching event
      * @see #waitForEvent(String, EventCondition, UnaryOperator)
      */
-    @Nonnull
-    public Map<String, Object> awaitEvent(
-            @Nonnull String stepName,
-            @Nonnull EventCondition eventCondition,
-            @Nonnull UnaryOperator<WaitForStepDefinition> customizer
+    public Map<String, @Nullable Object> awaitEvent(
+            String stepName,
+            EventCondition eventCondition,
+            UnaryOperator<WaitForStepDefinition> customizer
     ) {
         return super.awaitEvent(apply(defaultWaitForStepDefinition(stepName, eventCondition), customizer));
     }
@@ -291,10 +285,9 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @return payload extracted from the matching event
      * @see #waitForEvent(String, EventCondition)
      */
-    @Nonnull
-    public Map<String, Object> awaitEvent(
-            @Nonnull String stepName,
-            @Nonnull EventCondition eventCondition
+    public Map<String, @Nullable Object> awaitEvent(
+            String stepName,
+            EventCondition eventCondition
     ) {
         return awaitEvent(stepName, eventCondition, UnaryOperator.identity());
     }
@@ -309,10 +302,9 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param customizer customizer that typically sets the timeout
      * @return handle for the sleeping step
      */
-    @Nonnull
     public WorkflowStepResult sleep(
-            @Nonnull String stepName,
-            @Nonnull UnaryOperator<WaitForStepDefinition> customizer
+            String stepName,
+            UnaryOperator<WaitForStepDefinition> customizer
     ) {
         return super.waitForEvent(apply(defaultWaitForStepDefinition(stepName, EventConditions.never()), customizer));
     }
@@ -326,8 +318,8 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @see #sleep(String, UnaryOperator)
      */
     public void awaitSleep(
-            @Nonnull String stepName,
-            @Nonnull UnaryOperator<WaitForStepDefinition> customizer
+            String stepName,
+            UnaryOperator<WaitForStepDefinition> customizer
     ) {
         var result = super.waitForEvent(apply(defaultWaitForStepDefinition(stepName, EventConditions.never()),
                                               customizer));
@@ -351,11 +343,10 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param customizer   customizer for step metadata
      * @return handle for the payload update step
      */
-    @Nonnull
     public WorkflowStepResult modifyPayload(
-            @Nonnull String stepName,
-            @Nonnull PayloadModification modification,
-            @Nonnull UnaryOperator<PayloadStepDefinition> customizer
+            String stepName,
+            PayloadModification modification,
+            UnaryOperator<PayloadStepDefinition> customizer
     ) {
         return super.modifyPayload(apply(defaultPayloadStepDefinition(stepName, modification), customizer));
     }
@@ -367,10 +358,9 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param modification transformation to apply to the current payload
      * @return handle for the payload update step
      */
-    @Nonnull
     public WorkflowStepResult modifyPayload(
-            @Nonnull String stepName,
-            @Nonnull PayloadModification modification
+            String stepName,
+            PayloadModification modification
     ) {
         return modifyPayload(stepName, modification, UnaryOperator.identity());
     }
@@ -405,9 +395,9 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @return {@code true} if the workflow is at (or past) {@code newVersion} for this {@code changeId}; {@code false}
      * if it stays on the legacy branch.
      */
-    public boolean migrateVersion(@Nonnull String changeId,
-                                  @Nonnull String newVersion,
-                                  @Nonnull UnaryOperator<VersionStepDefinition> customizer) {
+    public boolean migrateVersion(String changeId,
+                                  String newVersion,
+                                  UnaryOperator<VersionStepDefinition> customizer) {
         if (changeId == null || changeId.isBlank()) {
             throw new IllegalArgumentException("changeId must not be blank");
         }
@@ -424,7 +414,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @return {@code true} if the workflow is at (or past) {@code newVersion} for this {@code changeId}.
      * @see #migrateVersion(String, String, UnaryOperator)
      */
-    public boolean migrateVersion(@Nonnull String changeId, @Nonnull String newVersion) {
+    public boolean migrateVersion(String changeId, String newVersion) {
         return migrateVersion(changeId, newVersion, UnaryOperator.identity());
     }
 
@@ -438,9 +428,9 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @see #modifyPayload(String, PayloadModification, UnaryOperator)
      */
     public void awaitModifyPayload(
-            @Nonnull String stepName,
-            @Nonnull PayloadModification modification,
-            @Nonnull UnaryOperator<PayloadStepDefinition> customizer
+            String stepName,
+            PayloadModification modification,
+            UnaryOperator<PayloadStepDefinition> customizer
     ) {
         super.awaitModifyPayload(apply(defaultPayloadStepDefinition(stepName, modification), customizer));
     }
@@ -453,8 +443,8 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @see #modifyPayload(String, PayloadModification)
      */
     public void awaitModifyPayload(
-            @Nonnull String stepName,
-            @Nonnull PayloadModification modification
+            String stepName,
+            PayloadModification modification
     ) {
         awaitModifyPayload(stepName, modification, UnaryOperator.identity());
     }
@@ -467,8 +457,8 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param customizer customizer for failure metadata
      */
     public void fail(
-            @Nonnull Throwable cause,
-            @Nonnull UnaryOperator<FailWorkflowDefinition> customizer
+            Throwable cause,
+            UnaryOperator<FailWorkflowDefinition> customizer
     ) {
         super.fail(apply(defaultFailWorkflowDefinition().cause(cause), customizer));
     }
@@ -479,7 +469,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param cause reason the workflow should fail
      */
     public void fail(
-            @Nonnull Throwable cause
+            Throwable cause
     ) {
         fail(cause, UnaryOperator.identity());
     }
@@ -491,7 +481,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param customizer customizer for cancellation metadata and cause
      */
     public void cancel(
-            @Nonnull UnaryOperator<CancelWorkflowDefinition> customizer
+            UnaryOperator<CancelWorkflowDefinition> customizer
     ) {
         super.cancel(apply(defaultCancelWorkflowDefinition(), customizer));
     }
@@ -511,8 +501,8 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param customizer customizer for cancellation metadata and cause
      */
     public void cancelStep(
-            @Nonnull String stepName,
-            @Nonnull UnaryOperator<CancelStepDefinition> customizer
+            String stepName,
+            UnaryOperator<CancelStepDefinition> customizer
     ) {
         super.cancelStep(apply(defaultCancelStepDefinition(stepName), customizer));
     }
@@ -522,7 +512,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @param stepName name of the step to cancel
      */
-    public void cancelStep(@Nonnull String stepName) {
+    public void cancelStep(String stepName) {
         cancelStep(stepName, UnaryOperator.identity());
     }
 
@@ -535,12 +525,11 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param processor    function that performs the step work
      * @return default execute step definition
      */
-    @Nonnull
     @Internal
     public ExecuteStepDefinition defaultExecuteStepDefinition(
-            @Nonnull String stepName,
-            @Nonnull Map<String, Object> inputPayload,
-            @Nonnull PayloadProcessor processor
+            String stepName,
+            Map<String, @Nullable Object> inputPayload,
+            PayloadProcessor processor
     ) {
         return new ExecuteStepDefinition(
                 new PrimitiveMetadata(stepName, defaults()),
@@ -559,11 +548,10 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param eventCondition event selection criteria
      * @return default wait-for step definition
      */
-    @Nonnull
     @Internal
     public WaitForStepDefinition defaultWaitForStepDefinition(
-            @Nonnull String stepName,
-            @Nonnull EventCondition eventCondition
+            String stepName,
+            EventCondition eventCondition
     ) {
         return new WaitForStepDefinition(
                 new PrimitiveMetadata(stepName, defaults()),
@@ -580,11 +568,10 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param modification transformation to apply to the current payload
      * @return default payload step definition
      */
-    @Nonnull
     @Internal
     public PayloadStepDefinition defaultPayloadStepDefinition(
-            @Nonnull String stepName,
-            @Nonnull PayloadModification modification
+            String stepName,
+            PayloadModification modification
     ) {
         return new PayloadStepDefinition(
                 new PrimitiveMetadata(stepName, defaults()),
@@ -600,10 +587,9 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param newVersion new workflow version to record (semver string).
      * @return default version step definition.
      */
-    @Nonnull
     protected VersionStepDefinition defaultMigrateVersionStepDefinition(
-            @Nonnull String changeId,
-            @Nonnull String newVersion
+            String changeId,
+            String newVersion
     ) {
         return new VersionStepDefinition(
                 new PrimitiveMetadata(changeId, defaults()),
@@ -616,7 +602,6 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @return default fail step definition
      */
-    @Nonnull
     @Internal
     public FailWorkflowDefinition defaultFailWorkflowDefinition() {
         return new FailWorkflowDefinition(
@@ -630,7 +615,6 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @return default cancel workflow definition
      */
-    @Nonnull
     @Internal
     public CancelWorkflowDefinition defaultCancelWorkflowDefinition() {
         return new CancelWorkflowDefinition(
@@ -645,9 +629,8 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param stepName name of the step to cancel
      * @return default cancel step definition
      */
-    @Nonnull
     @Internal
-    public CancelStepDefinition defaultCancelStepDefinition(@Nonnull String stepName) {
+    public CancelStepDefinition defaultCancelStepDefinition(String stepName) {
         return new CancelStepDefinition(
                 new PrimitiveMetadata(stepName, defaults()),
                 null
@@ -660,8 +643,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      * @param messageType event or command class to resolve
      * @return qualified name for the provided class
      */
-    @Nonnull
-    protected QualifiedName resolve(@Nonnull Class<?> messageType) {
+    protected QualifiedName resolve(Class<?> messageType) {
         return messageTypeResolver.resolveOrThrow(Objects.requireNonNull(messageType)).qualifiedName();
     }
 
@@ -671,7 +653,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @param defaultTimeout default timeout for newly created steps
      */
-    public void setDefaultTimeout(@Nonnull Duration defaultTimeout) {
+    public void setDefaultTimeout(Duration defaultTimeout) {
         this.defaultTimeout = Objects.requireNonNull(defaultTimeout, "defaultTimeout must not be null");
     }
 
@@ -680,7 +662,6 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @return default timeout for newly created steps
      */
-    @Nonnull
     public Duration defaultTimeout() {
         return defaultTimeout;
     }
@@ -690,7 +671,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @param defaultRetryPolicy default retry policy for execute steps
      */
-    public void setDefaultRetryPolicy(@Nonnull RetryPolicy defaultRetryPolicy) {
+    public void setDefaultRetryPolicy(RetryPolicy defaultRetryPolicy) {
         this.defaultRetryPolicy = Objects.requireNonNull(defaultRetryPolicy, "defaultRetryPolicy must not be null");
     }
 
@@ -699,7 +680,6 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      *
      * @return default retry policy for execute steps
      */
-    @Nonnull
     public RetryPolicy defaultRetryPolicy() {
         return defaultRetryPolicy;
     }

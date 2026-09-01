@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.state;
 
-import jakarta.annotation.Nonnull;
 
 import java.util.function.Predicate;
 
@@ -82,7 +81,6 @@ public interface AnyMatchCombinator {
      * @param results   the competing step results.
      * @return a composite result that resolves to the first matching result, or fallback to first completed.
      */
-    @Nonnull
-    CombinatorWorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate, WorkflowStepResult... results);
+    CombinatorWorkflowStepResult anyMatch(Predicate<WorkflowStepResult> predicate, WorkflowStepResult... results);
 
 }

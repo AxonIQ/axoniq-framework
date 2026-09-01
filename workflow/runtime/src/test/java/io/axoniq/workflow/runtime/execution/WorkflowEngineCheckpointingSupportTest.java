@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.junit.jupiter.api.*;
@@ -78,12 +77,12 @@ class WorkflowEngineCheckpointingSupportTest {
         private int scheduledBarriers;
 
         @Override
-        public boolean hasUnsafeCheckpointWork(@Nonnull Segment segment) {
+        public boolean hasUnsafeCheckpointWork(Segment segment) {
             return pendingWork;
         }
 
         @Override
-        public void addCheckpointLatch(@Nonnull Segment segment, @Nonnull Runnable latch) {
+        public void addCheckpointLatch(Segment segment, Runnable latch) {
             barrier = latch;
             scheduledBarriers++;
         }
@@ -100,12 +99,12 @@ class WorkflowEngineCheckpointingSupportTest {
         private int scheduledBarriers;
 
         @Override
-        public boolean hasUnsafeCheckpointWork(@Nonnull Segment segment) {
+        public boolean hasUnsafeCheckpointWork(Segment segment) {
             return scheduledBarriers == 0 || workAppended;
         }
 
         @Override
-        public void addCheckpointLatch(@Nonnull Segment segment, @Nonnull Runnable latch) {
+        public void addCheckpointLatch(Segment segment, Runnable latch) {
             scheduledBarriers++;
             // The first schedule sees an empty snapshot. A workflow thread appends work before the callback re-checks.
             workAppended = scheduledBarriers == 1;

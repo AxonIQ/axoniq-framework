@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.sequencing.SequencingPolicy;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -56,7 +55,7 @@ import java.util.stream.Collectors;
      * @param workflowConfigurationRegistry registry consulted to derive start-candidate workflow ids from business
      *                                      events
      */
-    WorkflowEngineSequencingPolicy(@Nonnull WorkflowConfigurationRegistry<?> workflowConfigurationRegistry) {
+    WorkflowEngineSequencingPolicy(WorkflowConfigurationRegistry<?> workflowConfigurationRegistry) {
         this.workflowConfigurationRegistry = workflowConfigurationRegistry;
     }
 
@@ -80,9 +79,8 @@ import java.util.stream.Collectors;
      * map to a single workflow instance
      */
     @Override
-    @Nonnull
-    public Optional<Object> sequenceIdentifierFor(@Nonnull EventMessage eventMessage,
-                                                  @Nonnull ProcessingContext processingContext) {
+    public Optional<Object> sequenceIdentifierFor(EventMessage eventMessage,
+                                                  ProcessingContext processingContext) {
         var metadata = eventMessage.metadata();
         if (MetadataUtils.hasWorkflowId().test(metadata)) {
             return Optional.of(WorkflowSegmentOwnership.segmentKey(MetadataUtils.getWorkflowId(metadata)));
@@ -98,8 +96,8 @@ import java.util.stream.Collectors;
      * version of each definition whose start condition matches. Mirrors the matching performed by the engine's start
      * path.
      */
-    private Set<String> newInstanceCandidateIds(@Nonnull EventMessage eventMessage,
-                                                @Nonnull ProcessingContext processingContext) {
+    private Set<String> newInstanceCandidateIds(EventMessage eventMessage,
+                                                ProcessingContext processingContext) {
         try {
             return workflowConfigurationRegistry
                     .getHighestVersionConfigurations(eventMessage.type())

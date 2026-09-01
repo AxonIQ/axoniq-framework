@@ -21,7 +21,6 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
-import jakarta.annotation.Nonnull;
 
 import static io.axoniq.workflow.runtime.util.WorkflowReflectionUtils.requireIsAssignableFrom;
 
@@ -42,13 +41,12 @@ public class DSLAdoptingExecutionFactory<C extends WorkflowContext> implements
      *
      * @param workflowContextType type of the workflow context.
      */
-    public DSLAdoptingExecutionFactory(@Nonnull Class<C> workflowContextType) {
+    public DSLAdoptingExecutionFactory(Class<C> workflowContextType) {
         this.workflowContextType = requireIsAssignableFrom(AbstractDSLWorkflowContext.class, workflowContextType);
     }
 
     @Override
-    @Nonnull
-    public WorkflowExecution create(@Nonnull WorkflowContext context) {
+    public WorkflowExecution create(WorkflowContext context) {
         if (workflowContextType.isAssignableFrom(context.getClass())) {
             return ((AbstractDSLWorkflowContext) context).execution();
         }

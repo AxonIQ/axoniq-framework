@@ -20,8 +20,8 @@ package io.axoniq.workflow.dsl.api;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -40,16 +40,16 @@ public class Payload {
     /**
      * Map type reference for easy access.
      */
-    public static final TypeReference<Map<String, Object>> PAYLOAD_TYPE = new TypeReference<>() {
+    public static final TypeReference<Map<String, @Nullable Object>> PAYLOAD_TYPE = new TypeReference<>() {
     };
-    private final Map<String, Object> payload;
+    private final Map<String, @Nullable Object> payload;
 
     /**
      * Constructs a new payload around the given map.
      *
      * @param payload payload map.
      */
-    public Payload(@Nonnull Map<String, Object> payload) {
+    public Payload(Map<String, @Nullable Object> payload) {
         this.payload = new HashMap<>(Objects.requireNonNull(payload, "Payload must not be null"));
     }
 
@@ -61,13 +61,13 @@ public class Payload {
      * @return payload representation of the given value.
      */
     public static Payload payload(
-            @Nonnull WorkflowContext context,
-            @Nonnull Object value
+            WorkflowContext context,
+            Object value
     ) {
         var converter = Objects.requireNonNull(context, "Workflow context must not be null")
                                .processingContext().component(EventConverter.class);
-        Map<String, Object> map = Objects.requireNonNull(converter.convert(value, PAYLOAD_TYPE.getType()),
-                                                         "Payload converted to null");
+        Map<String, @Nullable Object> map = Objects.requireNonNull(converter.convert(value, PAYLOAD_TYPE.getType()),
+                                                                   "Payload converted to null");
         return payload(map);
     }
 
@@ -77,7 +77,7 @@ public class Payload {
      * @param payload payload value.
      * @return payload representation of the given value.
      */
-    public static Payload payload(@Nonnull Map<String, Object> payload) {
+    public static Payload payload(Map<String, @Nullable Object> payload) {
         return new Payload(Objects.requireNonNull(payload, "Payload must not be null"));
     }
 
@@ -96,7 +96,7 @@ public class Payload {
      * @param context workflow context.
      * @return payload representation of the workflow context.
      */
-    public static Payload payload(@Nonnull WorkflowContext context) {
+    public static Payload payload(WorkflowContext context) {
         return payload(Objects.requireNonNull(context, "Workflow context must not be null").workflowPayload());
     }
 
@@ -107,7 +107,7 @@ public class Payload {
      * @param value value
      * @return payload with oen value.
      */
-    public static Payload payload(@Nonnull String key, Object value) {
+    public static Payload payload(String key, @Nullable Object value) {
         return payload().with(Objects.requireNonNull(key, "Payload key must not be null"), value);
     }
 
@@ -120,7 +120,8 @@ public class Payload {
      * @param value2 second value.
      * @return payload with two values.
      */
-    public static Payload payload(@Nonnull String key, Object value, @Nonnull String key2, Object value2) {
+    public static Payload payload(String key, @Nullable Object value,
+                                  String key2, @Nullable Object value2) {
         return payload(key, value)
                 .with(key2, value2);
     }
@@ -136,9 +137,9 @@ public class Payload {
      * @param value3 third value.
      * @return payload with three values.
      */
-    public static Payload payload(@Nonnull String key, Object value,
-                                  @Nonnull String key2, Object value2,
-                                  @Nonnull String key3, Object value3) {
+    public static Payload payload(String key, @Nullable Object value,
+                                  String key2, @Nullable Object value2,
+                                  String key3, @Nullable Object value3) {
         return payload(key, value, key2, value2).with(key3, value3);
     }
 
@@ -149,7 +150,8 @@ public class Payload {
      * @param <T> type of the value to retrieve.
      * @return value associated with the key.
      */
-    public <T> T get(@Nonnull String key) {
+    @Nullable
+    public <T> T get(String key) {
         //noinspection unchecked
         return (T) payload.get(Objects.requireNonNull(key, "Payload key must not be null"));
     }
@@ -162,11 +164,13 @@ public class Payload {
      * @param <T>       type of return value.
      * @return converter payload.
      */
-    public <T> T getPayloadAs(String key, Function<Map<String, Object>, T> converter) {
+    @SuppressWarnings("unchecked")
+    @Nullable
+    public <T> T getPayloadAs(String key, Function<Map<String, @Nullable Object>, T> converter) {
         Object value = payload.get(key);
         if (value instanceof Map) {
             //noinspection unchecked
-            return (T) converter.apply((Map<String, Object>) value);
+            return (T) converter.apply((Map<String, @Nullable Object>) value);
         }
         return (T) value;
     }
@@ -179,7 +183,7 @@ public class Payload {
      * @param value value to set.
      * @return payload with updated value.
      */
-    public Payload set(@Nonnull String key, Object value) {
+    public Payload set(String key, @Nullable Object value) {
         payload.put(Objects.requireNonNull(key, "Payload key must not be null"), value);
         return this;
     }
@@ -190,7 +194,7 @@ public class Payload {
      * @param other payload to merge.
      * @return payload with merged values.
      */
-    public Payload with(@Nonnull Payload other) {
+    public Payload with(Payload other) {
         payload.putAll(Objects.requireNonNull(other, "Payload must not be null").getValues());
         return this;
     }
@@ -202,7 +206,7 @@ public class Payload {
      * @param value value.
      * @return payload with updated value.
      */
-    public Payload with(@Nonnull String key, Object value) {
+    public Payload with(String key, @Nullable Object value) {
         return set(key, value);
     }
 
@@ -211,7 +215,7 @@ public class Payload {
      *
      * @return payload map.
      */
-    public Map<String, Object> getValues() {
+    public Map<String, @Nullable Object> getValues() {
         return payload;
     }
 }

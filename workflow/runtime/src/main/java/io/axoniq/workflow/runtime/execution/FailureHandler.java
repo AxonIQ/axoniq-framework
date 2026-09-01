@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 /**
@@ -41,6 +40,6 @@ interface FailureHandler {
      * @param error               the error that caused the failure.
      * @param eventNameCustomizer event name customizer.
      */
-    void onFailure(@Nonnull String stepName, @Nonnull Throwable error,
-                   @Nonnull EventNameCustomizer eventNameCustomizer);
+    void onFailure(String stepName, Throwable error,
+                   EventNameCustomizer eventNameCustomizer);
 }

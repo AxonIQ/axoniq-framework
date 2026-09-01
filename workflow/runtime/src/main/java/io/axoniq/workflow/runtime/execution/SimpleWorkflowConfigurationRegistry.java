@@ -21,7 +21,6 @@ package io.axoniq.workflow.runtime.execution;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.Version;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageType;
@@ -53,10 +52,9 @@ public class SimpleWorkflowConfigurationRegistry
     private final ConcurrentHashMap<QualifiedName, List<PredicatedWorkflowConfiguration>> highestVersionConfigurations = new ConcurrentHashMap<>();
 
     @Override
-    @Nonnull
     public SimpleWorkflowConfigurationRegistry register(
-            @Nonnull EventCondition eventCondition,
-            @Nonnull WorkflowConfiguration<?> workflowConfiguration
+            EventCondition eventCondition,
+            WorkflowConfiguration<?> workflowConfiguration
     ) {
         Objects.requireNonNull(workflowConfiguration, "The given workflow configuration cannot be null.");
         Objects.requireNonNull(eventCondition, "The given event condition cannot be null.");
@@ -87,33 +85,29 @@ public class SimpleWorkflowConfigurationRegistry
      * configuration yet. Taking the whole type here keeps {@link MessageType#version()} in reach of the lookup for when
      * it does.
      */
-    @Nonnull
     @Override
-    public List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(@Nonnull MessageType type) {
+    public List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(MessageType type) {
         return getHighestVersionConfigurations(type.qualifiedName());
     }
 
-    @Nonnull
     @Override
-    public List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(@Nonnull QualifiedName qualifiedName) {
+    public List<PredicatedWorkflowConfiguration> getHighestVersionConfigurations(QualifiedName qualifiedName) {
         return highestVersionConfigurations.getOrDefault(qualifiedName, List.of());
     }
 
     @Override
-    @Nonnull
     public Set<QualifiedName> supportedEvents() {
         return Set.copyOf(workflowsConfigurations.keySet());
     }
 
 
-    @Nonnull
     @Override
-    public List<PredicatedWorkflowConfiguration> getWorkflowsConfigurations(@Nonnull QualifiedName qualifiedName) {
+    public List<PredicatedWorkflowConfiguration> getWorkflowsConfigurations(QualifiedName qualifiedName) {
         return workflowsConfigurations.getOrDefault(qualifiedName, List.of());
     }
 
     @Override
-    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+    public void describeTo(ComponentDescriptor descriptor) {
         var qualifiedNamesToDefinitions = this.workflowsConfigurations.entrySet().stream()
                                                                       .map((e) -> new WorkflowDefinitionDescriptor(e.getKey(),
                                                                                                                    e.getValue()))
@@ -127,7 +121,7 @@ public class SimpleWorkflowConfigurationRegistry
     ) implements DescribableComponent {
 
         @Override
-        public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+        public void describeTo(ComponentDescriptor descriptor) {
             descriptor.describeProperty(qualifiedName.toString(), configurations.stream().map(configuration -> {
                 var definitionClass = configuration.configuration().workflowDefinition().getClass();
                 return String.format("%s", definitionClass.getName());

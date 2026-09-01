@@ -18,11 +18,12 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.state.AllMatchCombinator;
 import io.axoniq.workflow.runtime.api.execution.state.AnyMatchCombinator;
 import io.axoniq.workflow.runtime.api.execution.state.NoneMatchCombinator;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
@@ -48,7 +49,6 @@ public interface WorkflowContext extends
      *
      * @return the unique identifier of the workflow.
      */
-    @Nonnull
     String workflowId();
 
     /**
@@ -57,7 +57,6 @@ public interface WorkflowContext extends
      *
      * @return the workflow's current definition version (semver string).
      */
-    @Nonnull
     String workflowVersion();
 
     /**
@@ -65,15 +64,13 @@ public interface WorkflowContext extends
      *
      * @return the payload of the workflow.
      */
-    @Nonnull
-    Map<String, Object> workflowPayload();
+    Map<String, @Nullable Object> workflowPayload();
 
     /**
      * Retrieves workflow status.
      *
      * @return the status of the workflow.
      */
-    @Nonnull
     WorkflowStatus workflowStatus();
 
     /**
@@ -81,7 +78,6 @@ public interface WorkflowContext extends
      *
      * @return the names of the workflow steps.
      */
-    @Nonnull
     List<String> workflowStepNames();
 
     /**
@@ -89,6 +85,5 @@ public interface WorkflowContext extends
      *
      * @return the processing context.
      */
-    @Nonnull
     ProcessingContext processingContext();
 }

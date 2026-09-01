@@ -19,8 +19,7 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.annotation.ParameterResolver;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
@@ -43,15 +42,15 @@ public class WorkflowStateParameterResolverFactory implements ParameterResolverF
     /**
      * Constructs parameter resolver factory.
      */
-    public WorkflowStateParameterResolverFactory(@Nonnull Configuration configuration) {
+    public WorkflowStateParameterResolverFactory(Configuration configuration) {
         this.configuration = requireNonNull(configuration, "The Configuration is required");
     }
 
     @Nullable
     @Override
     public ParameterResolver<?> createInstance(
-            @Nonnull Executable executable,
-            @Nonnull Parameter[] parameters,
+            Executable executable,
+            Parameter[] parameters,
             int parameterIndex) {
         Class<?> parameterType = parameters[parameterIndex].getType();
         if (WorkflowState.class.isAssignableFrom(parameterType)) {

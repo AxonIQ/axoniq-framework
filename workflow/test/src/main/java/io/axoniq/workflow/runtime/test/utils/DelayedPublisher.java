@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.test.utils;
 
-import jakarta.annotation.Nonnull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,8 +42,8 @@ public class DelayedPublisher {
     private final List<Schedule> schedules = new ArrayList<>();
     private final TestEventPublisher eventPublisher;
 
-    public DelayedPublisher(@Nonnull TestEventPublisher eventPublisher,
-                            @Nonnull Executor executor) {
+    public DelayedPublisher(TestEventPublisher eventPublisher,
+                            Executor executor) {
         this.executor = executor;
         this.eventPublisher = eventPublisher;
     }

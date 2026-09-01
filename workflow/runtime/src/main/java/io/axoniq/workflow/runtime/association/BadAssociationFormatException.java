@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.association;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.Set;
@@ -48,8 +47,8 @@ public class BadAssociationFormatException extends RuntimeException {
      * @return bad association format exception.
      */
     public static BadAssociationFormatException unsupportedOperator(
-            @Nonnull Set<String> operators,
-            @Nonnull String conditionString) {
+            Set<String> operators,
+            String conditionString) {
         return new BadAssociationFormatException(
                 "Illegal operator used in association string "
                         + conditionString + ". Supported operators are "
@@ -64,7 +63,7 @@ public class BadAssociationFormatException extends RuntimeException {
      * @param conditionString condition string that caused the exception.
      * @return bad association format exception.
      */
-    public static BadAssociationFormatException wrongFormat(@Nonnull String conditionString) {
+    public static BadAssociationFormatException wrongFormat(String conditionString) {
         return new BadAssociationFormatException(
                 "Illegal format in association string "
                         + conditionString + ". It should be <qualifier>:<path><operator><value>");
@@ -78,8 +77,8 @@ public class BadAssociationFormatException extends RuntimeException {
      * @return bad association format exception
      */
     public static BadAssociationFormatException unsupportedQualifier(
-            @Nonnull Set<String> qualifiers,
-            @Nonnull String conditionString
+            Set<String> qualifiers,
+            String conditionString
     ) {
         return new BadAssociationFormatException(
                 "Illegal qualifier used in association string "

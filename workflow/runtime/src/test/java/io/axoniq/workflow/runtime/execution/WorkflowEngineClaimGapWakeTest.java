@@ -78,7 +78,6 @@ class WorkflowEngineClaimGapWakeTest {
     private WorkflowConfigurationRegistry<?> configurationRegistry;
     private WorkflowStore workflowStore;
     private WorkflowEngine workflowEngine;
-    private WorkflowEngineReplaySupport replaySupport;
     private WorkflowEngineCheckpointingSupport checkpointingSupport;
     private final RunningSteps runningSteps = new RunningSteps();
     private final EventWaitConditions eventWaitConditions = new EventWaitConditions();
@@ -100,9 +99,8 @@ class WorkflowEngineClaimGapWakeTest {
                 workflowStore,
                 mock(UnitOfWorkFactory.class)
         );
-        replaySupport = new WorkflowEngineReplaySupport(workflowEngine);
         checkpointingSupport = new WorkflowEngineCheckpointingSupport(workflowEngine);
-        workflowEngine.setEngineSupportComponents(replaySupport, checkpointingSupport);
+        workflowEngine.setCheckpointingSupport(checkpointingSupport);
         when(configurationRegistry.getHighestVersionConfigurations(new MessageType(RESUME_EVENT))).thenReturn(List.of());
         registerRestorableWorkflow();
     }

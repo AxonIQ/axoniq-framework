@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution.CheckpointWorkStateListener;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.Set;
@@ -43,16 +42,15 @@ final class UnsafeCheckpointWorkIndex {
         return !unsafeWorkflowIds.isEmpty();
     }
 
-    @Nonnull
     Set<String> unsafeWorkflowIds() {
         return Set.copyOf(unsafeWorkflowIds);
     }
 
-    void markSafe(@Nonnull String workflowId) {
+    void markSafe(String workflowId) {
         unsafeWorkflowIds.remove(workflowId);
     }
 
-    void markUnsafe(@Nonnull String workflowId) {
+    void markUnsafe(String workflowId) {
         unsafeWorkflowIds.add(workflowId);
     }
 
@@ -62,8 +60,8 @@ final class UnsafeCheckpointWorkIndex {
      * @param workflowId        identifier of the workflow whose checkpoint-work state is indexed
      * @param listenerRegistrar operation that installs the state listener on the workflow execution
      */
-    void register(@Nonnull String workflowId,
-                  @Nonnull Consumer<CheckpointWorkStateListener> listenerRegistrar) {
+    void register(String workflowId,
+                  Consumer<CheckpointWorkStateListener> listenerRegistrar) {
         listenerRegistrar.accept(new CheckpointWorkStateListener() {
             @Override
             public void onMarkedUnsafe() {

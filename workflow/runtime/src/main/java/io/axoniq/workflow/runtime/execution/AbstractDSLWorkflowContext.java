@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.dsl.api.WorkflowDSL;
 import io.axoniq.workflow.runtime.api.execution.context.CancelStepDefinition;
 import io.axoniq.workflow.runtime.api.execution.context.CancelWorkflowDefinition;
@@ -41,7 +43,6 @@ import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -77,10 +78,10 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
      * @param workflowConfiguration workflow configuration.
      */
     public AbstractDSLWorkflowContext(
-            @Nonnull String workflowId,
-            @Nonnull Map<String, Object> payload,
-            @Nonnull ProcessingContext processingContext,
-            @Nonnull WorkflowConfiguration<?> workflowConfiguration
+            String workflowId,
+            Map<String, @Nullable Object> payload,
+            ProcessingContext processingContext,
+            WorkflowConfiguration<?> workflowConfiguration
     ) {
         this.workflowExecution = new SimpleWorkflowExecution(
                 Objects.requireNonNull(workflowId, "Workflow id must not be null"),
@@ -93,8 +94,7 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     }
 
     @Override
-    @Nonnull
-    public WorkflowStepResult execute(@Nonnull ExecuteStepDefinition stepDefinition) {
+    public WorkflowStepResult execute(ExecuteStepDefinition stepDefinition) {
         return this.execute(
                 new PrimitiveCommands.WorkflowStepResultExecuteCommand(
                         stepDefinition.primitiveMetadata().stepName(),
@@ -110,14 +110,12 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     }
 
     @Override
-    @Nonnull
-    public Map<String, Object> awaitExecute(@Nonnull ExecuteStepDefinition stepDefinition) {
+    public Map<String, @Nullable Object> awaitExecute(ExecuteStepDefinition stepDefinition) {
         return resolveStepPayload(this.execute(stepDefinition));
     }
 
     @Override
-    @Nonnull
-    public WorkflowStepResult waitForEvent(@Nonnull WaitForStepDefinition stepDefinition) {
+    public WorkflowStepResult waitForEvent(WaitForStepDefinition stepDefinition) {
         return this.waitForEvent(
                 PrimitiveCommands.waitForEvent(
                         stepDefinition.primitiveMetadata().stepName(),
@@ -130,14 +128,12 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     }
 
     @Override
-    @Nonnull
-    public Map<String, Object> awaitEvent(@Nonnull WaitForStepDefinition stepDefinition) {
+    public Map<String, @Nullable Object> awaitEvent(WaitForStepDefinition stepDefinition) {
         return resolveStepPayload(this.waitForEvent(stepDefinition));
     }
 
     @Override
-    @Nonnull
-    public WorkflowStepResult modifyPayload(@Nonnull PayloadStepDefinition stepDefinition) {
+    public WorkflowStepResult modifyPayload(PayloadStepDefinition stepDefinition) {
         return this.modifyPayload(
                 PrimitiveCommands.modifyPayload(
                         stepDefinition.primitiveMetadata().stepName(),
@@ -148,12 +144,12 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     }
 
     @Override
-    public void awaitModifyPayload(@Nonnull PayloadStepDefinition stepDefinition) {
+    public void awaitModifyPayload(PayloadStepDefinition stepDefinition) {
         awaitStepCompletion(this.modifyPayload(stepDefinition));
     }
 
     @Override
-    public boolean migrateVersion(@Nonnull VersionStepDefinition stepDefinition) {
+    public boolean migrateVersion(VersionStepDefinition stepDefinition) {
         var stepName = stepDefinition.primitiveMetadata().stepName();
         var newVersion = stepDefinition.newVersion();
         var result = this.version(
@@ -177,31 +173,27 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
 
 
     @Override
-    @Nonnull
-    public WorkflowStepResult waitForEvent(@Nonnull WaitForPrimitive.WaitForCommand command) {
+    public WorkflowStepResult waitForEvent(WaitForPrimitive.WaitForCommand command) {
         return this.delegate.waitForEvent(command);
     }
 
-    @Nonnull
     @Override
-    public WorkflowStepResult execute(@Nonnull ExecutePrimitive.ExecuteCommand command) {
+    public WorkflowStepResult execute(ExecutePrimitive.ExecuteCommand command) {
         return delegate.execute(command);
     }
 
     @Override
-    @Nonnull
-    public WorkflowStepResult modifyPayload(@Nonnull PayloadPrimitive.ModifyPayloadCommand command) {
+    public WorkflowStepResult modifyPayload(PayloadPrimitive.ModifyPayloadCommand command) {
         return delegate.modifyPayload(command);
     }
 
     @Override
-    @Nonnull
-    public WorkflowStepResult version(@Nonnull VersionPrimitive.VersionCommand command) {
+    public WorkflowStepResult version(VersionPrimitive.VersionCommand command) {
         return delegate.version(command);
     }
 
     @Override
-    public void fail(@Nonnull FailWorkflowDefinition definition) {
+    public void fail(FailWorkflowDefinition definition) {
         delegate.failWorkflow(PrimitiveCommands.failWorkflow(
                 definition.cause(),
                 definition.primitiveMetadata().eventNameCustomizer()
@@ -209,7 +201,7 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     }
 
     @Override
-    public void cancel(@Nonnull CancelWorkflowDefinition definition) {
+    public void cancel(CancelWorkflowDefinition definition) {
         delegate.cancelWorkflow(PrimitiveCommands.cancelWorkflow(
                 definition.cause(),
                 definition.primitiveMetadata().eventNameCustomizer()
@@ -217,7 +209,7 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     }
 
     @Override
-    public void cancelStep(@Nonnull CancelStepDefinition definition) {
+    public void cancelStep(CancelStepDefinition definition) {
         delegate.cancelStep(PrimitiveCommands.cancelStep(
                 definition.primitiveMetadata().stepName(),
                 definition.cause(),
@@ -226,91 +218,80 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     }
 
 
-    @Nonnull
     @Override
-    public CombinatorWorkflowStepResult allMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+    public CombinatorWorkflowStepResult allMatch(Predicate<WorkflowStepResult> predicate,
                                                  WorkflowStepResult... results) {
         return delegate.allMatch(predicate, results);
     }
 
-    @Nonnull
     @Override
-    public CombinatorWorkflowStepResult anyMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+    public CombinatorWorkflowStepResult anyMatch(Predicate<WorkflowStepResult> predicate,
                                                  WorkflowStepResult... results) {
         return delegate.anyMatch(predicate, results);
     }
 
-    @Nonnull
     @Override
-    public CombinatorWorkflowStepResult noneMatch(@Nonnull Predicate<WorkflowStepResult> predicate,
+    public CombinatorWorkflowStepResult noneMatch(Predicate<WorkflowStepResult> predicate,
                                                   WorkflowStepResult... results) {
         return delegate.noneMatch(predicate, results);
     }
 
     @Override
-    public void cancelWorkflow(@Nonnull WorkflowLifecycleControl.CancelWorkflowCommand command) {
+    public void cancelWorkflow(WorkflowLifecycleControl.CancelWorkflowCommand command) {
         delegate.cancelWorkflow(command);
     }
 
     @Override
-    public void failWorkflow(@Nonnull WorkflowLifecycleControl.FailWorkflowCommand command) {
+    public void failWorkflow(WorkflowLifecycleControl.FailWorkflowCommand command) {
         delegate.failWorkflow(command);
     }
 
     @Override
-    public boolean cancelStep(@Nonnull WorkflowLifecycleControl.CancelStepCommand command) {
+    public boolean cancelStep(WorkflowLifecycleControl.CancelStepCommand command) {
         return delegate.cancelStep(command);
     }
 
 
-    @Nonnull
     @Override
     public String workflowId() {
         return delegate.workflowId();
     }
 
-    @Nonnull
     @Override
     public String workflowVersion() {
         return delegate.workflowVersion();
     }
 
-    @Nonnull
     @Override
-    public Map<String, Object> workflowPayload() {
+    public Map<String, @Nullable Object> workflowPayload() {
         return delegate.workflowPayload();
     }
 
-    @Nonnull
     @Override
     public WorkflowStatus workflowStatus() {
         return workflowExecution.state().workflowStatus();
     }
 
-    @Nonnull
     @Override
     public List<String> workflowStepNames() {
         return delegate.workflowStepNames();
     }
 
-    @Nonnull
     @Override
     public ProcessingContext processingContext() {
         return workflowExecution.processingContext();
     }
 
-    @Nonnull
     public WorkflowExecution execution() {
         return workflowExecution;
     }
 
     @Override
-    public void describeTo(@Nonnull ComponentDescriptor descriptor) {
+    public void describeTo(ComponentDescriptor descriptor) {
         workflowExecution.describeTo(descriptor);
     }
 
-    @Nonnull
-    private Map<String, Object> resolveStepPayload(@Nonnull WorkflowStepResult result) {
+    private Map<String, @Nullable Object> resolveStepPayload(WorkflowStepResult result) {
         if (result.success()) {
             return result.resultAs(PAYLOAD_TYPE, processingContext().component(EventConverter.class)).orElse(Map.of());
         }
@@ -325,7 +306,7 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
         throw result.error().orElseThrow();
     }
 
-    private void awaitStepCompletion(@Nonnull WorkflowStepResult result) {
+    private void awaitStepCompletion(WorkflowStepResult result) {
         result.await();
         if (result.timeout()) {
             throw new StepTimedOutException(

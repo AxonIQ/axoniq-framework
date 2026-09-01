@@ -18,11 +18,12 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
-import jakarta.annotation.Nonnull;
 
 import java.time.Duration;
 import java.util.Map;
@@ -44,8 +45,7 @@ public interface ExecutePrimitive {
      * @param command command object for the primitive.
      * @return durable result handle.
      */
-    @Nonnull
-    WorkflowStepResult execute(@Nonnull ExecuteCommand command);
+    WorkflowStepResult execute(ExecuteCommand command);
 
     /**
      * Parameter object for the primitive.
@@ -57,7 +57,6 @@ public interface ExecutePrimitive {
          *
          * @return name of the step.
          */
-        @Nonnull
         String stepName();
 
         /**
@@ -65,15 +64,13 @@ public interface ExecutePrimitive {
          *
          * @return payload.
          */
-        @Nonnull
-        Map<String, Object> local();
+        Map<String, @Nullable Object> local();
 
         /**
          * Returns action to be executed.
          *
          * @return action.
          */
-        @Nonnull
         PayloadProcessor action();
 
         /**
@@ -81,7 +78,6 @@ public interface ExecutePrimitive {
          *
          * @return step parameter reducer for payload.
          */
-        @Nonnull
         PayloadReducer parameterPayloadReducer();
 
         /**
@@ -89,7 +85,6 @@ public interface ExecutePrimitive {
          *
          * @return step result reducer for payload.
          */
-        @Nonnull
         PayloadReducer resultPayloadReducer();
 
         /**
@@ -97,7 +92,6 @@ public interface ExecutePrimitive {
          *
          * @return timeout.
          */
-        @Nonnull
         Duration timeout();
 
         /**
@@ -105,7 +99,6 @@ public interface ExecutePrimitive {
          *
          * @return event name customizer.
          */
-        @Nonnull
         EventNameCustomizer eventNameCustomizer();
 
         /**
@@ -113,7 +106,6 @@ public interface ExecutePrimitive {
          *
          * @return retry policy.
          */
-        @Nonnull
         default RetryPolicy retryPolicy() {
             return NONE;
         }

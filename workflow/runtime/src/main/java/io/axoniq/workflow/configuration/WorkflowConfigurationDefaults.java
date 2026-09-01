@@ -35,7 +35,6 @@ import io.axoniq.workflow.runtime.execution.WorkflowCancellationService;
 import io.axoniq.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
-import io.axoniq.workflow.runtime.execution.WorkflowEngineReplaySupport;
 import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.workflow.runtime.execution.WorkflowScheduler;
@@ -44,7 +43,7 @@ import io.axoniq.workflow.runtime.execution.WorkflowStore;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.DefaultTimeoutFutureResolver;
 import io.axoniq.workflow.runtime.util.FutureResolver;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.ClockUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
@@ -135,7 +134,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowEngine(componentRegistry);
         registerWorkflowHistoryProjector(componentRegistry);
         registerWorkflowStateParameterResolverFactory(componentRegistry);
-        registerReplaySupport(componentRegistry);
         registerCheckpointingSupport(componentRegistry);
     }
 
@@ -272,10 +270,8 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                            cfg.getComponent(UnitOfWorkFactory.class)
                                    ))
                                    .onStart(Phase.LOCAL_MESSAGE_HANDLER_REGISTRATIONS, (config, engine) -> {
-                                       engine.setEngineSupportComponents(
-                                               config.getComponent(WorkflowEngineReplaySupport.class),
-                                               config.getComponent(WorkflowEngineCheckpointingSupport.class)
-                                       );
+                                       engine.setCheckpointingSupport(
+                                               config.getComponent(WorkflowEngineCheckpointingSupport.class));
                                    })
                                    .onShutdown(POST_PROCESSOR_SHUTDOWN_PHASE,
                                                WorkflowEngine::shutdown));
@@ -346,13 +342,6 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     void registerCheckpointingSupport(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(WorkflowEngineCheckpointingSupport.class,
                                                cfg -> new WorkflowEngineCheckpointingSupport(cfg.getComponent(
-                                                       WorkflowEngine.class)
-                                               ));
-    }
-
-    void registerReplaySupport(ComponentRegistry componentRegistry) {
-        componentRegistry.registerIfNotPresent(WorkflowEngineReplaySupport.class,
-                                               cfg -> new WorkflowEngineReplaySupport(cfg.getComponent(
                                                        WorkflowEngine.class)
                                                ));
     }

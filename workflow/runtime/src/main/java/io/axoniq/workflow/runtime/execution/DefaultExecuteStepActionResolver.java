@@ -22,7 +22,6 @@ import io.axoniq.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 
 /**
@@ -34,11 +33,10 @@ import org.axonframework.common.annotation.Internal;
 @Internal
 public class DefaultExecuteStepActionResolver implements ExecuteStepActionResolver {
 
-    @Nonnull
     @Override
-    public PayloadProcessor resolve(@Nonnull WorkflowContext workflowContext,
-                                    @Nonnull WorkflowExecution workflowExecution,
-                                    @Nonnull ExecutePrimitive.ExecuteCommand command) {
+    public PayloadProcessor resolve(WorkflowContext workflowContext,
+                                    WorkflowExecution workflowExecution,
+                                    ExecutePrimitive.ExecuteCommand command) {
         return command.action();
     }
 }

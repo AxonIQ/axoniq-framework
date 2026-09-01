@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import jakarta.annotation.Nonnull;
 
 import java.util.Objects;
 
@@ -32,12 +31,12 @@ import java.util.Objects;
  * @since 1.1.0
  */
 public record VersionStepDefinition(
-        @Nonnull PrimitiveMetadata primitiveMetadata,
-        @Nonnull String newVersion
+        PrimitiveMetadata primitiveMetadata,
+        String newVersion
 ) {
 
     /**
-     * Fails fast when a mandatory component is {@code null} — the {@code @Nonnull} annotation alone is
+     * Fails fast when a mandatory component is {@code null}; the package's null-marked contract alone is
      * not enforced at runtime, so a user ignoring it is detected here at construction.
      */
     public VersionStepDefinition {
@@ -48,7 +47,7 @@ public record VersionStepDefinition(
     /**
      * Returns a copy of this definition with the provided primitive metadata.
      */
-    public VersionStepDefinition primitiveMetadata(@Nonnull PrimitiveMetadata primitiveMetadata) {
+    public VersionStepDefinition primitiveMetadata(PrimitiveMetadata primitiveMetadata) {
         return new VersionStepDefinition(primitiveMetadata, newVersion);
     }
 
@@ -56,21 +55,21 @@ public record VersionStepDefinition(
      * Returns a copy of this definition with the provided step name. For migration steps the
      * step name carries the developer-chosen {@code changeId}.
      */
-    public VersionStepDefinition stepName(@Nonnull String stepName) {
+    public VersionStepDefinition stepName(String stepName) {
         return primitiveMetadata(primitiveMetadata.stepName(stepName));
     }
 
     /**
      * Returns a copy of this definition with the provided event name customizer.
      */
-    public VersionStepDefinition eventNameCustomizer(@Nonnull EventNameCustomizer eventNameCustomizer) {
+    public VersionStepDefinition eventNameCustomizer(EventNameCustomizer eventNameCustomizer) {
         return primitiveMetadata(primitiveMetadata.eventNameCustomizer(eventNameCustomizer));
     }
 
     /**
      * Returns a copy of this definition with the provided new version (semver string).
      */
-    public VersionStepDefinition newVersion(@Nonnull String newVersion) {
+    public VersionStepDefinition newVersion(String newVersion) {
         return new VersionStepDefinition(primitiveMetadata, newVersion);
     }
 }

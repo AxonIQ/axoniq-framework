@@ -18,6 +18,8 @@
  */
 package io.axoniq.example.workflow.workflow;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
 import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
@@ -194,7 +196,7 @@ class SegmentShardingDeclarativeTest {
                                             ConcurrentHashMap<String, AtomicInteger> bodyRuns) {
         bodyRuns.computeIfAbsent(ctx.workflowId(), id -> new AtomicInteger()).incrementAndGet();
         ctx.awaitModifyPayload("markProcessed", payload -> {
-            Map<String, Object> updated = new LinkedHashMap<>(payload);
+            Map<String, @Nullable Object> updated = new LinkedHashMap<>(payload);
             updated.put("processed", true);
             return updated;
         });
@@ -208,7 +210,7 @@ class SegmentShardingDeclarativeTest {
                 step -> step.timeout(Duration.ofSeconds(30))
         );
         ctx.awaitModifyPayload("markResumed", payload -> {
-            Map<String, Object> updated = new LinkedHashMap<>(payload);
+            Map<String, @Nullable Object> updated = new LinkedHashMap<>(payload);
             updated.put("resumed", true);
             return updated;
         });

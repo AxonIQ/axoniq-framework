@@ -30,7 +30,6 @@ import io.axoniq.workflow.runtime.execution.WorkflowCancellationService;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.test.fixture.WorkflowTestDriver;
 import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.infra.FilesystemStyleComponentDescriptor;
@@ -67,8 +66,8 @@ public abstract class AbstractWorkflowTestBase<T extends WorkflowContext> {
      * @param dslType dsl type to use
      * @param contextFactoryBuilder context factory builder
      */
-    public AbstractWorkflowTestBase(@Nonnull Class<T> dslType,
-                                    @Nonnull ComponentBuilder<WorkflowContextFactory<T>> contextFactoryBuilder) {
+    public AbstractWorkflowTestBase(Class<T> dslType,
+                                    ComponentBuilder<WorkflowContextFactory<T>> contextFactoryBuilder) {
         var module = WorkflowModule.defaults(getClass().getSimpleName(), dslType)
                                    .workflowContextFactory(contextFactoryBuilder)
                                    .definition(getDeclaredDefinition());

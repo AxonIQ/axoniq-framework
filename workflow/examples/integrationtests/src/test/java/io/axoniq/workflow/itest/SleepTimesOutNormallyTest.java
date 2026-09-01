@@ -26,7 +26,6 @@ import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.Test;
 
@@ -84,7 +83,7 @@ class SleepTimesOutNormallyTest extends AbstractWorkflowTestBase<SimpleWorkflowC
                 idProperty = "id",
                 startOnEventClass = StartSleepEvent.class
         )
-        public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        public void execute(SimpleWorkflowContext ctx) {
             try {
                 ctx.awaitSleep("pacingDelay", step -> step.timeout(Duration.ofMillis(200)));
                 ctx.awaitExecute("afterSleep", Map.of(), (c, p) -> Map.of("ranAfterSleep", true));

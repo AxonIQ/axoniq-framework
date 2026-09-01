@@ -21,13 +21,11 @@ package io.axoniq.workflow.springboot;
 import io.axoniq.workflow.configuration.WorkflowModule;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
-import org.jspecify.annotations.NonNull;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
@@ -65,7 +63,7 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
     }
 
     @Override
-    public void enhance(@NonNull ComponentRegistry registry) {
+    public void enhance(ComponentRegistry registry) {
         Objects.requireNonNull(applicationContext, "ApplicationContext must not be null");
         workflowDefinitionBeanRefs
                 .forEach((workflowContextType, workflowBeanNames) -> register(registry,
@@ -75,9 +73,9 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
 
     @SuppressWarnings("unchecked")
     private <C extends WorkflowContext> void register(
-            @Nonnull ComponentRegistry registry,
-            @Nonnull Class<C> workflowContextType,
-            @Nonnull List<String> workflowBeanNames) {
+            ComponentRegistry registry,
+            Class<C> workflowContextType,
+            List<String> workflowBeanNames) {
         var factoryName = workflowContextFactoryBeanRefs.get(workflowContextType);
         if (factoryName == null) {
             throw new BadWorkflowConfigurationException(String.format(
@@ -107,7 +105,7 @@ public class WorkflowModuleConfigurer implements ConfigurationEnhancer, Applicat
     }
 
     @Override
-    public void setApplicationContext(@Nonnull ApplicationContext applicationContext) throws BeansException {
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
         this.applicationContext = applicationContext;
     }
 }

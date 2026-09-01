@@ -27,7 +27,6 @@ import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -115,7 +114,7 @@ class AwaitEventTimeoutWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkf
                 idProperty = "id",
                 startOnEventClass = RegistrationReceivedEvent.class
         )
-        public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        public void execute(SimpleWorkflowContext ctx) {
             logger.info("AwaitEventTimeoutWorkflow started for {}", ctx.workflowPayload());
 
             var id = String.valueOf(ctx.workflowPayload().get("id"));

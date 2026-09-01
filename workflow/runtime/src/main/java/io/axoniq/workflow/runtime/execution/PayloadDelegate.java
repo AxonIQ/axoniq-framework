@@ -27,7 +27,6 @@ import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.util.FutureResolver;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -65,16 +64,16 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
      */
     @Internal
     public PayloadDelegate(
-            @Nonnull WorkflowContext workflowContext,
-            @Nonnull WorkflowExecution workflowExecution,
-            @Nonnull RunningSteps runningSteps,
-            @Nonnull ReachedSteps reachedSteps,
-            @Nonnull EventNameCustomizer parentEventNameCustomizer,
-            @Nonnull Clock clock,
-            @Nonnull UnitOfWorkFactory unitOfWorkFactory,
-            @Nonnull EventSink eventSink,
-            @Nonnull Executor executor,
-            @Nonnull WorkflowScheduler timeoutScheduler
+            WorkflowContext workflowContext,
+            WorkflowExecution workflowExecution,
+            RunningSteps runningSteps,
+            ReachedSteps reachedSteps,
+            EventNameCustomizer parentEventNameCustomizer,
+            Clock clock,
+            UnitOfWorkFactory unitOfWorkFactory,
+            EventSink eventSink,
+            Executor executor,
+            WorkflowScheduler timeoutScheduler
     ) {
         super(workflowContext,
               workflowExecution,
@@ -89,8 +88,7 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
     }
 
     @Override
-    @Nonnull
-    public WorkflowStepResult modifyPayload(@Nonnull PayloadPrimitive.ModifyPayloadCommand command) {
+    public WorkflowStepResult modifyPayload(PayloadPrimitive.ModifyPayloadCommand command) {
         var stepName = command.stepName();
         var payloadModification = command.payloadModification();
         var eventNameCustomizer = command.eventNameCustomizer();

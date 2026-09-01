@@ -25,7 +25,6 @@ import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -82,7 +81,7 @@ class VersionedWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowConte
                 idProperty = "orderId",
                 startOnEventClass = OrderPlacedEvent.class
         )
-        public void execute(@Nonnull SimpleWorkflowContext ctx) {
+        public void execute(SimpleWorkflowContext ctx) {
             ctx.awaitExecute("reserveStock", Boolean.class, () -> {
                 logger.info("Reserving stock for {}", ctx.workflowPayload());
                 return true;

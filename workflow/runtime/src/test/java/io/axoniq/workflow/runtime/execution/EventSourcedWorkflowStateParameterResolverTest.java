@@ -36,8 +36,8 @@ import org.mockito.*;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
@@ -81,7 +81,7 @@ class EventSourcedWorkflowStateParameterResolverTest {
         GenericMessage message = new GenericMessage(messageType, "payload", Metadata.with("foo", "bar"));
         setMessageInContext(message);
 
-        assertFalse(resolver.matches(context));
+        assertThat(resolver.matches(context)).isFalse();
     }
 
     @Test
@@ -89,7 +89,7 @@ class EventSourcedWorkflowStateParameterResolverTest {
         GenericMessage message = new GenericMessage(messageType, "payload", MetadataUtils.create("workflow-1"));
         setMessageInContext(message);
 
-        assertTrue(resolver.matches(context));
+        assertThat(resolver.matches(context)).isTrue();
     }
 
     @Test
@@ -99,11 +99,11 @@ class EventSourcedWorkflowStateParameterResolverTest {
 
         CompletableFuture<WorkflowState> result = resolver.resolveParameterValue(context);
 
-        assertTrue(result.isCompletedExceptionally());
-        ExecutionException exception = assertThrows(ExecutionException.class, result::get);
-        assertTrue(exception.getCause() instanceof IllegalStateException);
-        assertEquals("Unable to inject workflow state, since no workflow id was found in the message.",
-                     exception.getCause().getMessage());
+        assertThat(result).isCompletedExceptionally();
+        assertThatThrownBy(result::get)
+                .isInstanceOf(ExecutionException.class)
+                .hasCauseInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Unable to inject workflow state, since no workflow id was found in the message.");
     }
 
     @Test
@@ -119,9 +119,8 @@ class EventSourcedWorkflowStateParameterResolverTest {
 
         CompletableFuture<WorkflowState> result = resolver.resolveParameterValue(context);
 
-        assertTrue(result.isDone());
-        assertFalse(result.isCompletedExceptionally());
-        assertEquals(state, result.get());
+        assertThat(result).isCompleted().isNotCompletedExceptionally();
+        assertThat(result.get()).isSameAs(state);
         verify(configuration).getComponent(WorkflowExecutionRepository.class);
         verify(executionRepository).findById(workflowId);
         verifyNoInteractions(historyRepository);
@@ -142,9 +141,8 @@ class EventSourcedWorkflowStateParameterResolverTest {
 
         CompletableFuture<WorkflowState> result = resolver.resolveParameterValue(context);
 
-        assertTrue(result.isDone());
-        assertFalse(result.isCompletedExceptionally());
-        assertEquals(state, result.get());
+        assertThat(result).isCompleted().isNotCompletedExceptionally();
+        assertThat(result.get()).isSameAs(state);
         verify(configuration).getComponent(WorkflowExecutionRepository.class);
         verify(executionRepository).findById(workflowId);
         verify(configuration).getComponent(WorkflowHistoryRepository.class);
@@ -160,7 +158,8 @@ class EventSourcedWorkflowStateParameterResolverTest {
         when(executionRepository.findById(workflowId)).thenReturn(Optional.empty());
         when(historyRepository.findById(workflowId)).thenReturn(Optional.empty());
 
-        assertThrows(IllegalStateException.class, () -> resolver.resolveParameterValue(context));
+        assertThatThrownBy(() -> resolver.resolveParameterValue(context))
+                .isInstanceOf(IllegalStateException.class);
 
         verify(configuration).getComponent(WorkflowExecutionRepository.class);
         verify(executionRepository).findById(workflowId);

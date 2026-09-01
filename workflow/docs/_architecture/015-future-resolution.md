@@ -41,7 +41,6 @@ and may impose a deadline, translate failures, or record metrics.
 | Publication resolution times out | Stop and clean up live runtime execution | Leave the workflow non-terminal for recovery from durable history after restart | An ERROR log identifies the workflow; alert on it and restart the owning processing node |
 | Cancellation publication resolution times out | Complete the cancellation request exceptionally, then stop and clean up live runtime execution | Leave the workflow non-terminal for recovery from durable history after restart | An ERROR log identifies the workflow; alert on it and restart the owning processing node |
 | Workflow body is parked for an event or timer | Keep the workflow driver parked; do not use `FutureResolver` | Unchanged until the awaited event or timer resumes the body | None |
-
 ### Alternatives considered
 
 `CompletionDriver` was proposed during the #280 discussion. It would accept incomplete operations and resume workflow

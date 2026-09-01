@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
@@ -235,7 +237,7 @@ class WaitForDelegateTest {
             EventMessage message = invocation.getArgument(1);
             if (message.payload() instanceof Map<?, ?> payload) {
                 @SuppressWarnings("unchecked")
-                Map<String, Object> startPayload = (Map<String, Object>) payload;
+                Map<String, @Nullable Object> startPayload = (Map<String, @Nullable Object>) payload;
                 startedStep.set(WorkflowStep.started(
                         "awaitPayment",
                         startPayload,

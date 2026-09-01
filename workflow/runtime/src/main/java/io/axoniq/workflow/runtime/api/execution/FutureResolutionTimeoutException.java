@@ -19,8 +19,6 @@
 package io.axoniq.workflow.runtime.api.execution;
 
 import io.axoniq.workflow.runtime.util.FutureResolver;
-import jakarta.annotation.Nonnull;
-
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -39,7 +37,7 @@ public class FutureResolutionTimeoutException extends RuntimeException {
      *
      * @param cause timeout reported by the future-resolution operation
      */
-    public FutureResolutionTimeoutException(@Nonnull TimeoutException cause) {
+    public FutureResolutionTimeoutException(TimeoutException cause) {
         super("Future did not complete before the configured resolution timeout", cause);
     }
 }

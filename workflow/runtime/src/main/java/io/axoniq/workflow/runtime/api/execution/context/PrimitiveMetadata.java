@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import jakarta.annotation.Nonnull;
 
 /**
  * Reusable metadata shared by primitive specs.
@@ -29,8 +28,8 @@ import jakarta.annotation.Nonnull;
  * @since 1.0.0
  */
 public record PrimitiveMetadata(
-        @Nonnull String stepName,
-        @Nonnull EventNameCustomizer eventNameCustomizer
+        String stepName,
+        EventNameCustomizer eventNameCustomizer
 ) {
 
     /**
@@ -39,7 +38,7 @@ public record PrimitiveMetadata(
      * @param stepName logical step name
      * @return copied metadata with updated step name
      */
-    public PrimitiveMetadata stepName(@Nonnull String stepName) {
+    public PrimitiveMetadata stepName(String stepName) {
         return new PrimitiveMetadata(stepName, eventNameCustomizer);
     }
 
@@ -49,7 +48,7 @@ public record PrimitiveMetadata(
      * @param eventNameCustomizer customizer for published event names
      * @return copied metadata with updated event naming
      */
-    public PrimitiveMetadata eventNameCustomizer(@Nonnull EventNameCustomizer eventNameCustomizer) {
+    public PrimitiveMetadata eventNameCustomizer(EventNameCustomizer eventNameCustomizer) {
         return new PrimitiveMetadata(stepName, eventNameCustomizer);
     }
 }

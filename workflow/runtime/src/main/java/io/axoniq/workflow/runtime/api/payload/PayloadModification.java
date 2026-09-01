@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.api.payload;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 import java.util.function.Function;
 
@@ -29,6 +31,6 @@ import java.util.function.Function;
  * @since 1.0.0
  */
 @FunctionalInterface
-public interface PayloadModification extends Function<Map<String, Object>, Map<String, Object>> {
+public interface PayloadModification extends Function<Map<String, @Nullable Object>, Map<String, @Nullable Object>> {
 
 }

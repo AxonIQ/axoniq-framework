@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.modelling.repository.ManagedEntity;
@@ -45,8 +44,8 @@ public class EventSourcedWorkflowStore implements WorkflowStore {
     private final Repository<String, EventSourcedWorkflowState> workflowStateRepository;
 
     public EventSourcedWorkflowStore(
-            @Nonnull Repository<String, EventSourcedRunningWorkflows> runningWorkflowsRepository,
-            @Nonnull Repository<String, EventSourcedWorkflowState> workflowStateRepository
+            Repository<String, EventSourcedRunningWorkflows> runningWorkflowsRepository,
+            Repository<String, EventSourcedWorkflowState> workflowStateRepository
     ) {
         this.runningWorkflowsRepository = Objects.requireNonNull(runningWorkflowsRepository,
                                                                  "Running workflows repository must not be null");
@@ -55,16 +54,14 @@ public class EventSourcedWorkflowStore implements WorkflowStore {
     }
 
     @Override
-    @Nonnull
-    public CompletableFuture<RunningWorkflows> loadRunningWorkflows(@Nonnull ProcessingContext processingContext) {
+    public CompletableFuture<RunningWorkflows> loadRunningWorkflows(ProcessingContext processingContext) {
         return runningWorkflowsRepository.loadOrCreate(EventSourcedRunningWorkflows.ENTITY_ID, processingContext)
                                          .thenApply(ManagedEntity::entity);
     }
 
     @Override
-    @Nonnull
-    public CompletableFuture<WorkflowState> loadWorkflow(@Nonnull String workflowId,
-                                                         @Nonnull ProcessingContext processingContext) {
+    public CompletableFuture<WorkflowState> loadWorkflow(String workflowId,
+                                                         ProcessingContext processingContext) {
         return workflowStateRepository.loadOrCreate(workflowId, processingContext)
                                       .thenApply(ManagedEntity::entity);
     }

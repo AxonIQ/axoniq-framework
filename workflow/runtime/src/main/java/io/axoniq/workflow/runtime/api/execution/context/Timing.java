@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import jakarta.annotation.Nonnull;
 
 import java.time.Duration;
 
@@ -29,7 +28,7 @@ import java.time.Duration;
  * @author Simon Zambrovski
  * @since 1.0.0
  */
-public record Timing(@Nonnull Duration timeout) {
+public record Timing(Duration timeout) {
 
     /**
      * Returns a copy of this timing specification with the provided timeout.
@@ -37,7 +36,7 @@ public record Timing(@Nonnull Duration timeout) {
      * @param timeout timeout for primitive completion
      * @return copied timing specification with updated timeout
      */
-    public Timing timeout(@Nonnull Duration timeout) {
+    public Timing timeout(Duration timeout) {
         return new Timing(timeout);
     }
 

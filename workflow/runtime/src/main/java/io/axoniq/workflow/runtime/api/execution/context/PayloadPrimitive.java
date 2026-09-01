@@ -20,7 +20,6 @@ package io.axoniq.workflow.runtime.api.execution.context;
 
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.payload.PayloadModification;
-import jakarta.annotation.Nonnull;
 
 /**
  * Primitive modifying the workflow instance payload allowing durable data flow support.
@@ -36,8 +35,7 @@ public interface PayloadPrimitive {
      * @param command command object for the primitive.
      * @return durable result handle.
      */
-    @Nonnull
-    WorkflowStepResult modifyPayload(@Nonnull ModifyPayloadCommand command);
+    WorkflowStepResult modifyPayload(ModifyPayloadCommand command);
 
     /**
      * Base payload modification command.
@@ -50,21 +48,18 @@ public interface PayloadPrimitive {
          * Retrieves the step name.
          * @return step name
          */
-        @Nonnull
         String stepName();
 
         /**
          * Retrieves payload modification function.
          * @return modification function
          */
-        @Nonnull
         PayloadModification payloadModification();
 
         /**
          * Retrieves event name customizer for the step.
          * @return event name customizer
          */
-        @Nonnull
         EventNameCustomizer eventNameCustomizer();
     }
 }

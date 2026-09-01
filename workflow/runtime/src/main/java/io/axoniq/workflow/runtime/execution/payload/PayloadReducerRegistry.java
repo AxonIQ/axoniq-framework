@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.execution.payload;
 
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
-import jakarta.annotation.Nonnull;
 
 import java.util.Map;
 import java.util.Objects;
@@ -50,7 +49,7 @@ public class PayloadReducerRegistry {
      * @param loadReducers flag indicating if the Service loading of reducers should be performed.
      * @param classLoader  class loader to use for loading reducers.
      */
-    public PayloadReducerRegistry(boolean loadReducers, @Nonnull ClassLoader classLoader) {
+    public PayloadReducerRegistry(boolean loadReducers, ClassLoader classLoader) {
         if (loadReducers) {
             load(classLoader);
         }
@@ -74,7 +73,7 @@ public class PayloadReducerRegistry {
      *
      * @param reducer reducer to register.
      */
-    public void register(@Nonnull PayloadReducer reducer) {
+    public void register(PayloadReducer reducer) {
         this.reducers.put(reducer.name(), reducer);
     }
 
@@ -84,8 +83,7 @@ public class PayloadReducerRegistry {
      * @param name name of the reducer.
      * @return payload reducer.
      */
-    @Nonnull
-    public Optional<PayloadReducer> get(@Nonnull String name) {
+    public Optional<PayloadReducer> get(String name) {
         return Optional.ofNullable(reducers.get(
                 Objects.requireNonNull(name, "Reducer name must not be null")
         ));

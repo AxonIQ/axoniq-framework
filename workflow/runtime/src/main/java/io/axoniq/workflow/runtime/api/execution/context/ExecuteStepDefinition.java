@@ -18,6 +18,8 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
@@ -40,7 +42,7 @@ import java.util.Map;
  */
 public record ExecuteStepDefinition(
         PrimitiveMetadata primitiveMetadata,
-        Map<String, Object> inputPayload,
+        Map<String, @Nullable Object> inputPayload,
         PayloadProcessor action,
         PayloadMapping payloadMapping,
         Timing timing,
@@ -83,7 +85,7 @@ public record ExecuteStepDefinition(
      * @param inputPayload local input payload for the action
      * @return copied step definition with updated input payload
      */
-    public ExecuteStepDefinition inputPayload(Map<String, Object> inputPayload) {
+    public ExecuteStepDefinition inputPayload(Map<String, @Nullable Object> inputPayload) {
         return new ExecuteStepDefinition(primitiveMetadata, inputPayload, action, payloadMapping, timing, retryPolicy);
     }
 

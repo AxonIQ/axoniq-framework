@@ -32,7 +32,6 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
-import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventSink;
@@ -76,17 +75,17 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
      * @param actionResolver            resolver for execute step actions
      */
     @Internal
-    public ExecuteDelegate(@Nonnull WorkflowContext context,
-                           @Nonnull WorkflowExecution workflowExecution,
-                           @Nonnull RunningSteps runningSteps,
-                           @Nonnull ReachedSteps reachedSteps,
-                           @Nonnull EventNameCustomizer parentEventNameCustomizer,
-                           @Nonnull Clock clock,
-                           @Nonnull UnitOfWorkFactory unitOfWorkFactory,
-                           @Nonnull EventSink eventSink,
-                           @Nonnull Executor executor,
-                           @Nonnull WorkflowScheduler timeoutScheduler,
-                           @Nonnull ExecuteStepActionResolver actionResolver
+    public ExecuteDelegate(WorkflowContext context,
+                           WorkflowExecution workflowExecution,
+                           RunningSteps runningSteps,
+                           ReachedSteps reachedSteps,
+                           EventNameCustomizer parentEventNameCustomizer,
+                           Clock clock,
+                           UnitOfWorkFactory unitOfWorkFactory,
+                           EventSink eventSink,
+                           Executor executor,
+                           WorkflowScheduler timeoutScheduler,
+                           ExecuteStepActionResolver actionResolver
     ) {
         super(context,
               workflowExecution,
@@ -101,9 +100,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         this.actionResolver = actionResolver;
     }
 
-    @Nonnull
     @Override
-    public WorkflowStepResult execute(@Nonnull ExecutePrimitive.ExecuteCommand command) {
+    public WorkflowStepResult execute(ExecutePrimitive.ExecuteCommand command) {
         return execute(command,
                 // default failure handler — publish FAILED
                        (name, error, enc) ->
@@ -114,11 +112,10 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         );
     }
 
-    @Nonnull
     WorkflowStepResult execute(
-            @Nonnull ExecutePrimitive.ExecuteCommand command,
-            @Nonnull FailureHandler failureHandler,
-            @Nonnull TimeoutHandler timeoutHandler
+            ExecutePrimitive.ExecuteCommand command,
+            FailureHandler failureHandler,
+            TimeoutHandler timeoutHandler
     ) {
         var stepName = command.stepName();
         var local = command.local();

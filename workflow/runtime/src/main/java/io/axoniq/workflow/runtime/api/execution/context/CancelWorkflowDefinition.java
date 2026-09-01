@@ -18,8 +18,7 @@
  */
 package io.axoniq.workflow.runtime.api.execution.context;
 
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Specification for terminating a workflow with cancellation.
@@ -30,7 +29,7 @@ import jakarta.annotation.Nullable;
  * @since 1.0.0
  */
 public record CancelWorkflowDefinition(
-        @Nonnull PrimitiveMetadata primitiveMetadata,
+        PrimitiveMetadata primitiveMetadata,
         @Nullable Throwable cause
 ) {
 
@@ -40,7 +39,7 @@ public record CancelWorkflowDefinition(
      * @param primitiveMetadata metadata of the primitive
      * @return copied workflow definition with updated metadata
      */
-    public CancelWorkflowDefinition primitiveMetadata(@Nonnull PrimitiveMetadata primitiveMetadata) {
+    public CancelWorkflowDefinition primitiveMetadata(PrimitiveMetadata primitiveMetadata) {
         return new CancelWorkflowDefinition(primitiveMetadata, cause);
     }
 
@@ -50,7 +49,7 @@ public record CancelWorkflowDefinition(
      * @param eventNameCustomizer customizer for published event names
      * @return copied workflow definition with updated event naming
      */
-    public CancelWorkflowDefinition eventNameCustomizer(@Nonnull EventNameCustomizer eventNameCustomizer) {
+    public CancelWorkflowDefinition eventNameCustomizer(EventNameCustomizer eventNameCustomizer) {
         return primitiveMetadata(primitiveMetadata.eventNameCustomizer(eventNameCustomizer));
     }
 

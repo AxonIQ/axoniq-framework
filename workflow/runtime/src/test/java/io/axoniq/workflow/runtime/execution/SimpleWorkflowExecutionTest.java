@@ -48,6 +48,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.ExecutorService;
@@ -163,7 +164,7 @@ class SimpleWorkflowExecutionTest {
         execution.addCheckpointLatch(checkpointLatchReleased::countDown);
 
         assertThatThrownBy(() -> execution.execute(ignored -> terminationHandlerCalled.countDown()))
-                .isInstanceOf(java.util.concurrent.CompletionException.class)
+                .isInstanceOf(CompletionException.class)
                 .satisfies(exception -> assertThat(exception.getCause()).isSameAs(timeout));
 
         verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
@@ -189,7 +190,7 @@ class SimpleWorkflowExecutionTest {
         var terminationHandlerCalled = new CountDownLatch(1);
 
         assertThatThrownBy(() -> execution.execute(ignored -> terminationHandlerCalled.countDown()))
-                .isInstanceOf(java.util.concurrent.CompletionException.class)
+                .isInstanceOf(CompletionException.class)
                 .satisfies(exception -> assertThat(exception.getCause()).isSameAs(timeout));
 
         verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));

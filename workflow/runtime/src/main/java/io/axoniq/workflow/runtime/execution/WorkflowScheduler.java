@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import jakarta.annotation.Nonnull;
 
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
@@ -37,8 +36,7 @@ public interface WorkflowScheduler {
      * @param deadline deadline according to the configured workflow clock
      * @return handle of the scheduled task
      */
-    @Nonnull
-    ScheduledTask schedule(@Nonnull Instant deadline);
+    ScheduledTask schedule(Instant deadline);
 
     /**
      * Scheduled task handle.
@@ -50,7 +48,6 @@ public interface WorkflowScheduler {
          *
          * @return completion future
          */
-        @Nonnull
         CompletableFuture<Void> completion();
 
         /**

@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.association;
 
-import jakarta.annotation.Nonnull;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
@@ -35,7 +34,6 @@ public interface ValueRetriever {
      *
      * @return qualifier, for example {@code payload} or {@code metadata}
      */
-    @Nonnull
     String qualifier();
 
     /**
@@ -43,7 +41,6 @@ public interface ValueRetriever {
      *
      * @return source-specific path, such as a payload property or metadata key
      */
-    @Nonnull
     String path();
 
     /**

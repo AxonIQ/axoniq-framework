@@ -18,10 +18,11 @@
  */
 package io.axoniq.workflow.runtime.test.fixture;
 
+import org.jspecify.annotations.Nullable;
+
 import io.axoniq.workflow.runtime.api.execution.state.StepFailedException;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
-import jakarta.annotation.Nonnull;
 
 import java.time.Duration;
 import java.util.Map;
@@ -50,7 +51,6 @@ public class GivenWhen<SELF extends GivenWhen<SELF, ASSERT>, ASSERT extends Then
      *
      * @return fixture to continue fluent invocations
      */
-    @Nonnull
     public SELF when() {
         return self();
     }
@@ -60,7 +60,6 @@ public class GivenWhen<SELF extends GivenWhen<SELF, ASSERT>, ASSERT extends Then
      *
      * @return assert phase to continue fluent invocations
      */
-    @Nonnull
     public ASSERT then() {
         //noinspection unchecked
         return (ASSERT) fixture.then();
@@ -73,8 +72,7 @@ public class GivenWhen<SELF extends GivenWhen<SELF, ASSERT>, ASSERT extends Then
      * @param event event payload or an already constructed event message
      * @return this phase for fluent chaining
      */
-    @Nonnull
-    public SELF publishEvent(@Nonnull Object event) {
+    public SELF publishEvent(Object event) {
         Objects.requireNonNull(event, "Event must not be null");
         testDriver.publishEvent(event);
         return self();
@@ -86,8 +84,7 @@ public class GivenWhen<SELF extends GivenWhen<SELF, ASSERT>, ASSERT extends Then
      * @param stepName step name to release
      * @return this phase for fluent chaining
      */
-    @Nonnull
-    public SELF execute(@Nonnull String stepName) {
+    public SELF execute(String stepName) {
         Objects.requireNonNull(stepName, "Step name must not be null");
         testDriver.executeStep(stepName);
         return self();
@@ -100,8 +97,7 @@ public class GivenWhen<SELF extends GivenWhen<SELF, ASSERT>, ASSERT extends Then
      * @param payloadProcessor fake action to invoke instead of the workflow-defined action
      * @return this phase for fluent chaining
      */
-    @Nonnull
-    public SELF execute(@Nonnull String stepName, @Nonnull PayloadProcessor payloadProcessor) {
+    public SELF execute(String stepName, PayloadProcessor payloadProcessor) {
         Objects.requireNonNull(stepName, "Step name must not be null");
         Objects.requireNonNull(payloadProcessor, "Payload processor must not be null");
 
@@ -116,8 +112,7 @@ public class GivenWhen<SELF extends GivenWhen<SELF, ASSERT>, ASSERT extends Then
      * @param expectedPayload payload returned by the fake step action
      * @return this phase for fluent chaining
      */
-    @Nonnull
-    public SELF executeReturning(@Nonnull String stepName, @Nonnull Map<String, Object> expectedPayload) {
+    public SELF executeReturning(String stepName, Map<String, @Nullable Object> expectedPayload) {
         Objects.requireNonNull(stepName, "Step name must not be null");
         Objects.requireNonNull(expectedPayload, "Expected payload must not be null");
         execute(stepName, (pc, in) -> expectedPayload);
@@ -135,8 +130,7 @@ public class GivenWhen<SELF extends GivenWhen<SELF, ASSERT>, ASSERT extends Then
      * @param expectedFailure failure thrown by the fake action
      * @return this phase for fluent chaining
      */
-    @Nonnull
-    public SELF executeFailing(@Nonnull String stepName, @Nonnull StepFailedException expectedFailure) {
+    public SELF executeFailing(String stepName, StepFailedException expectedFailure) {
         Objects.requireNonNull(stepName, "Step name must not be null");
         Objects.requireNonNull(expectedFailure, "Expected exception must not be null");
         execute(stepName, (pc, in) -> {
@@ -155,8 +149,7 @@ public class GivenWhen<SELF extends GivenWhen<SELF, ASSERT>, ASSERT extends Then
      * @param duration duration by which fixture time advances
      * @return this phase for fluent chaining
      */
-    @Nonnull
-    public SELF timePasses(@Nonnull Duration duration) {
+    public SELF timePasses(Duration duration) {
         Objects.requireNonNull(duration, "Duration must not be null");
         testDriver.timePasses(duration);
         return self();
