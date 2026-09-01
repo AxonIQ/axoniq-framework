@@ -46,8 +46,14 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
 
     private static final Logger LOG = LoggerFactory.getLogger(AxonServerContainer.class);
 
+    /**
+     * Pinned rather than {@code latest}: 2026.1.1 ships a broken
+     * {@code FileSegmentManager.newSegment} class (raises {@code java.lang.VerifyError: Bad type on operand stack}
+     * during DCB context creation, permanently killing that context's RAFT leader). Bump this once a fixed release
+     * is available.
+     */
     private static final DockerImageName DEFAULT_IMAGE_NAME =
-            DockerImageName.parse("docker.axoniq.io/axoniq/axonserver");
+            DockerImageName.parse("docker.axoniq.io/axoniq/axonserver:2026.1.0");
 
     private static final int AXON_SERVER_HTTP_PORT = 8024;
     private static final int AXON_SERVER_GRPC_PORT = 8124;
