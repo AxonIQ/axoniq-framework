@@ -1,9 +1,11 @@
 package multitenancy.deadletter;
 
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProviderUtil;
+import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
+import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import io.axoniq.framework.messaging.multitenancy.deadletter.TenantAwareSequencedDeadLetterQueueFactory;
 import io.axoniq.framework.messaging.eventhandling.deadletter.jdbc.JdbcSequencedDeadLetterQueue;
+import org.axonframework.common.configuration.Configuration;
 import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransactionalExecutorProvider;
@@ -23,9 +25,9 @@ public class DeclarativeTenantDeadLetterQueueConfiguration {
     }
 
     private JdbcSequencedDeadLetterQueue<EventMessage> createQueue(
-            io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor tenant,
+            TenantDescriptor tenant,
             String processorName,
-            org.axonframework.common.configuration.Configuration configuration) {
+            Configuration configuration) {
         TenantComponentProvider<DataSource> dataSourceProvider = TenantComponentProviderUtil
                 .find(configuration, DataSource.class).orElseThrow();
         JdbcTransactionalExecutorProvider executor = new JdbcTransactionalExecutorProvider(

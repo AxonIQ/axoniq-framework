@@ -1,7 +1,7 @@
 package multitenancy.deadletter;
 
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProviderUtil;
+import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.deadletter.TenantAwareSequencedDeadLetterQueueFactory;
 import io.axoniq.framework.messaging.eventhandling.deadletter.jdbc.JdbcSequencedDeadLetterQueue;
