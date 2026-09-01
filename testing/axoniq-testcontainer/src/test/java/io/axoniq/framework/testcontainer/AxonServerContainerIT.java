@@ -48,7 +48,7 @@ class AxonServerContainerIT {
 
     @Test
     void constructionWithDCBStartsAsExpected() {
-        String testName = "docker.axoniq.io/axoniq/axonserver:latest";
+        String testName = "axoniq/axonserver";
         try (
                 AxonServerContainer testSubject = new AxonServerContainer(testName)
                         .withDcbContext(true)
@@ -110,7 +110,7 @@ class AxonServerContainerIT {
     @Test
     void properlyConfiguredDefaultContainerLabel() {
         try (AxonServerContainer testSubject = new AxonServerContainer()) {
-            assertThat(testSubject.getDockerImageName()).isEqualTo("docker.axoniq.io/axoniq/axonserver:2026.1.0");
+            assertThat(testSubject.getDockerImageName()).isEqualTo("docker.axoniq.io/axoniq/axonserver:latest");
         }
     }
 
