@@ -81,6 +81,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     // Runtime
     private boolean running = false;
+    private boolean stoppedForRecovery = false;
     private volatile Thread workflowThread;
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
     private final EventWaitConditions eventWaitConditions;
@@ -192,6 +193,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      */
     @Override
     public void execute(Consumer<WorkflowExecution> terminationHandler) {
+        this.stoppedForRecovery = false;
         this.running = true;
         checkpointingSupport.refreshCheckpointWorkState();
         // run in a separate thread to avoid blocking the replay status change handler thread ( = WorkPackage)
@@ -232,6 +234,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                             } finally {
                                 if (!publicationResolutionTimedOut) {
                                     finishWorkflow(terminationHandler);
+                                } else {
+                                    stopRuntimeForRecovery();
                                 }
                             }
                             return CompletableFuture.completedFuture(null);
@@ -369,7 +373,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private void logPublicationResolutionTimeout(FutureResolutionTimeoutException timeout) {
         logger.error("Stopping runtime execution for workflow {} because a durable publication did not complete before "
                              + "the resolution timeout. The workflow remains non-terminal and must be recovered from "
-                             + "durable history after the processing node restarts.",
+                             + "durable history after the processing node restarts. Alert on this error and restart the "
+                             + "processing node that owns the workflow.",
                      workflowId,
                      timeout);
     }
@@ -397,12 +402,17 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                                                             workflowState.workflowDefinitionId(),
                                                             workflowConfiguration.eventNameCustomizer()));
             });
-        } catch (RuntimeException | Error failure) {
+        } catch (Throwable failure) {
             cancellation.callback().completeExceptionally(failure);
-            throw failure;
+            throwUnchecked(failure);
         }
         cancellation.callback().complete(null);
         return true;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void throwUnchecked(Throwable failure) throws T {
+        throw (T) failure;
     }
 
 
@@ -412,17 +422,39 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param terminationHandler termination handler to call.
      */
     private void finishWorkflow(Consumer<WorkflowExecution> terminationHandler) {
-        this.running = false; // mark we are completion and are not executable anymore
-        // TODO -> how do we recognize workflow executions which came to this point bit haven't reach the terminal states?
+        stopRuntime(null);
+        terminationHandler.accept(this);
+    }
+
+    /**
+     * Stops the in-memory workflow driver after a durable publication cannot be resolved.
+     * <p>
+     * The execution deliberately remains in the repository and non-terminal so a processing-node restart can restore
+     * it from durable history. In contrast to {@link #finishWorkflow(Consumer)}, this method must not invoke the
+     * termination handler because that handler removes the execution from the engine.
+     */
+    private void stopRuntimeForRecovery() {
+        this.stoppedForRecovery = true;
+        stopRuntime(new StepInterruptedException("Workflow runtime stopped after publication resolution timeout"));
+    }
+
+    /**
+     * Releases resources owned by the live workflow driver.
+     * <p>
+     * This cleanup is common to terminal completion and recovery stop. In both cases no driver remains to drain the
+     * task queue, so pending checkpoint latches must be completed before the execution is left in its final in-memory
+     * state.
+     */
+    private void stopRuntime(@Nullable Throwable stepCancellationCause) {
+        this.running = false;
         this.taskQueue.clear();
-        // Terminal cleanup removes queued barriers too. Release their callbacks because no workflow driver remains to
+        // Queue cleanup removes checkpoint barriers too. Release their callbacks because no workflow driver remains to
         // consume them; otherwise a fully deferred processor checkpoint would wait forever.
         this.checkpointingSupport.completePendingCheckpointLatch();
         this.eventWaitConditions.clear();
-        this.runningSteps.cancelAll(null, s -> {
+        this.runningSteps.cancelAll(stepCancellationCause, s -> {
         });
         this.checkpointingSupport.refreshCheckpointWorkState();
-        terminationHandler.accept(this);
     }
 
     private void transitionToTerminalState(Runnable terminalEventPublication) {
@@ -456,6 +488,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 eventWaitConditions.evaluateAndApply(eventMessage, processingContext, contextDelegate::eventReceived);
                 workflowState.evolve(eventMessage, processingContext);
             });
+        } else if (stoppedForRecovery) {
+            // The driver was deliberately stopped after a publication-resolution timeout. Keep its projected state in
+            // sync with durable events, but do not queue work that no driver can consume before the required restart.
+            workflowState.evolve(eventMessage, processingContext, false);
         } else {
             // replay mode
             workflowState.evolve(eventMessage, processingContext, false);

@@ -41,6 +41,7 @@ import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.time.Clock;
 import java.util.ArrayList;
@@ -152,13 +153,15 @@ class SimpleWorkflowExecutionTest {
     }
 
     @Test
-    void futureResolutionTimeoutStopsRuntimeWithoutTerminatingWorkflow() throws Exception {
+    void futureResolutionTimeoutStopsAndCleansUpRuntimeWithoutTerminatingWorkflow() throws Exception {
         var timeout = new FutureResolutionTimeoutException(new TimeoutException("publication timed out"));
         var eventSink = mock(EventSink.class);
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
                 .thenReturn(CompletableFuture.failedFuture(timeout));
         var execution = execution(eventSink, new DirectExecutorService());
         var terminationHandlerCalled = new CountDownLatch(1);
+        var checkpointLatchReleased = new CountDownLatch(1);
+        execution.addCheckpointLatch(checkpointLatchReleased::countDown);
 
         assertThatThrownBy(() -> execution.execute(ignored -> terminationHandlerCalled.countDown()))
                 .isInstanceOf(CompletionException.class)
@@ -166,8 +169,16 @@ class SimpleWorkflowExecutionTest {
 
         verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
         assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isFalse();
-        assertThat(execution.isRunning()).isTrue();
+        assertThat(checkpointLatchReleased.await(200, TimeUnit.MILLISECONDS)).isTrue();
+        assertThat(execution.isRunning()).isFalse();
+        assertThat(execution.hasTasks()).isFalse();
+        assertThat(execution.hasUnsafeCheckpointWork()).isFalse();
         assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.NONE);
+
+        markStarted(execution);
+
+        assertThat(execution.hasTasks()).isFalse();
+        assertThat(execution.hasUnsafeCheckpointWork()).isFalse();
     }
 
     @Test
@@ -184,7 +195,7 @@ class SimpleWorkflowExecutionTest {
 
         verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
         assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isFalse();
-        assertThat(execution.isRunning()).isTrue();
+        assertThat(execution.isRunning()).isFalse();
         assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
     }
 
@@ -205,6 +216,25 @@ class SimpleWorkflowExecutionTest {
     }
 
     @Test
+    void checkedPublicationFailureDuringCancellationCompletesRequesterExceptionally() {
+        var failure = new IOException("cancellation publication failed");
+        var execution = execution(
+                failedPublicationSink(failure),
+                new DirectExecutorService()
+        );
+        markStarted(execution);
+        var cancellation = (WorkflowCancellation.Request) execution.workflowCancellation();
+        var request = cancellation.requestWorkflowCancellation(null);
+
+        execution.execute(ignored -> { });
+
+        assertThat(request).isCompletedExceptionally();
+        assertThatThrownBy(request::join)
+                .isInstanceOf(java.util.concurrent.CompletionException.class)
+                .satisfies(exception -> assertThat(exception.getCause()).isSameAs(failure));
+    }
+
+    @Test
     void futureResolutionTimeoutWhilePublishingFailureLeavesWorkflowNonTerminal() {
         var timeout = new FutureResolutionTimeoutException(new TimeoutException("failure publication timed out"));
         var execution = execution(
@@ -220,7 +250,7 @@ class SimpleWorkflowExecutionTest {
                 .isInstanceOf(java.util.concurrent.CompletionException.class)
                 .satisfies(exception -> assertThat(exception.getCause()).isSameAs(timeout));
 
-        assertThat(execution.isRunning()).isTrue();
+        assertThat(execution.isRunning()).isFalse();
         assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
     }
 
@@ -270,9 +300,13 @@ class SimpleWorkflowExecutionTest {
     }
 
     private static EventSink failedPublicationSink(FutureResolutionTimeoutException timeout) {
+        return failedPublicationSink((Throwable) timeout);
+    }
+
+    private static EventSink failedPublicationSink(Throwable failure) {
         var eventSink = mock(EventSink.class);
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
-                .thenReturn(CompletableFuture.failedFuture(timeout));
+                .thenReturn(CompletableFuture.failedFuture(failure));
         return eventSink;
     }
 
