@@ -46,21 +46,7 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
 
     private static final Logger LOG = LoggerFactory.getLogger(AxonServerContainer.class);
 
-    /**
-     * Pinned rather than {@code latest}: 2026.1.1 ships a broken
-     * {@code FileSegmentManager.newSegment} class (raises {@code java.lang.VerifyError: Bad type on operand stack}
-     * during DCB context creation, permanently killing that context's RAFT leader). Bump this once a fixed release
-     * is available.
-     */
     private static final DockerImageName DEFAULT_IMAGE_NAME =
-            DockerImageName.parse("docker.axoniq.io/axoniq/axonserver:2026.1.0");
-    /**
-     * Unversioned family identifier for {@link #assertCompatibleWith}. Kept separate from
-     * {@link #DEFAULT_IMAGE_NAME}: {@code DockerImageName.assertCompatibleWith} treats two explicitly-versioned
-     * names as mutually incompatible, which would otherwise reject every caller pinning its own version (e.g.
-     * {@code axonserver:2025.2.0}) once {@link #DEFAULT_IMAGE_NAME} carries an explicit tag of its own.
-     */
-    private static final DockerImageName DEFAULT_IMAGE_FAMILY =
             DockerImageName.parse("docker.axoniq.io/axoniq/axonserver");
 
     private static final int AXON_SERVER_HTTP_PORT = 8024;
@@ -82,15 +68,15 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
     private static final String AXON_SERVER_ADDRESS_TEMPLATE = "%s:%s";
 
     /**
-     * Startup timeout for both wait strategies below. A container that could still become ready given a bit more
-     * time -- e.g. under CPU contention from other concurrently-starting containers on a busy CI runner -- should
-     * not fail the build just because the default 60s Testcontainers timeout was too tight.
+     * Startup timeout for both wait strategies below. A container that could still become ready given a bit more time
+     * -- e.g. under CPU contention from other concurrently-starting containers on a busy CI runner -- should not fail
+     * the build just because the default 60s Testcontainers timeout was too tight.
      */
     private static final Duration STARTUP_TIMEOUT = Duration.ofMinutes(2);
 
     /**
-     * Threshold above which a container's actual startup time is logged, to surface slow boots (e.g. caused by
-     * CPU contention from other concurrently-starting containers) without logging on every normal, fast start.
+     * Threshold above which a container's actual startup time is logged, to surface slow boots (e.g. caused by CPU
+     * contention from other concurrently-starting containers) without logging on every normal, fast start.
      */
     private static final Duration SLOW_STARTUP_THRESHOLD = Duration.ofSeconds(30);
 
@@ -128,7 +114,7 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
     public AxonServerContainer(final DockerImageName dockerImageName) {
         super(dockerImageName);
 
-        dockerImageName.assertCompatibleWith(DEFAULT_IMAGE_FAMILY, DockerImageName.parse("axoniq/axonserver"));
+        dockerImageName.assertCompatibleWith(DEFAULT_IMAGE_NAME, DockerImageName.parse("axoniq/axonserver"));
 
         //noinspection resource | ignore from AutoClosable on GenericContainer
         withExposedPorts(AXON_SERVER_HTTP_PORT, AXON_SERVER_GRPC_PORT)
@@ -283,8 +269,8 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
      * Initialize this Axon Server test container with DCB (Dynamic Consistency Boundary) context support.
      * <p>
      * When enabled, the default context will be created with DCB support, allowing for more flexible consistency
-     * boundaries in event-sourced applications. DCB enables defining consistency boundaries dynamically based on
-     * event tags rather than being limited to aggregate-based boundaries.
+     * boundaries in event-sourced applications. DCB enables defining consistency boundaries dynamically based on event
+     * tags rather than being limited to aggregate-based boundaries.
      * <p>
      * Default value is {@code false}.
      *
