@@ -35,12 +35,12 @@ and may impose a deadline, translate failures, or record metrics.
 
 ### Publication-resolution failure policy
 
-| Situation | Runtime action | Durable workflow state |
-| --- | --- | --- |
-| Publication resolves | Continue execution | Apply the published event |
-| Publication resolution times out | Stop live runtime execution | Leave the workflow non-terminal for recovery from durable history after restart |
-| Cancellation publication resolution times out | Complete the cancellation request exceptionally and stop live runtime execution | Leave the workflow non-terminal for recovery from durable history after restart |
-| Workflow body is parked for an event or timer | Keep the workflow driver parked; do not use `FutureResolver` | Unchanged until the awaited event or timer resumes the body |
+| Situation | Runtime action | Durable workflow state | Operator signal |
+| --- | --- | --- | --- |
+| Publication resolves | Continue execution | Apply the published event | None |
+| Publication resolution times out | Stop and clean up live runtime execution | Leave the workflow non-terminal for recovery from durable history after restart | An ERROR log identifies the workflow; alert on it and restart the owning processing node |
+| Cancellation publication resolution times out | Complete the cancellation request exceptionally, then stop and clean up live runtime execution | Leave the workflow non-terminal for recovery from durable history after restart | An ERROR log identifies the workflow; alert on it and restart the owning processing node |
+| Workflow body is parked for an event or timer | Keep the workflow driver parked; do not use `FutureResolver` | Unchanged until the awaited event or timer resumes the body | None |
 
 ### Alternatives considered
 
