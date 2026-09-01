@@ -54,6 +54,14 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
      */
     private static final DockerImageName DEFAULT_IMAGE_NAME =
             DockerImageName.parse("docker.axoniq.io/axoniq/axonserver:2026.1.0");
+    /**
+     * Unversioned family identifier for {@link #assertCompatibleWith}. Kept separate from
+     * {@link #DEFAULT_IMAGE_NAME}: {@code DockerImageName.assertCompatibleWith} treats two explicitly-versioned
+     * names as mutually incompatible, which would otherwise reject every caller pinning its own version (e.g.
+     * {@code axonserver:2025.2.0}) once {@link #DEFAULT_IMAGE_NAME} carries an explicit tag of its own.
+     */
+    private static final DockerImageName DEFAULT_IMAGE_FAMILY =
+            DockerImageName.parse("docker.axoniq.io/axoniq/axonserver");
 
     private static final int AXON_SERVER_HTTP_PORT = 8024;
     private static final int AXON_SERVER_GRPC_PORT = 8124;
@@ -120,7 +128,7 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
     public AxonServerContainer(final DockerImageName dockerImageName) {
         super(dockerImageName);
 
-        dockerImageName.assertCompatibleWith(DEFAULT_IMAGE_NAME, DockerImageName.parse("axoniq/axonserver"));
+        dockerImageName.assertCompatibleWith(DEFAULT_IMAGE_FAMILY, DockerImageName.parse("axoniq/axonserver"));
 
         //noinspection resource | ignore from AutoClosable on GenericContainer
         withExposedPorts(AXON_SERVER_HTTP_PORT, AXON_SERVER_GRPC_PORT)
