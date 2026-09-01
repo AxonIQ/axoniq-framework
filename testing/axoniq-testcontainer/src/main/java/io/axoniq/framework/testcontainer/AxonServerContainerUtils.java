@@ -31,6 +31,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -56,6 +57,8 @@ public class AxonServerContainerUtils {
      * Constant {@code boolean} specifying that a context does <b>not</b> support DCB.
      */
     public static final boolean NO_DCB_CONTEXT = false;
+
+    private static final Duration CONTEXTS_CONDITION_TIMEOUT = Duration.ofMinutes(2);
 
     /**
      * Initialize the cluster of the Axon Server instance located at the given {@code hostname} and {@code port}
@@ -178,7 +181,7 @@ public class AxonServerContainerUtils {
     private static void waitForContextsCondition(String hostname,
                                                  int port,
                                                  Predicate<List<String>> condition) {
-        await().atMost(60, TimeUnit.SECONDS)
+        await().atMost(Duration.ofMinutes(2))
                .pollInterval(100, TimeUnit.MILLISECONDS)
                .ignoreExceptionsInstanceOf(IOException.class)
                .until(() -> condition.test(internalContexts(hostname, port)));
