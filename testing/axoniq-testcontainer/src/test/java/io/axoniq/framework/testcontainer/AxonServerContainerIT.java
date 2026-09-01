@@ -48,8 +48,7 @@ class AxonServerContainerIT {
 
     @Test
     void constructionWithDCBStartsAsExpected() {
-        // Pinned: axonserver:latest (2026.1.1) raises java.lang.VerifyError during DCB context creation.
-        String testName = "docker.axoniq.io/axoniq/axonserver:2026.1.0";
+        String testName = "docker.axoniq.io/axoniq/axonserver:latest";
         try (
                 AxonServerContainer testSubject = new AxonServerContainer(testName)
                         .withDcbContext(true)
