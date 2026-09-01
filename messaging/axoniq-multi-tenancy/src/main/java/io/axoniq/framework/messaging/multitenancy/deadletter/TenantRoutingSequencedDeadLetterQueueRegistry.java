@@ -31,7 +31,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
@@ -44,15 +44,14 @@ import static java.util.Objects.requireNonNull;
 @Internal
 public class TenantRoutingSequencedDeadLetterQueueRegistry implements MultiTenantAwareComponent {
 
-    private final Map<String, TenantScopedCache<SequencedDeadLetterQueue<EventMessage>>> queues = new ConcurrentHashMap<>();
-    private final Map<TenantDescriptor, TenantRegistration> tenants = new ConcurrentHashMap<>();
+    private final Map<String, TenantScopedCache<SequencedDeadLetterQueue<EventMessage>>> queues = new HashMap<>();
+    private final Map<TenantDescriptor, TenantRegistration> tenants = new HashMap<>();
     /**
-     * Guards registry mutations that span the tenant registrations and all processing-group queue caches.
+     * Guards the compound invariant spanning tenant registrations and all processing-group queue caches.
      *
-     * <p>A {@code ConcurrentHashMap} (or an {@code AtomicBoolean}) cannot protect the compound invariant that a cache
-     * is registered with every currently known tenant while a tenant cannot be removed concurrently. The lock is held
-     * only for that bookkeeping; the tenant-specific queue lookup is delegated to the concurrent
-     * {@link TenantScopedCache} outside this critical section.</p>
+     * <p>A new cache must be registered with every known tenant before a tenant can be removed. The lock is held only
+     * for that bookkeeping; the tenant-specific queue lookup is delegated to the concurrent {@link TenantScopedCache}
+     * outside this critical section.</p>
      */
     private final Object registryLock = new Object();
 
@@ -108,7 +107,11 @@ public class TenantRoutingSequencedDeadLetterQueueRegistry implements MultiTenan
 
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
-        descriptor.describeProperty("tenants", tenants.keySet());
+        Set<TenantDescriptor> registeredTenants;
+        synchronized (registryLock) {
+            registeredTenants = Set.copyOf(tenants.keySet());
+        }
+        descriptor.describeProperty("tenants", registeredTenants);
     }
 
     private TenantScopedCache<SequencedDeadLetterQueue<EventMessage>> registerKnownTenants(
