@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
@@ -46,10 +47,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -183,6 +186,21 @@ class WaitForDelegateTest {
         ));
 
         assertThat(workflowScheduler.pendingTaskCount()).isZero();
+    }
+
+    @Test
+    void receivingTheAwaitedEventPropagatesPublicationResolutionTimeout() {
+        var event = mock(EventMessage.class);
+        when(event.payloadAs(any(org.axonframework.common.TypeReference.class))).thenReturn(Map.of());
+        when(processingContext.component(io.axoniq.workflow.runtime.util.FutureResolver.class))
+                .thenReturn(ignored -> {
+                    throw new FutureResolutionTimeoutException(new TimeoutException("publication timed out"));
+                });
+
+        assertThatThrownBy(() -> delegate.eventReceived(new EventWaitConditions.Awaited(
+                event, processingContext, "awaitPayment", GlobalOnlyPayloadReducer.INSTANCE,
+                DefaultEventNameCustomizer.Builder.defaults()
+        ))).isInstanceOf(FutureResolutionTimeoutException.class);
     }
 
     @Test

@@ -42,6 +42,9 @@ import io.axoniq.workflow.runtime.execution.WorkflowScheduler;
 import io.axoniq.workflow.runtime.execution.WorkflowStateParameterResolverFactory;
 import io.axoniq.workflow.runtime.execution.WorkflowStore;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
+import io.axoniq.workflow.runtime.util.DefaultTimeoutFutureResolver;
+import io.axoniq.workflow.runtime.util.FutureResolver;
+import jakarta.annotation.Nullable;
 import org.axonframework.common.ClockUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
@@ -58,7 +61,9 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.modelling.repository.Repository;
 
 import java.time.Clock;
+import java.util.Iterator;
 import java.util.NoSuchElementException;
+import java.util.ServiceLoader;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -89,7 +94,11 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     public static final String COMPONENT_WORKFLOW_ENGINE = "WorkflowEngine";
 
     /**
-     * Name of the executor service component.
+     * Name of the dedicated executor service component used for workflow-body work and workflow-event publication.
+     * <p>
+     * The default uses a virtual thread per task. A bounded future-resolution wait therefore blocks only its workflow
+     * task, not an event processor or another shared executor. Applications that replace this component should retain
+     * that isolation or size their executor for the configured resolver timeout.
      */
     public static final String WORKFLOW_ENGINE_EXECUTOR = "WorkflowEngineExecutor";
 
@@ -109,6 +118,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
         registerPayloadReducerRegistry(componentRegistry);
+        registerFutureResolver(componentRegistry);
         registerEventNameCustomizer(componentRegistry);
         registerClock(componentRegistry);
         decorateTagResolver(componentRegistry);
@@ -131,6 +141,28 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
 
     private void registerPayloadReducerRegistry(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(PayloadReducerRegistry.class, cfg -> new PayloadReducerRegistry());
+    }
+
+    void registerFutureResolver(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(FutureResolver.class, cfg -> loadFutureResolver());
+    }
+
+    private static FutureResolver loadFutureResolver() {
+        var contextClassLoader = Thread.currentThread().getContextClassLoader();
+        var resolver = findFutureResolver(contextClassLoader);
+        if (resolver == null && contextClassLoader != FutureResolver.class.getClassLoader()) {
+            resolver = findFutureResolver(FutureResolver.class.getClassLoader());
+        }
+        return resolver != null ? resolver : new DefaultTimeoutFutureResolver();
+    }
+
+    @Nullable
+    private static FutureResolver findFutureResolver(@Nullable ClassLoader classLoader) {
+        if (classLoader == null) {
+            return null;
+        }
+        Iterator<FutureResolver> resolvers = ServiceLoader.load(FutureResolver.class, classLoader).iterator();
+        return resolvers.hasNext() ? resolvers.next() : null;
     }
 
     void registerEventNameCustomizer(ComponentRegistry componentRegistry) {

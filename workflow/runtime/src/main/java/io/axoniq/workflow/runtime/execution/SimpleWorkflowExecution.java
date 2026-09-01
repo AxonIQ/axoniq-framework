@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
@@ -28,6 +29,7 @@ import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionCheckpointingSupport.ExecutionTaskQueue;
+import io.axoniq.workflow.runtime.util.FutureResolver;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.Nullable;
@@ -80,6 +82,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     // Runtime
     private boolean running = false;
+    private boolean stoppedForRecovery = false;
     private volatile Thread workflowThread;
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
     private final EventWaitConditions eventWaitConditions;
@@ -191,6 +194,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      */
     @Override
     public void execute(@Nonnull Consumer<WorkflowExecution> terminationHandler) {
+        this.stoppedForRecovery = false;
         this.running = true;
         checkpointingSupport.refreshCheckpointWorkState();
         // run in a separate thread to avoid blocking the replay status change handler thread ( = WorkPackage)
@@ -212,14 +216,29 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                             }
                             logger.trace("Thread: {}, ProcessingContext {}", currentThread(), ctx);
 
-                            publishStartWorkflow(ctx);
-
+                            var publicationResolutionTimedOut = false;
                             try {
+                                publishStartWorkflow(ctx);
                                 executeWorkflow(ctx);
+                            } catch (FutureResolutionTimeoutException timeout) {
+                                publicationResolutionTimedOut = true;
+                                logPublicationResolutionTimeout(timeout);
+                                throw timeout;
                             } catch (Throwable e) {
-                                handleWorkflowException(ctx, e);
+                                try {
+                                    handleWorkflowException(ctx, e);
+                                } catch (FutureResolutionTimeoutException timeout) {
+                                    publicationResolutionTimedOut = true;
+                                    logPublicationResolutionTimeout(timeout);
+                                    throw timeout;
+                                }
+                            } finally {
+                                if (!publicationResolutionTimedOut) {
+                                    finishWorkflow(terminationHandler);
+                                } else {
+                                    stopRuntimeForRecovery();
+                                }
                             }
-                            finishWorkflow(terminationHandler);
                             return CompletableFuture.completedFuture(null);
                         }
                 );
@@ -245,11 +264,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private void publishStartWorkflow(@Nonnull ProcessingContext ctx) {
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         if (this.state().workflowStatus() == WorkflowStatus.NONE) {
-            // FIXME join without timeout?
-            sendWorkflowEvent(startedWorkflow(this.workflowContext(),
-                                              workflowName,
-                                              workflowState.workflowDefinitionId(),
-                                              eventNameCustomizer), ctx).join();
+            publishWorkflowEvent(ctx, startedWorkflow(this.workflowContext(),
+                                                      workflowName,
+                                                      workflowState.workflowDefinitionId(),
+                                                      eventNameCustomizer));
             try {
                 awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
             } catch (Exception e) {
@@ -285,10 +303,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         }
         if (!this.state().workflowStatus().isTerminal()) {
             terminalTransition.transition(() -> {
-                sendWorkflowEvent(
-                        completedWorkflow(this.workflowContext(), workflowName, workflowState.workflowDefinitionId(),
-                                          eventNameCustomizer), ctx
-                ).join(); // FIXME join without timeout
+                publishWorkflowEvent(ctx, completedWorkflow(this.workflowContext(), workflowName,
+                                                            workflowState.workflowDefinitionId(), eventNameCustomizer));
             });
         }
         logger.info("Workflow executed. Resulting workflow payload {}.", this.workflowContext().workflowPayload());
@@ -296,6 +312,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     /**
      * Handles exceptions thrown during workflow execution.
+     * <p>
+     * This method applies the workflow exception policy and may publish terminal events. A
+     * {@link FutureResolutionTimeoutException} raised by one of those publication attempts propagates to the workflow
+     * driver, which stops runtime execution without publishing another terminal event.
      *
      * @param ctx       processing context.
      * @param exception exception to handle.
@@ -310,10 +330,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 // if events are already sent by WorkflowLifecycleControlDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
-                        sendWorkflowEvent(failedWorkflow(
-                                this.workflowContext(), workflowName, wfe,
-                                workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
-                        ).join(); // FIXME join without timeout
+                        publishWorkflowEvent(ctx, failedWorkflow(this.workflowContext(), workflowName, wfe,
+                                                                 workflowState.workflowDefinitionId(), eventNameCustomizer));
                     });
                 }
             }
@@ -321,20 +339,17 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 // if events are already sent by WorkflowLifecycleControlDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
-                        sendWorkflowEvent(cancelledWorkflow(
-                                this.workflowContext(), workflowName, wce,
-                                workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
-                        ).join(); // FIXME join without timeout
+                        publishWorkflowEvent(ctx, cancelledWorkflow(this.workflowContext(), workflowName, wce,
+                                                                    workflowState.workflowDefinitionId(), eventNameCustomizer));
                     });
                 }
             }
             case TimeoutException te -> {
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
-                        sendWorkflowEvent(timeoutWorkflow(
-                                this.workflowContext(), workflowName, contextDelegate.clock().instant(),
-                                workflowState.workflowDefinitionId(), eventNameCustomizer), ctx
-                        ).join(); // FIXME join without timeout
+                        publishWorkflowEvent(ctx, timeoutWorkflow(this.workflowContext(), workflowName,
+                                                                  contextDelegate.clock().instant(),
+                                                                  workflowState.workflowDefinitionId(), eventNameCustomizer));
                     });
                 }
             }
@@ -349,31 +364,20 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
             }
             case InterruptedException ie -> {
                 Thread.currentThread().interrupt();
-        /*
-                // we agreed not to drive the workflow to terminal state on interrupted exception
-                sendWorkflowEvent(
-                    cancelledWorkflow(this.workflowContext(),
-                                      workflowName,
-                                      eventNameCustomizer),
-                    ctx
-                ).join(); // FIXME join without timeout
-
-         */
             }
             default -> {
                 logger.error("Error occurred in workflow {}", workflowId, exception);
-                // we agreed not to drive the workflow to terminal state on any other exception
-                /*
-                sendWorkflowEvent(failedWorkflow(
-                                          this.workflowContext(),
-                                          workflowName,
-                                          exception instanceof Exception ? (Exception) exception : new RuntimeException(exception),
-                                          eventNameCustomizer),
-                                  ctx).join(); // FIXME join without timeout
-
-                 */
             }
         }
+    }
+
+    private void logPublicationResolutionTimeout(@Nonnull FutureResolutionTimeoutException timeout) {
+        logger.error("Stopping runtime execution for workflow {} because a durable publication did not complete before "
+                             + "the resolution timeout. The workflow remains non-terminal and must be recovered from "
+                             + "durable history after the processing node restarts. Alert on this error and restart the "
+                             + "processing node that owns the workflow.",
+                     workflowId,
+                     timeout);
     }
 
     /**
@@ -393,14 +397,23 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
             return false;
         }
         Thread.interrupted();
-        terminalTransition.transition(() -> {
-            sendWorkflowEvent(cancelledWorkflow(
-                    this.workflowContext(), workflowName, cancellation.cause(),
-                    workflowState.workflowDefinitionId(), workflowConfiguration.eventNameCustomizer()), ctx
-            ).join();
-        });
+        try {
+            terminalTransition.transition(() -> {
+                publishWorkflowEvent(ctx, cancelledWorkflow(this.workflowContext(), workflowName, cancellation.cause(),
+                                                            workflowState.workflowDefinitionId(),
+                                                            workflowConfiguration.eventNameCustomizer()));
+            });
+        } catch (Throwable failure) {
+            cancellation.callback().completeExceptionally(failure);
+            throwUnchecked(failure);
+        }
         cancellation.callback().complete(null);
         return true;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void throwUnchecked(Throwable failure) throws T {
+        throw (T) failure;
     }
 
 
@@ -410,17 +423,39 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param terminationHandler termination handler to call.
      */
     private void finishWorkflow(Consumer<WorkflowExecution> terminationHandler) {
-        this.running = false; // mark we are completion and are not executable anymore
-        // TODO -> how do we recognize workflow executions which came to this point bit haven't reach the terminal states?
+        stopRuntime(null);
+        terminationHandler.accept(this);
+    }
+
+    /**
+     * Stops the in-memory workflow driver after a durable publication cannot be resolved.
+     * <p>
+     * The execution deliberately remains in the repository and non-terminal so a processing-node restart can restore
+     * it from durable history. In contrast to {@link #finishWorkflow(Consumer)}, this method must not invoke the
+     * termination handler because that handler removes the execution from the engine.
+     */
+    private void stopRuntimeForRecovery() {
+        this.stoppedForRecovery = true;
+        stopRuntime(new StepInterruptedException("Workflow runtime stopped after publication resolution timeout"));
+    }
+
+    /**
+     * Releases resources owned by the live workflow driver.
+     * <p>
+     * This cleanup is common to terminal completion and recovery stop. In both cases no driver remains to drain the
+     * task queue, so pending checkpoint latches must be completed before the execution is left in its final in-memory
+     * state.
+     */
+    private void stopRuntime(@Nullable Throwable stepCancellationCause) {
+        this.running = false;
         this.taskQueue.clear();
-        // Terminal cleanup removes queued barriers too. Release their callbacks because no workflow driver remains to
+        // Queue cleanup removes checkpoint barriers too. Release their callbacks because no workflow driver remains to
         // consume them; otherwise a fully deferred processor checkpoint would wait forever.
         this.checkpointingSupport.completePendingCheckpointLatch();
         this.eventWaitConditions.clear();
-        this.runningSteps.cancelAll(null, s -> {
+        this.runningSteps.cancelAll(stepCancellationCause, s -> {
         });
         this.checkpointingSupport.refreshCheckpointWorkState();
-        terminationHandler.accept(this);
     }
 
     private void transitionToTerminalState(@Nonnull Runnable terminalEventPublication) {
@@ -454,6 +489,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 eventWaitConditions.evaluateAndApply(eventMessage, processingContext, contextDelegate::eventReceived);
                 workflowState.evolve(eventMessage, processingContext);
             });
+        } else if (stoppedForRecovery) {
+            // The driver was deliberately stopped after a publication-resolution timeout. Keep its projected state in
+            // sync with durable events, but do not queue work that no driver can consume before the required restart.
+            workflowState.evolve(eventMessage, processingContext, false);
         } else {
             // replay mode
             workflowState.evolve(eventMessage, processingContext, false);
@@ -523,6 +562,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     private CompletableFuture<Void> sendWorkflowEvent(@Nonnull EventMessage eventMessage,
                                                       @Nonnull ProcessingContext processingContext) {
+        // Publication runs on the dedicated workflow executor, whose default is virtual-thread-per-task. A bounded
+        // FutureResolver wait thus cannot occupy an event-processor or other shared worker thread.
         // TODO: make sure the consistency marker is used
         return ProcessingContextUtils
                 .executeWithResult(
@@ -537,6 +578,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                             return contextDelegate.publishEvent(childCtx, eventMessage);
                         }
                 );
+    }
+
+    private void publishWorkflowEvent(@Nonnull ProcessingContext processingContext,
+                                      @Nonnull EventMessage eventMessage) {
+        FutureResolver.resolve(processingContext, sendWorkflowEvent(eventMessage, processingContext));
     }
 
     @Override

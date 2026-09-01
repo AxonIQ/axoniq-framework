@@ -18,12 +18,14 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
+import io.axoniq.workflow.runtime.util.FutureResolver;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
@@ -36,7 +38,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.cancelledWorkflow;
@@ -215,8 +216,10 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     /**
      * Awaits durable publication of a workflow terminal event.
      * <p>
-     * Terminal transitions must not proceed before their event is durable. Timeout policy intentionally remains
-     * centralized here until issue #280 defines a configurable publication deadline and its recovery semantics.
+     * Terminal transitions must not proceed before their event is durable. {@link FutureResolver} centralizes the
+     * bounded waiting policy introduced for issue #280. Publication failures, including an unwrapped publication
+     * exception or timeout, are logged and rethrown. A resolver timeout is normalized to
+     * {@link FutureResolutionTimeoutException}, so workflow execution does not mistake it for a workflow timeout.
      *
      * @param publication    asynchronous terminal-event publication
      * @param terminalStatus terminal status represented by the event
@@ -224,12 +227,17 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     private void awaitTerminalEventPublication(@Nonnull CompletableFuture<Void> publication,
                                                @Nonnull String terminalStatus) {
         try {
-            publication.join(); // FIXME: add a user-defined timeout through configuration as part of #280
-        } catch (CompletionException exception) {
+            FutureResolver.resolve(workflowContext.processingContext(), publication);
+        } catch (Throwable exception) {
             logger.error("Failed to publish {} terminal event for workflow '{}'", terminalStatus,
                          workflowExecution.workflowId(), exception);
-            throw exception;
+            rethrowUnchecked(exception);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void rethrowUnchecked(Throwable exception) throws T {
+        throw (T) exception;
     }
 
     @Nonnull

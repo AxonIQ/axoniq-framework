@@ -19,6 +19,7 @@
 package io.axoniq.workflow.configuration;
 
 import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
+import io.axoniq.workflow.runtime.util.DefaultTimeoutFutureResolver;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.Component;
 import org.axonframework.common.configuration.ComponentDefinition;
@@ -39,6 +40,7 @@ import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -65,6 +67,31 @@ class WorkflowConfigurationDefaultsTest {
         try {
             assertThat(executor.getCorePoolSize())
                     .isEqualTo(WorkflowConfigurationDefaults.DEFAULT_WORKFLOW_TIMER_THREAD_COUNT);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void registersDefaultFutureResolver() {
+        var registry = new CapturingComponentRegistry();
+
+        subject.registerFutureResolver(registry);
+
+        var component = ((ComponentDefinition.ComponentCreator<?>) registry.componentDefinition).createComponent();
+        assertThat(component.resolve(mock(Configuration.class))).isInstanceOf(DefaultTimeoutFutureResolver.class);
+    }
+
+    @Test
+    void defaultWorkflowEngineExecutorUsesDedicatedVirtualThreads() throws Exception {
+        var registry = new CapturingComponentRegistry();
+
+        subject.registerWorkflowEngineExecutor(registry);
+
+        var component = ((ComponentDefinition.ComponentCreator<?>) registry.componentDefinition).createComponent();
+        ExecutorService executor = (ExecutorService) component.resolve(mock(Configuration.class));
+        try {
+            assertThat(executor.submit(Thread::currentThread).get().isVirtual()).isTrue();
         } finally {
             executor.shutdownNow();
         }

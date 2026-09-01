@@ -29,8 +29,11 @@ import java.lang.reflect.Constructor;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -138,5 +141,30 @@ class ProcessingContextUtilsTest {
 
         verify(executorService).execute(any(Runnable.class));
         verify(unitOfWorkFactory).create(anyString(), any(Function.class));
+    }
+
+    @Test
+    void executeWithResultInSeparateThreadKeepsParkedWorkflowBodyRunningUntilItCompletes() throws Exception {
+        var bodyStarted = new CountDownLatch(1);
+        var parkedBody = new CompletableFuture<String>();
+        try (var executorService = Executors.newSingleThreadExecutor()) {
+            ProcessingContextUtils.executeWithResultInSeparateThread(
+                    "myId",
+                    unitOfWorkFactory,
+                    executorService,
+                    parentContext,
+                    context -> {
+                        bodyStarted.countDown();
+                        return parkedBody;
+                    }
+            );
+
+            assertThat(bodyStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(executorService.awaitTermination(100, TimeUnit.MILLISECONDS)).isFalse();
+
+            parkedBody.complete("completion");
+            executorService.shutdown();
+            assertThat(executorService.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        }
     }
 }

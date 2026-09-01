@@ -314,6 +314,7 @@ final class WorkflowExecutionCheckpointingSupport {
         Runnable callback;
         synchronized (this) {
             checkpointWorkUnsafe = false;
+            latchQueued = false;
             callback = latchCallback;
             latchCallback = NO_OP;
         }

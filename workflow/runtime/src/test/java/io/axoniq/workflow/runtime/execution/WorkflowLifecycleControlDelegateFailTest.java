@@ -18,6 +18,9 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
@@ -33,6 +36,7 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.junit.jupiter.api.*;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -41,6 +45,7 @@ import java.util.function.Function;
 
 import static io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands.failWorkflow;
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -88,6 +93,7 @@ class WorkflowLifecycleControlDelegateFailTest {
 
         when(workflowExecution.state()).thenReturn(workflowState(Map.of()));
         when(workflowContext.processingContext()).thenReturn(processingContext);
+        when(workflowExecution.workflowId()).thenReturn("wf-1");
         when(workflowExecution.workflowName()).thenReturn("test-workflow");
         when(workflowContext.workflowId()).thenReturn("wf-1");
         when(workflowContext.workflowPayload()).thenReturn(Map.of());
@@ -159,6 +165,32 @@ class WorkflowLifecycleControlDelegateFailTest {
 
         order.verify(terminalTransition).transition(any(Runnable.class));
         order.verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
+    }
+
+    @Test
+    void failWorkflowLogsAndRethrowsUnwrappedPublicationFailure() {
+        var publicationFailure = new IllegalStateException("publication failed");
+        when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
+                .thenReturn(CompletableFuture.failedFuture(publicationFailure));
+        Logger logger = (Logger) LoggerFactory.getLogger(WorkflowLifecycleControlDelegate.class);
+        var appender = new ListAppender<ILoggingEvent>();
+        appender.start();
+        logger.addAppender(appender);
+
+        try {
+            assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(new RuntimeException("boom"), eventNameCustomizer)))
+                    .isSameAs(publicationFailure);
+
+            assertThat(appender.list)
+                    .anySatisfy(event -> {
+                        assertThat(event.getFormattedMessage())
+                                .contains("Failed to publish FAILED terminal event for workflow 'wf-1'");
+                        assertThat(event.getThrowableProxy().getMessage()).isEqualTo("publication failed");
+                    });
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
     }
 
     @SuppressWarnings("unchecked")

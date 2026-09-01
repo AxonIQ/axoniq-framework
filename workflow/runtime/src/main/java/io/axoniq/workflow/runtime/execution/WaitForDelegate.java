@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
+import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.workflow.runtime.api.execution.context.WaitForPrimitive;
@@ -25,6 +26,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.workflow.runtime.util.FutureResolver;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import jakarta.annotation.Nonnull;
 import org.axonframework.common.annotation.Internal;
@@ -170,10 +172,15 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
         var payload = eventMessagePayload(awaited.eventMessage());
         workflowExecution.appendTask(state -> {
             try {
-                completedWaitForEvent(awaited.stepName(),
-                                      payload,
-                                      awaited.payloadReducer().name(),
-                                      awaited.eventNameCustomizer()).join();
+                FutureResolver.resolve(
+                        workflowExecution.processingContext(),
+                        completedWaitForEvent(awaited.stepName(),
+                                              payload,
+                                              awaited.payloadReducer().name(),
+                                              awaited.eventNameCustomizer())
+                );
+            } catch (FutureResolutionTimeoutException timeout) {
+                throw timeout;
             } catch (Exception e) {
                 logger.warn("Failed to publish completed event for step '{}': {}",
                             awaited.stepName(),
