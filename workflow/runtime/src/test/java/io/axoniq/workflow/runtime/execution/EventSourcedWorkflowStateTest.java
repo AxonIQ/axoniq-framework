@@ -207,6 +207,40 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
+    void ignoresCompletedStepAndPayloadUpdateAfterWorkflowBecomesTerminal() {
+        state = new EventSourcedWorkflowState(WORKFLOW_ID, Map.of("before", "terminal"), DEFINITION_ID);
+        state.setStatus(WorkflowStatus.COMPLETED, null, false);
+        var metadata = MetadataUtils.create(WORKFLOW_ID, "late-step", StepStatus.COMPLETED)
+                                    .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD, NAME);
+        var eventMessage = mock(EventMessage.class);
+        when(eventMessage.type()).thenReturn(new MessageType("TestWorkflow.LateStep", "0.0.1"));
+        when(eventMessage.metadata()).thenReturn(metadata);
+
+        state.evolve(eventMessage, processingContext);
+
+        assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
+        assertThat(state.containsStep("late-step")).isFalse();
+        assertThat(state.payload()).containsExactly(Map.entry("before", "terminal"));
+        verify(eventMessage, never()).payloadAs(Object.class);
+    }
+
+    @Test
+    void ignoresVersionMigrationAfterWorkflowBecomesTerminal() {
+        state.setStatus(WorkflowStatus.COMPLETED, null, false);
+        var eventMessage = mock(EventMessage.class);
+        when(eventMessage.type()).thenReturn(new MessageType("TestWorkflow.Versioned", "0.0.2"));
+        when(eventMessage.metadata()).thenReturn(
+                MetadataUtils.createVersionMigrationStep(WORKFLOW_ID, "late-migration", "0.0.2")
+        );
+
+        state.evolve(eventMessage, processingContext);
+
+        assertThat(state.workflowDefinitionId()).isEqualTo(DEFINITION_ID);
+        assertThat(state.versionFor("late-migration")).contains(DEFINITION_ID.version());
+        verify(eventMessage, never()).payloadAs(Object.class);
+    }
+
+    @Test
     void evolvePayloadConvertsNonMapPayloadsToMaps() {
         String stepName = "testStep";
         Map<String, @Nullable Object> stepResult = Map.of("key", "value");

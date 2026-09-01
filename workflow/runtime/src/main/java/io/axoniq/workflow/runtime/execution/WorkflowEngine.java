@@ -507,15 +507,15 @@ public class WorkflowEngine implements
         terminalExecutions.forEach(execution -> checkpointWorkIndex.markSafe(execution.workflowId()));
         var executionsToStart = workflowExecutionRepository.findAll(owned.and(execution -> !execution.isRunning()));
         if (executionsToStart.isEmpty()) {
-            logger.info("No restored workflow executions require startup {}.", phase);
+            logger.debug("No restored workflow executions require startup {}.", phase);
             return;
         }
-        logger.info("Starting {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
+        logger.debug("Starting {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
         for (var execution : executionsToStart) {
             registerCancellation(execution);
             execute(execution, segment);
         }
-        logger.info("Started {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
+        logger.debug("Started {} restored workflow execution(s) {}.", executionsToStart.size(), phase);
     }
 
     private void execute(WorkflowExecution execution, @Nullable Segment segment) {

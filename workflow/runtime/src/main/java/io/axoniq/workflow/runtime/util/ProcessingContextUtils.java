@@ -92,6 +92,10 @@ public class ProcessingContextUtils {
      * the provided processing context. See
      * {@link #executeWithResult(String, UnitOfWorkFactory, Executor, Context, Function)} for running the action in the
      * same thread.
+     * <p>
+     * The returned future represents the complete action lifetime. For workflow bodies, that includes time spent parked
+     * while waiting for events or timers. Joining it intentionally parks the workflow driver thread and is not a
+     * durable-publication wait, so it must not use {@link FutureResolver} or apply a resolution timeout.
      *
      * @param id                id of the unit of work.
      * @param unitOfWorkFactory unit of work factory to use.
@@ -106,10 +110,13 @@ public class ProcessingContextUtils {
             ExecutorService executorService,
             ProcessingContext parentContext,
             Function<ProcessingContext, CompletableFuture<R>> action) {
-        executorService.execute(() -> FutureResolver.resolve(
-                parentContext,
-                executeWithResult(id, unitOfWorkFactory, executorService, parentContext, action)
-        ));
+        executorService.execute(() -> executeWithResult(id,
+                                                        unitOfWorkFactory,
+                                                        executorService,
+                                                        parentContext,
+                                                        action)
+                .join()
+        );
     }
 
 

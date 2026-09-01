@@ -271,6 +271,10 @@ public class EventSourcedWorkflowState implements WorkflowState {
             ProcessingContext processingContext,
             boolean notifyStatusListeners) {
         logger.trace("Applying event {}", eventMessage.type());
+        if (workflowStatus().isTerminal()) {
+            logger.debug("Ignoring event {} for terminal workflow {}", eventMessage.type(), workflowId);
+            return this;
+        }
         Object eventPayload = eventMessage.payloadAs(Object.class);
         var metadata = eventMessage.metadata();
         MetadataUtils.getWorkflowDefinitionId(metadata)
@@ -281,7 +285,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
         if (MetadataUtils.isVersionMigrationStep(metadata)) {
             applyVersionMigrationStep(metadata);
         }
-        // Apply step-level state changes — ignore transitions once already terminal
+        // Apply step-level state changes — ignore transitions once the step is already terminal
         MetadataUtils.getStepStatus(metadata).ifPresent(stepStatus -> {
             var stepName = getStepName(metadata);
             if (WorkflowStateUtils.isStepTerminal(this, stepName)) {

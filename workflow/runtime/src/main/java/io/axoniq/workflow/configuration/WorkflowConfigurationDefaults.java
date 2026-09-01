@@ -43,7 +43,7 @@ import io.axoniq.workflow.runtime.execution.WorkflowStore;
 import io.axoniq.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.workflow.runtime.util.DefaultTimeoutFutureResolver;
 import io.axoniq.workflow.runtime.util.FutureResolver;
-import jakarta.annotation.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.axonframework.common.ClockUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;

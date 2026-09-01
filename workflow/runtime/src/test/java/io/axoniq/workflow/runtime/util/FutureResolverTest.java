@@ -18,6 +18,7 @@
  */
 package io.axoniq.workflow.runtime.util;
 
+import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import org.axonframework.common.configuration.ComponentNotFoundException;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.*;
@@ -57,9 +58,16 @@ class FutureResolverTest {
     @Test
     void defaultResolverTimesOutForIncompletePublication() {
         var resolver = new DefaultTimeoutFutureResolver(Duration.ofMillis(50));
+        var publication = new CompletableFuture<Void>();
 
-        assertThatThrownBy(() -> resolver.resolve(new CompletableFuture<>()))
-                .isInstanceOf(TimeoutException.class);
+        assertThatThrownBy(() -> resolver.resolve(publication))
+                .isInstanceOf(FutureResolutionTimeoutException.class)
+                .hasCauseInstanceOf(TimeoutException.class);
+        assertThat(publication).isNotCompleted();
+
+        publication.complete(null);
+
+        assertThat(publication).isCompletedWithValue(null);
     }
 
     @Test
@@ -70,6 +78,17 @@ class FutureResolverTest {
         when(context.component(FutureResolver.class)).thenReturn(resolver);
         FutureResolver.resolve(context, publication);
         verify(resolver).resolve(same(publication));
+    }
+
+    @Test
+    void normalizesRawTimeoutFromConfiguredResolver() {
+        var context = mock(ProcessingContext.class);
+        FutureResolver resolver = ignored -> throwUnchecked(new TimeoutException("publication timed out"));
+        when(context.component(FutureResolver.class)).thenReturn(resolver);
+
+        assertThatThrownBy(() -> FutureResolver.resolve(context, new CompletableFuture<>()))
+                .isInstanceOf(FutureResolutionTimeoutException.class)
+                .hasCauseInstanceOf(TimeoutException.class);
     }
 
     @Test
@@ -91,5 +110,9 @@ class FutureResolverTest {
         FutureResolver.resolve(context, publication);
 
         assertThat(publication).isCompleted();
+    }
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void throwUnchecked(Throwable failure) throws T {
+        throw (T) failure;
     }
 }
