@@ -52,6 +52,8 @@ class AxonServerContainerIT {
         try (
                 AxonServerContainer testSubject = new AxonServerContainer(testName)
                         .withDcbContext(true)
+                        // TODO diagnostic scaffolding for #403 -- remove once the DCB cluster-init hang in CI is understood
+                        .withLogConsumer(frame -> System.out.print("[axonserver-dcb] " + frame.getUtf8StringWithoutLineEnding() + "\n"))
         ) {
             testSubject.start();
             assertThat(testSubject.isRunning()).isTrue();
