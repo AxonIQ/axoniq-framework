@@ -177,43 +177,39 @@ class MultiTenantDeadLetterQueueIT {
     private AxonConfiguration buildApplication() {
         var processor = EventProcessorModule
                 .pooledStreaming(PROCESSOR_NAME)
-                .eventHandlingComponents(components -> components.declarative(COMPONENT_NAME,
-                                                                              configuration -> Fixture.failingComponent(
-                                                                                      handledTenants)))
+                .eventHandlingComponents(components -> components.declarative(
+                        COMPONENT_NAME, configuration -> Fixture.failingComponent(handledTenants)
+                ))
                 // Enables DLQ support for this processor. The multi-tenancy enhancer decorates its queue factory.
-                .customized((configuration, pooled) -> pooled.extend(DeadLetterQueueConfiguration.class,
-                                                                     () -> new DeadLetterQueueConfiguration().enabled()));
+                .customized((configuration, pooled) -> pooled.extend(
+                        DeadLetterQueueConfiguration.class, () -> new DeadLetterQueueConfiguration().enabled()
+                ));
 
         Consumer<ComponentRegistry> registerTenantAwareSequencedDeadLetterQueueFactory = registry -> registry.registerComponent(
                 TenantAwareSequencedDeadLetterQueueFactory.class,
                 configuration -> (tenant, processorName, queueConfiguration) -> {
                     // reuses the single-per-tenant-datasource configured above
                     TenantComponentProvider<DataSource> dataSourceProvider =
-                            TenantComponentProviderUtil.find(
-                                    queueConfiguration, DataSource.class
-                            ).orElseThrow();
-                    EventConverter eventConverter = queueConfiguration.getComponent(
-                                                          EventConverter.class
-                                                  );
-                    GeneralConverter generalConverter = queueConfiguration.getComponent(
-                                                          GeneralConverter.class
-                                                  );
-                    JdbcTransactionalExecutorProvider executorProvider =
-                            new JdbcTransactionalExecutorProvider(
-                                                                                                  dataSourceProvider.componentFor(tenant)
-                            );
+                            TenantComponentProviderUtil.find(queueConfiguration, DataSource.class)
+                                                       .orElseThrow();
+                    EventConverter eventConverter = queueConfiguration.getComponent(EventConverter.class);
+                    GeneralConverter generalConverter = queueConfiguration.getComponent(GeneralConverter.class);
+                    JdbcTransactionalExecutorProvider executorProvider = new JdbcTransactionalExecutorProvider(
+                            dataSourceProvider.componentFor(tenant)
+                    );
+
                     JdbcSequencedDeadLetterQueue<EventMessage> queue =
                             JdbcSequencedDeadLetterQueue.<EventMessage>builder()
                                                         .processingGroup(processorName)
                                                         .transactionalExecutorProvider(
                                                                 ignored -> executorProvider.getTransactionalExecutor(
-                                                                        null)
+                                                                        null
+                                                                )
                                                         )
                                                         .eventConverter(eventConverter)
                                                         .genericConverter(generalConverter)
                                                         .build();
-                    joinAndUnwrap(queue.createSchema(new GenericDeadLetterTableFactory(),
-                                                     null));
+                    joinAndUnwrap(queue.createSchema(new GenericDeadLetterTableFactory(), null));
                     factoryTenants.add(tenant.tenantId());
                     return queue;
                 });
@@ -221,16 +217,18 @@ class MultiTenantDeadLetterQueueIT {
         return EventSourcingConfigurer.create()
                                       .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
                                       .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
-
                                       // The application's tenant-scoped datasource provider owns the physical storage
-                                      .componentRegistry(Fixture.registerTenantDataSourceProvider(databaseDirectory,
-                                                                                                  tenantDataSources))
+                                      .componentRegistry(Fixture.registerTenantDataSourceProvider(
+                                              databaseDirectory, tenantDataSources
+                                      ))
                                       .componentRegistry(registerTenantAwareSequencedDeadLetterQueueFactory)
                                       // The processor itself needs no tenant-specific configuration: DLQ operations
                                       // carry their tenant in the ProcessingContext and are routed by the registry.
                                       .messaging(messaging -> messaging.eventProcessing(
-                                              processing -> processing.pooledStreaming(
-                                                      pooled -> pooled.processor(processor))))
+                                                         processing -> processing.pooledStreaming(
+                                                                 pooled -> pooled.processor(processor))
+                                                 )
+                                      )
                                       .start();
     }
 
@@ -244,8 +242,9 @@ class MultiTenantDeadLetterQueueIT {
             return stream.nextIfAvailable(1, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while retrieving the event stored for tenant ["
-                                                    + tenantId + "]", e);
+            throw new IllegalStateException(
+                    "Interrupted while retrieving the event stored for tenant [" + tenantId + "]", e
+            );
         }
     }
 

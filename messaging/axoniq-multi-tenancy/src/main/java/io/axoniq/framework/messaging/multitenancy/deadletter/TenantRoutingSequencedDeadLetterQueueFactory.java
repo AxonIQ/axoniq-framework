@@ -21,7 +21,6 @@ package io.axoniq.framework.messaging.multitenancy.deadletter;
 
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
@@ -42,20 +41,13 @@ import static java.util.Objects.requireNonNull;
  * @author Jan Galinski
  * @since 5.4.0
  */
-@Internal
 class TenantRoutingSequencedDeadLetterQueueFactory implements SequencedDeadLetterQueueFactory {
 
     private final TenantAwareSequencedDeadLetterQueueFactory delegate;
     private final TenantRoutingSequencedDeadLetterQueueRegistry registry;
 
-    /**
-     * Creates the adapter used by the multi-tenancy configuration enhancer.
-     *
-     * @param delegate the factory creating the underlying tenant-specific queues
-     * @param registry the registry owning tenant lifecycle and tenant-specific queues
-     */
-    public TenantRoutingSequencedDeadLetterQueueFactory(TenantAwareSequencedDeadLetterQueueFactory delegate,
-                                                        TenantRoutingSequencedDeadLetterQueueRegistry registry) {
+    TenantRoutingSequencedDeadLetterQueueFactory(TenantAwareSequencedDeadLetterQueueFactory delegate,
+                                                 TenantRoutingSequencedDeadLetterQueueRegistry registry) {
         this.delegate = requireNonNull(delegate, "The delegate must not be null");
         this.registry = requireNonNull(registry, "The registry must not be null");
     }

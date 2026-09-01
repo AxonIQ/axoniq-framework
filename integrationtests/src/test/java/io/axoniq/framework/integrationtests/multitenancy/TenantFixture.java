@@ -32,7 +32,6 @@ import static io.axoniq.framework.axonserver.connector.api.AxonServerConfigurati
  * provided here.
  *
  * @author Jan Galinski
- * @since 5.4.0
  */
 final class TenantFixture {
 
@@ -40,9 +39,8 @@ final class TenantFixture {
      * A {@link TenantConnectPredicate} that only allows custom tenants to be connected. The default and admin tenants
      * are excluded.
      */
-    static final TenantConnectPredicate CONNECT_ONLY_CUSTOM_TENANTS = tenantDescriptor -> !Set.of(ADMIN_CONTEXT,
-                                                                                                  DEFAULT_CONTEXT)
-                                                                                              .contains(tenantDescriptor.tenantId());
+    static final TenantConnectPredicate CONNECT_ONLY_CUSTOM_TENANTS =
+            tenantDescriptor -> !Set.of(ADMIN_CONTEXT, DEFAULT_CONTEXT).contains(tenantDescriptor.tenantId());
 
 
     private TenantFixture() {

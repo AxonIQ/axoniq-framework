@@ -22,7 +22,6 @@ package io.axoniq.framework.messaging.multitenancy.configuration;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.TypeReference;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.AmbiguousComponentMatchException;
 import org.axonframework.common.configuration.Component;
 import org.axonframework.common.configuration.Configuration;

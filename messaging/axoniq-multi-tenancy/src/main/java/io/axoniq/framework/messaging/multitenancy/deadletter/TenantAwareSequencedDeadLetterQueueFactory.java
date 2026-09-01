@@ -29,9 +29,8 @@ import org.axonframework.messaging.eventhandling.EventMessage;
  * <p>
  * The regular event-processing {@code SequencedDeadLetterQueueFactory} only receives a processing group and cannot
  * select tenant-specific infrastructure, such as a tenant's {@code DataSource}. Applications should register this
- * factory
- * instead. The {@link TenantRoutingSequencedDeadLetterQueueRegistry} invokes it lazily once for every tenant and
- * processing group, then retains that concrete queue until the tenant is removed.
+ * factory instead. The {@link TenantRoutingSequencedDeadLetterQueueRegistry} invokes it lazily once for every tenant
+ * and processing group, then retains that concrete queue until the tenant is removed.
  * <p>
  * This factory creates the queue that stores dead letters; it does not route operations. Routing is provided by the
  * framework-internal {@link TenantRoutingSequencedDeadLetterQueueFactory}.
@@ -45,7 +44,7 @@ public interface TenantAwareSequencedDeadLetterQueueFactory {
     /**
      * Creates the concrete dead-letter queue for the given {@code tenant} and {@code processorName}.
      *
-     * @param tenant the tenant for which the queue is created
+     * @param tenant        the tenant for which the queue is created
      * @param processorName the processor for which the queue is created
      * @param configuration the configuration for component lookup
      * @return the concrete dead-letter queue for the given tenant and processing group

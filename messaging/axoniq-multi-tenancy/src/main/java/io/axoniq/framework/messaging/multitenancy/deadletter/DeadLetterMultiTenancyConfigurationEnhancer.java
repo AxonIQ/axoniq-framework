@@ -32,7 +32,8 @@ import static org.axonframework.common.configuration.DecoratorDefinition.forType
 
 /**
  * Makes an enabled dead-letter queue configuration tenant-aware by routing its configured queue factory per tenant.
- * This enhancer has no-op if the optional dependency for dead-letter queue support is not present on the classpath.
+ * <p>
+ * This enhancer does nothing if the optional dependency for dead-letter queue support is not present on the classpath.
  *
  * @author Jan Galinski
  * @since 5.4.0
@@ -49,38 +50,33 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
      */
     public static final int ENHANCER_ORDER = MultiTenancyConfigurationDefaults.ENHANCER_ORDER + 4;
 
+    private static final String EXP_MSG = "A TenantAwareSequencedDeadLetterQueueFactory must be configured when multi-tenancy and the dead-letter queue are enabled.";
+
     @Override
     public int order() {
         return ENHANCER_ORDER;
     }
 
     private static void registerDeadLetterQueueDecorator(ComponentRegistry componentRegistry) {
-        componentRegistry.registerDecorator(forType(PooledStreamingEventProcessorConfiguration.class)
-                                                    .with((configuration, name, processorConfiguration) -> {
-                                                        DeadLetterQueueConfiguration dlqConfig =
-                                                                processorConfiguration.extension(
-                                                                        DeadLetterQueueConfiguration.class);
-                                                        if (dlqConfig != null && dlqConfig.isEnabled()) {
-                                                            TenantAwareSequencedDeadLetterQueueFactory tenantFactory;
-                                                            try {
-                                                                tenantFactory = configuration.getComponent(
-                                                                        TenantAwareSequencedDeadLetterQueueFactory.class
-                                                                );
-                                                            } catch (RuntimeException e) {
-                                                                throw new AxonConfigurationException(
-                                                                        "A TenantAwareSequencedDeadLetterQueueFactory must be configured when multi-tenancy and the dead-letter queue are enabled.",
-                                                                        e
-                                                                );
-                                                            }
-                                                            dlqConfig.factory(new TenantRoutingSequencedDeadLetterQueueFactory(
-                                                                    tenantFactory,
-                                                                    configuration.getComponent(
-                                                                            TenantRoutingSequencedDeadLetterQueueRegistry.class
-                                                                    )
-                                                            ));
-                                                        }
-                                                        return processorConfiguration;
-                                                    }));
+        componentRegistry.registerDecorator(
+                forType(PooledStreamingEventProcessorConfiguration.class).with(
+                        (config, name, processorConfiguration) -> {
+                            DeadLetterQueueConfiguration dlqConfig =
+                                    processorConfiguration.extension(DeadLetterQueueConfiguration.class);
+                            if (dlqConfig != null && dlqConfig.isEnabled()) {
+                                TenantAwareSequencedDeadLetterQueueFactory tenantFactory =
+                                        config.getOptionalComponent(TenantAwareSequencedDeadLetterQueueFactory.class)
+                                              .orElseThrow(() -> new AxonConfigurationException(EXP_MSG));
+
+                                dlqConfig.factory(new TenantRoutingSequencedDeadLetterQueueFactory(
+                                        tenantFactory,
+                                        config.getComponent(TenantRoutingSequencedDeadLetterQueueRegistry.class)
+                                ));
+                            }
+                            return processorConfiguration;
+                        }
+                )
+        );
     }
 
     /**

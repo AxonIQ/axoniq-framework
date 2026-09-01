@@ -64,9 +64,9 @@ public class TenantRoutingSequencedDeadLetterQueueRegistry implements MultiTenan
      * tenant removal. The tenant-specific lookup itself remains concurrent.
      *
      * @param processorName the processor owning the queue
-     * @param configuration   the configuration passed to the delegate factory
-     * @param factory         the factory creating a tenant's underlying queue
-     * @param tenant          the registered tenant whose queue to return
+     * @param configuration the configuration passed to the delegate factory
+     * @param factory       the factory creating a tenant's underlying queue
+     * @param tenant        the registered tenant whose queue to return
      * @return the tenant's queue
      */
     public SequencedDeadLetterQueue<EventMessage> queueFor(String processorName,
@@ -115,7 +115,8 @@ public class TenantRoutingSequencedDeadLetterQueueRegistry implements MultiTenan
     }
 
     private TenantScopedCache<SequencedDeadLetterQueue<EventMessage>> registerKnownTenants(
-            TenantScopedCache<SequencedDeadLetterQueue<EventMessage>> queueCache) {
+            TenantScopedCache<SequencedDeadLetterQueue<EventMessage>> queueCache
+    ) {
         tenants.values().forEach(registration -> registration.register(queueCache));
         return queueCache;
     }
@@ -152,5 +153,4 @@ public class TenantRoutingSequencedDeadLetterQueueRegistry implements MultiTenan
             return cancelled;
         }
     }
-
 }
