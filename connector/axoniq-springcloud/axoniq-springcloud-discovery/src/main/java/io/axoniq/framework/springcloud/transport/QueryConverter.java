@@ -38,12 +38,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 
-import static io.axoniq.framework.springcloud.transport.WireCodec.copyOf;
-import static io.axoniq.framework.springcloud.transport.WireCodec.decode;
-import static io.axoniq.framework.springcloud.transport.WireCodec.descriptionsOf;
-import static io.axoniq.framework.springcloud.transport.WireCodec.encode;
-import static io.axoniq.framework.springcloud.transport.WireCodec.messageOf;
-import static io.axoniq.framework.springcloud.transport.WireCodec.serializedDetailsOf;
+import static io.axoniq.framework.springcloud.transport.WireCodec.*;
 
 /**
  * Converts queries and their responses between the messages the framework works with and the form members send each
@@ -224,9 +219,9 @@ final class QueryConverter {
      * @return the wire representation of the given {@code cause}
      */
     public static QueryDispatchFailure convertErrorResult(Throwable cause,
-                                                     String requestIdentifier,
-                                                     String origin,
-                                                     @Nullable Converter converter) {
+                                                          String requestIdentifier,
+                                                          String origin,
+                                                          @Nullable Converter converter) {
         byte[] details = serializedDetailsOf(cause, converter);
         Object rawDetails = HandlerExecutionException.resolveDetails(cause).orElse(null);
         return new QueryDispatchFailure(
