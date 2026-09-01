@@ -68,10 +68,8 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
     private static final Logger LOG = LoggerFactory.getLogger(AxonServerTestInfrastructure.class);
 
     public static final String AXON_SERVER_TEST_LICENSE = "axon-server-test.license";
-    // Pinned: axonserver:latest (2026.1.1) raises java.lang.VerifyError during DCB context creation, permanently
-    // killing that context's RAFT leader. Bump this once a fixed release is available.
     private static final AxonServerContainer CONTAINER =
-            new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:2026.1.0")
+            new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:latest")
                     .withAxonServerHostname("localhost")
                     .withDevMode(true)
                     .withReuse(true)
