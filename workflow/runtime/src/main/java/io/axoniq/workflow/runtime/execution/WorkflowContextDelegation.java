@@ -35,11 +35,11 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.EventSink;
 
 import java.time.Clock;
 import java.util.List;
@@ -79,7 +79,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
     private final WorkflowContext workflowContext;
 
     // Services
-    private final EventSink eventSink;
+    private final EventStore eventStore;
     private final UnitOfWorkFactory unitOfWorkFactory;
     private final UnitOfWorkFactory workflowBodyUnitOfWorkFactory;
     private final Clock clock;
@@ -130,9 +130,9 @@ public class WorkflowContextDelegation implements WorkflowContext {
         this.executorService = Objects.requireNonNull(
                 processingContext.component(ExecutorService.class, WORKFLOW_ENGINE_EXECUTOR),
                 "Could not retrieve workflow engine executor");
-        this.eventSink = Objects.requireNonNull(
-                processingContext.component(EventSink.class),
-                "Could not retrieve EventSink");
+        this.eventStore = Objects.requireNonNull(
+                processingContext.component(EventStore.class),
+                "Could not retrieve EventStore");
         this.timeoutScheduler = Objects.requireNonNull(
                 processingContext.component(WorkflowScheduler.class),
                 "Could not retrieve WorkflowScheduler");
@@ -147,7 +147,6 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                   stepParent,
                                                   clock,
                                                   unitOfWorkFactory,
-                                                  eventSink,
                                                   executorService,
                                                   timeoutScheduler,
                                                   executeStepActionResolver);
@@ -158,9 +157,6 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                                      reachedSteps,
                                                                      stepParent,
                                                                      clock,
-                                                                     unitOfWorkFactory,
-                                                                     eventSink,
-                                                                     executorService,
                                                                      timeoutScheduler);
         this.waitForDelegate = new WaitForDelegate(workflowContext,
                                                    workflowExecution,
@@ -169,36 +165,24 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                    reachedSteps,
                                                    stepParent,
                                                    clock,
-                                                   unitOfWorkFactory,
-                                                   eventSink,
-                                                   executorService,
                                                    timeoutScheduler);
         this.lifecycleControlDelegate = new WorkflowLifecycleControlDelegate(workflowContext,
                                                                              workflowExecution,
                                                                              runningSteps,
                                                                              reachedSteps,
-                                                                             terminalTransition,
-                                                                             unitOfWorkFactory,
-                                                                             eventSink,
-                                                                             executorService);
+                                                                             terminalTransition);
         this.payloadDelegate = new PayloadDelegate(workflowContext,
                                                    workflowExecution,
                                                    runningSteps,
                                                    reachedSteps,
                                                    stepParent,
                                                    clock,
-                                                   unitOfWorkFactory,
-                                                   eventSink,
-                                                   executorService,
                                                    timeoutScheduler);
         this.versionDelegate = new VersionDelegate(workflowContext,
                                                    workflowExecution,
                                                    reachedSteps,
                                                    stepParent,
-                                                   clock,
-                                                   unitOfWorkFactory,
-                                                   eventSink,
-                                                   executorService);
+                                                   clock);
 
         this.anyCombinatorDelegate = new AnyMatchCombinatorDelegate(workflowExecution);
         this.noneCombinatorDelegate = new NoneMatchCombinatorDelegate(workflowExecution);
@@ -313,12 +297,11 @@ public class WorkflowContextDelegation implements WorkflowContext {
     public CompletableFuture<Void> publishEvent(
             ProcessingContext processingContext,
             EventMessage eventMessage) {
-        return WorkflowAppendConditions.append(this.eventSink,
-                                               this.unitOfWorkFactory,
-                                               this.executorService,
-                                               processingContext,
-                                               eventMessage,
-                                               this.workflowExecution);
+        return workflowExecution.appendWorkflowEvent(eventMessage, processingContext);
+    }
+
+    EventStore eventStore() {
+        return eventStore;
     }
 
     public Clock clock() {

@@ -54,9 +54,6 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
      * @param reachedSteps              reached steps tracker
      * @param parentEventNameCustomizer parent event name customizer
      * @param clock                     clock for time calculations
-     * @param unitOfWorkFactory         unit of work factory for processing contexts
-     * @param eventSink                 event sink for event publications
-     * @param executor                  executor for step work
      * @param timeoutScheduler          scheduler for step timeouts
      */
     @Internal
@@ -67,9 +64,6 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
             ReachedSteps reachedSteps,
             EventNameCustomizer parentEventNameCustomizer,
             Clock clock,
-            UnitOfWorkFactory unitOfWorkFactory,
-            EventSink eventSink,
-            Executor executor,
             WorkflowScheduler timeoutScheduler
     ) {
         super(workflowContext,
@@ -78,9 +72,6 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
               reachedSteps,
               parentEventNameCustomizer,
               clock,
-              unitOfWorkFactory,
-              eventSink,
-              executor,
               timeoutScheduler);
     }
 

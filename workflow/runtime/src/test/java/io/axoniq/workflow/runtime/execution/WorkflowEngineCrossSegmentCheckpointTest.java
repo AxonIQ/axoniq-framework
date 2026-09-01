@@ -335,7 +335,7 @@ class WorkflowEngineCrossSegmentCheckpointTest {
         var execution = WorkflowExecutionFixture.mockExecution(STRAGGLER_ID, state, false);
         doAnswer(invocation -> {
             stragglerTermination.set(invocation.getArgument(0));
-            return null;
+            return CompletableFuture.completedFuture(null);
         }).when(execution).execute(any());
 
         var configuration = WorkflowExecutionFixture.mockConfiguration(STRAGGLER_ID, execution);

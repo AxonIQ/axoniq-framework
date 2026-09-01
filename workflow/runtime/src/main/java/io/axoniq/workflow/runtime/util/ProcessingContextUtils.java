@@ -94,8 +94,9 @@ public class ProcessingContextUtils {
      * same thread.
      * <p>
      * The returned future represents the complete action lifetime. For workflow bodies, that includes time spent parked
-     * while waiting for events or timers. Joining it intentionally parks the workflow driver thread and is not a
-     * durable-publication wait, so it must not use {@link FutureResolver} or apply a resolution timeout.
+     * while waiting for events or timers. It is composed rather than joined, so the submitting executor thread remains
+     * available while the workflow body is parked. This is not a durable-publication wait, so it must not use
+     * {@link FutureResolver} or apply a resolution timeout.
      *
      * @param id                id of the unit of work.
      * @param unitOfWorkFactory unit of work factory to use.
@@ -103,20 +104,33 @@ public class ProcessingContextUtils {
      * @param parentContext     parent processing context.
      * @param action            action to execute.
      * @param <R>               type of action result.
+     * @return a future completing with the action result once the child unit of work completes
      */
-    public static <R> void executeWithResultInSeparateThread(
+    public static <R> CompletableFuture<R> executeWithResultInSeparateThread(
             @Nullable String id,
             UnitOfWorkFactory unitOfWorkFactory,
             ExecutorService executorService,
             ProcessingContext parentContext,
             Function<ProcessingContext, CompletableFuture<R>> action) {
-        executorService.execute(() -> executeWithResult(id,
-                                                        unitOfWorkFactory,
-                                                        executorService,
-                                                        parentContext,
-                                                        action)
-                .join()
-        );
+        var result = new CompletableFuture<R>();
+        try {
+            executorService.execute(() -> executeWithResult(id,
+                                                            unitOfWorkFactory,
+                                                            executorService,
+                                                            parentContext,
+                                                            action)
+                    .whenComplete((value, failure) -> {
+                        if (failure == null) {
+                            result.complete(value);
+                        } else {
+                            result.completeExceptionally(failure);
+                        }
+                    })
+            );
+        } catch (Throwable failure) {
+            result.completeExceptionally(failure);
+        }
+        return result;
     }
 
 

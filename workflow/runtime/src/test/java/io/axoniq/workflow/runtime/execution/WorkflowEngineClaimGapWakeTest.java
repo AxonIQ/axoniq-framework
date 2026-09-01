@@ -34,6 +34,7 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.common.configuration.ComponentNotFoundException;
+import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.ApplicationContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -225,7 +226,7 @@ class WorkflowEngineClaimGapWakeTest {
         when(context.component(Clock.class)).thenReturn(Clock.systemUTC());
         when(context.component(ExecutorService.class, WORKFLOW_ENGINE_EXECUTOR))
                 .thenReturn(mock(ExecutorService.class));
-        when(context.component(EventSink.class)).thenReturn(mock(EventSink.class));
+        when(context.component(EventStore.class)).thenReturn(mock(EventStore.class));
         when(context.component(WorkflowScheduler.class)).thenReturn(mock(WorkflowScheduler.class));
         when(context.component(ExecuteStepActionResolver.class)).thenReturn(mock(ExecuteStepActionResolver.class));
         when(context.whenComplete(any())).thenAnswer(invocation -> {

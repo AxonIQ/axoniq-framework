@@ -30,6 +30,7 @@ import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.workflow.runtime.util.FutureResolver;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.annotation.Internal;
@@ -61,6 +62,8 @@ import java.util.concurrent.TimeoutException;
 public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrimitive {
 
     private static final Logger logger = LoggerFactory.getLogger(ExecuteDelegate.class);
+    private final UnitOfWorkFactory unitOfWorkFactory;
+    private final Executor executor;
     private final ExecuteStepActionResolver actionResolver;
     /** Steps this execution published a {@code STARTED} event for, so their state is known to be its own. */
     private final Set<String> ownStartedSteps = ConcurrentHashMap.newKeySet();
@@ -75,7 +78,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
      * @param parentEventNameCustomizer event name customizer
      * @param clock                     clock for time calculations
      * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts
-     * @param eventSink                 event sink for event publications
      * @param executor                  executor to offload execution tasks from workflow thread
      * @param timeoutScheduler          scheduler for workflow step timeouts
      * @param actionResolver            resolver for execute step actions
@@ -88,7 +90,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                            EventNameCustomizer parentEventNameCustomizer,
                            Clock clock,
                            UnitOfWorkFactory unitOfWorkFactory,
-                           EventSink eventSink,
                            Executor executor,
                            WorkflowScheduler timeoutScheduler,
                            ExecuteStepActionResolver actionResolver
@@ -99,10 +100,9 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
               reachedSteps,
               parentEventNameCustomizer,
               clock,
-              unitOfWorkFactory,
-              eventSink,
-              executor,
               timeoutScheduler);
+        this.unitOfWorkFactory = unitOfWorkFactory;
+        this.executor = executor;
         this.actionResolver = actionResolver;
     }
 
@@ -238,11 +238,12 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     }
 
     /**
-     * Publishes this execution's {@code STARTED} event for the given step and waits, without bound, until the step is
-     * present with status {@link StepStatus#STARTED}. That state change carries no writer identity: the event may have
+     * Publishes this execution's {@code STARTED} event for the given step and waits until the step is present with
+     * status {@link StepStatus#STARTED}. That state change carries no writer identity: the event may have
      * been recorded by another execution of the same workflow instance and delivered here over this execution's own
      * event stream. The store accepting this execution's own append is therefore the only proof that this execution
-     * took the step.
+     * took the step. The append is then resolved through the workflow's bounded future-resolution policy before the
+     * action is allowed to run.
      *
      * @param stepName            name of the step to start
      * @param local               local payload to record on the {@code STARTED} event
@@ -262,7 +263,12 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
             return false;
         }
         var ownAppend = ownStarted.get();
-        boolean accepted = ownAppend != null && ownAppend.handle((result, failure) -> failure == null).join();
+        if (ownAppend == null) {
+            return false;
+        }
+        var acceptedAppend = ownAppend.handle((result, failure) -> failure == null);
+        FutureResolver.resolve(workflowExecution.processingContext(), acceptedAppend);
+        boolean accepted = acceptedAppend.getNow(false);
         if (!accepted) {
             logger.warn("The STARTED event of step '{}' of workflow '{}' is not this execution's. Leaving the step "
                                 + "to the execution that recorded it.", stepName, workflowExecution.workflowId());

@@ -23,7 +23,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState;
-import io.axoniq.workflow.runtime.execution.WorkflowAppendConditions;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowEventTags;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
@@ -31,14 +30,13 @@ import jakarta.annotation.Nonnull;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
+import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejectedException;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
-import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
-import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -54,7 +52,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,7 +72,6 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
     private static final String MODULE = "claim-restore-self-fence";
     private static final MessageType DEFINITION_ID =
             new MessageType(new QualifiedName(MODULE), MessageType.DEFAULT_VERSION);
-    private static final Executor DIRECT = Runnable::run;
 
     private final DefaultEventNameCustomizer customizer = DefaultEventNameCustomizer.Builder.defaults();
 
@@ -106,6 +102,27 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
         assertThat(terminatedWithin("wf-a", Duration.ofSeconds(5)))
                 .as("'wf-a' sourced that write while restoring, so its own appends are no conflict")
                 .isTrue();
+    }
+
+    @Test
+    void aPreviousOwnerAppendingAfterRestoreSourcingFencesTheRestoredExecution() {
+        configuration = configurationWith(new PreviousOwnerWritingStorageEngine(new InMemoryEventStorageEngine()));
+        configuration.start();
+
+        var instance = workflowContext("wf-a", MessageType.DEFAULT_VERSION);
+        publish(EventMessageUtils.startedWorkflow(instance, MODULE, DEFINITION_ID, customizer));
+
+        restoreSegment();
+        var restoredExecution = runningExecution("wf-a");
+
+        // This is the write the restored execution did not source. Its first append must therefore be rejected.
+        publish(step(instance, "approveOrder"));
+
+        var failure = appendFailure(restoredExecution, step(instance, "shipOrder"));
+
+        assertThat(failure)
+                .as("a previous owner writing after the restore read must fence the restored execution")
+                .hasRootCauseInstanceOf(AppendEventsTransactionRejectedException.class);
     }
 
     /**
@@ -155,12 +172,7 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
     }
 
     private Throwable appendFailure(WorkflowExecution execution, EventMessage event) {
-        var append = WorkflowAppendConditions.append(configuration.getComponent(EventStore.class),
-                                                    configuration.getComponent(UnitOfWorkFactory.class),
-                                                    DIRECT,
-                                                    Context.empty(),
-                                                    event,
-                                                    execution);
+        var append = execution.appendWorkflowEvent(event, execution.processingContext());
         try {
             append.join();
             return null;

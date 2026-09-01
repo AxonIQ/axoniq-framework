@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowAppendCondition;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
@@ -30,14 +29,16 @@ import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionCheckpointingSupport.ExecutionTaskQueue;
-import io.axoniq.workflow.runtime.util.FutureResolver;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.jspecify.annotations.Nullable;
+import org.axonframework.eventsourcing.eventstore.AppendCondition;
+import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,6 +52,7 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.*;
+import static io.axoniq.workflow.runtime.util.FutureResolver.resolve;
 import static java.lang.Thread.currentThread;
 
 /**
@@ -110,7 +112,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                     },
                     CheckpointWorkStateListener.NO_OP
             );
-    private final WorkflowAppendCondition appendCondition = new ConsistencyMarkerSupport();
+    private final SequencedAppendCondition appendCondition = new SequencedAppendCondition();
+    private final WorkflowEventPublisher workflowEventPublisher;
 
     /**
      * Constructs a new instance.
@@ -149,7 +152,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         this.workflowConfiguration = Objects.requireNonNull(workflowConfiguration,
                                                             "Workflow configuration must not be null");
         this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps must not be null");
-        this.eventWaitConditions = Objects.requireNonNull(eventWaitConditions, "Event wait conditions must not be null");
+        this.eventWaitConditions = Objects.requireNonNull(eventWaitConditions,
+                                                          "Event wait conditions must not be null");
         this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps must not be null");
         var configuredName = Objects.requireNonNull(workflowConfiguration.workflowName(),
                                                     "Workflow name must not be null");
@@ -169,6 +173,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 reachedSteps,
                 terminalTransition,
                 processingContext
+        );
+        this.workflowEventPublisher = new WorkflowEventPublisher(
+                contextDelegate.eventStore(),
+                workflowId,
+                contextDelegate.unitOfWorkFactory(),
+                contextDelegate.executorService()
         );
         this.workflowCancellationRequest = new DefaultWorkflowCancellation(this, contextDelegate, runningSteps);
 
@@ -190,13 +200,13 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * resources are held while the instance is parked.
      */
     @Override
-    public void execute(Consumer<WorkflowExecution> terminationHandler) {
+    public CompletableFuture<Void> execute(Consumer<WorkflowExecution> terminationHandler) {
         this.stoppedForRecovery = false;
         this.running = true;
         checkpointingSupport.refreshCheckpointWorkState();
         // run in a separate thread to avoid blocking the replay status change handler thread ( = WorkPackage)
 
-        ProcessingContextUtils
+        return ProcessingContextUtils
                 .executeWithResultInSeparateThread(
                         contextDelegate.workflowId(),
                         contextDelegate.workflowBodyUnitOfWorkFactory(),
@@ -238,7 +248,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                             }
                             return CompletableFuture.completedFuture(null);
                         }
-                );
+                )
+                .thenApply(ignored -> null);
     }
 
 
@@ -261,10 +272,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private void publishStartWorkflow(ProcessingContext ctx) {
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         if (this.state().workflowStatus() == WorkflowStatus.NONE) {
-            publishWorkflowEvent(ctx, startedWorkflow(this.workflowContext(),
-                                                      workflowName,
-                                                      workflowState.workflowDefinitionId(),
-                                                      eventNameCustomizer));
+            publishAndWait(startedWorkflow(this.workflowContext(), workflowName,
+                                           workflowState.workflowDefinitionId(), eventNameCustomizer), ctx);
             try {
                 awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
             } catch (Exception e) {
@@ -300,8 +309,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         }
         if (!this.state().workflowStatus().isTerminal()) {
             terminalTransition.transition(() -> {
-                publishWorkflowEvent(ctx, completedWorkflow(this.workflowContext(), workflowName,
-                                                            workflowState.workflowDefinitionId(), eventNameCustomizer));
+                publishAndWait(completedWorkflow(this.workflowContext(), workflowName,
+                                                 workflowState.workflowDefinitionId(), eventNameCustomizer), ctx);
             });
         }
         logger.info("Workflow executed. Resulting workflow payload {}.", this.workflowContext().workflowPayload());
@@ -323,7 +332,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         }
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         switch (exception) {
-            case Throwable fenced when WorkflowAppendConditions.isAppendRejected(fenced) -> {
+            case Throwable fenced when AppendFailureClassifier.isRejected(fenced) -> {
                 logger.warn("Workflow {} stopped: another writer already recorded the fact this one tried to append, "
                                     + "so this execution no longer owns the instance.", workflowId());
                 // Intentionally publish nothing. The writer that won owns the instance, and a terminal event from
@@ -333,8 +342,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 // if events are already sent by WorkflowLifecycleControlDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
-                        publishWorkflowEvent(ctx, failedWorkflow(this.workflowContext(), workflowName, wfe,
-                                                                 workflowState.workflowDefinitionId(), eventNameCustomizer));
+                        publishAndWait(failedWorkflow(this.workflowContext(), workflowName, wfe,
+                                                     workflowState.workflowDefinitionId(), eventNameCustomizer), ctx);
                     });
                 }
             }
@@ -342,17 +351,17 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 // if events are already sent by WorkflowLifecycleControlDelegate, just let it propagate
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
-                        publishWorkflowEvent(ctx, cancelledWorkflow(this.workflowContext(), workflowName, wce,
-                                                                    workflowState.workflowDefinitionId(), eventNameCustomizer));
+                        publishAndWait(cancelledWorkflow(this.workflowContext(), workflowName, wce,
+                                                        workflowState.workflowDefinitionId(), eventNameCustomizer), ctx);
                     });
                 }
             }
             case TimeoutException te -> {
                 if (!this.state().workflowStatus().isTerminal()) {
                     terminalTransition.transition(() -> {
-                        publishWorkflowEvent(ctx, timeoutWorkflow(this.workflowContext(), workflowName,
-                                                                  contextDelegate.clock().instant(),
-                                                                  workflowState.workflowDefinitionId(), eventNameCustomizer));
+                        publishAndWait(timeoutWorkflow(this.workflowContext(), workflowName,
+                                                      contextDelegate.clock().instant(),
+                                                      workflowState.workflowDefinitionId(), eventNameCustomizer), ctx);
                     });
                 }
             }
@@ -402,9 +411,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         Thread.interrupted();
         try {
             terminalTransition.transition(() -> {
-                publishWorkflowEvent(ctx, cancelledWorkflow(this.workflowContext(), workflowName, cancellation.cause(),
-                                                            workflowState.workflowDefinitionId(),
-                                                            workflowConfiguration.eventNameCustomizer()));
+                publishAndWait(cancelledWorkflow(this.workflowContext(), workflowName, cancellation.cause(),
+                                                 workflowState.workflowDefinitionId(),
+                                                 workflowConfiguration.eventNameCustomizer()), ctx);
             });
         } catch (Throwable failure) {
             cancellation.callback().completeExceptionally(failure);
@@ -433,8 +442,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     /**
      * Stops the in-memory workflow driver after a durable publication cannot be resolved.
      * <p>
-     * The execution deliberately remains in the repository and non-terminal so a processing-node restart can restore
-     * it from durable history. In contrast to {@link #finishWorkflow(Consumer)}, this method must not invoke the
+     * The execution deliberately remains in the repository and non-terminal so a processing-node restart can restore it
+     * from durable history. In contrast to {@link #finishWorkflow(Consumer)}, this method must not invoke the
      * termination handler because that handler removes the execution from the engine.
      */
     private void stopRuntimeForRecovery() {
@@ -563,26 +572,40 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         return running;
     }
 
-    private CompletableFuture<Void> sendWorkflowEvent(EventMessage eventMessage,
-                                                      ProcessingContext processingContext) {
-        // Publication runs on the dedicated workflow executor, whose default is virtual-thread-per-task. A bounded
-        // FutureResolver wait thus cannot occupy an event-processor or other shared worker thread.
-        return contextDelegate.publishEvent(processingContext, eventMessage);
+    @Override
+    public CompletableFuture<Void> appendWorkflowEvent(EventMessage eventMessage, Context parentContext) {
+        return appendCondition.appendSequentially(marker -> workflowEventPublisher.publish(
+                eventMessage,
+                parentContext,
+                appendConditionFor(marker)
+        )).whenComplete((ignored, failure) -> {
+            if (AppendFailureClassifier.isRejected(failure)) {
+                logger.warn("Append of {} for workflow '{}' was rejected: another writer already recorded events for "
+                                    + "this instance. Stopping this execution.",
+                            eventMessage.type(), workflowId);
+                interruptWorkflowDriver();
+            }
+        });
     }
 
-    private void publishWorkflowEvent(ProcessingContext processingContext,
-                                      EventMessage eventMessage) {
-        FutureResolver.resolve(processingContext, sendWorkflowEvent(eventMessage, processingContext));
+    private AppendCondition appendConditionFor(@Nullable ConsistencyMarker marker) {
+        var condition = AppendCondition.withCriteria(EventSourcedWorkflowState.criteriaBuilder(workflowId));
+        return marker == null ? condition : condition.withMarker(marker);
+    }
+
+    /**
+     * Appends a workflow-owned event and waits for its durable publication through the context's future resolver.
+     *
+     * @param event event to append
+     * @param context context used for the append and its resolution policy
+     */
+    private void publishAndWait(EventMessage event, ProcessingContext context) {
+        resolve(context, appendWorkflowEvent(event, context));
     }
 
     @Override
     public ProcessingContext processingContext() {
         return contextDelegate.processingContext();
-    }
-
-    @Override
-    public WorkflowAppendCondition appendCondition() {
-        return appendCondition;
     }
 
     @Override
@@ -617,6 +640,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 this.contextDelegate.typedWorkflowContext(),
                 this.workflowConfiguration.workflowStatusChangeListeners()
         );
+    }
+
+    @Override
+    public void restoreAppendPosition(@Nullable ConsistencyMarker position) {
+        appendCondition.updateAppendPosition(position);
     }
 
     @Override

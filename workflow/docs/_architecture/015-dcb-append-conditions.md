@@ -27,9 +27,9 @@ same, exactly the DCB source-decide-append loop.
 
 ### The append condition
 
-Each execution owns a `WorkflowAppendCondition`, implemented by `ConsistencyMarkerSupport`: the position that instance
-last wrote at, plus the queue that keeps its appends in line. `WorkflowExecution.appendCondition()` defaults to
-`null`, so a mocked execution publishes unconditionally.
+`SimpleWorkflowExecution` owns a package-private `SequencedAppendCondition`: the position that instance last wrote
+at, plus the queue that keeps its appends in line. The condition is an implementation detail, not an execution API.
+The engine restores it through the narrow `WorkflowExecution.restoreAppendPosition(...)` operation.
 
 | moment | position |
 |---|---|
@@ -51,9 +51,50 @@ so retrying past one could double-record under a genuine second writer.
 
 ### Rejection
 
-`WorkflowAppendConditions.append` is the only append path. On rejection it logs a warning and interrupts the
-execution, reusing the path `releaseWorkflowsFor` already uses. It never retries, never publishes a compensating
-event, and never fails the workflow, since a failure would publish the terminal event the condition exists to prevent.
+`SimpleWorkflowExecution.appendWorkflowEvent` is the only append path. It creates the condition and delegates child
+unit-of-work publication to `WorkflowEventPublisher`. On rejection it logs a warning and interrupts the execution,
+reusing the path `releaseWorkflowsFor` already uses. It never retries, never publishes a compensating event, and never
+fails the workflow, since a failure would publish the terminal event the condition exists to prevent.
+
+### Invocation path
+
+All workflow-owned emitters enter through `SimpleWorkflowExecution`. The execution creates the append condition, then
+`WorkflowEventPublisher` creates the child unit of work, installs that condition, publishes, and returns the committed
+append position.
+
+```mermaid
+sequenceDiagram
+    participant Emitter as Workflow event emitter
+    participant Execution as SimpleWorkflowExecution
+    participant Sequence as SequencedAppendCondition
+    participant Publisher as WorkflowEventPublisher
+    participant UoW as Child unit of work
+    participant Store as EventStore
+
+    Emitter->>Execution: appendWorkflowEvent(event, parent context)
+    Execution->>Sequence: appendSequentially()
+    Sequence-->>Execution: current marker
+    Execution->>Execution: create append condition
+    Execution->>Publisher: publish(event, parent context, condition)
+    Publisher->>UoW: create child unit of work
+    UoW->>Store: transaction(context)
+    UoW->>Store: override append condition
+    Publisher->>Store: publish(context, event)
+
+    alt append succeeds
+        Store-->>Publisher: publication completed
+        Publisher-->>UoW: publication completed
+        UoW-->>Publisher: committed append position
+        Publisher-->>Sequence: committed append position
+        Sequence-->>Execution: marker advanced
+        Execution-->>Emitter: completed future
+    else foreign writer wins
+        Store-->>Publisher: append rejected
+        Publisher-->>Execution: failed future
+        Execution->>Execution: interrupt workflow driver
+        Execution-->>Emitter: failed future
+    end
+```
 
 ## Consequences
 

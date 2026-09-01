@@ -57,9 +57,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -163,9 +166,8 @@ class SimpleWorkflowExecutionTest {
         var checkpointLatchReleased = new CountDownLatch(1);
         execution.addCheckpointLatch(checkpointLatchReleased::countDown);
 
-        assertThatThrownBy(() -> execution.execute(ignored -> terminationHandlerCalled.countDown()))
-                .isInstanceOf(CompletionException.class)
-                .satisfies(exception -> assertThat(exception.getCause()).isSameAs(timeout));
+        assertThatCode(() -> execution.execute(ignored -> terminationHandlerCalled.countDown()))
+                .doesNotThrowAnyException();
 
         verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
         assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isFalse();
@@ -189,9 +191,8 @@ class SimpleWorkflowExecutionTest {
         markStarted(execution);
         var terminationHandlerCalled = new CountDownLatch(1);
 
-        assertThatThrownBy(() -> execution.execute(ignored -> terminationHandlerCalled.countDown()))
-                .isInstanceOf(CompletionException.class)
-                .satisfies(exception -> assertThat(exception.getCause()).isSameAs(timeout));
+        assertThatCode(() -> execution.execute(ignored -> terminationHandlerCalled.countDown()))
+                .doesNotThrowAnyException();
 
         verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
         assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isFalse();
@@ -207,9 +208,7 @@ class SimpleWorkflowExecutionTest {
         var cancellation = (WorkflowCancellation.Request) execution.workflowCancellation();
         var request = cancellation.requestWorkflowCancellation(null);
 
-        assertThatThrownBy(() -> execution.execute(ignored -> { }))
-                .isInstanceOf(java.util.concurrent.CompletionException.class)
-                .satisfies(exception -> assertThat(exception.getCause()).isSameAs(timeout));
+        assertThatCode(() -> execution.execute(ignored -> { })).doesNotThrowAnyException();
 
         assertThat(request).isCompletedExceptionally();
         assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
@@ -246,12 +245,48 @@ class SimpleWorkflowExecutionTest {
         );
         markStarted(execution);
 
-        assertThatThrownBy(() -> execution.execute(ignored -> { }))
-                .isInstanceOf(java.util.concurrent.CompletionException.class)
-                .satisfies(exception -> assertThat(exception.getCause()).isSameAs(timeout));
+        assertThatCode(() -> execution.execute(ignored -> { })).doesNotThrowAnyException();
 
         assertThat(execution.isRunning()).isFalse();
         assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
+    }
+
+    @Test
+    void concurrentWorkflowEventAppendsReachTheEventStoreOneAtATime() throws Exception {
+        var eventStore = eventStore();
+        var firstPublicationStarted = new CountDownLatch(1);
+        var secondPublicationStarted = new CountDownLatch(1);
+        var publications = new CopyOnWriteArrayList<CompletableFuture<Void>>();
+        var inFlight = new AtomicInteger();
+        var maximumInFlight = new AtomicInteger();
+        when(eventStore.publish(any(ProcessingContext.class), any(EventMessage.class))).thenAnswer(invocation -> {
+            var publication = new CompletableFuture<Void>();
+            publications.add(publication);
+            maximumInFlight.accumulateAndGet(inFlight.incrementAndGet(), Math::max);
+            firstPublicationStarted.countDown();
+            if (publications.size() == 2) {
+                secondPublicationStarted.countDown();
+            }
+            return publication;
+        });
+        var execution = execution(eventStore, new DirectExecutorService());
+        var first = CompletableFuture.supplyAsync(() -> execution.appendWorkflowEvent(event("first"), execution.processingContext()));
+
+        assertThat(firstPublicationStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        var second = CompletableFuture.supplyAsync(() -> execution.appendWorkflowEvent(event("second"), execution.processingContext()));
+
+        assertThat(second.get(5, TimeUnit.SECONDS)).isNotCompleted();
+        assertThat(publications).hasSize(1);
+        inFlight.decrementAndGet();
+        publications.getFirst().complete(null);
+
+        assertThat(secondPublicationStarted.await(5, TimeUnit.SECONDS)).isTrue();
+        inFlight.decrementAndGet();
+        publications.get(1).complete(null);
+
+        first.get(5, TimeUnit.SECONDS).join();
+        second.get(5, TimeUnit.SECONDS).join();
+        assertThat(maximumInFlight).hasValue(1);
     }
 
     private static void setWorkflowDriver(SimpleWorkflowExecution execution, Thread driver)
@@ -265,24 +300,24 @@ class SimpleWorkflowExecutionTest {
         return execution(eventStore());
     }
 
-    private SimpleWorkflowExecution execution(EventSink eventSink) {
+    private SimpleWorkflowExecution execution(EventStore eventStore) {
         var executor = Executors.newSingleThreadExecutor();
         executorServices.add(executor);
-        return execution(eventSink, executor);
+        return execution(eventStore, executor);
     }
 
-    private SimpleWorkflowExecution execution(EventSink eventSink, ExecutorService executor) {
-        return execution(eventSink, executor, ignored -> { });
+    private SimpleWorkflowExecution execution(EventStore eventStore, ExecutorService executor) {
+        return execution(eventStore, executor, ignored -> { });
     }
 
-    private SimpleWorkflowExecution execution(EventSink eventSink,
+    private SimpleWorkflowExecution execution(EventStore eventStore,
                                               ExecutorService executor,
                                               WorkflowDefinition<WorkflowContext> workflowDefinition) {
         var processingContext = mock(ProcessingContext.class);
         when(processingContext.resources()).thenReturn(Map.of());
         when(processingContext.component(UnitOfWorkFactory.class)).thenReturn(new SimpleUnitOfWorkFactory(processingContext));
         when(processingContext.component(Clock.class)).thenReturn(Clock.systemUTC());
-        when(processingContext.component(EventSink.class)).thenReturn(eventSink);
+        when(processingContext.component(EventStore.class)).thenReturn(eventStore);
         when(processingContext.component(EventConverter.class)).thenReturn(TestEventConverter.INSTANCE);
         when(processingContext.component(WorkflowScheduler.class)).thenReturn(new ControllableWorkflowScheduler());
         when(processingContext.component(ExecuteStepActionResolver.class)).thenReturn(new DefaultExecuteStepActionResolver());
@@ -301,6 +336,10 @@ class SimpleWorkflowExecutionTest {
 
     private static EventStore failedPublicationSink(FutureResolutionTimeoutException timeout) {
         return failedPublicationSink((Throwable) timeout);
+    }
+
+    private static EventMessage event(String name) {
+        return new GenericEventMessage(new MessageType(name), Map.of());
     }
 
     private static EventStore failedPublicationSink(Throwable failure) {

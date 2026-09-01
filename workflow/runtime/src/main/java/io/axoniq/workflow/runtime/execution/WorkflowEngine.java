@@ -34,7 +34,6 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.jspecify.annotations.Nullable;
@@ -492,18 +491,16 @@ public class WorkflowEngine implements
     }
 
     /**
-     * Returns the position the given context's sourcing ended at, or {@code null} when it publishes through no event
-     * store, in which case the restored execution appends without a seeded position, matching an append path without
-     * conditions.
+     * Returns the position the given context's sourcing ended at.
+     *
+     * A workflow engine started from configuration always has an event store. The missing-component path only keeps
+     * focused engine tests, which invoke restoration without bootstrapping a configuration, independent of it.
      */
     @Nullable
     private static ConsistencyMarker sourcedAt(ProcessingContext sourcingContext) {
         try {
-            return sourcingContext.component(EventSink.class) instanceof EventStore eventStore
-                    ? eventStore.transaction(sourcingContext).appendPosition()
-                    : null;
+            return sourcingContext.component(EventStore.class).transaction(sourcingContext).appendPosition();
         } catch (ComponentNotFoundException e) {
-            // A context without an event sink only occurs in tests: a start refuses a sink without an event store.
             return null;
         }
     }
@@ -536,10 +533,7 @@ public class WorkflowEngine implements
         var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
         execution.initializeState(state);
         var storedExecution = workflowExecutionRepository.save(workflowId, () -> execution);
-        var appendCondition = storedExecution.appendCondition();
-        if (appendCondition != null) {
-            appendCondition.updateAppendPosition(restoredAt);
-        }
+        storedExecution.restoreAppendPosition(restoredAt);
         checkpointWorkIndex.register(
                 storedExecution.workflowId(), storedExecution::registerCheckpointWorkStateListener
         );
@@ -592,7 +586,12 @@ public class WorkflowEngine implements
                                      // body, at that segment's own position: never at another segment's.
                                      checkpointingSupport.requestCheckpoint(segment, executionToken);
                                  }
-                         );
+                         ).whenComplete((ignored, failure) -> {
+                             if (failure != null) {
+                                 logger.error("Workflow {} stopped with an unhandled execution failure",
+                                              execution.workflowId(), failure);
+                             }
+                         });
                      } catch (Throwable t) {
                          throw new RuntimeException("Error during workflow execution", t);
                      }

@@ -106,7 +106,7 @@ class VersionDelegateTest {
         when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         when(processingContext.component(EventConverter.class)).thenReturn(TestEventConverter.INSTANCE);
         when(workflowExecution.state()).thenReturn(state);
-        when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
+        when(workflowExecution.appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         delegate = new VersionDelegate(
@@ -114,10 +114,7 @@ class VersionDelegateTest {
                 workflowExecution,
                 reachedSteps,
                 parentCustomizer,
-                Clock.systemUTC(),
-                unitOfWorkFactory,
-                eventSink,
-                executor
+                Clock.systemUTC()
         );
     }
 
@@ -149,7 +146,7 @@ class VersionDelegateTest {
 
         assertThat(v).isEqualTo("0.0.1");
         verify(workflowExecution, never()).appendTask(any());
-        verify(eventSink, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
+        verify(workflowExecution, never()).appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class));
     }
 
     @Test
@@ -167,7 +164,7 @@ class VersionDelegateTest {
         assertThat(v).isEqualTo("0.0.2");
 
         ArgumentCaptor<EventMessage> eventCaptor = ArgumentCaptor.forClass(EventMessage.class);
-        verify(eventSink).publish(eq(processingContext), eventCaptor.capture());
+        verify(workflowExecution).appendWorkflowEvent(eventCaptor.capture(), eq(processingContext));
         EventMessage published = eventCaptor.getValue();
         // Wire-level event name carries the changeId — the "what changed" signal.
         // DefaultEventNameCustomizer capitalises the first letter of the anchor.
@@ -190,7 +187,7 @@ class VersionDelegateTest {
         ).isInstanceOf(IllegalArgumentException.class)
          .hasMessageContaining("not strictly greater");
 
-        verify(eventSink, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
+        verify(workflowExecution, never()).appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class));
     }
 
     @Test
@@ -203,7 +200,7 @@ class VersionDelegateTest {
         // Recorded value wins, even when the call site requests something different.
         assertThat(v).isEqualTo("0.0.2");
         verify(workflowExecution, never()).appendTask(any());
-        verify(eventSink, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
+        verify(workflowExecution, never()).appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class));
     }
 
     @Test
@@ -221,7 +218,7 @@ class VersionDelegateTest {
 
         assertThat(first).isEqualTo("0.0.2");
         assertThat(second).isEqualTo("0.0.2");
-        verify(eventSink, times(1)).publish(any(ProcessingContext.class), any(EventMessage.class));
+        verify(workflowExecution, times(1)).appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class));
     }
 
     /**
@@ -244,7 +241,7 @@ class VersionDelegateTest {
 
         assertThat(v).isEqualTo("0.0.1");
         verify(workflowExecution, never()).appendTask(any());
-        verify(eventSink, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
+        verify(workflowExecution, never()).appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class));
     }
 
     /**
@@ -266,7 +263,7 @@ class VersionDelegateTest {
         String v = invokeVersion("x", "0.0.2");
 
         assertThat(v).isEqualTo("0.0.2");
-        verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
+        verify(workflowExecution).appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class));
     }
 
     @Test
@@ -281,7 +278,7 @@ class VersionDelegateTest {
         String v = invokeVersion("x", "0.0.3");
 
         assertThat(v).isEqualTo("0.0.3");
-        verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
+        verify(workflowExecution).appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class));
     }
 
     /**
@@ -303,7 +300,7 @@ class VersionDelegateTest {
         String v = invokeVersion("x", "0.0.2");
 
         assertThat(v).isEqualTo("0.0.2");
-        verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
+        verify(workflowExecution).appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class));
     }
 
     private WorkflowStep stepInStatus(StepStatus status) {

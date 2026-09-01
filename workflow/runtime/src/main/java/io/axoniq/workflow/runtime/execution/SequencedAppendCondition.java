@@ -18,7 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowAppendCondition;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
@@ -38,13 +37,12 @@ import java.util.function.Function;
  * @since 0.3.0
  */
 @Internal
-public class ConsistencyMarkerSupport implements WorkflowAppendCondition {
+final class SequencedAppendCondition {
 
     private final AtomicReference<CompletableFuture<Void>> previousAppend =
             new AtomicReference<>(CompletableFuture.completedFuture(null));
     private final AtomicReference<ConsistencyMarker> marker = new AtomicReference<>();
 
-    @Override
     public CompletableFuture<Void> appendSequentially(
             Function<ConsistencyMarker, CompletableFuture<ConsistencyMarker>> append
     ) {
@@ -59,7 +57,6 @@ public class ConsistencyMarkerSupport implements WorkflowAppendCondition {
         return result;
     }
 
-    @Override
     public void updateAppendPosition(@Nullable ConsistencyMarker position) {
         if (position == null || ConsistencyMarker.ORIGIN.equals(position)) {
             return;

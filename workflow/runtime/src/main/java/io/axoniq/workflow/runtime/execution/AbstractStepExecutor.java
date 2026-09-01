@@ -28,14 +28,12 @@ import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Context;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.EventSink;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,7 +43,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.merge;
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.*;
@@ -66,9 +63,6 @@ public abstract class AbstractStepExecutor {
     protected final ReachedSteps reachedSteps;
     protected final Clock clock;
     protected final EventNameCustomizer parentEventNameCustomizer;
-    protected final UnitOfWorkFactory unitOfWorkFactory;
-    protected final EventSink eventSink;
-    protected final Executor executor;
     protected final WorkflowScheduler timeoutScheduler;
 
     /**
@@ -80,9 +74,6 @@ public abstract class AbstractStepExecutor {
      * @param reachedSteps              reached steps tracker
      * @param parentEventNameCustomizer parent event name customizer
      * @param clock                     clock for time calculations
-     * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts
-     * @param eventSink                 event sink for event publications
-     * @param executor                  executor to offload execution tasks from workflow thread
      * @param timeoutScheduler          timeout scheduler
      */
     @Internal
@@ -93,9 +84,6 @@ public abstract class AbstractStepExecutor {
             ReachedSteps reachedSteps,
             EventNameCustomizer parentEventNameCustomizer,
             Clock clock,
-            UnitOfWorkFactory unitOfWorkFactory,
-            EventSink eventSink,
-            Executor executor,
             WorkflowScheduler timeoutScheduler
     ) {
         this.clock = Objects.requireNonNull(clock, "Clock is mandatory");
@@ -105,9 +93,6 @@ public abstract class AbstractStepExecutor {
         this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
         this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,
                                                                 "Event name customizer is mandatory");
-        this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UoW Factory state is mandatory");
-        this.eventSink = Objects.requireNonNull(eventSink, "Event sink is mandatory");
-        this.executor = executor;
         this.timeoutScheduler = Objects.requireNonNull(timeoutScheduler, "Timeout scheduler is mandatory");
     }
 
@@ -317,12 +302,7 @@ public abstract class AbstractStepExecutor {
      * @return a future completing once the event is appended.
      */
     protected CompletableFuture<Void> appendEvent(EventMessage eventMessage, Context context) {
-        return WorkflowAppendConditions.append(eventSink,
-                                               unitOfWorkFactory,
-                                               executor,
-                                               context,
-                                               eventMessage,
-                                               workflowExecution);
+        return workflowExecution.appendWorkflowEvent(eventMessage, context);
     }
 
     protected Map<String, @Nullable Object> sanitize(@Nullable Map<String, @Nullable Object> payload) {

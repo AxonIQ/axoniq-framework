@@ -78,8 +78,8 @@ class TerminalStateGuardTest {
         TestableStepExecutor(WorkflowContext workflowContext, WorkflowExecution workflowExecution,
                              EventNameCustomizer parentEventNameCustomizer, Clock clock,
                              UnitOfWorkFactory unitOfWorkFactory, EventSink eventSink, Executor executor) {
-            super(workflowContext, workflowExecution, new RunningSteps(), new ReachedSteps(), parentEventNameCustomizer, clock, unitOfWorkFactory, eventSink,
-                  executor, new ControllableWorkflowScheduler());
+            super(workflowContext, workflowExecution, new RunningSteps(), new ReachedSteps(), parentEventNameCustomizer,
+                  clock, new ControllableWorkflowScheduler());
         }
 
         CompletableFuture<Void> testCompleted(String stepName, Map<String, @Nullable Object> payload,

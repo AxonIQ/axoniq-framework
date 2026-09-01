@@ -97,7 +97,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
         when(workflowExecution.workflowName()).thenReturn("test-workflow");
         when(workflowContext.workflowId()).thenReturn("wf-1");
         when(workflowContext.workflowPayload()).thenReturn(Map.of());
-        when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
+        when(workflowExecution.appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         eventNameCustomizer = defaults();
@@ -107,10 +107,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
                 workflowExecution,
                 runningSteps,
                 new ReachedSteps(),
-                terminalTransition,
-                unitOfWorkFactory,
-                eventSink,
-                executor
+                terminalTransition
         );
     }
 
@@ -138,7 +135,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
         assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
-        verify(eventSink).publish(eq(processingContext), any(EventMessage.class));
+        verify(workflowExecution).appendWorkflowEvent(any(EventMessage.class), eq(processingContext));
     }
 
     @Test
@@ -159,13 +156,13 @@ class WorkflowLifecycleControlDelegateCancelTest {
 
     @Test
     void cancelWorkflowExecutesStepsInOrder() {
-        var order = inOrder(terminalTransition, eventSink);
+        var order = inOrder(terminalTransition, workflowExecution);
 
         assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
         order.verify(terminalTransition).transition(any(Runnable.class));
-        order.verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
+        order.verify(workflowExecution).appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class));
     }
 
     @SuppressWarnings("unchecked")

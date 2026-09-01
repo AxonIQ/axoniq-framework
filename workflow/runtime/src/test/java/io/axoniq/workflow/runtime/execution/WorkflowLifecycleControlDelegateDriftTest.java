@@ -66,7 +66,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
 
         delegate = new WorkflowLifecycleControlDelegate(
                 workflowContext, workflowExecution, new RunningSteps(), reachedSteps,
-                terminalEventPublication -> terminalEventPublication.run(), unitOfWorkFactory, eventSink, executor
+                terminalEventPublication -> terminalEventPublication.run()
         );
     }
 

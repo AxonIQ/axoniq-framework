@@ -20,7 +20,6 @@ package io.axoniq.workflow.configuration;
 
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.eventstore.EventStore;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -35,21 +34,20 @@ import static org.mockito.Mockito.when;
 class WorkflowEventProcessingRegistrationEnhancerTest {
 
     @Test
-    void aSinkWithoutAnEventStoreRefusesToStart() {
+    void aConfigurationWithoutAnEventStoreRefusesToStart() {
         var enhancer = new WorkflowEventProcessingRegistrationEnhancer("Workflow", null, null, true);
         var config = mock(Configuration.class);
-        when(config.getComponent(EventSink.class)).thenReturn(mock(EventSink.class));
 
         assertThatThrownBy(() -> enhancer.requireEventStore(config))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("instead of an EventStore");
+                .hasMessageContaining("requires an EventStore");
     }
 
     @Test
-    void anEventStoreSinkStarts() {
+    void anEventStoreConfigurationStarts() {
         var enhancer = new WorkflowEventProcessingRegistrationEnhancer("Workflow", null, null, true);
         var config = mock(Configuration.class);
-        when(config.getComponent(EventSink.class)).thenReturn(mock(EventStore.class));
+        when(config.getComponent(EventStore.class)).thenReturn(mock(EventStore.class));
 
         assertThatCode(() -> enhancer.requireEventStore(config)).doesNotThrowAnyException();
     }

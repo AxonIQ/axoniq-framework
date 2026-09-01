@@ -151,9 +151,6 @@ class RetryableExecuteDelegateTest {
                 new ReachedSteps(),
                 DefaultEventNameCustomizer.Builder.defaults(),
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                mock(UnitOfWorkFactory.class),
-                mock(EventSink.class),
-                executor,
                 scheduler
         );
         return new Fixture(delegate,

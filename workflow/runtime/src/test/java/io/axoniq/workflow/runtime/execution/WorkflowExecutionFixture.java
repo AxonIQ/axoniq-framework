@@ -26,6 +26,7 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 import static org.mockito.ArgumentMatchers.*;
@@ -65,6 +66,7 @@ final class WorkflowExecutionFixture {
         when(execution.state()).thenReturn(state);
         when(execution.isRunning()).thenReturn(running);
         when(execution.workflowCancellation()).thenReturn(mock(WorkflowCancellation.class));
+        when(execution.execute(any())).thenReturn(CompletableFuture.completedFuture(null));
 
         var workflowContext = mock(WorkflowContext.class);
         var bodyContext = mock(ProcessingContext.class);
@@ -110,7 +112,7 @@ final class WorkflowExecutionFixture {
     static void recordBodyStartOn(WorkflowExecution execution, Consumer<String> bodyStarts, String workflowId) {
         doAnswer(invocation -> {
             bodyStarts.accept(workflowId);
-            return null;
+            return CompletableFuture.completedFuture(null);
         }).when(execution).execute(any());
     }
 

@@ -32,7 +32,6 @@ import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.CompletePhase;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.RequiredComponentPhase;
 import org.axonframework.messaging.eventhandling.configuration.EventProcessorModule;
@@ -289,17 +288,12 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     }
 
     void requireEventStore(Configuration config) {
-        EventSink eventSink = config.getComponent(EventSink.class);
-        if (!(eventSink instanceof EventStore)) {
+        EventStore eventStore = config.getComponent(EventStore.class);
+        if (eventStore == null) {
             throw new IllegalStateException(
-                    "The workflow engine of module " + moduleName + " cannot start: its event sink is a "
-                            + eventSink.getClass().getName() + " instead of an EventStore. A WorkflowConfigurer "
-                            + "configures one through the EventSourcingConfigurer, so reaching this means the sink "
-                            + "was replaced. The engine appends every workflow event under an AppendCondition, and "
-                            + "only an event store transaction carries one; a sink without it accepts every append, "
-                            + "which lets two nodes run one workflow instance and duplicate its side effects with "
-                            + "nothing detecting it. This check is defensive: it fails the start rather than let that "
-                            + "go unnoticed at runtime."
+                    "The workflow engine of module " + moduleName + " requires an EventStore. A WorkflowConfigurer "
+                            + "configures one through the EventSourcingConfigurer. The engine appends every workflow "
+                            + "event under an AppendCondition, which only an event-store transaction carries."
             );
         }
     }

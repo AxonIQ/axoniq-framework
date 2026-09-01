@@ -27,14 +27,11 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.workflow.runtime.util.FutureResolver;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.util.Objects;
-import java.util.concurrent.Executor;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.merge;
 
@@ -58,9 +55,6 @@ public class VersionDelegate implements VersionPrimitive {
     private final ReachedSteps reachedSteps;
     private final EventNameCustomizer parentEventNameCustomizer;
     private final Clock clock;
-    private final UnitOfWorkFactory unitOfWorkFactory;
-    private final EventSink eventSink;
-    private final Executor executor;
 
     /**
      * Constructs the delegate.
@@ -70,27 +64,18 @@ public class VersionDelegate implements VersionPrimitive {
      * @param reachedSteps              reached steps tracker
      * @param parentEventNameCustomizer parent event name customizer
      * @param clock                     clock for time calculations
-     * @param unitOfWorkFactory         unit of work factory
-     * @param eventSink                 event sink
-     * @param executor                  executor for event publication
      */
     public VersionDelegate(WorkflowContext workflowContext,
                            WorkflowExecution workflowExecution,
                            ReachedSteps reachedSteps,
                            EventNameCustomizer parentEventNameCustomizer,
-                           Clock clock,
-                           UnitOfWorkFactory unitOfWorkFactory,
-                           EventSink eventSink,
-                           Executor executor) {
+                           Clock clock) {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow execution is mandatory");
         this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
         this.parentEventNameCustomizer = Objects.requireNonNull(parentEventNameCustomizer,
                                                                 "Parent event name customizer is mandatory");
         this.clock = Objects.requireNonNull(clock, "Clock is mandatory");
-        this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UnitOfWorkFactory is mandatory");
-        this.eventSink = Objects.requireNonNull(eventSink, "EventSink is mandatory");
-        this.executor = Objects.requireNonNull(executor, "Executor is mandatory");
     }
 
     @Override
@@ -144,14 +129,7 @@ public class VersionDelegate implements VersionPrimitive {
 
         workflowExecution.appendTask(e -> FutureResolver.resolve(
                 workflowExecution.processingContext(),
-                WorkflowAppendConditions.append(
-                        eventSink,
-                        unitOfWorkFactory,
-                        executor,
-                        workflowExecution.processingContext(),
-                        event,
-                        workflowExecution
-                )
+                workflowExecution.appendWorkflowEvent(event, workflowExecution.processingContext())
         ));
 
         try {

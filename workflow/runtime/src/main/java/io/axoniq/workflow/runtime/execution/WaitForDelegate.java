@@ -82,9 +82,6 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             ReachedSteps reachedSteps,
             EventNameCustomizer parentEventNameCustomizer,
             Clock clock,
-            UnitOfWorkFactory unitOfWorkFactory,
-            EventSink eventSink,
-            Executor executor,
             WorkflowScheduler timeoutScheduler
     ) {
         super(workflowContext,
@@ -93,9 +90,6 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
               reachedSteps,
               parentEventNameCustomizer,
               clock,
-              unitOfWorkFactory,
-              eventSink,
-              executor,
               timeoutScheduler);
         this.eventWaitConditions = Objects.requireNonNull(eventWaitConditions, "Event wait conditions are mandatory");
     }

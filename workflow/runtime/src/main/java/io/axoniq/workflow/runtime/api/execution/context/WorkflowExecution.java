@@ -23,9 +23,12 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -49,8 +52,9 @@ public interface WorkflowExecution extends DescribableComponent {
      *
      * @param terminationHandler termination handler, which is executed after the execution has reached a terminal
      *                           {@link WorkflowStatus}
+     * @return a future completing when the workflow body has stopped
      */
-    void execute(Consumer<WorkflowExecution> terminationHandler);
+    CompletableFuture<Void> execute(Consumer<WorkflowExecution> terminationHandler);
 
     /**
      * Returns the workflow context of the current execution.
@@ -88,6 +92,15 @@ public interface WorkflowExecution extends DescribableComponent {
      * This is a wake-up mechanism only. It does not mutate workflow state or publish workflow events.
      */
     void interruptWorkflowDriver();
+
+    /**
+     * Appends a workflow-owned event from the given parent context.
+     *
+     * @param event event to append
+     * @param parentContext context the append unit of work derives from
+     * @return a future that completes when the event has been appended
+     */
+    CompletableFuture<Void> appendWorkflowEvent(EventMessage event, Context parentContext);
 
     /**
      * Returns and removes the next queued task.
@@ -220,12 +233,9 @@ public interface WorkflowExecution extends DescribableComponent {
     WorkflowConfiguration<?> workflowConfiguration();
 
     /**
-     * Returns the append condition of this execution, or {@code null} when it appends unconditionally.
+     * Restores the position from which this execution conditions its next append.
      *
-     * @return the append condition of this execution, or {@code null} to append unconditionally
+     * @param position position observed while restoring the workflow
      */
-    @Nullable
-    default WorkflowAppendCondition appendCondition() {
-        return null;
-    }
+    void restoreAppendPosition(@Nullable ConsistencyMarker position);
 }
