@@ -48,12 +48,11 @@ class AxonServerContainerIT {
 
     @Test
     void constructionWithDCBStartsAsExpected() {
-        String testName = "axoniq/axonserver";
+        // Pinned: axonserver:latest (2026.1.1) raises java.lang.VerifyError during DCB context creation.
+        String testName = "docker.axoniq.io/axoniq/axonserver:2026.1.0";
         try (
                 AxonServerContainer testSubject = new AxonServerContainer(testName)
                         .withDcbContext(true)
-                        // TODO diagnostic scaffolding for #403 -- remove once the DCB cluster-init hang in CI is understood
-                        .withLogConsumer(frame -> System.out.print("[axonserver-dcb] " + frame.getUtf8StringWithoutLineEnding() + "\n"))
         ) {
             testSubject.start();
             assertThat(testSubject.isRunning()).isTrue();
@@ -112,7 +111,7 @@ class AxonServerContainerIT {
     @Test
     void properlyConfiguredDefaultContainerLabel() {
         try (AxonServerContainer testSubject = new AxonServerContainer()) {
-            assertThat(testSubject.getDockerImageName()).isEqualTo("docker.axoniq.io/axoniq/axonserver:latest");
+            assertThat(testSubject.getDockerImageName()).isEqualTo("docker.axoniq.io/axoniq/axonserver:2026.1.0");
         }
     }
 
