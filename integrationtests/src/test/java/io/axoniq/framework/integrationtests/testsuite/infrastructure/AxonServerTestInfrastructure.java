@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -73,12 +74,14 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
                     .withDevMode(true)
                     .withReuse(true)
                     .withDcbContext(true)
-                    .withLicense(licenseExists()
-                                         ? AXON_SERVER_TEST_LICENSE
-                                         : null);
+                    .withLicense(licenseExists() ? AXON_SERVER_TEST_LICENSE : null);
 
     public static boolean licenseExists() {
-        return AxonServerTestInfrastructure.class.getResource("/" + AXON_SERVER_TEST_LICENSE) != null;
+        try (var resource = AxonServerTestInfrastructure.class.getResourceAsStream("/" + AXON_SERVER_TEST_LICENSE)) {
+            return resource != null && resource.read() != -1;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private final List<Consumer<ComponentRegistry>> infrastructureConfigurators;
