@@ -30,8 +30,10 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.execution.WorkflowExecutionCheckpointingSupport.ExecutionTaskQueue;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
+import org.axonframework.common.ExceptionUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
+import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejectedException;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.MessageType;
@@ -112,7 +114,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                     },
                     CheckpointWorkStateListener.NO_OP
             );
-    private final SequencedAppendCondition appendCondition = new SequencedAppendCondition();
+    private final SequencedAppender appendCondition = new SequencedAppender();
     private final WorkflowEventPublisher workflowEventPublisher;
 
     /**
@@ -332,11 +334,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         }
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         switch (exception) {
-            case Throwable fenced when AppendFailureClassifier.isRejected(fenced) -> {
-                logger.warn("Workflow {} stopped: another writer already recorded the fact this one tried to append, "
-                                    + "so this execution no longer owns the instance.", workflowId());
-                // Intentionally publish nothing. The writer that won owns the instance, and a terminal event from
-                // here would overwrite its outcome, the very thing the append condition prevents.
+            case Throwable fenced when isRejected(fenced) -> {
+                logger.debug("Workflow {} stopped after an append rejection because another writer already recorded "
+                                     + "the event this execution tried to append.", workflowId());
             }
             case WorkflowFailedException wfe -> {
                 // if events are already sent by WorkflowLifecycleControlDelegate, just let it propagate
@@ -579,13 +579,17 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 parentContext,
                 appendConditionFor(marker)
         )).whenComplete((ignored, failure) -> {
-            if (AppendFailureClassifier.isRejected(failure)) {
+            if (isRejected(failure)) {
                 logger.warn("Append of {} for workflow '{}' was rejected: another writer already recorded events for "
                                     + "this instance. Stopping this execution.",
                             eventMessage.type(), workflowId);
                 interruptWorkflowDriver();
             }
         });
+    }
+
+    boolean isRejected(Throwable failure) {
+        return ExceptionUtils.findException(failure, AppendEventsTransactionRejectedException.class).isPresent();
     }
 
     private AppendCondition appendConditionFor(@Nullable ConsistencyMarker marker) {
@@ -644,7 +648,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     @Override
     public void restoreAppendPosition(@Nullable ConsistencyMarker position) {
-        appendCondition.updateAppendPosition(position);
+        appendCondition.updateMarker(position);
     }
 
     @Override

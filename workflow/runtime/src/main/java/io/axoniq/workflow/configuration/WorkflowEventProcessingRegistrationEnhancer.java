@@ -22,6 +22,7 @@ import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.execution.EventHandlingComponentHandlingAny;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
@@ -288,9 +289,9 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     }
 
     void requireEventStore(Configuration config) {
-        EventStore eventStore = config.getComponent(EventStore.class);
+        EventStore eventStore = config.getOptionalComponent(EventStore.class).orElse(null);
         if (eventStore == null) {
-            throw new IllegalStateException(
+            throw new AxonConfigurationException(
                     "The workflow engine of module " + moduleName + " requires an EventStore. A WorkflowConfigurer "
                             + "configures one through the EventSourcingConfigurer. The engine appends every workflow "
                             + "event under an AppendCondition, which only an event-store transaction carries."

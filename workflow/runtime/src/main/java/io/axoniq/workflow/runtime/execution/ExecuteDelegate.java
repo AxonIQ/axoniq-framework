@@ -35,7 +35,6 @@ import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,11 +42,11 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Execute delegate implementing {@link ExecutePrimitive}.
@@ -65,7 +64,9 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     private final UnitOfWorkFactory unitOfWorkFactory;
     private final Executor executor;
     private final ExecuteStepActionResolver actionResolver;
-    /** Steps this execution published a {@code STARTED} event for, so their state is known to be its own. */
+    /**
+     * Steps this execution published a {@code STARTED} event for, so their state is known to be its own.
+     */
     private final Set<String> ownStartedSteps = ConcurrentHashMap.newKeySet();
 
     /**
@@ -158,7 +159,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
             }
         }
 
-        // FIXME -> consider to use QOS (at least once/at most once)
         var step = workflowExecution.state().getStep(stepName);
         if (step.status() == StepStatus.STARTED || step.status() == StepStatus.RETRYING) {
             var actualStartTime = step.timestamp();
@@ -167,7 +167,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
             var result = unitOfWorkFactory
                     .create(stepName,
-                            customize -> customize.workScheduler(executor)) // FIXME -> define a new thread pool for execution customer code
+                            customize -> customize.workScheduler(executor))
                     .executeWithResult(processingContext -> {
                         var procContext = ProcessingContextUtils.copyResources(workflowExecution.state()
                                                                                                 .getStep(stepName)
@@ -190,7 +190,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
             if (remainingTimeout.isNegative()) {
                 workflowExecution.appendTask(i -> {
-                    // TODO - Do one last check on the state to make sure we didn't have any concurrent state changes
                     timeoutHandler.onTimeout(stepName, eventNameCustomizer);
                 });
             } else {
@@ -239,22 +238,21 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
     /**
      * Publishes this execution's {@code STARTED} event for the given step and waits until the step is present with
-     * status {@link StepStatus#STARTED}. That state change carries no writer identity: the event may have
-     * been recorded by another execution of the same workflow instance and delivered here over this execution's own
-     * event stream. The store accepting this execution's own append is therefore the only proof that this execution
-     * took the step. The append is then resolved through the workflow's bounded future-resolution policy before the
-     * action is allowed to run.
+     * status {@link StepStatus#STARTED}. That state change carries no writer identity: the event may have been recorded
+     * by another execution of the same workflow instance and delivered here over this execution's own event stream. The
+     * store accepting this execution's own append is therefore the only proof that this execution took the step. The
+     * append is then resolved through the workflow's bounded future-resolution policy before the action is allowed to
+     * run.
      *
      * @param stepName            name of the step to start
      * @param local               local payload to record on the {@code STARTED} event
      * @param eventNameCustomizer event name customizer
-     * @return {@code true} when the store accepted this execution's append, so this execution owns the step and may
-     * run its action. {@code false} when the append was rejected, when the step turned STARTED before this execution's
+     * @return {@code true} when the store accepted this execution's append, so this execution owns the step and may run
+     * its action. {@code false} when the append was rejected, when the step turned STARTED before this execution's
      * append ran, or when the wait was interrupted (the interrupt flag is restored)
      */
     private boolean tryStartStep(String stepName, Map<String, Object> local, EventNameCustomizer eventNameCustomizer) {
         var ownStarted = new AtomicReference<CompletableFuture<Void>>();
-        ownStartedSteps.add(stepName);
         workflowExecution.appendTask(i -> ownStarted.set(started(stepName, sanitize(local), eventNameCustomizer)));
         try {
             workflowExecution.awaitStateChange(WorkflowStateUtils.stepStatus(stepName, StepStatus.STARTED));
@@ -269,8 +267,10 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         var acceptedAppend = ownAppend.handle((result, failure) -> failure == null);
         FutureResolver.resolve(workflowExecution.processingContext(), acceptedAppend);
         boolean accepted = acceptedAppend.getNow(false);
-        if (!accepted) {
-            logger.warn("The STARTED event of step '{}' of workflow '{}' is not this execution's. Leaving the step "
+        if (accepted) {
+            ownStartedSteps.add(stepName);
+        } else {
+            logger.info("The STARTED event of step '{}' of workflow '{}' is not this execution's. Leaving the step "
                                 + "to the execution that recorded it.", stepName, workflowExecution.workflowId());
         }
         return accepted;

@@ -25,7 +25,9 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
@@ -35,9 +37,11 @@ import org.junit.jupiter.api.*;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -54,6 +58,7 @@ class DelegateInterruptedAwaitTest {
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private EventNameCustomizer parentCustomizer;
+    private UnitOfWorkFactory unitOfWorkFactory;
     private WaitForDelegate waitForDelegate;
     private ExecuteDelegate executeDelegate;
 
@@ -65,7 +70,7 @@ class DelegateInterruptedAwaitTest {
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
         EventSink eventSink = mock(EventSink.class);
-        UnitOfWorkFactory unitOfWorkFactory = mock(UnitOfWorkFactory.class);
+        unitOfWorkFactory = mock(UnitOfWorkFactory.class);
         Executor executor = Runnable::run;
         parentCustomizer = DefaultEventNameCustomizer.Builder.defaults();
 
@@ -134,6 +139,27 @@ class DelegateInterruptedAwaitTest {
         assertThat(result.canceled()).isTrue();
         assertThat(result.failure()).isFalse();
         assertThat(result.error()).isEmpty();
+    }
+
+    @Test
+    void interruptedStartDoesNotClaimAStartedStepOnTheNextAttempt() {
+        var stepName = "chargePayment";
+        var stepIsStarted = new AtomicBoolean();
+        var processingContext = workflowExecution.processingContext();
+        var startedStep = new WorkflowStep(
+                stepName, StepStatus.STARTED, Map.of(), null, Instant.now(), processingContext
+        );
+        when(state.containsStep(stepName)).thenAnswer(invocation -> stepIsStarted.get());
+        when(state.getStep(stepName)).thenAnswer(invocation -> stepIsStarted.get() ? startedStep : null);
+
+        executeDelegate.execute(executeCommand(stepName));
+        Thread.interrupted();
+        stepIsStarted.set(true);
+
+        executeDelegate.execute(executeCommand(stepName));
+
+        verify(workflowExecution, times(2)).appendTask(any());
+        verifyNoInteractions(unitOfWorkFactory);
     }
 
     private PrimitiveCommands.WorkflowStepResultWaitForCommand waitForCommand(String stepName) {

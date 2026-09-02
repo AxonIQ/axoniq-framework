@@ -18,22 +18,20 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejectedException;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.*;
 
-class SequencedAppendConditionTest {
+class SequencedAppenderTest {
 
     @Test
     void passesThePositionWrittenByOneAppendToTheNext() {
-        var condition = new SequencedAppendCondition();
+        var condition = new SequencedAppender();
         var firstPosition = mock(ConsistencyMarker.class);
         var seenPositions = new ArrayList<ConsistencyMarker>();
 
@@ -51,7 +49,7 @@ class SequencedAppendConditionTest {
 
     @Test
     void failedAppendDoesNotBlockTheAppendBehindIt() {
-        var condition = new SequencedAppendCondition();
+        var condition = new SequencedAppender();
         var failed = new CompletableFuture<ConsistencyMarker>();
         var secondStarted = new CompletableFuture<Void>();
 
@@ -65,17 +63,5 @@ class SequencedAppendConditionTest {
         assertThat(first).isCompletedExceptionally();
         second.join();
         assertThat(secondStarted).isCompleted();
-    }
-
-    @Test
-    void rejectionIsRecognizedThroughTheCauseChain() {
-        var rejected = AppendEventsTransactionRejectedException.conflictingEventsDetected(ConsistencyMarker.ORIGIN);
-
-        assertThat(AppendFailureClassifier.isRejected(rejected)).isTrue();
-        assertThat(AppendFailureClassifier.isRejected(new CompletionException(rejected))).isTrue();
-        assertThat(AppendFailureClassifier.isRejected(new CompletionException(new RuntimeException(rejected))))
-                .isTrue();
-        assertThat(AppendFailureClassifier.isRejected(new IllegalStateException("boom"))).isFalse();
-        assertThat(AppendFailureClassifier.isRejected(null)).isFalse();
     }
 }

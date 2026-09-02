@@ -18,8 +18,6 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import org.jspecify.annotations.Nullable;
-
 import io.axoniq.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.workflow.runtime.api.execution.context.PrimitiveCommands;
@@ -39,13 +37,12 @@ import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventMessage;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Predicate;
 
@@ -91,9 +88,9 @@ public class WorkflowContextDelegation implements WorkflowContext {
     /**
      * Creates the context delegation.
      *
-     * @param workflowConfiguration   workflow configuration
-     * @param workflowContext        workflow context created by the factory
-     * @param workflowExecution      workflow execution
+     * @param workflowConfiguration workflow configuration
+     * @param workflowContext       workflow context created by the factory
+     * @param workflowExecution     workflow execution
      * @param runningSteps          running step registry
      * @param eventWaitConditions   event wait condition registry
      * @param reachedSteps          reached steps tracker
@@ -189,61 +186,120 @@ public class WorkflowContextDelegation implements WorkflowContext {
         this.allCombinatorDelegate = new AllMatchCombinatorDelegate(workflowExecution);
     }
 
+    /**
+     * Returns the identifier of the workflow instance.
+     *
+     * @return the workflow instance identifier
+     */
     @Override
     public String workflowId() {
         return workflowExecution.workflowId();
     }
 
+    /**
+     * Returns the version of the workflow definition being executed.
+     *
+     * @return the workflow definition version
+     */
     @Override
     public String workflowVersion() {
         return workflowExecution.state().workflowDefinitionId().version();
     }
 
+    /**
+     * Returns the current workflow payload.
+     *
+     * @return the workflow payload
+     */
     @Override
     public Map<String, @Nullable Object> workflowPayload() {
         return workflowExecution.state().payload();
     }
 
+    /**
+     * Changes the workflow payload according to the given command.
+     *
+     * @param command the payload modification to perform
+     * @return the result representing the modification
+     */
     @Override
     public WorkflowStepResult modifyPayload(PayloadPrimitive.ModifyPayloadCommand command) {
         workflowExecution.state().throwTerminalCause();
         return payloadDelegate.modifyPayload(command);
     }
 
+    /**
+     * Returns the current status of the workflow.
+     *
+     * @return the workflow status
+     */
     @Override
     public WorkflowStatus workflowStatus() {
         return workflowExecution.state().workflowStatus();
     }
 
+    /**
+     * Returns the names of all known workflow steps.
+     *
+     * @return the workflow step names
+     */
     @Override
     public List<String> workflowStepNames() {
         return workflowExecution.state().workflowStepNames();
     }
 
+    /**
+     * Returns the processing context of this workflow invocation.
+     *
+     * @return the processing context
+     */
     @Override
     public ProcessingContext processingContext() {
         return this.processingContext;
     }
 
     // delegation
+    /**
+     * Executes the step described by the given command.
+     *
+     * @param command the step execution command
+     * @return the result representing the step execution
+     */
     @Override
     public WorkflowStepResult execute(ExecutePrimitive.ExecuteCommand command) {
         workflowExecution.state().throwTerminalCause();
         return retryableExecuteDelegate.execute(command);
     }
 
+    /**
+     * Waits for an event according to the given command.
+     *
+     * @param command the event wait command
+     * @return the result representing the event wait
+     */
     @Override
     public WorkflowStepResult waitForEvent(WaitForPrimitive.WaitForCommand command) {
         workflowExecution.state().throwTerminalCause();
         return waitForDelegate.waitForEvent(command);
     }
 
+    /**
+     * Resolves the workflow version according to the given command.
+     *
+     * @param command the version resolution command
+     * @return the result representing the version resolution
+     */
     @Override
     public WorkflowStepResult version(VersionPrimitive.VersionCommand command) {
         workflowExecution.state().throwTerminalCause();
         return versionDelegate.version(command);
     }
 
+    /**
+     * Requests cancellation of the workflow.
+     *
+     * @param command the workflow cancellation command
+     */
     @Override
     public void cancelWorkflow(WorkflowLifecycleControl.CancelWorkflowCommand command) {
         workflowExecution.state().throwTerminalCause();
@@ -253,6 +309,11 @@ public class WorkflowContextDelegation implements WorkflowContext {
         ));
     }
 
+    /**
+     * Fails the workflow with the cause supplied by the command.
+     *
+     * @param command the workflow failure command
+     */
     @Override
     public void failWorkflow(WorkflowLifecycleControl.FailWorkflowCommand command) {
         workflowExecution.state().throwTerminalCause();
@@ -262,23 +323,50 @@ public class WorkflowContextDelegation implements WorkflowContext {
         ));
     }
 
+    /**
+     * Requests cancellation of a workflow step.
+     *
+     * @param command the step cancellation command
+     * @return {@code true} when the cancellation was accepted
+     */
     @Override
     public boolean cancelStep(WorkflowLifecycleControl.CancelStepCommand command) {
         return lifecycleControlDelegate.cancelStep(command);
     }
 
+    /**
+     * Combines step results when all results satisfy the predicate.
+     *
+     * @param predicate predicate each result must satisfy
+     * @param results results to combine
+     * @return the combined step result
+     */
     @Override
     public CombinatorWorkflowStepResult allMatch(Predicate<WorkflowStepResult> predicate,
                                                  WorkflowStepResult... results) {
         return allCombinatorDelegate.allMatch(predicate, results);
     }
 
+    /**
+     * Combines step results when any result satisfies the predicate.
+     *
+     * @param predicate predicate at least one result must satisfy
+     * @param results results to combine
+     * @return the combined step result
+     */
     @Override
     public CombinatorWorkflowStepResult anyMatch(Predicate<WorkflowStepResult> predicate,
                                                  WorkflowStepResult... results) {
         return anyCombinatorDelegate.anyMatch(predicate, results);
     }
 
+    /**
+     * Combines step results when no result satisfies the predicate.
+     *
+     * @param predicate predicate no result may satisfy
+     * @param results results to combine
+     * @return the combined step result
+     */
     @Override
     public CombinatorWorkflowStepResult noneMatch(Predicate<WorkflowStepResult> predicate,
                                                   WorkflowStepResult... results) {
@@ -286,28 +374,24 @@ public class WorkflowContextDelegation implements WorkflowContext {
     }
 
 
-    /**
-     * Appends the given workflow lifecycle {@code eventMessage} under its append condition, in a unit of work derived
-     * from the given {@code processingContext}.
-     *
-     * @param processingContext the context the append's unit of work derives its resources from.
-     * @param eventMessage      the event to append.
-     * @return a future completing once the event is appended.
-     */
-    public CompletableFuture<Void> publishEvent(
-            ProcessingContext processingContext,
-            EventMessage eventMessage) {
-        return workflowExecution.appendWorkflowEvent(eventMessage, processingContext);
-    }
-
     EventStore eventStore() {
         return eventStore;
     }
 
+    /**
+     * Returns the clock used by workflow primitives.
+     *
+     * @return the workflow clock
+     */
     public Clock clock() {
         return this.clock;
     }
 
+    /**
+     * Returns the transactional unit of work factory for short-lived workflow operations.
+     *
+     * @return the transactional unit of work factory
+     */
     public UnitOfWorkFactory unitOfWorkFactory() {
         return this.unitOfWorkFactory;
     }
@@ -321,20 +405,25 @@ public class WorkflowContextDelegation implements WorkflowContext {
      * Workflow and step events are published in short-lived child units of work created from the transactional
      * {@link #unitOfWorkFactory()} instead.
      *
-     * @return the non-transactional unit of work factory used for the workflow-body wrapper.
+     * @return the non-transactional unit of work factory used for the workflow-body wrapper
      */
     public UnitOfWorkFactory workflowBodyUnitOfWorkFactory() {
         return this.workflowBodyUnitOfWorkFactory;
     }
 
+    /**
+     * Returns the executor that runs workflow work.
+     *
+     * @return the workflow executor
+     */
     public ExecutorService executorService() {
         return this.executorService;
     }
 
     /**
-     * Event dispatching to the "wait for primitive".
+     * Dispatches an event to the wait-for primitive.
      *
-     * @param awaited event arrival wrapper object.
+     * @param awaited event arrival wrapper object
      */
     @Internal
     public void eventReceived(EventWaitConditions.Awaited awaited) {
@@ -344,8 +433,8 @@ public class WorkflowContextDelegation implements WorkflowContext {
     /**
      * Retrieves typed version of the workflow context.
      *
-     * @param <T> workflow context type.
-     * @return typed workflow context created by the factory.
+     * @param <T> workflow context type
+     * @return typed workflow context created by the factory
      */
     public <T extends WorkflowContext> T typedWorkflowContext() {
         try {
@@ -356,6 +445,11 @@ public class WorkflowContextDelegation implements WorkflowContext {
         }
     }
 
+    /**
+     * Describes this workflow context to the supplied component descriptor.
+     *
+     * @param descriptor descriptor to populate
+     */
     @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("workflowId", workflowExecution.workflowId());

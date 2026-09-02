@@ -112,25 +112,14 @@ public class ProcessingContextUtils {
             ExecutorService executorService,
             ProcessingContext parentContext,
             Function<ProcessingContext, CompletableFuture<R>> action) {
-        var result = new CompletableFuture<R>();
         try {
-            executorService.execute(() -> executeWithResult(id,
-                                                            unitOfWorkFactory,
-                                                            executorService,
-                                                            parentContext,
-                                                            action)
-                    .whenComplete((value, failure) -> {
-                        if (failure == null) {
-                            result.complete(value);
-                        } else {
-                            result.completeExceptionally(failure);
-                        }
-                    })
-            );
+            return CompletableFuture.supplyAsync(
+                    () -> executeWithResult(id, unitOfWorkFactory, executorService, parentContext, action),
+                    executorService
+            ).thenCompose(Function.identity());
         } catch (Throwable failure) {
-            result.completeExceptionally(failure);
+            return CompletableFuture.failedFuture(failure);
         }
-        return result;
     }
 
 

@@ -18,8 +18,8 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.FutureResolutionTimeoutException;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
+import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowDefinition;
@@ -28,20 +28,17 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
-import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.eventsourcing.eventstore.EventStoreTransaction;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.eventsourcing.eventstore.EventStore;
-import org.axonframework.eventsourcing.eventstore.EventStoreTransaction;
-import org.axonframework.messaging.eventhandling.EventSink;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.junit.jupiter.api.*;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -49,26 +46,22 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests for {@link SimpleWorkflowExecution}.
@@ -160,14 +153,15 @@ class SimpleWorkflowExecutionTest {
     @Test
     void futureResolutionTimeoutStopsAndCleansUpRuntimeWithoutTerminatingWorkflow() throws Exception {
         var timeout = new FutureResolutionTimeoutException(new TimeoutException("publication timed out"));
-        var eventSink = failedPublicationSink(timeout);
+        var eventSink = failingEventStore(timeout);
         var execution = execution(eventSink, new DirectExecutorService());
         var terminationHandlerCalled = new CountDownLatch(1);
         var checkpointLatchReleased = new CountDownLatch(1);
         execution.addCheckpointLatch(checkpointLatchReleased::countDown);
 
-        assertThatCode(() -> execution.execute(ignored -> terminationHandlerCalled.countDown()))
-                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> execution.execute(ignored -> terminationHandlerCalled.countDown()).join())
+                .isInstanceOf(CompletionException.class)
+                .hasCauseInstanceOf(FutureResolutionTimeoutException.class);
 
         verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
         assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isFalse();
@@ -186,13 +180,14 @@ class SimpleWorkflowExecutionTest {
     @Test
     void futureResolutionTimeoutDuringCompletionLeavesWorkflowStarted() throws Exception {
         var timeout = new FutureResolutionTimeoutException(new TimeoutException("completion publication timed out"));
-        var eventSink = failedPublicationSink(timeout);
+        var eventSink = failingEventStore(timeout);
         var execution = execution(eventSink, new DirectExecutorService());
         markStarted(execution);
         var terminationHandlerCalled = new CountDownLatch(1);
 
-        assertThatCode(() -> execution.execute(ignored -> terminationHandlerCalled.countDown()))
-                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> execution.execute(ignored -> terminationHandlerCalled.countDown()).join())
+                .isInstanceOf(CompletionException.class)
+                .hasCauseInstanceOf(FutureResolutionTimeoutException.class);
 
         verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
         assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isFalse();
@@ -203,12 +198,15 @@ class SimpleWorkflowExecutionTest {
     @Test
     void futureResolutionTimeoutDuringCancellationCompletesRequesterExceptionally() {
         var timeout = new FutureResolutionTimeoutException(new TimeoutException("cancellation publication timed out"));
-        var execution = execution(failedPublicationSink(timeout), new DirectExecutorService());
+        var execution = execution(failingEventStore(timeout), new DirectExecutorService());
         markStarted(execution);
         var cancellation = (WorkflowCancellation.Request) execution.workflowCancellation();
         var request = cancellation.requestWorkflowCancellation(null);
 
-        assertThatCode(() -> execution.execute(ignored -> { })).doesNotThrowAnyException();
+        assertThatThrownBy(() -> execution.execute(ignored -> {
+        }).join())
+                .isInstanceOf(CompletionException.class)
+                .hasCauseInstanceOf(FutureResolutionTimeoutException.class);
 
         assertThat(request).isCompletedExceptionally();
         assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
@@ -218,14 +216,15 @@ class SimpleWorkflowExecutionTest {
     void checkedPublicationFailureDuringCancellationCompletesRequesterExceptionally() {
         var failure = new IOException("cancellation publication failed");
         var execution = execution(
-                failedPublicationSink(failure),
+                failingEventStore(failure),
                 new DirectExecutorService()
         );
         markStarted(execution);
         var cancellation = (WorkflowCancellation.Request) execution.workflowCancellation();
         var request = cancellation.requestWorkflowCancellation(null);
 
-        execution.execute(ignored -> { });
+        execution.execute(ignored -> {
+        }).join();
 
         assertThat(request).isCompletedExceptionally();
         assertThatThrownBy(request::join)
@@ -237,7 +236,7 @@ class SimpleWorkflowExecutionTest {
     void futureResolutionTimeoutWhilePublishingFailureLeavesWorkflowNonTerminal() {
         var timeout = new FutureResolutionTimeoutException(new TimeoutException("failure publication timed out"));
         var execution = execution(
-                failedPublicationSink(timeout),
+                failingEventStore(timeout),
                 new DirectExecutorService(),
                 ignored -> {
                     throw new WorkflowFailedException("business failure");
@@ -245,7 +244,10 @@ class SimpleWorkflowExecutionTest {
         );
         markStarted(execution);
 
-        assertThatCode(() -> execution.execute(ignored -> { })).doesNotThrowAnyException();
+        assertThatThrownBy(() -> execution.execute(ignored -> {
+        }).join())
+                .isInstanceOf(CompletionException.class)
+                .hasCauseInstanceOf(FutureResolutionTimeoutException.class);
 
         assertThat(execution.isRunning()).isFalse();
         assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
@@ -270,10 +272,12 @@ class SimpleWorkflowExecutionTest {
             return publication;
         });
         var execution = execution(eventStore, new DirectExecutorService());
-        var first = CompletableFuture.supplyAsync(() -> execution.appendWorkflowEvent(event("first"), execution.processingContext()));
+        var first = CompletableFuture.supplyAsync(() -> execution.appendWorkflowEvent(event("first"),
+                                                                                      execution.processingContext()));
 
         assertThat(firstPublicationStarted.await(5, TimeUnit.SECONDS)).isTrue();
-        var second = CompletableFuture.supplyAsync(() -> execution.appendWorkflowEvent(event("second"), execution.processingContext()));
+        var second = CompletableFuture.supplyAsync(() -> execution.appendWorkflowEvent(event("second"),
+                                                                                       execution.processingContext()));
 
         assertThat(second.get(5, TimeUnit.SECONDS)).isNotCompleted();
         assertThat(publications).hasSize(1);
@@ -307,7 +311,8 @@ class SimpleWorkflowExecutionTest {
     }
 
     private SimpleWorkflowExecution execution(EventStore eventStore, ExecutorService executor) {
-        return execution(eventStore, executor, ignored -> { });
+        return execution(eventStore, executor, ignored -> {
+        });
     }
 
     private SimpleWorkflowExecution execution(EventStore eventStore,
@@ -315,7 +320,8 @@ class SimpleWorkflowExecutionTest {
                                               WorkflowDefinition<WorkflowContext> workflowDefinition) {
         var processingContext = mock(ProcessingContext.class);
         when(processingContext.resources()).thenReturn(Map.of());
-        when(processingContext.component(UnitOfWorkFactory.class)).thenReturn(new SimpleUnitOfWorkFactory(processingContext));
+        when(processingContext.component(UnitOfWorkFactory.class)).thenReturn(new SimpleUnitOfWorkFactory(
+                processingContext));
         when(processingContext.component(Clock.class)).thenReturn(Clock.systemUTC());
         when(processingContext.component(EventStore.class)).thenReturn(eventStore);
         when(processingContext.component(EventConverter.class)).thenReturn(TestEventConverter.INSTANCE);
@@ -330,19 +336,23 @@ class SimpleWorkflowExecutionTest {
         when(workflowContext.workflowPayload()).thenReturn(Map.of());
         when(workflowContext.processingContext()).thenReturn(processingContext);
         return new SimpleWorkflowExecution(
-                "workflow-id", Map.of(), processingContext, new TestWorkflowConfiguration(workflowDefinition), workflowContext
+                "workflow-id",
+                Map.of(),
+                processingContext,
+                new TestWorkflowConfiguration(workflowDefinition),
+                workflowContext
         );
     }
 
-    private static EventStore failedPublicationSink(FutureResolutionTimeoutException timeout) {
-        return failedPublicationSink((Throwable) timeout);
-    }
-
     private static EventMessage event(String name) {
-        return new GenericEventMessage(new MessageType(name), Map.of());
+        return new GenericEventMessage(new MessageType(name), Map.of()).withConverter(TestEventConverter.INSTANCE);
     }
 
-    private static EventStore failedPublicationSink(Throwable failure) {
+    private static EventStore failingEventStore(FutureResolutionTimeoutException timeout) {
+        return failingEventStore((Throwable) timeout);
+    }
+
+    private static EventStore failingEventStore(Throwable failure) {
         var eventStore = eventStore();
         when(eventStore.publish(any(ProcessingContext.class), any(EventMessage.class)))
                 .thenReturn(CompletableFuture.failedFuture(failure));
@@ -368,7 +378,7 @@ class SimpleWorkflowExecutionTest {
                         new MessageType(new QualifiedName("test-workflow"), definition.version()),
                         Map.of(),
                         MetadataUtils.create(execution.workflowId(), WorkflowStatus.STARTED, definition)
-                ),
+                ).withConverter(TestEventConverter.INSTANCE),
                 execution.processingContext()
         );
     }
@@ -411,7 +421,8 @@ class SimpleWorkflowExecutionTest {
         private final WorkflowDefinition<WorkflowContext> workflowDefinition;
 
         private TestWorkflowConfiguration() {
-            this(ignored -> { });
+            this(ignored -> {
+            });
         }
 
         private TestWorkflowConfiguration(WorkflowDefinition<WorkflowContext> workflowDefinition) {
@@ -453,5 +464,4 @@ class SimpleWorkflowExecutionTest {
             return defaults();
         }
     }
-
 }

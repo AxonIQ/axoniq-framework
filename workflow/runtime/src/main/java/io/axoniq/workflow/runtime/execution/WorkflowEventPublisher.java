@@ -19,7 +19,6 @@
 package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.EventStore;
@@ -38,9 +37,8 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.3.0
  */
-@Internal
 final class WorkflowEventPublisher {
 
     private final EventStore eventStore;
@@ -59,8 +57,8 @@ final class WorkflowEventPublisher {
     }
 
     CompletableFuture<ConsistencyMarker> publish(EventMessage event,
-                                                  Context parentContext,
-                                                  AppendCondition condition) {
+                                                 Context parentContext,
+                                                 AppendCondition condition) {
         var transaction = new AtomicReference<EventStoreTransaction>();
         return ProcessingContextUtils.executeWithResult(
                 workflowId,

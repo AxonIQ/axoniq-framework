@@ -493,8 +493,13 @@ public class WorkflowEngine implements
     /**
      * Returns the position the given context's sourcing ended at.
      *
-     * A workflow engine started from configuration always has an event store. The missing-component path only keeps
-     * focused engine tests, which invoke restoration without bootstrapping a configuration, independent of it.
+     * The current Event Store does not add its append position to the processing context when sourcing. Retrieve it
+     * from the context-bound transaction until {@link ConsistencyMarker} provides a corresponding context accessor.
+     * The missing-component path keeps focused engine tests that construct an engine without a full workflow
+     * configuration independent of the Event Store.
+     *
+     * @param sourcingContext context used to source the workflow state
+     * @return the marker at which sourcing ended
      */
     @Nullable
     private static ConsistencyMarker sourcedAt(ProcessingContext sourcingContext) {

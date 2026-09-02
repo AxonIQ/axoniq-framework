@@ -18,9 +18,10 @@
  */
 package io.axoniq.workflow.runtime.execution;
 
-import org.jspecify.annotations.Nullable;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
@@ -36,13 +37,23 @@ import java.util.function.Function;
  * @author Stefan Dragisic
  * @since 0.3.0
  */
-@Internal
-final class SequencedAppendCondition {
+@Internal final class SequencedAppender {
 
     private final AtomicReference<CompletableFuture<Void>> previousAppend =
-            new AtomicReference<>(CompletableFuture.completedFuture(null));
+            new AtomicReference<>(FutureUtils.emptyCompletedFuture());
     private final AtomicReference<ConsistencyMarker> marker = new AtomicReference<>();
 
+    /**
+     * Queues an append after the preceding append and supplies the marker that preceding successful append produced.
+     * <p>
+     * Multiple step completions of one workflow can request an append concurrently. This method gives each request a
+     * distinct turn and passes it the workflow's latest marker, so a successful append advances the position for the
+     * next request. A failed append completes its own future exceptionally but releases the next request, which can
+     * then use the last marker known to be durable.
+     *
+     * @param append appends using the current marker and completes with the position committed by that append
+     * @return a future completing when the queued append has advanced the marker or exceptionally when it failed
+     */
     public CompletableFuture<Void> appendSequentially(
             Function<ConsistencyMarker, CompletableFuture<ConsistencyMarker>> append
     ) {
@@ -51,13 +62,22 @@ final class SequencedAppendCondition {
         var previous = previousAppend.getAndSet(thisAppend);
         var result = previous.handle((ignored, previousFailure) -> append.apply(marker.get()))
                              .thenCompose(position -> position)
-                             .thenAccept(this::updateAppendPosition);
+                             .thenAccept(this::updateMarker);
         // Hand over the line either way: a failed append must not stall the appends waiting behind it.
         result.whenComplete((ignored, failure) -> thisAppend.complete(null));
         return result;
     }
 
-    public void updateAppendPosition(@Nullable ConsistencyMarker position) {
+    /**
+     * Seeds or advances the marker from which the next append is conditionally evaluated.
+     * <p>
+     * Restoration seeds the marker with the position at which the workflow's own sourcing read finished. Successful
+     * appends then advance it to their committed positions. Origin and absent positions are deliberately ignored so a
+     * newly created workflow keeps its first append anchored at origin.
+     *
+     * @param position position observed during restoration or committed by a successful append
+     */
+    public void updateMarker(@Nullable ConsistencyMarker position) {
         if (position == null || ConsistencyMarker.ORIGIN.equals(position)) {
             return;
         }
