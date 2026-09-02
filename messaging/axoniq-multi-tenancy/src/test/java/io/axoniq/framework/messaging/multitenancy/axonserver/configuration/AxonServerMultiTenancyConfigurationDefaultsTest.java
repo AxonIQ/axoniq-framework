@@ -95,7 +95,11 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         // when
         AxonConfiguration configuration =
                 MessagingConfigurer.create()
-                                   .componentRegistry(MultiTenancyUtils::disable)
+                                   .componentRegistry(registry -> {
+                                       registry.registerComponent(AxonServerConnectionManager.class,
+                                                                  config -> stubConnectionManager());
+                                       MultiTenancyUtils.disable(registry);
+                                   })
                                    .build();
 
         // then none of the Axon Server-backed multi-tenancy defaults were registered
@@ -178,6 +182,10 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         void acceptsTheDefaultEventSourcingSetupAndYieldsTheRoutingEngine() {
             AxonConfiguration defaultSetup =
                     EventSourcingConfigurer.create()
+                                           .componentRegistry(registry -> registry.registerComponent(
+                                                   AxonServerConnectionManager.class,
+                                                   config -> stubConnectionManager()
+                                           ))
                                            .build();
 
             assertThat(defaultSetup.getComponent(EventStorageEngine.class))
@@ -300,7 +308,9 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
             configuration = MessagingConfigurer.create()
                                                .componentRegistry(registry -> registry.registerComponent(
                                                        TenantComponentProvider.class,
-                                                       config -> componentProvider))
+                                                       config -> componentProvider)
+                                                                 .registerComponent(AxonServerConnectionManager.class,
+                                                                                    config -> stubConnectionManager()))
                                                .build();
         }
 
@@ -554,7 +564,9 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
                                        .componentRegistry(registry -> registry
                                                .registerComponent(TenantProvider.class, config -> tenantProvider)
                                                .registerComponent(TenantEventStorageEngineFactory.class,
-                                                                  config -> replacement))
+                                                                  config -> replacement)
+                                               .registerComponent(AxonServerConnectionManager.class,
+                                                                  config -> stubConnectionManager()))
                                        .build();
             replacementConfiguration.start();
             try {

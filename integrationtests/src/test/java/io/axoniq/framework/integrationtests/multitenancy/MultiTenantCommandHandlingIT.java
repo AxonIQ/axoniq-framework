@@ -27,7 +27,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.DefaultAxonApplication;
 import org.axonframework.messaging.commandhandling.CommandMessage;
@@ -96,11 +95,8 @@ class MultiTenantCommandHandlingIT {
 
         application = new DefaultAxonApplication()
                 .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                .componentRegistry(cr -> cr.registerComponent(TenantResolver.class,
-                                                              c -> new MetadataBasedTenantResolver()))
-                .componentRegistry(cr -> cr.registerComponent(
-                        TenantConnectPredicate.class,
-                        c -> d -> !Set.of(ADMIN_CONTEXT, DEFAULT_CONTEXT).contains(d.tenantId())))
+                .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
+
                 // Identity factory: the tenant-scoped component IS the resolved TenantDescriptor, so injecting it
                 // into the annotated handler below proves parameter resolution picks the dispatched tenant's instance.
                 .componentRegistry(registry -> registry.registerComponent(TenantComponentProvider.class,

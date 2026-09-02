@@ -131,7 +131,7 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             assertThat(result).isNotNull();
             assertThat(connection1.recordingQueryChannel().sentQueries()).isEmpty();
             assertThat(connection2.recordingQueryChannel().sentQueries()).hasSize(1);
-            assertThat(connection2.recordingQueryChannel().sentQueries().get(0).getMessageIdentifier())
+            assertThat(connection2.recordingQueryChannel().sentQueries().getFirst().getMessageIdentifier())
                     .isEqualTo(query.identifier());
         }
 

@@ -24,7 +24,6 @@ import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolve
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.RecordingTenantAwareComponent;
@@ -69,8 +68,6 @@ class AxonServerTenantProviderIT {
 
         AxonConfiguration application = new DefaultAxonApplication()
                 .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                .componentRegistry(cr -> cr.registerComponent(TenantResolver.class,
-                                                              c -> new MetadataBasedTenantResolver()))
                 .start();
 
         AxonServerTenantProvider tenantProvider = (AxonServerTenantProvider) application.getComponent(TenantProvider.class);
@@ -101,8 +98,6 @@ class AxonServerTenantProviderIT {
 
         AxonConfiguration application = new DefaultAxonApplication()
                 .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                .componentRegistry(cr -> cr.registerComponent(TenantResolver.class,
-                                                              c -> new MetadataBasedTenantResolver()))
                 .componentRegistry(cr -> cr.registerComponent(TenantConnectPredicate.class, c -> predicate))
                 .start();
 
