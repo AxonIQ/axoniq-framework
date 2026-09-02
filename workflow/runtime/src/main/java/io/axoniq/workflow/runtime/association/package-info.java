@@ -19,6 +19,7 @@
 /**
  * The association DSL used to correlate incoming events with waiting workflow steps, including value retrievers,
  * comparison operators, and their serialized representation.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.runtime.association;

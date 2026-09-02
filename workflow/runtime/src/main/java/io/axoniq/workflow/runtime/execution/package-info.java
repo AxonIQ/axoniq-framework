@@ -20,6 +20,7 @@
  * Internal implementation of the workflow execution engine: the {@code WorkflowEngine}, its scheduling, state and
  * storage, checkpointing/replay support, cancellation coordination, and the delegates implementing individual step
  * primitives.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.runtime.execution;

@@ -29,6 +29,9 @@ import org.springframework.stereotype.Component;
 import static io.axoniq.demo.bikerental.coreapi.payment.PaymentStatus.Status.APPROVED;
 import static io.axoniq.demo.bikerental.coreapi.payment.PaymentStatus.Status.REJECTED;
 
+/**
+ * @since 0.1.0
+ */
 @Component
 public class PaymentStatusProjector {
 

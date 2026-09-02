@@ -50,7 +50,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * converter on the timeout step's bare {@link java.time.Instant} payload.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class AwaitEventTimeoutWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 

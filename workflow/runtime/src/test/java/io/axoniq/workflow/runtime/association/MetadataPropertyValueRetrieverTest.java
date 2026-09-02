@@ -32,7 +32,6 @@ import static org.mockito.Mockito.*;
  * Tests for {@link MetadataPropertyValueRetriever}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class MetadataPropertyValueRetrieverTest {
 

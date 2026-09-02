@@ -36,7 +36,7 @@ import static java.util.stream.Collectors.groupingBy;
  * Pretty printing event store used for testing.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public class PrettyPrintingRecordingEventStore extends RecordingEventStore {
 

@@ -36,6 +36,7 @@ import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriev
 
 /**
  * Sample user registration.
+ * @since 0.1.0
  */
 public class UserSignupWorkflow {
 

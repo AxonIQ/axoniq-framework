@@ -26,7 +26,7 @@ import org.jspecify.annotations.Nullable;
  * @param primitiveMetadata metadata containing name of the step to cancel
  * @param cause             optional cancellation cause
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public record CancelStepDefinition(
         PrimitiveMetadata primitiveMetadata,

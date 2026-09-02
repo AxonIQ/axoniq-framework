@@ -42,7 +42,6 @@ import static org.mockito.Mockito.*;
  * Test for autodetection of workflow lifecycle status listener registrations.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class AutoDetectionLifecycleListenerTest {
 

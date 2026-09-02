@@ -33,7 +33,6 @@ import static org.assertj.core.api.Assertions.*;
  * Tests for {@link MetadataUtils}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class MetadataUtilsTest {
 

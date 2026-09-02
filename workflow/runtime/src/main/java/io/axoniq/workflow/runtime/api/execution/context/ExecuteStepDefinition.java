@@ -38,7 +38,7 @@ import java.util.Map;
  * @param timing            timing configuration
  * @param retryPolicy       retry policy for the action
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public record ExecuteStepDefinition(
         PrimitiveMetadata primitiveMetadata,

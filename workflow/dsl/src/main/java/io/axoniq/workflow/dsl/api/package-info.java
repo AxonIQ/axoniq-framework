@@ -19,6 +19,7 @@
 /**
  * DSL-level helpers for declaring event associations, such as payload and metadata property retrievers and equality
  * matchers used to correlate workflow steps with incoming events.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.dsl.api;

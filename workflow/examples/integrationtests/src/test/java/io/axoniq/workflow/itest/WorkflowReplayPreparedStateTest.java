@@ -75,7 +75,6 @@ import static org.awaitility.Awaitility.await;
  * Replay simulation test.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class WorkflowReplayPreparedStateTest {
 

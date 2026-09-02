@@ -18,6 +18,7 @@
  */
 /**
  * Package containing workflow configuration components.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.configuration;

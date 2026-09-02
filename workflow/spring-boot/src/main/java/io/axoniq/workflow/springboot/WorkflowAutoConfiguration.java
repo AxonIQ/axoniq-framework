@@ -32,7 +32,7 @@ import static io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrati
  * Autoconfiguration for workflow infrastructure.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 @AutoConfiguration
 @EnableConfigurationProperties(WorkflowProperties.class)

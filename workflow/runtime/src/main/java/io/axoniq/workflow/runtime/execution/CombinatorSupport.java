@@ -39,7 +39,7 @@ import java.util.stream.Collectors;
  * used by all three combinator delegates ({@code AnyMatch}, {@code NoneMatch}, {@code AllMatch}).
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 final class CombinatorSupport {

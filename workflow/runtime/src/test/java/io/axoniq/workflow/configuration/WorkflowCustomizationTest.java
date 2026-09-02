@@ -39,7 +39,6 @@ import static org.mockito.Mockito.*;
  * Tests for {@link WorkflowCustomization}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class WorkflowCustomizationTest {
 

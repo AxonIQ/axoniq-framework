@@ -39,6 +39,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * @since 0.1.0
+ */
 @RestController
 @RequestMapping("/")
 public class RentalController {

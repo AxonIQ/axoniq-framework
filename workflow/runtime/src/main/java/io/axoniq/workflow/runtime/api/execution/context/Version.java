@@ -33,7 +33,7 @@ import java.util.regex.Pattern;
  * {@link #value()}.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.2.0
  */
 public final class Version implements Comparable<Version> {
 

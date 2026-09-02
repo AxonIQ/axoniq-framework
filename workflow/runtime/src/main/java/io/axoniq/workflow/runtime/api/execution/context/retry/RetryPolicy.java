@@ -32,7 +32,7 @@ import java.util.function.Predicate;
  *                       {@code false} to stop. Checked in addition to {@code maxRetries}.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 public record RetryPolicy(int maxRetries, RetryHandler onRetryHandler,
                            BackoffStrategy backoffStrategy,

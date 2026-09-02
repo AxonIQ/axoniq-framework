@@ -32,7 +32,7 @@ import java.util.Map;
  * workflow context.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public class CombineGlobalAndLocalPayloadReducer implements PayloadReducer {
 

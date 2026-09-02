@@ -33,7 +33,7 @@ package io.axoniq.workflow.runtime.test.fixture;
  * assertion failures or infrastructure exceptions.</p>
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public class WorkflowTestFixtureException extends RuntimeException {
 

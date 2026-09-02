@@ -39,7 +39,7 @@ import static java.util.Objects.requireNonNullElseGet;
  * it in the workflow execution repository (runtime) and then consult the workflow history repository.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.3.0
  */
 public class WorkflowStateParameterResolver implements ParameterResolver<WorkflowState> {
 

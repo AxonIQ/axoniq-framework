@@ -19,6 +19,7 @@
 /**
  * Simple example demonstrating a user sign-up workflow: it creates and activates a user, sends a welcome email, and
  * waits for an external event before completing.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.example.simple.user;

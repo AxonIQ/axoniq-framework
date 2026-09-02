@@ -27,7 +27,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
  * @param state      resulting (final) state of the workflow.
  * @author Simon Zambrovski
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 public record WorkflowHistory(
         String workflowId,

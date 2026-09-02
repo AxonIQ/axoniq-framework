@@ -31,7 +31,7 @@ import java.util.Map;
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 public interface EventNameCustomizer {
 

@@ -19,6 +19,7 @@
 /**
  * Spring Boot entry point for the bike rental example application, which demonstrates the workflow engine by modelling
  * bike rentals and their payment process.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.demo.bikerental;

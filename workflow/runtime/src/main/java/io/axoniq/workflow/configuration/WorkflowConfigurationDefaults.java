@@ -74,7 +74,7 @@ import static org.axonframework.eventsourcing.configuration.EventSourcedEntityMo
  * Defaults for workflow configuration.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 @RegistrationScope(scope = RegistrationScope.Scope.CURRENT)

@@ -19,6 +19,7 @@
 /**
  * Base Java DSL for defining workflow steps, providing the core primitives to execute work, wait for events, modify the
  * workflow payload, sleep, fail, and cancel a workflow.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.dsl.base;

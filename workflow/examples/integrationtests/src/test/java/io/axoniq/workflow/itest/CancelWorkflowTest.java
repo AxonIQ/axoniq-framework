@@ -41,7 +41,6 @@ import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.of
 
 /**
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class CancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 

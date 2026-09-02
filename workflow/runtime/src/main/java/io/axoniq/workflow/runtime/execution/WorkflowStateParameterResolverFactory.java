@@ -33,7 +33,7 @@ import static java.util.Objects.requireNonNull;
  * Parameter resolver factory for workflow state.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.3.0
  */
 public class WorkflowStateParameterResolverFactory implements ParameterResolverFactory {
 

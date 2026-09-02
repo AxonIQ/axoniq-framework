@@ -26,7 +26,7 @@ import java.util.function.Function;
  * Responsible for delivery of workflow id from provided event message.
  *
  * @author Simon Zambrovski.
- * @since 1.0.0
+ * @since 0.1.0
  */
 @FunctionalInterface
 public interface WorkflowIdProvider extends Function<EventMessage, String> {

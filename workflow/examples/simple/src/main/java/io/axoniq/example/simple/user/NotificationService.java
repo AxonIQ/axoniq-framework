@@ -21,6 +21,9 @@ package io.axoniq.example.simple.user;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * @since 0.1.0
+ */
 public class NotificationService {
 
     static Logger logger = LoggerFactory.getLogger(NotificationService.class);

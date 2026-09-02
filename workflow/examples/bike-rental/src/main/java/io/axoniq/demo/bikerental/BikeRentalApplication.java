@@ -31,6 +31,7 @@ import org.springframework.context.annotation.Primary;
 
 /**
  * Main class of the application.
+ * @since 0.1.0
  */
 @SpringBootApplication
 public class BikeRentalApplication {

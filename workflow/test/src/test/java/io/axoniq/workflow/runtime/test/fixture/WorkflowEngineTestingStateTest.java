@@ -42,7 +42,6 @@ import static org.mockito.Mockito.*;
  * Tests for {@link WorkflowEngineTestingState}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class WorkflowEngineTestingStateTest {
 

@@ -20,6 +20,7 @@
  * The given/when/then style test fixture API for workflow runtime tests, including the staged
  * {@code WorkflowTestFixture}, the lower-level {@code WorkflowTestDriver}, and the shared testing state and services
  * backing both.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.runtime.test.fixture;

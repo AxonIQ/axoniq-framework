@@ -36,7 +36,6 @@ import static org.mockito.Mockito.*;
  * This mirrors the {@code .exceptionally()} handler pattern used in {@link WaitForDelegate}.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class WaitForDelegateCancelTest {
 

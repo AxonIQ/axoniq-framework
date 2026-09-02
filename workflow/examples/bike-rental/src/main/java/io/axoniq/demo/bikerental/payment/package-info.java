@@ -19,6 +19,7 @@
 /**
  * Payment side of the bike rental example: command and event handlers for preparing, confirming and rejecting payments,
  * together with a REST API and a read-model projection of payment status.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.demo.bikerental.payment;

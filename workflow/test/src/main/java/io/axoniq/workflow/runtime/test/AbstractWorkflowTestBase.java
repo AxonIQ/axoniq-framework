@@ -47,7 +47,7 @@ import java.util.function.UnaryOperator;
  *
  * @param <T> type of the workflow context.
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public abstract class AbstractWorkflowTestBase<T extends WorkflowContext> {
 

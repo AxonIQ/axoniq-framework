@@ -28,7 +28,7 @@ import java.util.function.Function;
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 @FunctionalInterface
 public interface PayloadModification extends Function<Map<String, @Nullable Object>, Map<String, @Nullable Object>> {

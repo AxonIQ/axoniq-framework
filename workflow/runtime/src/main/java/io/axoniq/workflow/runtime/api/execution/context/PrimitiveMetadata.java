@@ -25,7 +25,7 @@ package io.axoniq.workflow.runtime.api.execution.context;
  * @param stepName            step name.
  * @param eventNameCustomizer event name customizer.
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public record PrimitiveMetadata(
         String stepName,

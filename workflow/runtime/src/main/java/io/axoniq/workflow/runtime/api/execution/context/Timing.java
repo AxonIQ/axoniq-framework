@@ -26,7 +26,7 @@ import java.time.Duration;
  *
  * @param timeout timeout for primitive completion
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public record Timing(Duration timeout) {
 

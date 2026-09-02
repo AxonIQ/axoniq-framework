@@ -30,7 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Registry of payload reducers defined by {@link PayloadReducer}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public class PayloadReducerRegistry {
 

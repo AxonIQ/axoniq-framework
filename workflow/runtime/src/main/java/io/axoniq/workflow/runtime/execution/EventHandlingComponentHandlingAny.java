@@ -51,7 +51,7 @@ import static java.util.Objects.requireNonNull;
  * processor checkpoint-aware, preserving the engine's deferred checkpointing behavior.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public class EventHandlingComponentHandlingAny implements EventHandlingComponent, Checkpointing {
 

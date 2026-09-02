@@ -19,6 +19,7 @@
 /**
  * Axon configuration enhancers that wire test-only workflow infrastructure, such as deterministic event publication,
  * pretty-printing event recording, and stepping-mode execution control, into a test configuration.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.runtime.test.configuration;

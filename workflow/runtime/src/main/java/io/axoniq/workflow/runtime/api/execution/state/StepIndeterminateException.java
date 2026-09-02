@@ -39,7 +39,7 @@ import org.jspecify.annotations.Nullable;
  * re-executed to preserve the at-most-once guarantee.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.2.0
  */
 public class StepIndeterminateException extends StepFailedException {
 

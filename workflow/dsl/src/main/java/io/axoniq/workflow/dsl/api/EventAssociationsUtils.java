@@ -28,7 +28,7 @@ import io.axoniq.workflow.runtime.association.ValueRetriever;
  * DSL-level helpers for authoring serialized event associations.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public final class EventAssociationsUtils {
 

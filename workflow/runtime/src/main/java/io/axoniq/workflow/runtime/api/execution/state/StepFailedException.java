@@ -28,7 +28,7 @@ import org.jspecify.annotations.Nullable;
  * are subtypes for callers that need to distinguish those cases.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 public class StepFailedException extends RuntimeException {
 

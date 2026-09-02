@@ -29,7 +29,7 @@ import java.time.Duration;
  * @author Allard Buijze
  * @author Simon Zambrovski
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 public interface WaitForPrimitive {
 
@@ -45,7 +45,7 @@ public interface WaitForPrimitive {
      * Parameter object for the primitive.
      *
      * @author Simon Zambrovski
-     * @since 1.0.0
+     * @since 0.1.0
      */
     interface WaitForCommand {
 

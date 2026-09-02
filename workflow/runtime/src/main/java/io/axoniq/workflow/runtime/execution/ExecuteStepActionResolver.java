@@ -31,7 +31,7 @@ import org.axonframework.common.annotation.Internal;
  * without changing workflow definitions.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 @FunctionalInterface

@@ -40,7 +40,7 @@ import org.axonframework.eventsourcing.eventstore.InterceptingEventStore;
  * state or history, especially when diagnosing multi-step progress or comparing expected workflow event sequences.</p>
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public class WorkflowTestPrettyRecordingEventStoreEnhancer implements ConfigurationEnhancer {
 

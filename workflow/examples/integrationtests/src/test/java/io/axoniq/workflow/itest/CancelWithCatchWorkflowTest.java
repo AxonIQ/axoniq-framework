@@ -47,7 +47,6 @@ import static org.assertj.core.api.Fail.fail;
  * exception.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class CancelWithCatchWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 

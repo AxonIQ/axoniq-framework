@@ -30,6 +30,9 @@ import org.axonframework.messaging.eventhandling.annotation.EventHandler;
 import org.axonframework.messaging.queryhandling.QueryUpdateEmitter;
 import org.springframework.stereotype.Component;
 
+/**
+ * @since 0.1.0
+ */
 @Component
 public class BikeStatusProjector {
 

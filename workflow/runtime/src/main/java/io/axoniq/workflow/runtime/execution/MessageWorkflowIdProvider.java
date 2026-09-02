@@ -25,7 +25,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
  * Workflow id provider using the message identifier as workflow id.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public class MessageWorkflowIdProvider implements WorkflowIdProvider {
 

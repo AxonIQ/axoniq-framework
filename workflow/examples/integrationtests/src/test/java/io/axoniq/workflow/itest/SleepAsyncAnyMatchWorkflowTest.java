@@ -45,7 +45,6 @@ import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.of
  * returns a composable result.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class SleepAsyncAnyMatchWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
 

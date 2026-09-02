@@ -63,7 +63,7 @@ import java.util.stream.Collectors;
  * sets across workflow definitions.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public record Associations(
         ValueComparisonOperatorRegistry registry,
@@ -164,7 +164,7 @@ public record Associations(
      * @param operator String representation of the operator
      * @param value    value to match
      * @author Simon Zambrovski
-     * @since 1.0.0
+     * @since 0.2.0
      */
     public record Matcher(
             String operator,

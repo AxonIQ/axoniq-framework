@@ -35,7 +35,7 @@ import java.util.concurrent.TimeoutException;
  * legitimately expect a longer wait must configure it explicitly.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.3.0
  */
 public class DefaultTimeoutFutureResolver implements FutureResolver {
 

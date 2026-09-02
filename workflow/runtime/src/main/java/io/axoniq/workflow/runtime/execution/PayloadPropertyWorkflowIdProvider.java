@@ -33,7 +33,7 @@ import static io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState.PAY
  * Workflow id provider accessing event message property.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public class PayloadPropertyWorkflowIdProvider implements WorkflowIdProvider {
 

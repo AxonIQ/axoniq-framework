@@ -52,7 +52,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author Simon Zambrovski
  * @author Steven van Beelen
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 public class WorkflowEngineCheckpointingSupport implements Checkpointing {

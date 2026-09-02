@@ -88,7 +88,7 @@ import java.util.function.UnaryOperator;
  * is stopped cleanly.</p>
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public interface WorkflowTestDriver {
 

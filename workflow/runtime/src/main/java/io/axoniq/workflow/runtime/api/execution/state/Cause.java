@@ -24,7 +24,7 @@ import org.axonframework.common.annotation.Internal;
  * Contract describing the cause of a workflow or step failure.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 public interface Cause {

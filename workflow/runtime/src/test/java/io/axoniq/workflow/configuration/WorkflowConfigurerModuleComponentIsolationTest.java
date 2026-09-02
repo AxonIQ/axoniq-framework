@@ -48,7 +48,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * history).
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class WorkflowConfigurerModuleComponentIsolationTest {
 

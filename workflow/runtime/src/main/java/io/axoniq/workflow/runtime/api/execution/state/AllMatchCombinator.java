@@ -25,7 +25,7 @@ import java.util.function.Predicate;
  * Guard combinator that succeeds when all completed results match the predicate.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 public interface AllMatchCombinator {
 

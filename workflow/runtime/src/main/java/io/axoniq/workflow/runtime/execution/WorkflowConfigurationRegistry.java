@@ -44,7 +44,7 @@ import java.util.stream.Collectors;
  *
  * @param <W> type of the registry.
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRegistry<W>>

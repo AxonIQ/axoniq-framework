@@ -29,7 +29,7 @@ package io.axoniq.workflow.runtime.api.execution.state;
  * (explicit cancellation).
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.2.0
  */
 public class StepTimedOutException extends StepFailedException {
 

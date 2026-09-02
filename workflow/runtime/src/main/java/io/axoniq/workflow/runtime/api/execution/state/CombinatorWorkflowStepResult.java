@@ -84,7 +84,7 @@ import java.util.List;
  * (e.g. {@code r.failure()}, {@code r.isCompleted()}) regardless of which list they are in.</p>
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 public interface CombinatorWorkflowStepResult extends WorkflowStepResult {
 

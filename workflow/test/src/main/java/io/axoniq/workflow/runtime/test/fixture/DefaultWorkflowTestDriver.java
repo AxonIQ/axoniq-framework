@@ -35,7 +35,7 @@ import java.util.function.Predicate;
  * Default implementation of {@link WorkflowTestDriver}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 public class DefaultWorkflowTestDriver implements WorkflowTestDriver {

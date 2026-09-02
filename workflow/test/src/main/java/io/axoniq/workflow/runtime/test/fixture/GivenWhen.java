@@ -34,7 +34,7 @@ import java.util.Objects;
  * @param <SELF>   type of action stage
  * @param <ASSERT> type of assert stage
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public class GivenWhen<SELF extends GivenWhen<SELF, ASSERT>, ASSERT extends Then<ASSERT, SELF>>
         extends FixturePhase<SELF> {

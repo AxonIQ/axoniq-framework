@@ -30,7 +30,7 @@ import java.util.function.BiFunction;
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 @FunctionalInterface
 public interface PayloadProcessor extends BiFunction<ProcessingContext, Map<String, @Nullable Object>, Map<String, @Nullable Object>> {

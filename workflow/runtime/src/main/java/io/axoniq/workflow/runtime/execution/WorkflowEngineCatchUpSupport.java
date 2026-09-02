@@ -30,7 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Tracks whether claimed workflow-engine segments have consumed the startup backlog.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.3.0
  */
 @Internal
 final class WorkflowEngineCatchUpSupport {

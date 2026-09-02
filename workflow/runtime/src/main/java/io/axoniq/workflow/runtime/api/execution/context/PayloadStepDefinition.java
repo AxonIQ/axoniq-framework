@@ -26,7 +26,7 @@ import io.axoniq.workflow.runtime.api.payload.PayloadModification;
  * @param primitiveMetadata metadata of the primitive
  * @param modification      payload modification
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public record PayloadStepDefinition(
         PrimitiveMetadata primitiveMetadata,

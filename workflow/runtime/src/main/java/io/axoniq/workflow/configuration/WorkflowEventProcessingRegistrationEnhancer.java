@@ -56,7 +56,7 @@ import java.util.function.Function;
  * Enhancer for registration of the workflow engine event processing.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 @RegistrationScope(scope = RegistrationScope.Scope.CURRENT)
 @Internal

@@ -38,7 +38,6 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
  * ArchUnit tests for fixture assertion naming conventions.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 @AnalyzeClasses(packagesOf = {WorkflowTestDriver.class, WorkflowEngineTestingState.class})
 class FixtureAssertionNamingArchTest {

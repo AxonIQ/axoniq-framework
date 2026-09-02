@@ -29,7 +29,7 @@ import java.util.Map;
  * @param <T> type of the context.
  * @author Simon Zambrovski
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 @FunctionalInterface
 public interface WorkflowContextFactory<T extends WorkflowContext> {

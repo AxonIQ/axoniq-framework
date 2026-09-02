@@ -29,6 +29,7 @@ import java.util.Optional;
 
 /**
  * Represents a result of a step execution.
+ * @since 0.1.0
  */
 public interface WorkflowStepResult {
 

@@ -52,7 +52,7 @@ import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriev
  * example and is migrated without changes to business logic implemented there.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Component
 public class PaymentWorkflow {

@@ -25,6 +25,9 @@ import io.axoniq.demo.bikerental.coreapi.rental.RentalStatus;
 import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
 import org.springframework.stereotype.Component;
 
+/**
+ * @since 0.1.0
+ */
 @Component
 public class BikeStatusProjection {
 

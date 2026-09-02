@@ -56,7 +56,6 @@ import static org.awaitility.Awaitility.await;
  * units of work are still observed.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class TransactionScopeWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 

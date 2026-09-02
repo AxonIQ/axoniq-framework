@@ -44,7 +44,7 @@ import static io.axoniq.workflow.runtime.util.MetadataUtils.METADATA_KEY_MODIFY_
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 public class EventMessageUtils {

@@ -54,7 +54,6 @@ import static org.mockito.Mockito.*;
  * Tests for {@link SimpleWorkflowConfigurationRegistry}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class SimpleWorkflowConfigurationRegistryTest {
 

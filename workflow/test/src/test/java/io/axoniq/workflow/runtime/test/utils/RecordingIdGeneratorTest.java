@@ -27,7 +27,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Tests for {@link RecordingIdGenerator}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class RecordingIdGeneratorTest {
 

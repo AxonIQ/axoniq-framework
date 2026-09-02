@@ -45,7 +45,6 @@ import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.of
  * short-circuit on the first failure.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class NoneMatchGuardWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
 

@@ -42,7 +42,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * terminal state. The workflow should remain in a non-terminal state.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class ExceptionBetweenStepsWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
 

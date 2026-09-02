@@ -47,7 +47,6 @@ import static org.mockito.Mockito.*;
  * Integration test for workflow autodetection.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 @SpringBootTest(
         classes = WorkflowAutodetectionIT.TestConfig.class,

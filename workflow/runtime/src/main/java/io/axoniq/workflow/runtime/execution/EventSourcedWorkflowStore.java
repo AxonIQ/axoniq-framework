@@ -35,7 +35,7 @@ import java.util.concurrent.CompletableFuture;
  * </p>
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 public class EventSourcedWorkflowStore implements WorkflowStore {

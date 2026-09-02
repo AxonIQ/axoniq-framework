@@ -45,7 +45,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * independent workflows, one keyed by {@code orderId} and the other by {@code customerId}.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class ParallelExecutionsWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
 

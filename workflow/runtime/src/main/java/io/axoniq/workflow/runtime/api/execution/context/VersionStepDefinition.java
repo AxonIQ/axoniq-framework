@@ -28,7 +28,7 @@ import java.util.Objects;
  * @param primitiveMetadata metadata of the primitive ({@code stepName == changeId}).
  * @param newVersion        new workflow version to record (semver string).
  * @author Stefan Dragisic
- * @since 1.1.0
+ * @since 0.2.0
  */
 public record VersionStepDefinition(
         PrimitiveMetadata primitiveMetadata,

@@ -62,7 +62,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * </ol>
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class StepTimeoutWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
 

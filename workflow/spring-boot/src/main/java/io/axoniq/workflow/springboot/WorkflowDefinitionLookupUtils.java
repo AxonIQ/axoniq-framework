@@ -36,7 +36,7 @@ import static io.axoniq.workflow.configuration.AutoDetectionUtils.workflowMethod
  * Helper utilities for workflow definition lookup.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 class WorkflowDefinitionLookupUtils {

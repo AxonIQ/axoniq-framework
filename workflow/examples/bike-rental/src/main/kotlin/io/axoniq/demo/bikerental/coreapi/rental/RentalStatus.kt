@@ -18,6 +18,9 @@
  */
 package io.axoniq.demo.bikerental.coreapi.rental
 
+/**
+ * @since 0.1.0
+ */
 enum class RentalStatus {
   AVAILABLE,
   REQUESTED,

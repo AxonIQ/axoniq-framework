@@ -25,7 +25,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
  * Retrieves association value from the event message.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public interface ValueRetriever {
 

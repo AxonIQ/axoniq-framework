@@ -47,7 +47,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * definition on replay.
  *
  * @author Stefan Dragisic
- * @since 1.1.0
  */
 @SpringBootTest(
         classes = WorkflowMultiVersionGroupingIT.TestConfig.class,

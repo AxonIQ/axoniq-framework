@@ -44,7 +44,6 @@ import static org.mockito.Mockito.same;
  * Tests for {@link TestEventPublisher}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class TestEventPublisherTest {
 

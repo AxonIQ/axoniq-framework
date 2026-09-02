@@ -51,7 +51,7 @@ import java.util.function.UnaryOperator;
  * @author Stefan Dragisic
  * @author Allrad Buijze
  * @author Steven van Beelen
- * @since 1.0.0
+ * @since 0.1.0
  */
 public class SimpleWorkflowContext extends BaseWorkflowContext {
 

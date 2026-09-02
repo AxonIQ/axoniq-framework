@@ -44,7 +44,6 @@ import static org.awaitility.Awaitility.await;
  * runs the following step. Only cancellation surfaces; a timed-out sleep does not.
  *
  * @author Stefan Dragisic
- * @since 0.3.0
  */
 class SleepTimesOutNormallyTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 

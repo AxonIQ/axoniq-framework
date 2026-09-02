@@ -51,7 +51,7 @@ import java.util.concurrent.Executor;
  * infrastructure and can also be registered directly in custom test configurations.</p>
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public class WorkflowTestEventPublicationEnhancer implements ConfigurationEnhancer {
 

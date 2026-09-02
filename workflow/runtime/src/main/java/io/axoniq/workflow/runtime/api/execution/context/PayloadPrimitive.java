@@ -25,7 +25,7 @@ import io.axoniq.workflow.runtime.api.payload.PayloadModification;
  * Primitive modifying the workflow instance payload allowing durable data flow support.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public interface PayloadPrimitive {
 
@@ -39,7 +39,7 @@ public interface PayloadPrimitive {
 
     /**
      * Base payload modification command.
-     * @since 1.0.0
+     * @since 0.1.0
      * @author Simon Zambrovski
      */
     interface ModifyPayloadCommand {

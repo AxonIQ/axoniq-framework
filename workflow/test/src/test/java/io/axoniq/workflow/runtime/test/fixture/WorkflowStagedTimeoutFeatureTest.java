@@ -37,7 +37,6 @@ import java.util.function.UnaryOperator;
  * Test for BDD fixture time advancement.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class WorkflowStagedTimeoutFeatureTest {
 

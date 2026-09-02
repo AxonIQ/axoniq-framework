@@ -19,6 +19,7 @@
 /**
  * The workflow execution state model, including workflow and step results, errors, and match combinators
  * ({@code allMatch}, {@code anyMatch}, {@code noneMatch}).
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.runtime.api.execution.state;

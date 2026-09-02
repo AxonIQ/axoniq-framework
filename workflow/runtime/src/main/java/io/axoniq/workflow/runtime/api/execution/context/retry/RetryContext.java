@@ -29,7 +29,7 @@ package io.axoniq.workflow.runtime.api.execution.context.retry;
  * @param delay      the computed backoff delay before this retry attempt.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 public record RetryContext(String stepName, int attempt, int maxRetries, Throwable error,
                            java.time.Duration delay) {

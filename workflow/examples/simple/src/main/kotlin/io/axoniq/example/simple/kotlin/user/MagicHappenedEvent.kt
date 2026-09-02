@@ -20,6 +20,9 @@ package io.axoniq.example.simple.kotlin.user
 
 import com.fasterxml.jackson.annotation.JsonProperty
 
+/**
+ * @since 0.1.0
+ */
 @JvmRecord
 data class MagicHappenedEvent(
     @field:JsonProperty("magician")

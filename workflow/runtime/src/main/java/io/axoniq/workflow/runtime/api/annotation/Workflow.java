@@ -32,7 +32,7 @@ import java.lang.annotation.Target;
  * Annotation to mark the workflow definition method.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
