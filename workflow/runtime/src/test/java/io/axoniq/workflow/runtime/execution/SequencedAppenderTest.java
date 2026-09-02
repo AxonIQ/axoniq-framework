@@ -31,15 +31,15 @@ class SequencedAppenderTest {
 
     @Test
     void passesThePositionWrittenByOneAppendToTheNext() {
-        var condition = new SequencedAppender();
+        var appender = new SequencedAppender();
         var firstPosition = mock(ConsistencyMarker.class);
         var seenPositions = new ArrayList<ConsistencyMarker>();
 
-        condition.appendSequentially(position -> {
+        appender.appendSequentially(position -> {
             seenPositions.add(position);
             return CompletableFuture.completedFuture(firstPosition);
         }).join();
-        condition.appendSequentially(position -> {
+        appender.appendSequentially(position -> {
             seenPositions.add(position);
             return CompletableFuture.completedFuture(firstPosition);
         }).join();
@@ -49,12 +49,12 @@ class SequencedAppenderTest {
 
     @Test
     void failedAppendDoesNotBlockTheAppendBehindIt() {
-        var condition = new SequencedAppender();
+        var appender = new SequencedAppender();
         var failed = new CompletableFuture<ConsistencyMarker>();
         var secondStarted = new CompletableFuture<Void>();
 
-        var first = condition.appendSequentially(ignored -> failed);
-        var second = condition.appendSequentially(ignored -> {
+        var first = appender.appendSequentially(ignored -> failed);
+        var second = appender.appendSequentially(ignored -> {
             secondStarted.complete(null);
             return CompletableFuture.completedFuture(mock(ConsistencyMarker.class));
         });
