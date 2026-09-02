@@ -29,6 +29,9 @@ import org.axonframework.extension.spring.stereotype.EventSourced;
 import org.axonframework.messaging.commandhandling.annotation.CommandHandler;
 import org.axonframework.messaging.eventhandling.gateway.EventAppender;
 
+/**
+ * @since 0.1.0
+ */
 @EventSourced(tagKey = "Payment")
 public class Payment {
 

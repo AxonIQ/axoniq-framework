@@ -23,7 +23,7 @@ package io.axoniq.workflow.runtime.api.execution.context.retry;
  * Use for logging, metrics, or other side effects. Not called during replay.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 @FunctionalInterface
 public interface RetryHandler {

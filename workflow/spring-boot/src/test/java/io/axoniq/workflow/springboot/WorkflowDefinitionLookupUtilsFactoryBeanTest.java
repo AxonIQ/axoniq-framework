@@ -43,7 +43,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Test for detection of workflow context factories in Spring context.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 @ExtendWith(SpringExtension.class)
 @ContextConfiguration(classes = WorkflowDefinitionLookupUtilsFactoryBeanTest.TestConfig.class)

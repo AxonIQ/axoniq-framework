@@ -20,6 +20,9 @@ package io.axoniq.example.simple.user;
 
 import org.axonframework.messaging.eventhandling.annotation.Event;
 
+/**
+ * @since 0.1.0
+ */
 @Event(namespace = "my.custom", name = "RegistrationReceived")
 public record RegistrationReceivedEvent(String id, String email, String status) {
 

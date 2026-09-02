@@ -38,7 +38,7 @@ import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Bu
  * Holds wait for event conditions for a single workflow instance.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 final class EventWaitConditions implements DescribableComponent {
 

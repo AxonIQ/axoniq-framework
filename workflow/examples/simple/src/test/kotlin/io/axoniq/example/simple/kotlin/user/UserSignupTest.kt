@@ -34,7 +34,6 @@ import java.util.function.Function
 /**
  * User signup test using the declarative workflow API kotlin DSL.
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class UserSignupTest : AbstractWorkflowTestBase<WorkflowKontext>(
     WorkflowKontext::class.java,

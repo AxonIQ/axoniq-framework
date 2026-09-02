@@ -42,7 +42,7 @@ import static org.awaitility.Awaitility.await;
  * Mutable implementation of {@link WorkflowEngineTestingState} holding at most one execution and one history.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 class MutableWorkflowEngineTestingState implements WorkflowEngineTestingState {

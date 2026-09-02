@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit;
  * Wall-clock timeout scheduler used in production.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 public class DefaultWorkflowScheduler implements WorkflowScheduler {

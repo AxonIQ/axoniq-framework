@@ -31,7 +31,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext
  * @param initialPayload initial payload of the workflow
  * @param processingContext processing context of the current message
  * @param workflowConfiguration runtime configuration for this workflow
- * @since 1.0.0
+ * @since 0.1.0
  * @author Simon Zambrovski
  */
 class WorkflowKontext(

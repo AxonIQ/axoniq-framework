@@ -35,7 +35,7 @@ import java.util.function.Predicate;
  * @param <SELF>   type of assert stage
  * @param <ACTION> type of action stage
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTION, SELF>>
         extends FixturePhase<SELF> {

@@ -46,7 +46,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * exception.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class FailWithCatchWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
 

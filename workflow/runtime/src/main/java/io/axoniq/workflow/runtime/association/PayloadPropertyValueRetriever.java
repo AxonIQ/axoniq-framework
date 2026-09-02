@@ -32,7 +32,7 @@ import java.util.Objects;
  * Retrieves the value based on a payload property.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public class PayloadPropertyValueRetriever implements ValueRetriever {
 

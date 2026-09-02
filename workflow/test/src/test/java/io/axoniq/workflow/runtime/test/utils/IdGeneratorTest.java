@@ -28,7 +28,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Tests for {@link IdGenerator}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class IdGeneratorTest {
 

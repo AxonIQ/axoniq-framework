@@ -32,6 +32,9 @@ import kotlin.time.Duration.Companion.seconds
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * @since 0.1.0
+ */
 class UserSignupWorkflow {
 
     @Workflow(idProperty = "id", startOnEventName = "my.custom.RegistrationReceived")

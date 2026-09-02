@@ -34,7 +34,7 @@ import java.util.function.Supplier;
  * {@link WorkflowExecution} bundling configuration, context, and execution state.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 public interface WorkflowExecutionRepository extends DescribableComponent {

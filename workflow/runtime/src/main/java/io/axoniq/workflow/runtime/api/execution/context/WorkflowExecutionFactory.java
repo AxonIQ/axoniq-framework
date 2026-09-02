@@ -24,7 +24,7 @@ import org.axonframework.common.annotation.Internal;
  * Factory to create a workflow execution.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 @FunctionalInterface

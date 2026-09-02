@@ -30,7 +30,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Tests for {@link ManualWorkflowScheduler}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class ManualWorkflowSchedulerTest {
 

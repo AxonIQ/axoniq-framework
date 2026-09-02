@@ -25,7 +25,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext
 /**
  * Factory that creates [WorkflowKontext] instances for Kotlin DSL workflows.
  *
- * @since 1.0.0
+ * @since 0.1.0
  * @author Simon Zambrovski
  */
 class WorkflowKontextFactory : WorkflowContextFactory<WorkflowKontext> {

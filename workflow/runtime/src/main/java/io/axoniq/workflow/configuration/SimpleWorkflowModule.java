@@ -55,7 +55,7 @@ import static io.axoniq.workflow.configuration.WorkflowConfigurationDefaults.COM
  *
  * @param <C> type of workflow context.
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 class SimpleWorkflowModule<C extends WorkflowContext>

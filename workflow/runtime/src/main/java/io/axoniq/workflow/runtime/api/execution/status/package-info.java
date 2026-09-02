@@ -18,6 +18,7 @@
  */
 /**
  * Lifecycle status enumerations for workflow executions and workflow steps.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.runtime.api.execution.status;

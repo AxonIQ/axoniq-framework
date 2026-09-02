@@ -37,7 +37,7 @@ import java.util.IdentityHashMap;
  * @param cause   compacted cause, or {@code null}.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 public record WorkflowError(String type,

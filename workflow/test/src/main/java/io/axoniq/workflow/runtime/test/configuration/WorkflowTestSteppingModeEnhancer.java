@@ -54,7 +54,7 @@ import java.time.Clock;
  * the workflow test configuration yourself.</p>
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public class WorkflowTestSteppingModeEnhancer implements ConfigurationEnhancer {
 

@@ -33,7 +33,7 @@ import java.util.function.Function;
  * Resolver that lets tests provide execute-step actions.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public class ManualExecuteStepActionResolver implements ExecuteStepActionResolver {
 

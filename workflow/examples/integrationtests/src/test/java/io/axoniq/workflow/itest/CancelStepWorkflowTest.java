@@ -43,7 +43,6 @@ import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.of
  * Verifies that {@code cancelStep} cancels a single running step without terminating the workflow.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class CancelStepWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
 

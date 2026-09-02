@@ -66,7 +66,6 @@ import static org.awaitility.Awaitility.await;
  * </ul>
  *
  * @author Stefan Dragisic
- * @since 0.3.0
  */
 class SegmentShardingDeclarativeTest {
 

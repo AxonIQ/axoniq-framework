@@ -21,6 +21,7 @@ package io.axoniq.example.simple.user;
 /**
  * Event that is published when a magic happens
  * @param magician magician that did the magic
+ * @since 0.1.0
  */
 public record MagicHappenedEvent(String magician) {
 

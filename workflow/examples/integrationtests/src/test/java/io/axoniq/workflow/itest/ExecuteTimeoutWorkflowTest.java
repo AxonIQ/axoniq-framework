@@ -55,7 +55,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code result.error().orElseThrow()} surfaces that opaque wrapper instead of a meaningful dedicated type.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class ExecuteTimeoutWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
 

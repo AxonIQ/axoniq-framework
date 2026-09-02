@@ -25,6 +25,9 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * @since 0.1.0
+ */
 @Repository
 public interface PaymentStatusRepository extends CrudRepository<PaymentStatus, String> {
 

@@ -45,7 +45,6 @@ import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.of
  * fast step as winner.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class AnyRaceWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
 

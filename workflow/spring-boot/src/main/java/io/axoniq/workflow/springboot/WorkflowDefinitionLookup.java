@@ -38,7 +38,7 @@ import static io.axoniq.workflow.springboot.WorkflowDefinitionLookupUtils.workfl
  * Workflow definition lookup looking for beans with {@link @Workflow} annotated methods.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public class WorkflowDefinitionLookup implements BeanDefinitionRegistryPostProcessor {
 

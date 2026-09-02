@@ -31,7 +31,7 @@ import java.util.function.Consumer;
  * advancement unsafe.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.3.0
  */
 @Internal
 final class UnsafeCheckpointWorkIndex {

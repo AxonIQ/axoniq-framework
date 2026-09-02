@@ -42,7 +42,7 @@ import static io.axoniq.workflow.configuration.AutoDetectionUtils.*;
  *
  * @param <C> the type of {@link WorkflowContext} used by the workflows being built
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 class AutoDetectingWorkflowBuilder<C extends WorkflowContext>

@@ -34,7 +34,6 @@ import static org.mockito.Mockito.*;
  * Tests for {@link NoneMatchCombinatorDelegate#noneMatch(java.util.function.Predicate, WorkflowStepResult...)}.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class NoneMatchCombinatorDelegateTest {
 

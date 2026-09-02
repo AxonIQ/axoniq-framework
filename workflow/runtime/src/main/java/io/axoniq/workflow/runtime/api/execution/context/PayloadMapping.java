@@ -26,7 +26,7 @@ import io.axoniq.workflow.runtime.api.payload.PayloadReducer;
  * @param parameterPayloadReducer reducer for step input payload.
  * @param resultPayloadReducer    reducer for step result payload.
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public record PayloadMapping(
         PayloadReducer parameterPayloadReducer,

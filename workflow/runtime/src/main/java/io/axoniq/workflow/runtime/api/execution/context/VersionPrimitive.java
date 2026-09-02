@@ -28,7 +28,7 @@ import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
  * {@code @Workflow(workflowVersion=...)}.
  *
  * @author Stefan Dragisic
- * @since 1.1.0
+ * @since 0.2.0
  */
 public interface VersionPrimitive {
 

@@ -24,7 +24,7 @@ import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
  * Listener informed on status change of workflow.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 @FunctionalInterface
 public interface WorkflowStatusChangeListener {

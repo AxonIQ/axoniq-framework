@@ -36,7 +36,7 @@ import static io.axoniq.workflow.runtime.execution.WorkflowEventTags.*;
  * Resolves workflow-specific event-store tags for engine-published events.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 public class WorkflowEventTagResolver implements TagResolver {

@@ -49,7 +49,7 @@ import java.util.concurrent.ExecutorService;
  * callbacks that evaluate the policy and schedule retry attempts.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 public class RetryableExecuteDelegate extends AbstractStepExecutor implements ExecutePrimitive {

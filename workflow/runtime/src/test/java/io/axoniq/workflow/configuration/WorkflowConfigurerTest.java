@@ -25,7 +25,6 @@ import org.junit.jupiter.api.*;
  * Test for workflow module configurer.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 @Disabled("Clarify why some tests are failing")
 class WorkflowConfigurerTest extends ApplicationConfigurerTestSuite<WorkflowConfigurer> {

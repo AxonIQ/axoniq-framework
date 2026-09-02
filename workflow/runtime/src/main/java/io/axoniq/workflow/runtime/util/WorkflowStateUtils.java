@@ -29,7 +29,7 @@ import java.util.function.Predicate;
  * Utility functions for inspecting {@link WorkflowState}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.3.0
  */
 @Internal
 public final class WorkflowStateUtils {

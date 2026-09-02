@@ -30,6 +30,9 @@ import java.util.Map;
 
 import static io.axoniq.example.simple.user.SleepUtils.waitWithProgress;
 
+/**
+ * @since 0.1.0
+ */
 public class UserService {
 
     static Logger logger = LoggerFactory.getLogger(UserService.class);

@@ -45,7 +45,7 @@ import java.util.function.Predicate;
  *
  * @param <SELF> concrete phase type used for fluent chaining
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 abstract class FixturePhase<SELF extends FixturePhase<SELF>> extends Phase<SELF> {

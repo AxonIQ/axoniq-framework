@@ -19,6 +19,7 @@
 /**
  * Internal runtime utilities for future resolution, workflow event and metadata construction, processing context
  * propagation, reflection, and workflow state inspection.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.runtime.util;

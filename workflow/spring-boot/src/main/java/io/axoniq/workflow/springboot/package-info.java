@@ -19,6 +19,7 @@
 /**
  * Spring Boot autoconfiguration for the workflow engine: detects {@code @Workflow}-annotated beans, registers them as
  * workflow modules, and binds the {@code axoniq.workflow} configuration properties.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.springboot;

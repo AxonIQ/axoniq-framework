@@ -19,6 +19,7 @@
 /**
  * In-memory {@link io.axoniq.workflow.history.api.WorkflowHistoryRepository} implementation and the event handler that
  * projects workflow events into it.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.history.inmemory;

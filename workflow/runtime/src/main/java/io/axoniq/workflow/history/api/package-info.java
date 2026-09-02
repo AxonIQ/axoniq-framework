@@ -18,6 +18,7 @@
  */
 /**
  * Public API for reading historic workflow executions, exposing their final state and a repository abstraction.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.history.api;

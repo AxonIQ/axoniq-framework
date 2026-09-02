@@ -32,7 +32,7 @@ import java.util.Map;
  * Event sourced state of the workflow execution.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 public interface WorkflowState extends DescribableComponent {

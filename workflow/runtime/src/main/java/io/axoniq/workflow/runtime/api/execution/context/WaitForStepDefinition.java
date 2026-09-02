@@ -30,7 +30,7 @@ import java.time.Duration;
  * @param payloadMapping    mapping of payloads
  * @param timing            timing configuration
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public record WaitForStepDefinition(
         PrimitiveMetadata primitiveMetadata,

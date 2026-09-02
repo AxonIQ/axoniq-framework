@@ -19,6 +19,7 @@
 /**
  * The abstract base class for workflow runtime tests, wiring a workflow module, engine, and supporting services around
  * JUnit lifecycle callbacks.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.runtime.test;

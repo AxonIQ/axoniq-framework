@@ -19,6 +19,7 @@
 /**
  * Convenience Java DSL built on top of the base DSL, adding shortcuts for common workflow steps such as executing
  * without extra input payload, waiting for a typed event, and replacing the workflow payload outright.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.dsl.simple;

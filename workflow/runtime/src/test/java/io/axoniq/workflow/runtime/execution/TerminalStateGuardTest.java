@@ -57,7 +57,6 @@ import static org.mockito.Mockito.*;
  * step is already in a terminal state.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class TerminalStateGuardTest {
 

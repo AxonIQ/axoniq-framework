@@ -47,7 +47,7 @@ import java.util.Map;
  *
  * @param <C> the type of {@link WorkflowContext} used by the workflow
  * @author Steven van Beelen
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 record SimpleWorkflowConfiguration<C extends WorkflowContext>(

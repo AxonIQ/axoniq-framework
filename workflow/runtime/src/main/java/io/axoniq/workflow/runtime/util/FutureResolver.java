@@ -37,7 +37,7 @@ import java.util.concurrent.TimeoutException;
  * exhaust workflow threads. Callers that legitimately expect a longer wait must configure a resolver with that bound.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.3.0
  */
 @FunctionalInterface
 public interface FutureResolver {

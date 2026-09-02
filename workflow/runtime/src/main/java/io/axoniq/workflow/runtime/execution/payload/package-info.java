@@ -19,6 +19,7 @@
 /**
  * {@code PayloadReducer} implementations and their registry, combining or selecting between the global (workflow
  * context) and local payloads passed to and returned from workflow steps.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.runtime.execution.payload;

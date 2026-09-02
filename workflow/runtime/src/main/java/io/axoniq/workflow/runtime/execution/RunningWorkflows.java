@@ -26,7 +26,7 @@ import java.util.Set;
  * Identifies workflow instances that have started and have not yet reached a terminal state.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 public interface RunningWorkflows {

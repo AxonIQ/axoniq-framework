@@ -34,7 +34,7 @@ import java.util.function.BiPredicate;
  * @param operator  comparison operator name
  * @param value     serialized comparison value
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public record SerializedAssociation(
         String qualifier,

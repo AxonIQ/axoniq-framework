@@ -24,7 +24,7 @@ import org.axonframework.common.annotation.Internal;
  * Interface for handling failures in assertions.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 public interface AssertionFailureHandler {

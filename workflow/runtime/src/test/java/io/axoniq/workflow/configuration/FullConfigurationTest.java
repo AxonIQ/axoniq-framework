@@ -41,7 +41,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Test for full configuration of workflow modules.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class FullConfigurationTest {
 

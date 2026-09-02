@@ -25,7 +25,7 @@ import org.axonframework.common.annotation.Internal;
  *
  * @param <SELF> type of the phase
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public class Phase<SELF extends Phase<SELF>> {
 

@@ -44,7 +44,7 @@ import java.util.function.Predicate;
  *
  * @author Stefan Dragisic
  * @see AllMatchCombinator
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 public class AllMatchCombinatorDelegate implements AllMatchCombinator {

@@ -51,7 +51,6 @@ import static org.mockito.Mockito.*;
  * Tests for {@link WorkflowTestDriver}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 class WorkflowTestDriverTest {
 

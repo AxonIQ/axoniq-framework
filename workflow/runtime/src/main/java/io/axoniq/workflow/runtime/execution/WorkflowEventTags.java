@@ -22,7 +22,7 @@ package io.axoniq.workflow.runtime.execution;
  * Constant holder for workflow event tags.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public class WorkflowEventTags {
 

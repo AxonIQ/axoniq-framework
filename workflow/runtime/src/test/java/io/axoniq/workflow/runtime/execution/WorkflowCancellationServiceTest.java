@@ -33,7 +33,6 @@ import static org.mockito.ArgumentMatchers.any;
 
 /**
  * @author Simon Zambrovski
- * @since 0.3.0
  */
 class WorkflowCancellationServiceTest {
 

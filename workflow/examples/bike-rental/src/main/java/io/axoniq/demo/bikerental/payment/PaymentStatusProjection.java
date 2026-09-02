@@ -27,6 +27,9 @@ import org.springframework.stereotype.Component;
 
 import static io.axoniq.demo.bikerental.coreapi.payment.PaymentStatus.Status.PENDING;
 
+/**
+ * @since 0.1.0
+ */
 @Component
 public class PaymentStatusProjection {
 

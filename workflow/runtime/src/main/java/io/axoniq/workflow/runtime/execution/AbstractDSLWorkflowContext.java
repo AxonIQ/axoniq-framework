@@ -62,7 +62,7 @@ import static io.axoniq.workflow.runtime.execution.EventSourcedWorkflowState.PAY
  * </p>
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public abstract class AbstractDSLWorkflowContext implements WorkflowContext, WorkflowDSL {
 

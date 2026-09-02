@@ -20,6 +20,7 @@
  * Bike and rental side of the bike rental example: the {@code Bike} entity and its read-model projection, REST
  * endpoints for registering, requesting and returning bikes, and the workflow that orchestrates payment for a rental
  * request.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.demo.bikerental.rental;

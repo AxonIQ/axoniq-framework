@@ -27,7 +27,7 @@ import org.axonframework.common.annotation.Internal;
  * (e.g. publish FAILED or RETRYING).
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 @FunctionalInterface
 @Internal

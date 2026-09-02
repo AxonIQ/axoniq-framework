@@ -18,5 +18,8 @@
  */
 package io.axoniq.example.simple.kotlin.user
 
+/**
+ * @since 0.1.0
+ */
 @JvmRecord
 data class RegistrationReceivedEvent(val id: String, val email: String)

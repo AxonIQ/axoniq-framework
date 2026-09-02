@@ -27,7 +27,7 @@ package io.axoniq.workflow.runtime.api.execution.state;
  * can catch this type. Distinct from {@link StepTimedOutException} (timeout).
  *
  * @author Stefan Dragisic
- * @since 1.0.0
+ * @since 0.1.0
  */
 public class StepCancellationException extends StepFailedException {
 

@@ -26,7 +26,7 @@ import org.jspecify.annotations.Nullable;
  * @param primitiveMetadata metadata of the primitive
  * @param cause             optional cancellation cause
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 public record CancelWorkflowDefinition(
         PrimitiveMetadata primitiveMetadata,

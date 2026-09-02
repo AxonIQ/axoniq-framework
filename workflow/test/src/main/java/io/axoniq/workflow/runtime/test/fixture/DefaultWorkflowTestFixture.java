@@ -35,7 +35,7 @@ import java.util.function.UnaryOperator;
  * @param <ACTION> type of the action phase used for {@code given()} and {@code when()}
  * @param <ASSERT> type of the assertion phase used for {@code then()}
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 public class DefaultWorkflowTestFixture<

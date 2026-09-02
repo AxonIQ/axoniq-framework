@@ -21,6 +21,9 @@ package io.axoniq.demo.bikerental.coreapi.payment
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 
+/**
+ * @since 0.1.0
+ */
 @Entity
 class PaymentStatus {
   @Id

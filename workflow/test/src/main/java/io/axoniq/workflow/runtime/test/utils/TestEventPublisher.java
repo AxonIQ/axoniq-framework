@@ -48,7 +48,7 @@ import java.util.concurrent.CompletableFuture;
  * event publication while still allowing deterministic control over timestamps and generated identifiers.</p>
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 public class TestEventPublisher {

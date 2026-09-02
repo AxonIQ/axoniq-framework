@@ -24,6 +24,9 @@ import org.axonframework.messaging.eventhandling.annotation.Event
 import org.axonframework.messaging.queryhandling.annotation.Query
 import org.axonframework.modelling.annotation.TargetEntityId
 
+/**
+ * @since 0.1.0
+ */
 @Command(routingKey = "bikeId")
 @JvmRecord
 data class RegisterBikeCommand(

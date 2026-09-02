@@ -38,7 +38,6 @@ import kotlin.time.Duration.Companion.minutes
 
 /**
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class CancelWorkflowTest : AbstractWorkflowTestBase<WorkflowKontext>(
     WorkflowKontext::class.java,

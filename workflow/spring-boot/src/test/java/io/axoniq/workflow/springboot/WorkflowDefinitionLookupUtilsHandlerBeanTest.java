@@ -42,7 +42,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Test for detection of workflow definitions in Spring context.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
  */
 @ExtendWith(SpringExtension.class)
 @ContextConfiguration(classes = WorkflowDefinitionLookupUtilsHandlerBeanTest.TestConfig.class)

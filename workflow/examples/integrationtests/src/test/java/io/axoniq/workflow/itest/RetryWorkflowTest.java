@@ -56,7 +56,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * retry, timeout during retry, and retry exhaustion.
  *
  * @author Stefan Dragisic
- * @since 1.0.0
  */
 class RetryWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
 

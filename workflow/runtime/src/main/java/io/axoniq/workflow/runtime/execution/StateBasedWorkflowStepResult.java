@@ -47,7 +47,7 @@ import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriev
  * @author Allard Buijze
  * @author Stefan Dragisic
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 @Internal
 public class StateBasedWorkflowStepResult implements WorkflowStepResult {

@@ -18,6 +18,7 @@
  */
 /**
  * Retry policy configuration for workflow execute steps, including backoff strategies and retry callbacks.
+ * @since 0.1.0
  */
 @NullMarked
 package io.axoniq.workflow.runtime.api.execution.context.retry;

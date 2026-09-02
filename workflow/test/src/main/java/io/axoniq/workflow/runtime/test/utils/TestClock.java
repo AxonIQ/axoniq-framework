@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Mutable clock for fixture-controlled workflow time.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 public class TestClock extends Clock {

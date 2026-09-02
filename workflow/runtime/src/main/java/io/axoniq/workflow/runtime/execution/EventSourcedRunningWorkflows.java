@@ -32,7 +32,7 @@ import java.util.Set;
  * Event sourced collection of running workflow IDs, loaded by {@link WorkflowStore}.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.2.0
  */
 @Internal
 public class EventSourcedRunningWorkflows implements RunningWorkflows {

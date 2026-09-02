@@ -24,7 +24,7 @@ import java.util.function.BiFunction;
  * Association value comparison operator.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public interface ValueComparisonOperator extends BiFunction<Object, Object, Boolean> {
 

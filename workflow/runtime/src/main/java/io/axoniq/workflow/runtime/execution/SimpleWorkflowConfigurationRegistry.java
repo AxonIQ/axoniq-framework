@@ -36,7 +36,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * In-memory workflow definition registry implementation.
  *
  * @author Simon Zambrovski
- * @since 1.0.0
+ * @since 0.1.0
  */
 public class SimpleWorkflowConfigurationRegistry
         implements WorkflowConfigurationRegistry<SimpleWorkflowConfigurationRegistry> {

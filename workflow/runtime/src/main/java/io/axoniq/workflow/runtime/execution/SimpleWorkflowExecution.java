@@ -64,7 +64,7 @@ import static java.lang.Thread.currentThread;
  * @author Simon Zambrovski
  * @author Stefan Dragisic
  * @author Steven van Beelen
- * @since 1.0.0
+ * @since 0.1.0
  */
 public final class SimpleWorkflowExecution implements WorkflowExecution, WorkflowCancellationProvider {
 
