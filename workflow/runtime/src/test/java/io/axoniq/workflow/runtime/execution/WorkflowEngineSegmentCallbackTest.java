@@ -20,6 +20,9 @@ package io.axoniq.workflow.runtime.execution;
 
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.common.configuration.ComponentNotFoundException;
+import org.axonframework.messaging.core.ApplicationContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
@@ -101,7 +104,7 @@ class WorkflowEngineSegmentCallbackTest {
                                         new InMemoryWorkflowExecutionRepository(),
                                         mock(WorkflowCancellationService.class),
                                         mock(WorkflowStore.class),
-                                        mock(UnitOfWorkFactory.class));
+                                        restoreUnitOfWorkFactory());
 
         assertThat(engine.restoreTimeout).isEqualTo(WorkflowEngine.DEFAULT_RESTORE_TIMEOUT);
     }
@@ -117,7 +120,7 @@ class WorkflowEngineSegmentCallbackTest {
                                         repository,
                                         cancellationService,
                                         workflowStore,
-                                        mock(UnitOfWorkFactory.class));
+                                        restoreUnitOfWorkFactory());
         engine.setCheckpointingSupport(new WorkflowEngineCheckpointingSupport(engine));
         engine.restoreTimeout = SHORT_TIMEOUT;
         return engine;
@@ -127,5 +130,18 @@ class WorkflowEngineSegmentCallbackTest {
         var execution = mock(WorkflowExecution.class);
         when(execution.workflowId()).thenReturn(workflowId);
         return execution;
+    }
+
+    /**
+     * Returns a real unit of work factory: the engine sources every restored instance in a unit of
+     * work of its own, so a mock would hand it none.
+     */
+    private static UnitOfWorkFactory restoreUnitOfWorkFactory() {
+        return new SimpleUnitOfWorkFactory(new ApplicationContext() {
+            @Override
+            public <C> C component(Class<C> type, String name) {
+                throw new ComponentNotFoundException(type, name);
+            }
+        });
     }
 }

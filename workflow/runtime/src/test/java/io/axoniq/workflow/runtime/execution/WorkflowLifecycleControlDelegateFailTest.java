@@ -97,7 +97,7 @@ class WorkflowLifecycleControlDelegateFailTest {
         when(workflowExecution.workflowName()).thenReturn("test-workflow");
         when(workflowContext.workflowId()).thenReturn("wf-1");
         when(workflowContext.workflowPayload()).thenReturn(Map.of());
-        when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
+        when(workflowExecution.appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         eventNameCustomizer = defaults();
@@ -107,10 +107,7 @@ class WorkflowLifecycleControlDelegateFailTest {
                 workflowExecution,
                 new RunningSteps(),
                 new ReachedSteps(),
-                terminalTransition,
-                unitOfWorkFactory,
-                eventSink,
-                executor
+                terminalTransition
         );
     }
 
@@ -136,7 +133,7 @@ class WorkflowLifecycleControlDelegateFailTest {
         assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(new RuntimeException("boom"), eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
-        verify(eventSink).publish(eq(processingContext), any(EventMessage.class));
+        verify(workflowExecution).appendWorkflowEvent(any(EventMessage.class), eq(processingContext));
     }
 
     @Test
@@ -158,19 +155,19 @@ class WorkflowLifecycleControlDelegateFailTest {
     @Test
     void failWorkflowExecutesStepsInOrder() {
         var cause = new RuntimeException("boom");
-        var order = inOrder(terminalTransition, eventSink);
+        var order = inOrder(terminalTransition, workflowExecution);
 
         assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(cause, eventNameCustomizer)))
                 .isInstanceOf(WorkflowFailedException.class);
 
         order.verify(terminalTransition).transition(any(Runnable.class));
-        order.verify(eventSink).publish(any(ProcessingContext.class), any(EventMessage.class));
+        order.verify(workflowExecution).appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class));
     }
 
     @Test
     void failWorkflowLogsAndRethrowsUnwrappedPublicationFailure() {
         var publicationFailure = new IllegalStateException("publication failed");
-        when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
+        when(workflowExecution.appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class)))
                 .thenReturn(CompletableFuture.failedFuture(publicationFailure));
         Logger logger = (Logger) LoggerFactory.getLogger(WorkflowLifecycleControlDelegate.class);
         var appender = new ListAppender<ILoggingEvent>();

@@ -91,7 +91,6 @@ class ExecuteDelegateTerminalInterruptionTest {
                 DefaultEventNameCustomizer.Builder.defaults(),
                 Clock.systemUTC(),
                 unitOfWorkFactory,
-                mock(EventSink.class),
                 Runnable::run,
                 scheduler,
                 new DefaultExecuteStepActionResolver()

@@ -30,19 +30,23 @@ import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.workflow.runtime.util.FutureResolver;
 import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Execute delegate implementing {@link ExecutePrimitive}.
@@ -57,7 +61,13 @@ import java.util.concurrent.TimeoutException;
 public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrimitive {
 
     private static final Logger logger = LoggerFactory.getLogger(ExecuteDelegate.class);
+    private final UnitOfWorkFactory unitOfWorkFactory;
+    private final Executor executor;
     private final ExecuteStepActionResolver actionResolver;
+    /**
+     * Steps this execution published a {@code STARTED} event for, so their state is known to be its own.
+     */
+    private final Set<String> ownStartedSteps = ConcurrentHashMap.newKeySet();
 
     /**
      * Constructs the delegate.
@@ -69,7 +79,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
      * @param parentEventNameCustomizer event name customizer
      * @param clock                     clock for time calculations
      * @param unitOfWorkFactory         unit of work factory for creation of new processing contexts
-     * @param eventSink                 event sink for event publications
      * @param executor                  executor to offload execution tasks from workflow thread
      * @param timeoutScheduler          scheduler for workflow step timeouts
      * @param actionResolver            resolver for execute step actions
@@ -82,7 +91,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                            EventNameCustomizer parentEventNameCustomizer,
                            Clock clock,
                            UnitOfWorkFactory unitOfWorkFactory,
-                           EventSink eventSink,
                            Executor executor,
                            WorkflowScheduler timeoutScheduler,
                            ExecuteStepActionResolver actionResolver
@@ -93,10 +101,9 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
               reachedSteps,
               parentEventNameCustomizer,
               clock,
-              unitOfWorkFactory,
-              eventSink,
-              executor,
               timeoutScheduler);
+        this.unitOfWorkFactory = unitOfWorkFactory;
+        this.executor = executor;
         this.actionResolver = actionResolver;
     }
 
@@ -125,20 +132,20 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         var eventNameCustomizer = command.eventNameCustomizer();
         logger.trace("Execute {} called from thread {}", stepName, Thread.currentThread());
 
-        // AT-MOST-ONCE: snapshot the step state BEFORE this run publishes STARTED. A step already present-and-STARTED
-        // here can only be a prior incarnation's in-flight attempt rebuilt from the durable log (a fresh run has not
-        // published STARTED yet at this point), so its external effect may already have run. To keep effects
-        // at-most-once we must NOT re-run the action; instead route the interrupted attempt through the regular error
-        // flow via the passed-in failure handler (no retry policy -> step FAILED with StepIndeterminateException; retry
-        // policy -> RETRYING + next attempt). Live retry attempts reach this method with status RETRYING, never STARTED,
-        // so they are unaffected and still execute.
-        boolean resumedInFlight = WorkflowStateUtils.isStepStatus(
-                workflowExecution.state(), stepName, StepStatus.STARTED
-        );
-
         reachedSteps.record(stepName);
 
         acceptAllPendingTasksForStep(stepName);
+
+        // AT-MOST-ONCE: read the step state once every pending task is applied, and before this run publishes STARTED.
+        // A step present-and-STARTED here belongs to another run: either a prior incarnation's in-flight attempt
+        // rebuilt from the durable log, or the run of whichever execution owns the instance now. Both may already have
+        // performed the step's external effect, so this run must NOT execute the action; instead route the attempt
+        // through the regular error flow via the passed-in failure handler (no retry policy -> step FAILED with
+        // StepIndeterminateException; retry policy -> RETRYING + next attempt). Live retry attempts reach this method
+        // with status RETRYING, never STARTED, so they are unaffected and still execute.
+        boolean resumedInFlight = WorkflowStateUtils.isStepStatus(
+                workflowExecution.state(), stepName, StepStatus.STARTED
+        ) && !ownStartedSteps.contains(stepName);
 
         if (resumedInFlight) {
             failureHandler.onFailure(stepName, new StepIndeterminateException(stepName), eventNameCustomizer);
@@ -147,28 +154,20 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
         if (!workflowExecution.state().containsStep(stepName)) {
             reachedSteps.assertNoReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
-            workflowExecution.appendTask(i ->
-                                                 started(stepName, sanitize(local), eventNameCustomizer)
-            );
-            try {
-                workflowExecution.awaitStateChange(WorkflowStateUtils.stepStatus(stepName, StepStatus.STARTED));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+            if (!tryStartStep(stepName, local, eventNameCustomizer)) {
                 return WorkflowStepResults.canceled(stepName);
             }
         }
 
-        // FIXME -> consider to use QOS (at least once/at most once)
         var step = workflowExecution.state().getStep(stepName);
         if (step.status() == StepStatus.STARTED || step.status() == StepStatus.RETRYING) {
             var actualStartTime = step.timestamp();
             var timeoutDeadline = actualStartTime.plus(timeout);
             var remainingTimeout = Duration.between(clock.instant(), timeoutDeadline);
-            // FIXME - This is where we capture our current consistency marker
 
             var result = unitOfWorkFactory
                     .create(stepName,
-                            customize -> customize.workScheduler(executor)) // FIXME -> define a new thread pool for execution customer code
+                            customize -> customize.workScheduler(executor))
                     .executeWithResult(processingContext -> {
                         var procContext = ProcessingContextUtils.copyResources(workflowExecution.state()
                                                                                                 .getStep(stepName)
@@ -191,8 +190,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
             if (remainingTimeout.isNegative()) {
                 workflowExecution.appendTask(i -> {
-                    // TODO - Do one last check on the state to make sure we didn't have any concurrent state changes
-                    // FIXME - This is where we should publish using an append condition
                     timeoutHandler.onTimeout(stepName, eventNameCustomizer);
                 });
             } else {
@@ -210,17 +207,14 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                         // Normal completion — a null action result sanitizes to an empty map in completed(),
                         // so a null-returning action COMPLETES rather than wedging on a null-e dereference.
                         workflowExecution.appendTask(i -> {
-                            // FIXME - This is where we should publish using an append condition
                             completed(stepName, r, resultPayloadReducer.name(), eventNameCustomizer);
                         });
                     } else {
                         if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {
-                            // FIXME - This is where we should publish using an append condition
                             workflowExecution.appendTask(
                                     i -> timeoutHandler.onTimeout(stepName, eventNameCustomizer));
                         } else if (isCancellation(e)) {
                             var terminationCause = unwrapCancellation(e);
-                            // FIXME - This is where we should publish using an append condition
                             workflowExecution.appendTask(i -> {
                                 cancelled(stepName, terminationCause, eventNameCustomizer);
                             });
@@ -230,7 +224,6 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                 // A whole-workflow terminal transition interrupts a running step only to unblock the
                                 // workflow body. It has no corresponding durable step-terminal event.
                             } else {
-                                // FIXME - This is where we should publish using an append condition
                                 workflowExecution.appendTask(
                                         i -> failureHandler.onFailure(stepName, cause, eventNameCustomizer));
                             }
@@ -241,5 +234,45 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         }
 
         return stateBased(stepName, eventNameCustomizer, workflowExecution);
+    }
+
+    /**
+     * Publishes this execution's {@code STARTED} event for the given step and waits until the step is present with
+     * status {@link StepStatus#STARTED}. That state change carries no writer identity: the event may have been recorded
+     * by another execution of the same workflow instance and delivered here over this execution's own event stream. The
+     * store accepting this execution's own append is therefore the only proof that this execution took the step. The
+     * append is then resolved through the workflow's bounded future-resolution policy before the action is allowed to
+     * run.
+     *
+     * @param stepName            name of the step to start
+     * @param local               local payload to record on the {@code STARTED} event
+     * @param eventNameCustomizer event name customizer
+     * @return {@code true} when the store accepted this execution's append, so this execution owns the step and may run
+     * its action. {@code false} when the append was rejected, when the step turned STARTED before this execution's
+     * append ran, or when the wait was interrupted (the interrupt flag is restored)
+     */
+    private boolean tryStartStep(String stepName, Map<String, Object> local, EventNameCustomizer eventNameCustomizer) {
+        var ownStarted = new AtomicReference<CompletableFuture<Void>>();
+        workflowExecution.appendTask(i -> ownStarted.set(started(stepName, sanitize(local), eventNameCustomizer)));
+        try {
+            workflowExecution.awaitStateChange(WorkflowStateUtils.stepStatus(stepName, StepStatus.STARTED));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+        var ownAppend = ownStarted.get();
+        if (ownAppend == null) {
+            return false;
+        }
+        var acceptedAppend = ownAppend.handle((result, failure) -> failure == null);
+        FutureResolver.resolve(workflowExecution.processingContext(), acceptedAppend);
+        boolean accepted = acceptedAppend.getNow(false);
+        if (accepted) {
+            ownStartedSteps.add(stepName);
+        } else {
+            logger.info("The STARTED event of step '{}' of workflow '{}' is not this execution's. Leaving the step "
+                                + "to the execution that recorded it.", stepName, workflowExecution.workflowId());
+        }
+        return accepted;
     }
 }

@@ -25,7 +25,6 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.workflow.runtime.util.FutureResolver;
-import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -35,9 +34,7 @@ import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import java.time.Clock;
 import java.util.concurrent.Executor;
 
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.merge;
 import static io.axoniq.workflow.runtime.execution.payload.LocalOnlyPayloadReducer.NAME;
-import static io.axoniq.workflow.runtime.util.EventMessageUtils.completedStep;
 
 /**
  * Primitive implementing durable payload modifications.
@@ -57,9 +54,6 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
      * @param reachedSteps              reached steps tracker
      * @param parentEventNameCustomizer parent event name customizer
      * @param clock                     clock for time calculations
-     * @param unitOfWorkFactory         unit of work factory for processing contexts
-     * @param eventSink                 event sink for event publications
-     * @param executor                  executor for step work
      * @param timeoutScheduler          scheduler for step timeouts
      */
     @Internal
@@ -70,9 +64,6 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
             ReachedSteps reachedSteps,
             EventNameCustomizer parentEventNameCustomizer,
             Clock clock,
-            UnitOfWorkFactory unitOfWorkFactory,
-            EventSink eventSink,
-            Executor executor,
             WorkflowScheduler timeoutScheduler
     ) {
         super(workflowContext,
@@ -81,9 +72,6 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
               reachedSteps,
               parentEventNameCustomizer,
               clock,
-              unitOfWorkFactory,
-              eventSink,
-              executor,
               timeoutScheduler);
     }
 
@@ -101,21 +89,12 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
             workflowExecution.appendTask(e -> {
                                              // apply modification right away
                                              var newPayload = payloadModification.apply(workflowExecution.workflowContext().workflowPayload());
-                                             var payloadEvent = completedStep(workflowContext,
-                                                                              stepName,
-                                                                              sanitize(newPayload),
-                                                                              NAME, // replace later the entire payload
-                                                                              merge(parentEventNameCustomizer, eventNameCustomizer));
-                                             var processingContext = workflowExecution.processingContext();
                                              FutureResolver.resolve(
-                                                     processingContext,
-                                                     ProcessingContextUtils.executeWithResult(
-                                                             workflowExecution.workflowId(),
-                                                             unitOfWorkFactory,
-                                                             executor,
-                                                             processingContext,
-                                                             ctx -> eventSink.publish(ctx, payloadEvent)
-                                                     )
+                                                     workflowExecution.processingContext(),
+                                                     completed(stepName,
+                                                               sanitize(newPayload),
+                                                               NAME, // replace later the entire payload
+                                                               eventNameCustomizer)
                                              );
                                          }
             );

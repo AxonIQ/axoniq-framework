@@ -26,18 +26,14 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.workflow.runtime.util.FutureResolver;
-import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.workflow.runtime.util.WorkflowStateUtils;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.cancelledWorkflow;
 import static io.axoniq.workflow.runtime.util.EventMessageUtils.failedWorkflow;
@@ -68,10 +64,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     private final RunningSteps runningSteps;
     private final ReachedSteps reachedSteps;
     private final WorkflowTerminalTransition terminalTransition;
-    private final EventSink eventSink;
     private final String workflowName;
-    private final UnitOfWorkFactory unitOfWorkFactory;
-    private final Executor executor;
 
     /**
      * Constructs a lifecycle-control delegate.
@@ -81,9 +74,6 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
      * @param runningSteps       running step registry
      * @param reachedSteps       reached steps tracker
      * @param terminalTransition owner of workflow terminal-transition execution mechanics
-     * @param unitOfWorkFactory  unit of work factory for creation of new processing contexts
-     * @param eventSink          event sink for event publications.
-     * @param executor           executor to offload execution tasks from workflow thread
      */
     @Internal
     public WorkflowLifecycleControlDelegate(
@@ -91,20 +81,14 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
             WorkflowExecution workflowExecution,
             RunningSteps runningSteps,
             ReachedSteps reachedSteps,
-            WorkflowTerminalTransition terminalTransition,
-            UnitOfWorkFactory unitOfWorkFactory,
-            EventSink eventSink,
-            Executor executor
+            WorkflowTerminalTransition terminalTransition
     ) {
         this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow execution is mandatory");
         this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
         this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
         this.terminalTransition = Objects.requireNonNull(terminalTransition, "Terminal transition is mandatory");
-        this.eventSink = Objects.requireNonNull(eventSink, "Event sink is mandatory");
         this.workflowName = Objects.requireNonNull(workflowExecution.workflowName(), "Workflow name is mandatory");
-        this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory, "UnitOfWork factory is mandatory");
-        this.executor = Objects.requireNonNull(executor, "Executor is mandatory");
     }
 
     @Override
@@ -186,14 +170,10 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
 
         logger.error("Workflow '{}' failed", workflowExecution.workflowId(), exception);
 
-        awaitTerminalEventPublication(ProcessingContextUtils.executeWithResult(
-                workflowExecution.workflowId(),
-                unitOfWorkFactory,
-                executor,
-                workflowContext.processingContext(),
-                ctx -> eventSink.publish(ctx,
-                                         failedWorkflow(workflowContext, effectiveName, exception, workflowDefinitionId,
-                                                        eventNameCustomizer))), "FAILED");
+        awaitTerminalEventPublication(workflowExecution.appendWorkflowEvent(
+                failedWorkflow(workflowContext, effectiveName, exception, workflowDefinitionId,
+                               eventNameCustomizer),
+                workflowContext.processingContext()), "FAILED");
     }
 
     private void publishCancelled(WorkflowLifecycleControl.CancelWorkflowCommand command,
@@ -202,14 +182,10 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         var eventNameCustomizer = command.eventNameCustomizer();
         var workflowDefinitionId = workflowExecution.state().workflowDefinitionId();
 
-        awaitTerminalEventPublication(ProcessingContextUtils.executeWithResult(
-                workflowExecution.workflowId(),
-                unitOfWorkFactory,
-                executor,
-                workflowContext.processingContext(),
-                ctx -> eventSink.publish(ctx,
-                                         cancelledWorkflow(workflowContext, effectiveName, cause, workflowDefinitionId,
-                                                           eventNameCustomizer))), "CANCELLED");
+        awaitTerminalEventPublication(workflowExecution.appendWorkflowEvent(
+                cancelledWorkflow(workflowContext, effectiveName, cause, workflowDefinitionId,
+                                  eventNameCustomizer),
+                workflowContext.processingContext()), "CANCELLED");
     }
 
     /**

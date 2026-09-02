@@ -22,7 +22,11 @@ import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
+import io.axoniq.workflow.runtime.util.ProcessingContextUtils;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.common.configuration.ComponentNotFoundException;
+import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
+import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.sequencing.SequencingPolicy;
@@ -427,13 +431,9 @@ public class WorkflowEngine implements
                                 logger.debug("Rehydrating {} running workflow execution(s) of segment {}.",
                                              ownedIds.size(), segment.getSegmentId());
                                 var rehydrations = ownedIds.stream()
-                                                           .map(workflowId -> workflowStore
-                                                                   .loadWorkflow(workflowId, sourcingContext)
-                                                                   .thenAccept(state -> restoreWorkflow(
-                                                                           workflowId,
-                                                                           state,
-                                                                           executionContext
-                                                                   ))
+                                                           .map(workflowId -> restoreWorkflow(workflowId,
+                                                                                              sourcingContext,
+                                                                                              executionContext)
                                                                    // Per instance, so one unrestorable workflow cannot
                                                                    // abort the whole restore pass. Aborting it would
                                                                    // fail the segment claim callback, which the
@@ -457,9 +457,63 @@ public class WorkflowEngine implements
                             });
     }
 
+    /**
+     * Sources one instance in a unit of work of its own and restores it at the position that read ended at.
+     * <p>
+     * The position has to be the instance's own: a transaction shared by every instance of the claim ends at the
+     * lowest of its reads, and a previous owner appending while the claim is still reading leaves that position before
+     * an event the claim itself sourced. The restored execution would then be rejected by its own history and stop,
+     * even though its state is current. Reading one instance per transaction leaves each position at or after that
+     * instance's last event, so only a write that lands after this read rejects the execution, which is a foreign
+     * writer and exactly what should stop it.
+     *
+     * @param workflowId       id of the instance to restore
+     * @param executionContext the context the restored execution runs on
+     * @return a future completing once the instance is restored
+     */
+    private CompletableFuture<Void> restoreWorkflow(String workflowId,
+                                                    ProcessingContext claimContext,
+                                                    ProcessingContext executionContext) {
+        return unitOfWorkFactory
+                .create("restore-" + workflowId)
+                .executeWithResult(sourcingContext -> {
+                    // Everything the claim reads with, except its event store transaction: that is what makes this
+                    // read, and the position it ends at, this instance's own.
+                    ProcessingContextUtils.copyResources(claimContext, sourcingContext);
+                    return workflowStore
+                            .loadWorkflow(workflowId, sourcingContext)
+                            .thenAccept(state -> restoreWorkflow(workflowId,
+                                                                 state,
+                                                                 executionContext,
+                                                                 sourcedAt(sourcingContext)));
+                })
+                .thenApply(ignored -> null);
+    }
+
+    /**
+     * Returns the position the given context's sourcing ended at.
+     *
+     * The current Event Store does not add its append position to the processing context when sourcing. Retrieve it
+     * from the context-bound transaction until {@link ConsistencyMarker} provides a corresponding context accessor.
+     * The missing-component path keeps focused engine tests that construct an engine without a full workflow
+     * configuration independent of the Event Store.
+     *
+     * @param sourcingContext context used to source the workflow state
+     * @return the marker at which sourcing ended
+     */
+    @Nullable
+    private static ConsistencyMarker sourcedAt(ProcessingContext sourcingContext) {
+        try {
+            return sourcingContext.component(EventStore.class).transaction(sourcingContext).appendPosition();
+        } catch (ComponentNotFoundException e) {
+            return null;
+        }
+    }
+
     private void restoreWorkflow(String workflowId,
                                  WorkflowState state,
-                                 ProcessingContext executionContext) {
+                                 ProcessingContext executionContext,
+                                 @Nullable ConsistencyMarker restoredAt) {
         var definitionId = state.workflowDefinitionId();
         var workflowName = definitionId.qualifiedName().toString();
         // Same routing as the replay path: a body may have moved its recorded version forward with
@@ -484,6 +538,7 @@ public class WorkflowEngine implements
         var execution = workflowConfiguration.workflowExecutionFactory().create(workflowContext);
         execution.initializeState(state);
         var storedExecution = workflowExecutionRepository.save(workflowId, () -> execution);
+        storedExecution.restoreAppendPosition(restoredAt);
         checkpointWorkIndex.register(
                 storedExecution.workflowId(), storedExecution::registerCheckpointWorkStateListener
         );
@@ -536,7 +591,12 @@ public class WorkflowEngine implements
                                      // body, at that segment's own position: never at another segment's.
                                      checkpointingSupport.requestCheckpoint(segment, executionToken);
                                  }
-                         );
+                         ).whenComplete((ignored, failure) -> {
+                             if (failure != null) {
+                                 logger.error("Workflow {} stopped with an unhandled execution failure",
+                                              execution.workflowId(), failure);
+                             }
+                         });
                      } catch (Throwable t) {
                          throw new RuntimeException("Error during workflow execution", t);
                      }

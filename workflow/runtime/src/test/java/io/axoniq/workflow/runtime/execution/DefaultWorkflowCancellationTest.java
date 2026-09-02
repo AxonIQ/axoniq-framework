@@ -25,11 +25,10 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecutionFactory
 import io.axoniq.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 
 import java.time.Clock;
@@ -114,7 +113,7 @@ class DefaultWorkflowCancellationTest {
         var processingContext = mock(ProcessingContext.class);
         when(processingContext.component(UnitOfWorkFactory.class)).thenReturn(new SimpleUnitOfWorkFactory(processingContext));
         when(processingContext.component(Clock.class)).thenReturn(Clock.systemUTC());
-        when(processingContext.component(EventSink.class)).thenReturn(new NoOpEventSink());
+        when(processingContext.component(EventStore.class)).thenReturn(mock(EventStore.class));
         when(processingContext.component(WorkflowScheduler.class)).thenReturn(new ControllableWorkflowScheduler());
         when(processingContext.component(ExecuteStepActionResolver.class)).thenReturn(new DefaultExecuteStepActionResolver());
 
@@ -165,16 +164,4 @@ class DefaultWorkflowCancellationTest {
         }
     }
 
-    private static final class NoOpEventSink implements EventSink {
-
-        @Override
-        public CompletableFuture<Void> publish(ProcessingContext context, List<? extends EventMessage> events) {
-            return CompletableFuture.completedFuture(null);
-        }
-
-        @Override
-        public void describeTo(ComponentDescriptor descriptor) {
-            // No-op
-        }
-    }
 }

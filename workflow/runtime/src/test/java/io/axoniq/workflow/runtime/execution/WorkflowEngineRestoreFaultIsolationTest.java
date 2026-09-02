@@ -29,6 +29,9 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.common.configuration.ComponentNotFoundException;
+import org.axonframework.messaging.core.ApplicationContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
@@ -94,7 +97,7 @@ class WorkflowEngineRestoreFaultIsolationTest {
                 new InMemoryWorkflowExecutionRepository(),
                 mock(WorkflowCancellationService.class),
                 workflowStore,
-                mock(UnitOfWorkFactory.class)
+                restoreUnitOfWorkFactory()
         );
         workflowEngine.setCheckpointingSupport(new WorkflowEngineCheckpointingSupport(workflowEngine));
         when(workflowStore.loadRunningWorkflows(any()))
@@ -220,5 +223,18 @@ class WorkflowEngineRestoreFaultIsolationTest {
 
     private ProcessingContext sourcingContext() {
         return new StubProcessingContext();
+    }
+
+    /**
+     * Returns a real unit of work factory: the engine sources every restored instance in a unit of
+     * work of its own, so a mock would hand it none.
+     */
+    private static UnitOfWorkFactory restoreUnitOfWorkFactory() {
+        return new SimpleUnitOfWorkFactory(new ApplicationContext() {
+            @Override
+            public <C> C component(Class<C> type, String name) {
+                throw new ComponentNotFoundException(type, name);
+            }
+        });
     }
 }

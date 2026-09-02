@@ -22,6 +22,9 @@ import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.common.configuration.ComponentNotFoundException;
+import org.axonframework.messaging.core.ApplicationContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.junit.jupiter.api.*;
 
@@ -54,7 +57,7 @@ class WorkflowEngineSegmentFailoverTest {
                 repository,
                 mock(WorkflowCancellationService.class),
                 workflowStore,
-                mock(UnitOfWorkFactory.class)
+                restoreUnitOfWorkFactory()
         );
         workflowEngine.setCheckpointingSupport(mock(WorkflowEngineCheckpointingSupport.class));
     }
@@ -99,5 +102,18 @@ class WorkflowEngineSegmentFailoverTest {
         var execution = mock(WorkflowExecution.class);
         when(execution.workflowId()).thenReturn(workflowId);
         return execution;
+    }
+
+    /**
+     * Returns a real unit of work factory: the engine sources every restored instance in a unit of
+     * work of its own, so a mock would hand it none.
+     */
+    private static UnitOfWorkFactory restoreUnitOfWorkFactory() {
+        return new SimpleUnitOfWorkFactory(new ApplicationContext() {
+            @Override
+            public <C> C component(Class<C> type, String name) {
+                throw new ComponentNotFoundException(type, name);
+            }
+        });
     }
 }

@@ -82,9 +82,6 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             ReachedSteps reachedSteps,
             EventNameCustomizer parentEventNameCustomizer,
             Clock clock,
-            UnitOfWorkFactory unitOfWorkFactory,
-            EventSink eventSink,
-            Executor executor,
             WorkflowScheduler timeoutScheduler
     ) {
         super(workflowContext,
@@ -93,9 +90,6 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
               reachedSteps,
               parentEventNameCustomizer,
               clock,
-              unitOfWorkFactory,
-              eventSink,
-              executor,
               timeoutScheduler);
         this.eventWaitConditions = Objects.requireNonNull(eventWaitConditions, "Event wait conditions are mandatory");
     }
@@ -137,7 +131,6 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             if (remainingTimeout.isNegative()) {
                 workflowExecution.appendTask(i -> {
                     if (!WorkflowStateUtils.isStepTerminal(i.state(), stepName)) {
-                        // FIXME - This is where we should publish using an append condition
                         timedOutWaitForEvent(stepName, clock.instant(), eventNameCustomizer);
                     }
                 });

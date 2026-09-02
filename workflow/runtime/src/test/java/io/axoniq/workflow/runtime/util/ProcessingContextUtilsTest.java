@@ -20,12 +20,19 @@
 package io.axoniq.workflow.runtime.util;
 
 import org.axonframework.messaging.core.Context;
+import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.ProcessingLifecycle;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.TransactionalUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.transaction.Transaction;
+import org.axonframework.messaging.core.unitofwork.transaction.TransactionManager;
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Constructor;
+import java.sql.Connection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -92,7 +99,49 @@ class ProcessingContextUtilsTest {
     void testCopyResources() {
         ProcessingContext result = ProcessingContextUtils.copyResources(parentContext, childContext);
         assertThat(result).isEqualTo(childContext);
-        verify(childContext).putResource(any(), eq("testValue"));
+        verify(childContext).putResourceIfAbsent(any(), eq("testValue"));
+    }
+
+    @Test
+    void executeWithResultKeepsTheConnectionInstalledByTheChildTransactionManager() {
+        var key = Context.ResourceKey.<Connection>withLabel("connection");
+        var parentConnection = mock(Connection.class);
+        var childConnection = mock(Connection.class);
+        var parent = Context.with(key, parentConnection);
+        var transactionManager = new ConnectionInstallingTransactionManager(key, childConnection);
+        var transactionalFactory = new TransactionalUnitOfWorkFactory(
+                transactionManager,
+                new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE)
+        );
+
+        var result = ProcessingContextUtils.executeWithResult(
+                "child",
+                transactionalFactory,
+                Runnable::run,
+                parent,
+                context -> {
+                    assertThat(context.getResource(key)).isSameAs(childConnection);
+                    return CompletableFuture.completedFuture(null);
+                }
+        );
+
+        assertThat(result.join()).isNull();
+    }
+
+    @Test
+    void testCopyResourcesAddsTheResourcesTheTargetLacks() {
+        var key = Context.ResourceKey.<String>withLabel("connection");
+        var from = Context.with(key, "parentConnection");
+
+        new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE)
+                .create()
+                .executeWithResult(target -> {
+                    ProcessingContextUtils.copyResources(from, target);
+
+                    assertThat(target.<String>getResource(key)).isEqualTo("parentConnection");
+                    return CompletableFuture.completedFuture(null);
+                })
+                .join();
     }
 
     @Test
@@ -105,7 +154,7 @@ class ProcessingContextUtilsTest {
 
         assertThat(resultFuture.join()).isEqualTo("completion");
         verify(unitOfWorkFactory).create(any(Function.class));
-        verify(childContext).putResource(any(), eq("testValue"));
+        verify(childContext).putResourceIfAbsent(any(), eq("testValue"));
         // verify lifecycle hooks registration
         verify(childContext).whenComplete(any());
         verify(childContext).onAfterCommit(any());
@@ -135,20 +184,21 @@ class ProcessingContextUtilsTest {
 
         Function<ProcessingContext, CompletableFuture<String>> action = ctx -> CompletableFuture.completedFuture("completion");
 
-        ProcessingContextUtils.executeWithResultInSeparateThread(
+        var result = ProcessingContextUtils.executeWithResultInSeparateThread(
                 "myId", unitOfWorkFactory, executorService, parentContext, action
         );
 
+        assertThat(result.join()).isEqualTo("completion");
         verify(executorService).execute(any(Runnable.class));
         verify(unitOfWorkFactory).create(anyString(), any(Function.class));
     }
 
     @Test
-    void executeWithResultInSeparateThreadKeepsParkedWorkflowBodyRunningUntilItCompletes() throws Exception {
+    void executeWithResultInSeparateThreadDoesNotBlockItsExecutorWhileTheBodyIsParked() throws Exception {
         var bodyStarted = new CountDownLatch(1);
         var parkedBody = new CompletableFuture<String>();
         try (var executorService = Executors.newSingleThreadExecutor()) {
-            ProcessingContextUtils.executeWithResultInSeparateThread(
+            var result = ProcessingContextUtils.executeWithResultInSeparateThread(
                     "myId",
                     unitOfWorkFactory,
                     executorService,
@@ -160,11 +210,33 @@ class ProcessingContextUtilsTest {
             );
 
             assertThat(bodyStarted.await(5, TimeUnit.SECONDS)).isTrue();
-            assertThat(executorService.awaitTermination(100, TimeUnit.MILLISECONDS)).isFalse();
-
-            parkedBody.complete("completion");
             executorService.shutdown();
             assertThat(executorService.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(result).isNotDone();
+
+            parkedBody.complete("completion");
+            assertThat(result.get(5, TimeUnit.SECONDS)).isEqualTo("completion");
+        }
+    }
+
+    private static class ConnectionInstallingTransactionManager implements TransactionManager {
+
+        private final Context.ResourceKey<Connection> key;
+        private final Connection connection;
+
+        private ConnectionInstallingTransactionManager(Context.ResourceKey<Connection> key, Connection connection) {
+            this.key = key;
+            this.connection = connection;
+        }
+
+        @Override
+        public Transaction startTransaction() {
+            return mock(Transaction.class);
+        }
+
+        @Override
+        public void attachToProcessingLifecycle(ProcessingLifecycle lifecycle) {
+            lifecycle.runOnPreInvocation(context -> context.putResource(key, connection));
         }
     }
 }

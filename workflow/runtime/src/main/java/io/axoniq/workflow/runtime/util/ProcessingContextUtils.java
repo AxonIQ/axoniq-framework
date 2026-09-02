@@ -94,8 +94,9 @@ public class ProcessingContextUtils {
      * same thread.
      * <p>
      * The returned future represents the complete action lifetime. For workflow bodies, that includes time spent parked
-     * while waiting for events or timers. Joining it intentionally parks the workflow driver thread and is not a
-     * durable-publication wait, so it must not use {@link FutureResolver} or apply a resolution timeout.
+     * while waiting for events or timers. It is composed rather than joined, so the submitting executor thread remains
+     * available while the workflow body is parked. This is not a durable-publication wait, so it must not use
+     * {@link FutureResolver} or apply a resolution timeout.
      *
      * @param id                id of the unit of work.
      * @param unitOfWorkFactory unit of work factory to use.
@@ -103,20 +104,22 @@ public class ProcessingContextUtils {
      * @param parentContext     parent processing context.
      * @param action            action to execute.
      * @param <R>               type of action result.
+     * @return a future completing with the action result once the child unit of work completes
      */
-    public static <R> void executeWithResultInSeparateThread(
+    public static <R> CompletableFuture<R> executeWithResultInSeparateThread(
             @Nullable String id,
             UnitOfWorkFactory unitOfWorkFactory,
             ExecutorService executorService,
             ProcessingContext parentContext,
             Function<ProcessingContext, CompletableFuture<R>> action) {
-        executorService.execute(() -> executeWithResult(id,
-                                                        unitOfWorkFactory,
-                                                        executorService,
-                                                        parentContext,
-                                                        action)
-                .join()
-        );
+        try {
+            return CompletableFuture.supplyAsync(
+                    () -> executeWithResult(id, unitOfWorkFactory, executorService, parentContext, action),
+                    executorService
+            ).thenCompose(Function.identity());
+        } catch (Throwable failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
     }
 
 
@@ -124,11 +127,16 @@ public class ProcessingContextUtils {
      * Copies resources from the given context to the target processing context.
      * <p>
      * An {@link EventStoreTransaction} is deliberately left behind. It stays bound to the unit of work that opened it,
-     * so appending through a copy registers the append on <em>that</em> unit of work and fails once it has committed. A
-     * workflow instance restored while a segment is claimed sources its state in the claim's short-lived unit of work
-     * and keeps that context on its steps; without this, every event the instance publishes afterward would be routed
-     * back into the finished claim, leaving it restored but unable to make progress. Skipping the transaction makes
-     * {@code to} open its own.
+     * so appending through a copy registers the append on <em>that</em> unit of work and fails once it has committed.
+     * A workflow instance restored while a segment is claimed sources its state in the claim's short-lived unit of
+     * work and keeps that context on its steps; without this, every event the instance publishes afterwards would be
+     * routed back into the finished claim, leaving it restored but unable to make progress. Skipping the transaction
+     * makes {@code to} open its own.
+     * <p>
+     * A resource {@code to} already holds wins over the one {@code from} carries under the same key. The target opens
+     * its own unit of work, and a transaction manager binds a connection to that one; overwriting it with the source's
+     * connection makes the target write on a connection it never commits, so on PostgreSQL its event stays
+     * uncommitted and the next append conflicts with it.
      *
      * @param from source containing resources.
      * @param to   target processing context.
@@ -140,7 +148,7 @@ public class ProcessingContextUtils {
         var fromResource = from.resources();
         fromResource.forEach((k, v) -> {
             if (!(v instanceof EventStoreTransaction)) {
-                to.putResource((Context.ResourceKey<Object>) k, v);
+                to.putResourceIfAbsent((Context.ResourceKey<Object>) k, v);
             }
         });
         return to;

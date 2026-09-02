@@ -65,7 +65,6 @@ class WaitForDelegateTest {
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private UnitOfWorkFactory unitOfWorkFactory;
-    private EventSink eventSink;
     private ProcessingContext processingContext;
     private WaitForDelegate delegate;
     private EventWaitConditions eventWaitConditions;
@@ -79,7 +78,6 @@ class WaitForDelegateTest {
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
         unitOfWorkFactory = mock(UnitOfWorkFactory.class);
-        eventSink = mock(EventSink.class);
         processingContext = mock(ProcessingContext.class);
         startedStep = new AtomicReference<>();
         workflowScheduler = new ControllableWorkflowScheduler();
@@ -120,9 +118,6 @@ class WaitForDelegateTest {
                 new ReachedSteps(),
                 customizer,
                 clock,
-                unitOfWorkFactory,
-                eventSink,
-                executor,
                 workflowScheduler
         );
     }
@@ -142,7 +137,7 @@ class WaitForDelegateTest {
         ));
 
         ArgumentCaptor<EventMessage> eventCaptor = ArgumentCaptor.forClass(EventMessage.class);
-        verify(eventSink).publish(any(ProcessingContext.class), eventCaptor.capture());
+        verify(workflowExecution).appendWorkflowEvent(eventCaptor.capture(), any(ProcessingContext.class));
 
         assertThat(eventCaptor.getValue().payload()).isEqualTo(Map.of(
                 "startTime", Instant.parse("2026-07-08T10:00:00Z"),
@@ -233,8 +228,9 @@ class WaitForDelegateTest {
     }
 
     private void stubEventPublishing() {
-        when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class))).thenAnswer(invocation -> {
-            EventMessage message = invocation.getArgument(1);
+        when(workflowExecution.appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class)))
+                .thenAnswer(invocation -> {
+            EventMessage message = invocation.getArgument(0);
             if (message.payload() instanceof Map<?, ?> payload) {
                 @SuppressWarnings("unchecked")
                 Map<String, @Nullable Object> startPayload = (Map<String, @Nullable Object>) payload;
@@ -245,7 +241,7 @@ class WaitForDelegateTest {
                         processingContext
                 ));
             }
-            return CompletableFuture.completedFuture(null);
-        });
+                    return CompletableFuture.completedFuture(null);
+                });
     }
 }

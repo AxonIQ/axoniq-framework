@@ -22,6 +22,7 @@ import io.axoniq.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.workflow.runtime.execution.EventHandlingComponentHandlingAny;
 import io.axoniq.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.workflow.runtime.execution.WorkflowEngineCheckpointingSupport;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
@@ -30,6 +31,7 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurationDefaults;
+import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.CompletePhase;
 import org.axonframework.messaging.eventhandling.configuration.EventHandlingComponentsConfigurer.RequiredComponentPhase;
@@ -281,8 +283,20 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     }
 
     private CompletableFuture<Void> workflowEngineStartHandler(Configuration config) {
+        requireEventStore(config);
         WorkflowEngine workflowEngine = workflowEngine(config);
         return config.getComponent(StreamableEventSource.class).latestToken(null).thenCompose(workflowEngine::start);
+    }
+
+    void requireEventStore(Configuration config) {
+        EventStore eventStore = config.getOptionalComponent(EventStore.class).orElse(null);
+        if (eventStore == null) {
+            throw new AxonConfigurationException(
+                    "The workflow engine of module " + moduleName + " requires an EventStore. A WorkflowConfigurer "
+                            + "configures one through the EventSourcingConfigurer. The engine appends every workflow "
+                            + "event under an AppendCondition, which only an event-store transaction carries."
+            );
+        }
     }
 
     @Override
