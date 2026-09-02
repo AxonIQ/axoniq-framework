@@ -24,7 +24,7 @@ import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsResponse;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
-import io.axoniq.framework.messaging.deadletter.Decisions;
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
 import io.axoniq.framework.messaging.eventhandling.deadletter.jdbc.GenericDeadLetterTableFactory;
@@ -71,7 +71,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import javax.sql.DataSource;
 
-import static java.util.concurrent.CompletableFuture.completedFuture;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.axonframework.common.FutureUtils.joinAndUnwrap;
@@ -83,8 +82,6 @@ import static org.axonframework.common.FutureUtils.joinAndUnwrap;
  */
 @ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
 class MultiTenantDeadLetterQueueIT {
-
-    private final AtomicInteger retriedLetters = new AtomicInteger();
 
     private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
     private static final String TENANT_A = "dlq-tenant-a";
@@ -127,7 +124,7 @@ class MultiTenantDeadLetterQueueIT {
     private AxonConfiguration application;
 
     @Test
-    void routesEnqueueAndProcessingToTheTenantInTheProcessingContext() {
+    void replaysDeadLettersForTheTenantInTheProcessorContext() {
         // given
         publishEvent(TENANT_A, "event-a");
         publishEvent(TENANT_B, "event-b");
@@ -150,13 +147,11 @@ class MultiTenantDeadLetterQueueIT {
         assertThat(deadLetterCount(TENANT_A)).isEqualTo(1L);
         assertThat(deadLetterCount(TENANT_B)).isEqualTo(1L);
 
-        deadLetterQueue().process(letter -> true, letter -> {
-            retriedLetters.incrementAndGet();
-            return completedFuture(Decisions.evict());
-        }, contextFor(TENANT_A)).join();
+        boolean processed = deadLetterProcessor().processAny(contextFor(TENANT_A)).join();
 
         // then
-        assertThat(retriedLetters).hasValue(1);
+        assertThat(processed).isTrue();
+        assertThat(handledTenants).containsExactlyInAnyOrder(TENANT_A, TENANT_A, TENANT_B);
         assertThat(deadLetterQueue().size(contextFor(TENANT_A)).join()).isZero();
         assertThat(deadLetterQueue().size(contextFor(TENANT_B)).join()).isEqualTo(1L);
         assertThat(deadLetterCount(TENANT_A)).isZero();
@@ -178,7 +173,7 @@ class MultiTenantDeadLetterQueueIT {
         var processor = EventProcessorModule
                 .pooledStreaming(PROCESSOR_NAME)
                 .eventHandlingComponents(components -> components.declarative(
-                        COMPONENT_NAME, configuration -> Fixture.failingComponent(handledTenants)
+                        COMPONENT_NAME, configuration -> Fixture.failingOnceComponent(handledTenants)
                 ))
                 // Enables DLQ support for this processor. The multi-tenancy enhancer decorates its queue factory.
                 .customized((configuration, pooled) -> pooled.extend(
@@ -269,6 +264,12 @@ class MultiTenantDeadLetterQueueIT {
         return moduleConfiguration().getComponent(SequencedDeadLetterQueue.class, queueName);
     }
 
+    @SuppressWarnings("unchecked")
+    private SequencedDeadLetterProcessor<EventMessage> deadLetterProcessor() {
+        String componentName = "EventHandlingComponent[" + PROCESSOR_NAME + "][" + COMPONENT_NAME + "]";
+        return moduleConfiguration().getComponent(SequencedDeadLetterProcessor.class, componentName);
+    }
+
     private Configuration moduleConfiguration() {
         return application.getModuleConfiguration("EventProcessor[" + PROCESSOR_NAME + "]")
                           .or(() -> application.getModuleConfiguration(PROCESSOR_NAME))
@@ -294,17 +295,22 @@ class MultiTenantDeadLetterQueueIT {
     private static final class Fixture {
 
         /**
-         * Creates a {@link SimpleEventHandlingComponent} that subscribes to {@link TenantDlqEvent} and always fails.
+         * Creates a {@link SimpleEventHandlingComponent} that fails once for each {@link TenantDlqEvent}.
          *
          * @param handledTenants the list of tenant IDs that have handled an event, to be updated by the component
-         * @return a {@link SimpleEventHandlingComponent} that subscribes to {@link TenantDlqEvent} and always fails
+         * @return a {@link SimpleEventHandlingComponent} that subscribes to {@link TenantDlqEvent} and fails once
          */
-        private static SimpleEventHandlingComponent failingComponent(List<String> handledTenants) {
+        private static SimpleEventHandlingComponent failingOnceComponent(List<String> handledTenants) {
+            Map<String, AtomicInteger> attempts = new ConcurrentHashMap<>();
             SimpleEventHandlingComponent component = SimpleEventHandlingComponent.create(COMPONENT_NAME,
                                                                                          SequentialPolicy.INSTANCE);
             component.subscribe(new QualifiedName("test", "TenantDlqEvent"), (event, context) -> {
-                handledTenants.add(TenantDescriptor.fromContext(context).orElseThrow().tenantId());
-                throw new IllegalStateException("Expected failure for event " + event.identifier());
+                String tenantId = TenantDescriptor.fromContext(context).orElseThrow().tenantId();
+                handledTenants.add(tenantId);
+                if (attempts.computeIfAbsent(tenantId, ignored -> new AtomicInteger()).incrementAndGet() == 1) {
+                    throw new IllegalStateException("Expected failure for event " + event.identifier());
+                }
+                return org.axonframework.messaging.core.MessageStream.empty();
             });
             return component;
         }

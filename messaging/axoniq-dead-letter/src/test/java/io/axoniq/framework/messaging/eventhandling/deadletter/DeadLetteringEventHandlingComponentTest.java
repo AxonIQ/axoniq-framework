@@ -20,6 +20,7 @@
 package io.axoniq.framework.messaging.eventhandling.deadletter;
 
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.EmptyApplicationContext;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
@@ -293,6 +294,68 @@ class DeadLetteringEventHandlingComponentTest {
 
     @Nested
     class WhenProcessingDeadLetters {
+
+        @Test
+        void processWithContextPassesContextToQueue() {
+            // given
+            queue = spy(InMemorySequencedDeadLetterQueue.<EventMessage>builder().build());
+            testSubject = new DeadLetteringEventHandlingComponent(
+                    delegate, queue, enqueuePolicy, unitOfWorkFactory, true
+            );
+            ProcessingContext context = new StubProcessingContext();
+
+            // when
+            boolean result = testSubject.process(letter -> true, context).join();
+
+            // then
+            assertThat(result).isFalse();
+            verify(queue).process(any(), any(), same(context));
+        }
+
+        @Test
+        void processAnyWithContextPassesContextToQueue() {
+            // given
+            queue = spy(InMemorySequencedDeadLetterQueue.<EventMessage>builder().build());
+            testSubject = new DeadLetteringEventHandlingComponent(
+                    delegate, queue, enqueuePolicy, unitOfWorkFactory, true
+            );
+            ProcessingContext context = new StubProcessingContext();
+
+            // when
+            boolean result = testSubject.processAny(context).join();
+
+            // then
+            assertThat(result).isFalse();
+            verify(queue).process(any(), any(), same(context));
+        }
+
+        @Test
+        void processAnyWithContextMakesContextResourcesAvailableToTheHandler() {
+            // given
+            Context.ResourceKey<String> retryResource = Context.ResourceKey.withLabel("retry-resource");
+            AtomicReference<String> receivedResource = new AtomicReference<>();
+            delegate = new StubEventHandlingComponent(TEST_SEQUENCE_ID) {
+                @Override
+                public MessageStream.@NonNull Empty<Message> handle(@NonNull EventMessage event,
+                                                                     @NonNull ProcessingContext context) {
+                    receivedResource.set(context.getResource(retryResource));
+                    return super.handle(event, context);
+                }
+            };
+            testSubject = new DeadLetteringEventHandlingComponent(
+                    delegate, queue, enqueuePolicy, unitOfWorkFactory, true
+            );
+            EventMessage testEvent = EventTestUtils.asEventMessage("test-payload");
+            queue.enqueue(TEST_SEQUENCE_ID, new GenericDeadLetter<>(TEST_SEQUENCE_ID, testEvent), null).join();
+            ProcessingContext context = new StubProcessingContext().withResource(retryResource, "retry-value");
+
+            // when
+            boolean result = testSubject.processAny(context).join();
+
+            // then
+            assertThat(result).isTrue();
+            assertThat(receivedResource).hasValue("retry-value");
+        }
 
         @Test
         void processAnyReturnsFalseWhenQueueIsEmpty() {

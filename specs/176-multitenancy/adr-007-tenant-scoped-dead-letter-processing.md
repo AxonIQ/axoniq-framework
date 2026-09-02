@@ -41,10 +41,14 @@ below as reference alternatives and are not selected.
 The ADR 006 queue integration is merged. Processor changes are tracked in follow-up issue
 [#406](https://github.com/AxonIQ/axoniq-framework/issues/406).
 
-The public multi-tenant interaction is explicit and small: a caller replaying dead letters creates a processing context
-that contains `TenantDescriptor.RESOURCE_KEY` and invokes the context-aware processor method. The queue reached by
+The public multi-tenant interaction is explicit and small: a caller replaying dead letters creates a unit of work,
+adds `TenantDescriptor.RESOURCE_KEY` to its processing context, and invokes the context-aware processor method. The
+queue reached by
 `DeadLetteringEventHandlingComponent` is already a `TenantRoutingSequencedDeadLetterQueue`; its `queueFor(context)`
-method derives the physical tenant queue from that resource. This usage must be documented with the DLQ retry examples.
+method derives the physical tenant queue from that resource. The processing task then merges the supplied retry context
+into its fresh retry context before the context captured in the dead letter, so the handler sees the caller-supplied
+tenant too. This usage must be documented with the DLQ retry examples.
+It is documented in the [Tenant-aware dead-letter queues guide](../../docs/reference-guide/modules/multi-tenancy/pages/tenant-dead-letter-queue.adoc#replaying-tenant-dead-letters).
 
 Follow up with the Platform team on how a dashboard-triggered dead-letter replay identifies the tenant and supplies the
 tenant-bearing processing context. This is a compatibility and integration question only; it does not change this
@@ -214,8 +218,9 @@ tenant queue is explicitly selected, but it must not be the routing mechanism.
 ### Option 3: add `ProcessingContext` overloads to `SequencedDeadLetterProcessor` (chosen)
 
 Add `process(filter, context)` and `processAny(context)`, and have `DeadLetteringEventHandlingComponent` forward that
-context to `SequencedDeadLetterQueue.process(...)`. The existing methods can remain and delegate with `null`, retaining
-current single-tenant behavior. The multi-tenant caller constructs a context with
+context to `SequencedDeadLetterQueue.process(...)` and its retry task. The task merges the supplied context into the
+fresh retry context before the dead letter's captured context. The existing methods can remain and delegate with `null`,
+retaining current single-tenant behavior. The multi-tenant caller constructs a context with
 `TenantDescriptor.RESOURCE_KEY` and uses the overload.
 
 This is the most direct representation of the real input and naturally supports predicates, `processAny`, and a
@@ -250,7 +255,7 @@ public interface SequencedDeadLetterProcessor<M extends Message> {
 // Framework implementation: old methods redirect to the new overloads with null.
 public CompletableFuture<Boolean> process(Predicate<DeadLetter<? extends EventMessage>> filter,
                                           @Nullable ProcessingContext context) {
-    return queue.process(filter, processingTask::process, context);
+    return queue.process(filter, letter -> processingTask.process(letter, context), context);
 }
 
 public CompletableFuture<Boolean> process(Predicate<DeadLetter<? extends EventMessage>> filter) {
@@ -278,7 +283,8 @@ the compatibility default; only implementations that override the new overload p
   existing implementations remain binary and source compatible and simply ignore a supplied context.
 - `DeadLetteringEventHandlingComponent` overrides the new overloads. Its no-context methods call those overloads with
   `null`; the context-aware `process(...)` implementation passes the given nullable context to
-  `SequencedDeadLetterQueue.process(...)`.
+  `SequencedDeadLetterQueue.process(...)` and to the retry task. The retry task merges it into the fresh retry context
+  before the dead letter's captured context, preserving the captured context's precedence for same-key resources.
 - A tenant replay caller must add `TenantDescriptor.RESOURCE_KEY` to its processing context and call
   `process(filter, context)` or `processAny(context)`. Omitting that resource leaves a tenant-routing queue unable to
   select a physical queue and fails through its asynchronous API.

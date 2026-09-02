@@ -20,6 +20,8 @@
 package io.axoniq.framework.messaging.deadletter;
 
 import org.axonframework.messaging.core.Message;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
@@ -59,6 +61,23 @@ public interface SequencedDeadLetterProcessor<M extends Message> {
     CompletableFuture<Boolean> process(Predicate<DeadLetter<? extends M>> sequenceFilter);
 
     /**
+     * Process a sequence of {@link DeadLetter dead letters} matching the given {@code sequenceFilter} in the given
+     * {@code context}.
+     * <p>
+     * The default implementation delegates to {@link #process(Predicate)} and ignores the context. Implementations
+     * that use the context to select dead-letter storage should override this method.
+     *
+     * @param sequenceFilter A filter for the first {@link DeadLetter dead letter} entries of each sequence.
+     * @param context        the processing context in which to process the dead letters, if any
+     * @return a {@link CompletableFuture} with {@code true} if at least one {@link DeadLetter dead letter} was
+     * processed successfully, {@code false} otherwise
+     */
+    default CompletableFuture<Boolean> process(Predicate<DeadLetter<? extends M>> sequenceFilter,
+                                               @Nullable ProcessingContext context) {
+        return process(sequenceFilter);
+    }
+
+    /**
      * Process any sequence of {@link DeadLetter dead letters} belonging to this component.
      * <p>
      * Note that only a <em>single</em> matching sequence is processed!
@@ -72,5 +91,19 @@ public interface SequencedDeadLetterProcessor<M extends Message> {
      */
     default CompletableFuture<Boolean> processAny() {
         return process(letter -> true);
+    }
+
+    /**
+     * Process any sequence of {@link DeadLetter dead letters} belonging to this component in the given {@code context}.
+     * <p>
+     * The default implementation delegates to {@link #processAny()} and ignores the context. Implementations that use
+     * the context to select dead-letter storage should override this method.
+     *
+     * @param context the processing context in which to process the dead letters, if any
+     * @return a {@link CompletableFuture} with {@code true} if at least one {@link DeadLetter dead letter} was
+     * processed successfully, {@code false} otherwise
+     */
+    default CompletableFuture<Boolean> processAny(@Nullable ProcessingContext context) {
+        return processAny();
     }
 }

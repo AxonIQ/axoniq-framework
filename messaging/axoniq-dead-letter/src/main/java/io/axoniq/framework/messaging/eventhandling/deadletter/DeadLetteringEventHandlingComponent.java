@@ -36,6 +36,7 @@ import org.axonframework.messaging.eventhandling.DelegatingEventHandlingComponen
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.replay.ResetContext;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -217,10 +218,26 @@ public class DeadLetteringEventHandlingComponent extends DelegatingEventHandling
 
     @Override
     public CompletableFuture<Boolean> process(Predicate<DeadLetter<? extends EventMessage>> sequenceFilter) {
+        return process(sequenceFilter, null);
+    }
+
+    @Override
+    public CompletableFuture<Boolean> process(Predicate<DeadLetter<? extends EventMessage>> sequenceFilter,
+                                              @Nullable ProcessingContext context) {
         DeadLetteredEventProcessingTask processingTask = new DeadLetteredEventProcessingTask(
                 delegate, enqueuePolicy, unitOfWorkFactory
         );
-        return queue.process(sequenceFilter, processingTask::process, null);
+        return queue.process(sequenceFilter, letter -> processingTask.process(letter, context), context);
+    }
+
+    @Override
+    public CompletableFuture<Boolean> processAny() {
+        return processAny(null);
+    }
+
+    @Override
+    public CompletableFuture<Boolean> processAny(@Nullable ProcessingContext context) {
+        return process(letter -> true, context);
     }
 
     @SuppressWarnings("unchecked")
