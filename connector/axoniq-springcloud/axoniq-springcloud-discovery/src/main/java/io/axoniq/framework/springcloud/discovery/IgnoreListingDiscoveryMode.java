@@ -40,7 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Spring Cloud Discovery reports every service registered with it, not only the ones running this connector. Asking an
  * unrelated service for its capabilities fails with a client error on every heartbeat for as long as both are
  * deployed — a steady stream of pointless requests and log noise. This mode remembers such instances and skips them
- * until the configured {@code expireThreshold} has passed, after which they are tried once more. That expiry matters:
+ * until the configured {@code ignorePeriod} has passed, after which they are tried once more. That expiry matters:
  * an instance may have answered with a client error because it was still starting up, and a permanent ignore-list
  * would keep it out of the cluster for good.
  * <p>
@@ -56,60 +56,63 @@ public class IgnoreListingDiscoveryMode implements CapabilityDiscoveryMode {
     private static final Logger logger = LoggerFactory.getLogger(IgnoreListingDiscoveryMode.class);
 
     /**
-     * The period an instance is ignored for when no other threshold is configured.
+     * The period an instance is ignored for when no other period is configured.
      */
-    public static final Duration DEFAULT_EXPIRE_THRESHOLD = Duration.ofMinutes(1);
+    public static final Duration DEFAULT_IGNORE_PERIOD = Duration.ofMinutes(1);
 
     private final CapabilityDiscoveryMode delegate;
-    private final Duration expireThreshold;
+    private final Duration ignorePeriod;
     private final Clock clock;
 
     private final Map<ServiceInstanceKey, Instant> ignoredUntil = new ConcurrentHashMap<>();
 
     /**
      * Constructs an {@code IgnoreListingDiscoveryMode} around the given {@code delegate}, ignoring instances that
-     * answer with a client error for {@link #DEFAULT_EXPIRE_THRESHOLD}.
+     * answer with a client error for {@link #DEFAULT_IGNORE_PERIOD}.
      *
      * @param delegate the mode to delegate capability discovery to
      */
     public IgnoreListingDiscoveryMode(CapabilityDiscoveryMode delegate) {
-        this(delegate, DEFAULT_EXPIRE_THRESHOLD, Clock.systemUTC());
+        this(delegate, DEFAULT_IGNORE_PERIOD, Clock.systemUTC());
     }
 
     /**
      * Constructs an {@code IgnoreListingDiscoveryMode} around the given {@code delegate}, ignoring instances that
-     * answer with a client error for the given {@code expireThreshold}.
+     * answer with a client error for the given {@code ignorePeriod}.
      *
-     * @param delegate        the mode to delegate capability discovery to
-     * @param expireThreshold the period an instance is ignored for after answering with a client error. Must be
-     *                        strictly positive.
+     * @param delegate     the mode to delegate capability discovery to
+     * @param ignorePeriod the period an instance is ignored for after answering with a client error. Must be strictly
+     *                     positive.
      */
-    public IgnoreListingDiscoveryMode(CapabilityDiscoveryMode delegate, Duration expireThreshold) {
-        this(delegate, expireThreshold, Clock.systemUTC());
+    public IgnoreListingDiscoveryMode(CapabilityDiscoveryMode delegate, Duration ignorePeriod) {
+        this(delegate, ignorePeriod, Clock.systemUTC());
     }
 
     /**
      * Constructs an {@code IgnoreListingDiscoveryMode} around the given {@code delegate}, ignoring instances that
-     * answer with a client error for the given {@code expireThreshold} as measured by the given {@code clock}.
+     * answer with a client error for the given {@code ignorePeriod} as measured by the given {@code clock}.
      *
-     * @param delegate        the mode to delegate capability discovery to
-     * @param expireThreshold the period an instance is ignored for after answering with a client error. Must be
-     *                        strictly positive.
-     * @param clock           the clock measuring when an ignored instance may be tried again
+     * @param delegate     the mode to delegate capability discovery to
+     * @param ignorePeriod the period an instance is ignored for after answering with a client error. Must be strictly
+     *                     positive.
+     * @param clock        the clock measuring when an ignored instance may be tried again
      */
-    public IgnoreListingDiscoveryMode(CapabilityDiscoveryMode delegate, Duration expireThreshold, Clock clock) {
-        this.delegate = Objects.requireNonNull(delegate, "The delegate must not be null.");
-        this.expireThreshold = Objects.requireNonNull(expireThreshold, "The expireThreshold must not be null.");
-        this.clock = Objects.requireNonNull(clock, "The clock must not be null.");
-        if (expireThreshold.isNegative() || expireThreshold.isZero()) {
+    public IgnoreListingDiscoveryMode(CapabilityDiscoveryMode delegate, Duration ignorePeriod, Clock clock) {
+        Objects.requireNonNull(ignorePeriod, "The ignorePeriod must not be null.");
+        if (ignorePeriod.isNegative() || ignorePeriod.isZero()) {
             throw new IllegalArgumentException(
-                    "The expireThreshold must be strictly positive, but was [" + expireThreshold + "]."
+                    "The ignorePeriod must be strictly positive, but was [" + ignorePeriod + "]."
             );
         }
+        this.delegate = Objects.requireNonNull(delegate, "The delegate must not be null.");
+        this.ignorePeriod = ignorePeriod;
+        this.clock = Objects.requireNonNull(clock, "The clock must not be null.");
     }
 
     @Override
     public void updateLocalCapabilities(ServiceInstance localInstance, MemberCapabilities capabilities) {
+        Objects.requireNonNull(localInstance, "The localInstance must not be null.");
+        Objects.requireNonNull(capabilities, "The capabilities must not be null.");
         delegate.updateLocalCapabilities(localInstance, capabilities);
     }
 
@@ -120,6 +123,7 @@ public class IgnoreListingDiscoveryMode implements CapabilityDiscoveryMode {
 
     @Override
     public Optional<MemberCapabilities> capabilities(ServiceInstance serviceInstance) {
+        Objects.requireNonNull(serviceInstance, "The serviceInstance must not be null.");
         ServiceInstanceKey key = ServiceInstanceKey.of(serviceInstance);
         if (isIgnored(key)) {
             return Optional.empty();
@@ -127,10 +131,10 @@ public class IgnoreListingDiscoveryMode implements CapabilityDiscoveryMode {
         try {
             return delegate.capabilities(serviceInstance);
         } catch (ServiceInstanceClientException e) {
-            ignoredUntil.put(key, clock.instant().plus(expireThreshold));
+            ignoredUntil.put(key, clock.instant().plus(ignorePeriod));
             logger.info("Ignoring ServiceInstance [{}] for [{}], as it answered the capabilities request with a "
                                 + "client error. It is not serving this connector's capabilities endpoint.",
-                        key, expireThreshold, e);
+                        key, ignorePeriod, e);
             return Optional.empty();
         }
     }

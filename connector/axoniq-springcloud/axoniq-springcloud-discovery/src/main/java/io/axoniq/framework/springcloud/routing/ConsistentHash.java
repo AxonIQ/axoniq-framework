@@ -50,7 +50,7 @@ import java.util.stream.IntStream;
  * <p>
  * A member with a load factor of {@code 0} — including one whose capabilities could not be retrieved, reported as
  * {@link MemberCapabilities#INCAPABLE} — claims no positions and is never resolved to, but remains part of
- * {@link #getMembers()}.
+ * {@link #members()}.
  *
  * @author Allard Buijze
  * @since 5.4.0
@@ -97,6 +97,34 @@ public final class ConsistentHash {
         // members hashing to the same ring position resolve the same way everywhere.
         members.values().forEach(member -> member.hashes().forEach(hash -> positions.put(hash, member)));
         this.hashToMember = Collections.unmodifiableSortedMap(positions);
+    }
+
+    /**
+     * Returns a {@code ConsistentHash} holding exactly the given {@code memberships}, hashed with this ring's hash
+     * function.
+     * <p>
+     * Intended for rebuilding a ring from scratch, as a discovery round does. Registering members one by one through
+     * {@link #with(Member, MemberCapabilities)} would recompute every member's ring positions on each call, making a
+     * rebuild quadratic in the number of members; this assigns the positions once.
+     * <p>
+     * Members this ring holds that are absent from {@code memberships} are not carried over — the result describes the
+     * cluster as {@code memberships} describes it, which is what makes it a rebuild rather than an update.
+     *
+     * @param memberships the members to register, and the messages each of them handles
+     * @return a {@code ConsistentHash} holding exactly the given {@code memberships}, or {@code this} when it already
+     * holds exactly those memberships
+     */
+    public ConsistentHash withOnly(Map<Member, MemberCapabilities> memberships) {
+        Objects.requireNonNull(memberships, "The memberships must not be null.");
+
+        Map<String, RingMember> rebuilt = new TreeMap<>();
+        memberships.forEach((member, capabilities) -> rebuilt.put(
+                member.name(), new RingMember(member, capabilities, hashFunction)
+        ));
+        if (rebuilt.equals(members)) {
+            return this;
+        }
+        return new ConsistentHash(rebuilt, hashFunction, version + 1);
     }
 
     /**
@@ -150,7 +178,7 @@ public final class ConsistentHash {
      * @return the member that should handle the command, or {@link Optional#empty()} when no registered member
      * handles commands of the given {@code commandName}
      */
-    public Optional<Member> getMember(String routingKey, QualifiedName commandName) {
+    public Optional<Member> memberFor(String routingKey, QualifiedName commandName) {
         Objects.requireNonNull(routingKey, "The routingKey must not be null.");
         Objects.requireNonNull(commandName, "The commandName must not be null.");
 
@@ -173,7 +201,7 @@ public final class ConsistentHash {
      *
      * @return every registered member, in no particular order
      */
-    public Set<Member> getMembers() {
+    public Set<Member> members() {
         return members.values().stream().map(RingMember::member).collect(Collectors.toUnmodifiableSet());
     }
 

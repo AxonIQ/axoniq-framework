@@ -50,10 +50,11 @@ axon.axonserver.enabled=false
 === `SpringCloudCommandBusConnector`
 
 The `SpringCloudCommandBusConnector` distributes commands over HTTP between the nodes reported by a Spring Cloud `DiscoveryClient`, without an Axon Server in between.
-It suits deployments that already run a service registry, Eureka, Consul, or Kubernetes, and would rather route commands through it than add another component.
+It suits deployments that already run a service registry, such as Eureka, Consul, or Kubernetes, and would rather route commands through it than add another component.
 
 Because there is no server to route on the cluster's behalf, this connector routes itself.
 Every node maintains a consistent-hash ring of the other nodes and the commands each of them handles, and resolves each command's routing key onto that ring.
+The connector's own API and log messages call a node a *member* of that ring. The two words mean the same thing here.
 A command that lands on the local node is handled there.
 One that lands elsewhere is sent to that node over HTTP.
 
@@ -121,8 +122,10 @@ The remaining properties rarely need changing:
 axon.springcloud.enabled=true
 # How long a node is given to answer a command before it is treated as unreachable.
 axon.springcloud.command-reply-timeout=30s
+# How long an instance is given to answer a capabilities request. Keep it well under the heartbeat interval.
+axon.springcloud.capabilities-timeout=2s
 # How long a service instance is left alone after answering the capabilities endpoint with a client error.
-axon.springcloud.ignore-listing-expire-threshold=1m
+axon.springcloud.ignore-period=1m
 # The service instance metadata property holding a node's context root, when nodes are not served from the root.
 axon.springcloud.context-root-metadata-property-name=contextRoot
 ----
@@ -135,7 +138,7 @@ A node with twice the load factor of another claims twice as many positions on t
 [NOTE]
 ====
 A discovery registry reports every service registered with it, not only those running this connector.
-A service that answers the capabilities endpoint with a client error is left alone for `ignore-listing-expire-threshold` before being tried again, rather than being polled on every heartbeat.
+A service that answers the capabilities endpoint with a client error is left alone for `ignore-period` before being tried again, rather than being polled on every heartbeat.
 ====
 
 === Routing strategy

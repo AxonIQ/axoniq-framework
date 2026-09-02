@@ -39,7 +39,7 @@ import java.util.function.Supplier;
  * Turns a {@link CommandDispatchRequest} received from another member into an invocation of this application's local
  * command handler, and its outcome back into a {@link CommandDispatchReply}.
  * <p>
- * This gateway exists as a component of its own, separate from
+ * This invoker exists as a component of its own, separate from
  * {@link SpringCloudCommandController}, for two reasons. It breaks what would otherwise be a construction cycle: the
  * controller is a Spring bean created before the connector, while the {@link CommandBusConnector.Handler handler} it
  * must invoke only becomes available once {@code DistributedCommandBus} registers one on the connector, later still.
@@ -55,28 +55,28 @@ import java.util.function.Supplier;
  * @author Allard Buijze
  * @since 5.4.0
  */
-public class IncomingCommandGateway {
+public class IncomingCommandInvoker {
 
-    private static final Logger logger = LoggerFactory.getLogger(IncomingCommandGateway.class);
+    private static final Logger logger = LoggerFactory.getLogger(IncomingCommandInvoker.class);
 
     private final Supplier<String> memberName;
     private final @Nullable MessageConverter converter;
     private final AtomicReference<@Nullable Handler> handler = new AtomicReference<>();
 
     /**
-     * Constructs an {@code IncomingCommandGateway} reporting failures as originating from the member the given
+     * Constructs an {@code IncomingCommandInvoker} reporting failures as originating from the member the given
      * {@code memberName} supplies.
      * <p>
      * Taken as a supplier because a member is not named until it has registered with discovery, which happens after
-     * this gateway is built. Resolving it per failure reports the name this member is actually known by, rather than
+     * this invoker is built. Resolving it per failure reports the name this member is actually known by, rather than
      * the provisional one it had at start-up.
      *
      * @param memberName supplies the name identifying this application in replies it sends, used to point at the
-     *                   member a failure originated on.
+     *                   member a failure originated on
      * @param converter  the converter attached to received commands for inline payload conversion, and used to
-     *                   serialize application-specific exception details, or {@code null} when none is available.
+     *                   serialize application-specific exception details, or {@code null} when none is available
      */
-    public IncomingCommandGateway(Supplier<String> memberName, @Nullable MessageConverter converter) {
+    public IncomingCommandInvoker(Supplier<String> memberName, @Nullable MessageConverter converter) {
         this.memberName = Objects.requireNonNull(memberName, "The memberName must not be null.");
         this.converter = converter;
     }

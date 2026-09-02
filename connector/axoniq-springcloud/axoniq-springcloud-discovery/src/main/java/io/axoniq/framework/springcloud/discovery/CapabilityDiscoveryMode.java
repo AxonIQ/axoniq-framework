@@ -58,13 +58,16 @@ public interface CapabilityDiscoveryMode {
      * member of this cluster, or is not currently answering for one. That differs from returning
      * {@link MemberCapabilities#INCAPABLE}, which keeps the instance in the ring as a member that handles nothing.
      *
+     * Called concurrently, once per discovered instance, for every instance of one discovery round. Implementations
+     * must therefore be thread-safe.
+     *
      * @param serviceInstance the instance to discover the capabilities of
      * @return the capabilities of the given {@code serviceInstance}, or {@link Optional#empty()} when it should not be
      * part of the routing ring
      * @throws ServiceInstanceClientException when the given {@code serviceInstance} answers with a client error,
      *                                        indicating it does not serve capabilities at all
      */
-    Optional<MemberCapabilities> capabilities(ServiceInstance serviceInstance) throws ServiceInstanceClientException;
+    Optional<MemberCapabilities> capabilities(ServiceInstance serviceInstance);
 
     /**
      * Returns this application's own capabilities, as last published through

@@ -21,7 +21,7 @@ package io.axoniq.framework.springcloud;
 
 import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
-import io.axoniq.framework.springcloud.transport.IncomingQueryGateway;
+import io.axoniq.framework.springcloud.transport.IncomingQueryInvoker;
 import io.axoniq.framework.springcloud.transport.RecordingRemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
 import io.axoniq.framework.springcloud.util.RecordingEntitlementManager;
@@ -87,7 +87,7 @@ class SpringCloudQueryBusConnectorTest {
         dispatcher = new RecordingRemoteQueryDispatcher();
         entitlementManager = new RecordingEntitlementManager();
         testSubject = new SpringCloudQueryBusConnector(registry,
-                                                       new IncomingQueryGateway(() -> "node-a", null),
+                                                       new IncomingQueryInvoker(() -> "node-a", null),
                                                        dispatcher,
                                                        null,
                                                        entitlementManager);
@@ -190,7 +190,7 @@ class SpringCloudQueryBusConnectorTest {
         void reportsNoHandlerWhenTheConnectorHasNoneYet() {
             // given a member advertising the query before its handler was registered on the connector
             SpringCloudQueryBusConnector unbound = new SpringCloudQueryBusConnector(
-                    registry, new IncomingQueryGateway(() -> "node-a", null), dispatcher, null, entitlementManager
+                    registry, new IncomingQueryInvoker(() -> "node-a", null), dispatcher, null, entitlementManager
             );
             unbound.subscribe(FIND_COURSE);
 

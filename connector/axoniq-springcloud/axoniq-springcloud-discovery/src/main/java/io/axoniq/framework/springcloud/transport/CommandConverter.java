@@ -38,7 +38,6 @@ import org.axonframework.messaging.core.RemoteNonTransientHandlingException;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static io.axoniq.framework.springcloud.transport.WireCodec.copyOf;
@@ -65,7 +64,6 @@ import static io.axoniq.framework.springcloud.transport.WireCodec.serializedDeta
  */
 @Internal
 final class CommandConverter {
-
 
     /**
      * Local stack traces are suppressed on reconstructed remote failures: the stack of the thread that read the reply
@@ -96,7 +94,7 @@ final class CommandConverter {
      *
      * @param request   the request received from another member
      * @param converter the converter to attach to the resulting command for inline payload conversion, or {@code null}
-     *                  when none is available.
+     *                  when none is available
      * @return the command the given {@code request} represents
      */
     public static CommandMessage convertRequest(CommandDispatchRequest request, @Nullable Converter converter) {
@@ -142,7 +140,7 @@ final class CommandConverter {
      * @param requestIdentifier the identifier of the command being replied to
      * @param origin            the name of this member, reported as where the failure originated
      * @param converter         the converter used to serialize application-specific exception details, or {@code null}
-     *                          when none is available.
+     *                          when none is available
      * @return the wire representation of the given {@code cause}
      */
     public static CommandDispatchReply convertErrorResult(Throwable cause,
@@ -151,16 +149,13 @@ final class CommandConverter {
                                                           @Nullable Converter converter) {
         byte[] details = serializedDetailsOf(cause, converter);
         Object rawDetails = HandlerExecutionException.resolveDetails(cause).orElse(null);
-        return new CommandDispatchReply(
+        return CommandDispatchReply.error(
                 UUID.randomUUID().toString(),
                 requestIdentifier,
-                null,
-                null,
-                Map.of(),
                 CommandErrorCode.classify(cause),
                 messageOf(cause),
-                descriptionsOf(cause),
                 origin,
+                descriptionsOf(cause),
                 details == null || rawDetails == null ? null : rawDetails.getClass().getName(),
                 encode(details)
         );
@@ -172,7 +167,7 @@ final class CommandConverter {
      *
      * @param reply     the reply received from the member that handled the command
      * @param converter the converter to attach to the result, and to lazily convert exception details with, or
-     *                  {@code null} when none is available.
+     *                  {@code null} when none is available
      * @return the result the given {@code reply} represents, or {@code null} when the handler returned none
      * @throws org.axonframework.common.AxonException reconstructed from the given {@code reply} when it reports a
      *                                               failure
@@ -199,7 +194,7 @@ final class CommandConverter {
      *
      * @param reply     the reply reporting a failure
      * @param converter the converter to lazily convert application-specific exception details with, or {@code null}
-     *                  when none is available.
+     *                  when none is available
      * @return the exception the given {@code reply} reports
      */
     private static RuntimeException convertError(CommandDispatchReply reply, @Nullable Converter converter) {
@@ -242,8 +237,7 @@ final class CommandConverter {
      * @return a reply carrying neither a result nor a failure
      */
     public static CommandDispatchReply emptyReply(String requestIdentifier) {
-        return new CommandDispatchReply(UUID.randomUUID().toString(), requestIdentifier,
-                                        null, null, Map.of(), null, null, List.of(), null, null, null);
+        return CommandDispatchReply.noResult(UUID.randomUUID().toString(), requestIdentifier);
     }
 
     private CommandConverter() {

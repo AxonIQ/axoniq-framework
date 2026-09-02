@@ -52,16 +52,16 @@ import java.util.function.Supplier;
  * @author Allard Buijze
  * @since 5.4.0
  */
-public class IncomingQueryGateway {
+public class IncomingQueryInvoker {
 
-    private static final Logger logger = LoggerFactory.getLogger(IncomingQueryGateway.class);
+    private static final Logger logger = LoggerFactory.getLogger(IncomingQueryInvoker.class);
 
     private final Supplier<String> memberName;
     private final @Nullable MessageConverter converter;
     private final AtomicReference<@Nullable Handler> handler = new AtomicReference<>();
 
     /**
-     * Constructs an {@code IncomingQueryGateway} reporting failures as originating from the member the given
+     * Constructs an {@code IncomingQueryInvoker} reporting failures as originating from the member the given
      * {@code memberName} supplies.
      * <p>
      * Taken as a supplier because a member is not named until it has registered with discovery, which happens after
@@ -73,7 +73,7 @@ public class IncomingQueryGateway {
      * @param converter  the converter attached to received queries for inline payload conversion, and used to
      *                   serialize application-specific exception details, or {@code null} when none is available.
      */
-    public IncomingQueryGateway(Supplier<String> memberName, @Nullable MessageConverter converter) {
+    public IncomingQueryInvoker(Supplier<String> memberName, @Nullable MessageConverter converter) {
         this.memberName = Objects.requireNonNull(memberName, "The memberName must not be null.");
         this.converter = converter;
     }

@@ -43,7 +43,7 @@ import java.util.Objects;
  * @param payload    the command's payload as its converter wrote it, or {@code null} when it has none
  * @param metadata   the {@link CommandMessage#metadata() metadata} of the command
  * @param routingKey the {@link CommandMessage#routingKey() routing key} of the command, or {@code null} when it has
- *                   none.
+ *                   none
  * @param priority   the {@link CommandMessage#priority() priority} of the command, or {@code null} when it has none
  * @author Allard Buijze
  * @since 5.4.0
@@ -61,7 +61,6 @@ public record CommandDispatchRequest(
      * Compact constructor requiring an {@code identifier} and {@code type}, and defaulting {@code null} metadata to
      * empty so a request from a member that omits the field still reads.
      */
-    @SuppressWarnings("MissingJavadoc")
     public CommandDispatchRequest {
         Objects.requireNonNull(identifier, "The command identifier must not be null.");
         Objects.requireNonNull(type, "The command type must not be null.");

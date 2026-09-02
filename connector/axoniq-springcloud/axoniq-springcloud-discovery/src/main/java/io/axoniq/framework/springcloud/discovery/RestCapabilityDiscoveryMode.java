@@ -31,6 +31,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -73,6 +74,15 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
      */
     public static final String DEFAULT_CAPABILITIES_ENDPOINT = "/axoniq-springcloud/member-capabilities";
 
+    /**
+     * How long an instance is given to answer a capabilities request when no other deadline is configured.
+     * <p>
+     * Kept short deliberately: capabilities are asked for on every discovery heartbeat, so this bounds how long one
+     * unresponsive instance can hold up the round that rebuilds the routing ring. Applied by the Spring Boot
+     * autoconfiguration to the client it contributes for capabilities requests.
+     */
+    public static final Duration DEFAULT_CAPABILITIES_TIMEOUT = Duration.ofSeconds(2);
+
     private final RestClient restClient;
     private final String capabilitiesEndpoint;
 
@@ -100,7 +110,7 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
      *
      * @param restClient           the client used to request the capabilities of other members
      * @param capabilitiesEndpoint the path, relative to a member's base URI, the capabilities endpoint is served
-     *                             under.
+     *                             under
      */
     public RestCapabilityDiscoveryMode(RestClient restClient, String capabilitiesEndpoint) {
         this.restClient = Objects.requireNonNull(restClient, "The restClient must not be null.");
@@ -212,13 +222,10 @@ public class RestCapabilityDiscoveryMode implements CapabilityDiscoveryMode {
         try {
             return Objects.equals(serviceInstance.getUri(), local.getUri());
         } catch (Exception e) {
-            logger.debug("Could not compare the URI of ServiceInstance [{}] with this application's own.", key(serviceInstance), e);
+            logger.debug("Could not compare the URI of ServiceInstance [{}] with this application's own.",
+                         ServiceInstanceKey.of(serviceInstance), e);
             return false;
         }
-    }
-
-    private static String key(ServiceInstance serviceInstance) {
-        return ServiceInstanceKey.of(serviceInstance).toString();
     }
 
     private record CachedCapabilities(String entityTag, MemberCapabilities capabilities) {

@@ -52,7 +52,7 @@ public class SpringCloudQueryController {
      */
     public static final String DEFAULT_QUERY_ENDPOINT = "/axoniq-springcloud/query";
 
-    private final IncomingQueryGateway gateway;
+    private final IncomingQueryInvoker gateway;
     private final Duration timeout;
 
     /**
@@ -62,7 +62,7 @@ public class SpringCloudQueryController {
      * @param timeout how long a response stream may stay open before the container closes it. A query still being
      *                answered when it elapses is reported to the member that asked as a failed stream.
      */
-    public SpringCloudQueryController(IncomingQueryGateway gateway, Duration timeout) {
+    public SpringCloudQueryController(IncomingQueryInvoker gateway, Duration timeout) {
         this.gateway = Objects.requireNonNull(gateway, "The gateway must not be null.");
         this.timeout = Objects.requireNonNull(timeout, "The timeout must not be null.");
     }

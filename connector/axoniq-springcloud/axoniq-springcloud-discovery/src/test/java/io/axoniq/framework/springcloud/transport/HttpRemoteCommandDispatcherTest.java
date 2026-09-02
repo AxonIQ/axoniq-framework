@@ -36,11 +36,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.client.RestClient;
 
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -189,46 +192,93 @@ class HttpRemoteCommandDispatcherTest {
     class WhenTheMemberCouldNotBeReached {
 
         @Test
-        void failsWithADispatchFailureOnAConnectionError() {
+        void reportsTheMemberAsUnreachableOnAConnectionError() {
             // given
             requestFactory.failingToConnect();
 
             // when / then — the connector relies on this to decide the member is unreachable
             assertThatThrownBy(() -> testSubject.dispatch(REMOTE_MEMBER, command()).join())
-                    .hasCauseInstanceOf(CommandDispatchException.class)
+                    .hasCauseInstanceOf(MemberUnreachableException.class)
                     .hasMessageContaining("Could not send command");
         }
 
         @Test
-        void failsWithADispatchFailureOnAnErrorStatus() {
+        void reportsTheMemberAsUnreachableOnAnErrorStatus() {
             // given
             requestFactory.respondingWithStatus(HttpStatus.SERVICE_UNAVAILABLE);
 
             // when / then
             assertThatThrownBy(() -> testSubject.dispatch(REMOTE_MEMBER, command()).join())
-                    .hasCauseInstanceOf(CommandDispatchException.class);
+                    .hasCauseInstanceOf(MemberUnreachableException.class);
         }
 
         @Test
-        void failsWithADispatchFailureOnAnEmptyReply() {
+        void reportsTheMemberAsUnreachableOnAnEmptyReply() {
             // given
             requestFactory.respondingWithStatus(HttpStatus.OK);
 
             // when / then
             assertThatThrownBy(() -> testSubject.dispatch(REMOTE_MEMBER, command()).join())
-                    .hasCauseInstanceOf(CommandDispatchException.class)
+                    .hasCauseInstanceOf(MemberUnreachableException.class)
                     .hasMessageContaining("empty body");
         }
 
         @Test
-        void failsWithADispatchFailureWhenTheMemberHasNoEndpoint() {
+        void reportsTheMemberAsUnreachableWhenItHasNoEndpoint() {
             // given
             Member withoutEndpoint = Member.unregisteredLocalMember("UNIVERSITY[LOCAL]");
 
             // when / then
             assertThatThrownBy(() -> testSubject.dispatch(withoutEndpoint, command()).join())
-                    .hasCauseInstanceOf(CommandDispatchException.class)
+                    .hasCauseInstanceOf(MemberUnreachableException.class)
                     .hasMessageContaining("no endpoint");
+        }
+    }
+
+    @Nested
+    class WhenTheMemberDoesNotAnswer {
+
+        @Test
+        void reportsTheMemberAsUnreachableOnceTheReplyDeadlinePasses() throws Exception {
+            // given — a member that accepted the request and then never answers, which is what a killed or
+            // partitioned member leaves behind. A real executor is needed here: the deadline can only pass while the
+            // round trip is still in flight on another thread.
+            CountDownLatch releaseTheRequest = new CountDownLatch(1);
+            ExecutorService executor = Executors.newSingleThreadExecutor();
+            try {
+                RestClient stalling = RestClient.builder()
+                                                .requestFactory((uri, method) -> {
+                                                    awaitQuietly(releaseTheRequest);
+                                                    throw new IllegalStateException("Never reached.");
+                                                })
+                                                .build();
+                HttpRemoteCommandDispatcher dispatcher = new HttpRemoteCommandDispatcher(
+                        stalling,
+                        SpringCloudCommandController.DEFAULT_COMMAND_ENDPOINT,
+                        executor,
+                        null,
+                        Duration.ofMillis(50)
+                );
+
+                // when / then — reported as a failure to reach the member, so the connector takes it out of the ring
+                assertThatThrownBy(() -> dispatcher.dispatch(REMOTE_MEMBER, command()).join())
+                        .isInstanceOf(CompletionException.class)
+                        .cause()
+                        .isInstanceOf(MemberUnreachableException.class)
+                        .hasMessageContaining("did not answer command")
+                        .hasMessageContaining("PT0.05S");
+            } finally {
+                releaseTheRequest.countDown();
+                executor.shutdownNow();
+            }
+        }
+
+        private static void awaitQuietly(CountDownLatch latch) {
+            try {
+                latch.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
@@ -244,6 +294,27 @@ class HttpRemoteCommandDispatcherTest {
             assertThatThrownBy(() -> testSubject.dispatch(REMOTE_MEMBER, unconverted).join())
                     .hasCauseInstanceOf(ConversionException.class);
             assertThat(requestFactory.requests()).isEmpty();
+        }
+
+        @Test
+        void rejectsANonPositiveReplyTimeout() {
+            RestClient restClient = RestClient.builder().requestFactory(requestFactory).build();
+
+            // when / then
+            assertThatThrownBy(() -> new HttpRemoteCommandDispatcher(
+                    restClient, SpringCloudCommandController.DEFAULT_COMMAND_ENDPOINT,
+                    Runnable::run, null, Duration.ZERO
+            )).isInstanceOf(IllegalArgumentException.class)
+              .hasMessageContaining("must be positive");
+            assertThatThrownBy(() -> new HttpRemoteCommandDispatcher(
+                    restClient, SpringCloudCommandController.DEFAULT_COMMAND_ENDPOINT,
+                    Runnable::run, null, Duration.ofSeconds(-1)
+            )).isInstanceOf(IllegalArgumentException.class)
+              .hasMessageContaining("must be positive");
+            assertThatThrownBy(() -> new HttpRemoteCommandDispatcher(
+                    restClient, SpringCloudCommandController.DEFAULT_COMMAND_ENDPOINT,
+                    Runnable::run, null, null
+            )).isInstanceOf(NullPointerException.class);
         }
 
         @Test

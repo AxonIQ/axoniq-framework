@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.springboot.springcloud;
 
+import io.axoniq.framework.springcloud.discovery.IgnoreListingDiscoveryMode;
 import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.transport.HttpRemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.transport.HttpRemoteQueryDispatcher;
@@ -115,14 +116,24 @@ public class SpringCloudProperties {
     private int queryBufferSize = HttpRemoteQueryDispatcher.DEFAULT_BUFFER_SIZE;
 
     /**
+     * How long an instance is given to answer a capabilities request, both to connect and to respond.
+     * <p>
+     * Capabilities are asked for on every discovery heartbeat, so this deadline has to stay well under the heartbeat
+     * interval. An instance that accepts a connection and then answers nothing would otherwise hold up the round that
+     * rebuilds the routing ring, and with it every member's view of who handles what. Defaults to
+     * {@link RestCapabilityDiscoveryMode#DEFAULT_CAPABILITIES_TIMEOUT}.
+     */
+    private Duration capabilitiesTimeout = RestCapabilityDiscoveryMode.DEFAULT_CAPABILITIES_TIMEOUT;
+
+    /**
      * How long a service instance is left alone after answering a capabilities request with a client error.
      * <p>
      * Spring Cloud Discovery reports every registered service, not only those running this connector. An instance that
      * answers with a client error is not serving the capabilities endpoint, and asking it again on every heartbeat is
      * wasted work. The period is finite because an instance may have answered that way only because it was still
-     * starting up. Defaults to one minute.
+     * starting up. Defaults to {@link IgnoreListingDiscoveryMode#DEFAULT_IGNORE_PERIOD}.
      */
-    private Duration ignoreListingExpireThreshold = Duration.ofMinutes(1);
+    private Duration ignorePeriod = IgnoreListingDiscoveryMode.DEFAULT_IGNORE_PERIOD;
 
     /**
      * The service instance metadata property holding an instance's context root, appended to its URI when reaching it.
@@ -280,17 +291,17 @@ public class SpringCloudProperties {
      *
      * @return the period an instance answering with a client error is ignored for
      */
-    public Duration getIgnoreListingExpireThreshold() {
-        return ignoreListingExpireThreshold;
+    public Duration getIgnorePeriod() {
+        return ignorePeriod;
     }
 
     /**
      * Sets how long a service instance is left alone after answering a capabilities request with a client error.
      *
-     * @param ignoreListingExpireThreshold the period an instance answering with a client error is ignored for
+     * @param ignorePeriod the period an instance answering with a client error is ignored for
      */
-    public void setIgnoreListingExpireThreshold(Duration ignoreListingExpireThreshold) {
-        this.ignoreListingExpireThreshold = ignoreListingExpireThreshold;
+    public void setIgnorePeriod(Duration ignorePeriod) {
+        this.ignorePeriod = ignorePeriod;
     }
 
     /**
@@ -310,5 +321,23 @@ public class SpringCloudProperties {
      */
     public void setContextRootMetadataPropertyName(@Nullable String contextRootMetadataPropertyName) {
         this.contextRootMetadataPropertyName = contextRootMetadataPropertyName;
+    }
+
+    /**
+     * Returns how long an instance is given to answer a capabilities request.
+     *
+     * @return the deadline for a capabilities request
+     */
+    public Duration getCapabilitiesTimeout() {
+        return capabilitiesTimeout;
+    }
+
+    /**
+     * Sets how long an instance is given to answer a capabilities request.
+     *
+     * @param capabilitiesTimeout the deadline for a capabilities request
+     */
+    public void setCapabilitiesTimeout(Duration capabilitiesTimeout) {
+        this.capabilitiesTimeout = capabilitiesTimeout;
     }
 }

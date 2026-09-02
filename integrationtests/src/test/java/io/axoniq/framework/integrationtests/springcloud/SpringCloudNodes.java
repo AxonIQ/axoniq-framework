@@ -71,8 +71,8 @@ final class SpringCloudNodes {
     /**
      * A command routed by its {@code courseId}, so that every command for one course reaches one node.
      *
-     * @param courseId The course the command concerns, and the key it is routed by.
-     * @param name     The name to give the course.
+     * @param courseId the course the command concerns, and the key it is routed by
+     * @param name     the name to give the course
      */
     @Command(routingKey = "courseId")
     record CreateCourse(String courseId, String name) {
@@ -105,7 +105,7 @@ final class SpringCloudNodes {
         /**
          * Reports both nodes of the cluster to the connector, standing in for a discovery registry.
          *
-         * @param nodePorts The ports of every node in the cluster, comma-separated.
+         * @param nodePorts the ports of every node in the cluster, comma-separated
          * @return a discovery client reporting every node in the cluster
          */
         @Bean
@@ -124,7 +124,7 @@ final class SpringCloudNodes {
         /**
          * Identifies this node within the cluster, which is how the connector tells its own instance from the others.
          *
-         * @param port The port this node serves on.
+         * @param port the port this node serves on
          * @return the registration representing this node
          */
         @Bean

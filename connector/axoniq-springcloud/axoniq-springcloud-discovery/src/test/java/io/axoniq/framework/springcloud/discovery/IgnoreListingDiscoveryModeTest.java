@@ -41,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class IgnoreListingDiscoveryModeTest {
 
-    private static final Duration EXPIRE_THRESHOLD = Duration.ofMinutes(1);
+    private static final Duration IGNORE_PERIOD = Duration.ofMinutes(1);
     private static final MemberCapabilities CAPABILITIES = new MemberCapabilities(
             100, Set.of(new QualifiedName("university.CreateCourse")), Set.of()
     );
@@ -60,7 +60,7 @@ class IgnoreListingDiscoveryModeTest {
                 .answering(axonNode, CAPABILITIES)
                 .failingWithClientError(unrelatedService);
         clock = new MutableClock(Instant.parse("2026-08-28T10:00:00Z"));
-        testSubject = new IgnoreListingDiscoveryMode(delegate, EXPIRE_THRESHOLD, clock);
+        testSubject = new IgnoreListingDiscoveryMode(delegate, IGNORE_PERIOD, clock);
     }
 
     @Nested
@@ -141,7 +141,7 @@ class IgnoreListingDiscoveryModeTest {
             delegate.recovering(unrelatedService, CAPABILITIES);
 
             // when
-            clock.advance(EXPIRE_THRESHOLD.plusSeconds(1));
+            clock.advance(IGNORE_PERIOD.plusSeconds(1));
 
             // then — a permanent ignore list would keep a recovering instance out of the cluster for good
             assertThat(testSubject.capabilities(unrelatedService)).contains(CAPABILITIES);
@@ -154,7 +154,7 @@ class IgnoreListingDiscoveryModeTest {
             int askedOnce = delegate.asked().size();
 
             // when
-            clock.advance(EXPIRE_THRESHOLD.minusSeconds(1));
+            clock.advance(IGNORE_PERIOD.minusSeconds(1));
             testSubject.capabilities(unrelatedService);
 
             // then
@@ -187,7 +187,7 @@ class IgnoreListingDiscoveryModeTest {
         }
 
         @Test
-        void rejectsANonPositiveExpireThreshold() {
+        void rejectsANonPositiveIgnorePeriod() {
             // when / then
             assertThatThrownBy(() -> new IgnoreListingDiscoveryMode(delegate, Duration.ZERO))
                     .isInstanceOf(IllegalArgumentException.class)

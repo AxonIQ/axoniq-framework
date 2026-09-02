@@ -83,11 +83,9 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <!-- Test-only: lets MockMvc drive the query endpoint, so what a member actually writes to the wire can
-                 be read back and checked. -->
+            <!-- Test-only: provides the servlet API the Spring MVC test support compiles against. -->
             <groupId>jakarta.servlet</groupId>
             <artifactId>jakarta.servlet-api</artifactId>
-            <version>6.1.0</version>
             <scope>test</scope>
         </dependency>
         <!-- The RestClient needs a JSON message converter to read and write the wire format. Applications get one

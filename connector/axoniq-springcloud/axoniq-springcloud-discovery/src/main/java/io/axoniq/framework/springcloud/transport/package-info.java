@@ -25,7 +25,7 @@
  * io.axoniq.framework.springcloud.transport.CommandDispatchReply} are its wire format, {@link
  * io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher} sends it, {@link
  * io.axoniq.framework.springcloud.transport.SpringCloudCommandController} receives it, and {@link
- * io.axoniq.framework.springcloud.transport.IncomingCommandGateway} turns a received request into an invocation of
+ * io.axoniq.framework.springcloud.transport.IncomingCommandInvoker} turns a received request into an invocation of
  * the local handler and its result back into a reply.
  * <p>
  * A query may be answered any number of times, so it is one request answered by a stream of Server-Sent Events:

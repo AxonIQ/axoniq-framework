@@ -53,7 +53,6 @@ public record MemberCapabilitiesPayload(int loadFactor, List<String> commands, L
      * Compact constructor defaulting {@code null} name lists to empty, so a payload from a member that omits a field
      * altogether still reads.
      */
-    @SuppressWarnings("MissingJavadoc")
     public MemberCapabilitiesPayload {
         commands = commands == null ? List.of() : List.copyOf(commands);
         queries = queries == null ? List.of() : List.copyOf(queries);

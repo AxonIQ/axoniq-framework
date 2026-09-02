@@ -37,14 +37,11 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,7 +58,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * The framing is the thing under test, and it is what the two halves of the transport agree on. A query is answered
  * with a stream of responses, and the member reading them can only tell one response from the next if each is written
  * as an event of its own; responses run together into one event would arrive as a single answer that no longer
- * matches what the handler produced. Everything from {@link IncomingQueryGateway} through {@link SseQueryResponseSink}
+ * matches what the handler produced. Everything from {@link IncomingQueryInvoker} through {@link SseQueryResponseSink}
  * to {@link ServerSentEventReader} takes part, so this pins the whole agreement rather than either end of it.
  *
  * @author Allard Buijze
@@ -76,12 +73,12 @@ class SseQueryResponseSinkFramingTest {
     private final ObjectMapper objectMapper =
             JsonMapper.builder().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
 
-    private IncomingQueryGateway gateway;
+    private IncomingQueryInvoker gateway;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        gateway = new IncomingQueryGateway(() -> "node-b", null);
+        gateway = new IncomingQueryInvoker(() -> "node-b", null);
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new SpringCloudQueryController(gateway, Duration.ofSeconds(30)))
                 .build();
