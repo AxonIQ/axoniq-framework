@@ -121,7 +121,7 @@ claim restores it. Safety over liveness.
 A user-published event tagged `workflowId=X` by a custom tag resolver would falsely conflict with instance `X`'s
 appends. Engine events are the only ones tagged this way by the engine's own resolver.
 
-The engine requires a DCB event store: in-memory, Axon Server or PostgreSQL. A sink that is no `EventStore` carries no
+The engine requires an Event Store supporting DCB, like Axon's in-memory, Axon Server or PostgreSQL. A sink that is no `EventStore` carries no
 transaction to attach a condition to, so it accepts every append and nothing detects that the check is gone. A start
 refuses such a sink instead of running without the check.
 
