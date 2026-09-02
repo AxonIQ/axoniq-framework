@@ -83,7 +83,7 @@ public class SpringCloudQueryController {
 
     private static final Logger logger = LoggerFactory.getLogger(SpringCloudQueryController.class);
 
-    private final IncomingQueryGateway gateway;
+    private final IncomingQueryInvoker gateway;
     private final Duration timeout;
     private final Duration keepAliveInterval;
     private final ScheduledExecutorService scheduler;
@@ -99,7 +99,7 @@ public class SpringCloudQueryController {
      * @param scheduler         decides when each open subscription is due a keep-alive
      * @param keepAliveExecutor performs the keep-alive writes
      */
-    public SpringCloudQueryController(IncomingQueryGateway gateway,
+    public SpringCloudQueryController(IncomingQueryInvoker gateway,
                                       Duration timeout,
                                       ScheduledExecutorService scheduler,
                                       Executor keepAliveExecutor) {
@@ -125,7 +125,7 @@ public class SpringCloudQueryController {
      *                          executor that can hold as many blocked threads as there are open subscriptions suits
      *                          it -- a virtual-thread-per-task executor, for instance.
      */
-    public SpringCloudQueryController(IncomingQueryGateway gateway,
+    public SpringCloudQueryController(IncomingQueryInvoker gateway,
                                       Duration timeout,
                                       Duration keepAliveInterval,
                                       ScheduledExecutorService scheduler,

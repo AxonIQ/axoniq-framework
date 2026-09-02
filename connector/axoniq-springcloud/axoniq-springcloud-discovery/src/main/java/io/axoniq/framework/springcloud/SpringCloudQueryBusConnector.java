@@ -21,7 +21,7 @@ package io.axoniq.framework.springcloud;
 
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import io.axoniq.framework.springcloud.routing.Member;
-import io.axoniq.framework.springcloud.transport.IncomingQueryGateway;
+import io.axoniq.framework.springcloud.transport.IncomingQueryInvoker;
 import io.axoniq.framework.springcloud.transport.QueryDispatchException;
 import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher.SubscriptionListener;
@@ -88,7 +88,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
     private static final Logger logger = LoggerFactory.getLogger(SpringCloudQueryBusConnector.class);
 
     private final SpringCloudMemberRegistry registry;
-    private final IncomingQueryGateway gateway;
+    private final IncomingQueryInvoker gateway;
     private final RemoteQueryDispatcher dispatcher;
     private final @Nullable MessageConverter converter;
     private final EntitlementManager entitlementManager;
@@ -109,7 +109,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
      *                   when none is available.
      */
     public SpringCloudQueryBusConnector(SpringCloudMemberRegistry registry,
-                                        IncomingQueryGateway gateway,
+                                        IncomingQueryInvoker gateway,
                                         RemoteQueryDispatcher dispatcher,
                                         @Nullable MessageConverter converter) {
         this(registry, gateway, dispatcher, converter, EntitlementManager.INSTANCE);
@@ -120,7 +120,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
      * Package-private constructor allowing an alternative {@link EntitlementManager} to be injected.
      * <p>
      * Marked {@link Internal} because production code must use
-     * {@link #SpringCloudQueryBusConnector(SpringCloudMemberRegistry, IncomingQueryGateway, RemoteQueryDispatcher,
+     * {@link #SpringCloudQueryBusConnector(SpringCloudMemberRegistry, IncomingQueryInvoker, RemoteQueryDispatcher,
      * MessageConverter)}, which registers the addon and claims against {@link EntitlementManager#INSTANCE}. This
      * constructor exists so tests need not touch that singleton.
      *
@@ -133,7 +133,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
      */
     @Internal
     SpringCloudQueryBusConnector(SpringCloudMemberRegistry registry,
-                                 IncomingQueryGateway gateway,
+                                 IncomingQueryInvoker gateway,
                                  RemoteQueryDispatcher dispatcher,
                                  @Nullable MessageConverter converter,
                                  EntitlementManager entitlementManager) {
@@ -398,7 +398,7 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
     private void suspectWhenUnreachable(Member member, MessageStream<QueryResponseMessage> responses) {
         responses.error()
                  .filter(cause -> cause instanceof QueryDispatchException)
-                 .ifPresent(cause -> registry.suspect(member));
+                 .ifPresent(cause -> registry.markUnreachable(member));
     }
 
     /**

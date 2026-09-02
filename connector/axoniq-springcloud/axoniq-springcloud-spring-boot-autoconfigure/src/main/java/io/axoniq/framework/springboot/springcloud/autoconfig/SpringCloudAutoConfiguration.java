@@ -29,8 +29,8 @@ import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesController;
 import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.transport.HttpRemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.transport.HttpRemoteQueryDispatcher;
-import io.axoniq.framework.springcloud.transport.IncomingCommandGateway;
-import io.axoniq.framework.springcloud.transport.IncomingQueryGateway;
+import io.axoniq.framework.springcloud.transport.IncomingCommandInvoker;
+import io.axoniq.framework.springcloud.transport.IncomingQueryInvoker;
 import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.transport.SpringCloudCommandController;
@@ -48,17 +48,23 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
+import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
+import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.cloud.client.serviceregistry.Registration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.function.Predicate;
 
 /**
  * Autoconfiguration for the Axoniq Framework Spring Cloud connector.
@@ -74,8 +80,8 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
  * <p>
  * Activates when a Spring Cloud {@link DiscoveryClient} and a {@link Registration} are available — that is, when the
  * application has chosen a discovery implementation of its own — and can be switched off with
- * {@code axon.springcloud.enabled=false}. As members reach each other over HTTP, it also requires a web application;
- * see {@link NonWebApplicationGuard}.
+ * {@code axon.springcloud.enabled=false}. As members reach each other over HTTP through Spring MVC controllers, it also
+ * requires a servlet web application; see {@link NonWebApplicationGuard} and {@link ReactiveWebApplicationGuard}.
  *
  * @author Allard Buijze
  * @since 5.4.0
@@ -86,14 +92,27 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 public class SpringCloudAutoConfiguration {
 
     /**
-     * The name of the {@link RestClient} bean used to reach other members of the cluster.
+     * The name of the {@link RestClient} bean used to send commands to other members of the cluster.
      */
     public static final String REST_CLIENT_BEAN = "axoniqSpringCloudRestClient";
+
+    /**
+     * The name of the {@link RestClient} bean used to ask other instances for their capabilities.
+     */
+    public static final String CAPABILITIES_REST_CLIENT_BEAN = "axoniqSpringCloudCapabilitiesRestClient";
 
     /**
      * The name of the {@link Executor} bean inter-member command and query dispatches run on.
      */
     public static final String DISPATCH_EXECUTOR_BEAN = "axoniqSpringCloudDispatchExecutor";
+
+    /**
+     * How long the connector's own clients are given to establish a connection.
+     * <p>
+     * Applies only to the clients this autoconfiguration builds itself; an application supplying its own
+     * {@link RestClient.Builder} decides its own timeouts.
+     */
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
 
     /**
      * The name of the {@link ScheduledExecutorService} bean deciding when the deadline of a dispatched query has
@@ -221,19 +240,58 @@ public class SpringCloudAutoConfiguration {
     public static class ConnectorConfiguration {
 
         /**
-         * Bean creation method for the {@link RestClient} used to reach other members, both to ask for their
-         * capabilities and to send them commands.
+         * Bean creation method for the {@link RestClient} used to send commands to other members.
          * <p>
          * Built from the application's own {@link RestClient.Builder} when it has one, so that whatever it configured
-         * there — a load balancer, authentication, timeouts — applies to inter-member traffic as well.
+         * there — a load balancer, authentication, timeouts — applies to inter-member traffic as well. When the
+         * application supplies no builder, the client is given timeouts of its own: without them a member that accepts
+         * a connection and then answers nothing holds the sending thread for as long as the operating system allows,
+         * outliving the dispatcher's own reply deadline, which bounds the returned future but not the exchange behind
+         * it.
          *
          * @param builderProvider provides the application's {@link RestClient.Builder}, if it has one
          * @return the client used to reach other members of the cluster
          */
         @Bean(REST_CLIENT_BEAN)
         @ConditionalOnMissingBean(name = REST_CLIENT_BEAN)
-        public RestClient axoniqSpringCloudRestClient(ObjectProvider<RestClient.Builder> builderProvider) {
-            return builderProvider.getIfAvailable(RestClient::builder).build();
+        public RestClient axoniqSpringCloudRestClient(ObjectProvider<RestClient.Builder> builderProvider,
+                                                     SpringCloudProperties properties) {
+            RestClient.Builder applicationBuilder = builderProvider.getIfAvailable();
+            if (applicationBuilder != null) {
+                return applicationBuilder.build();
+            }
+            return RestClient.builder()
+                             .requestFactory(requestFactory(CONNECT_TIMEOUT,
+                                                            properties.getCommandReplyTimeout()))
+                             .build();
+        }
+
+        /**
+         * Bean creation method for the {@link RestClient} used to ask other instances for their capabilities.
+         * <p>
+         * Separate from the client commands are sent with, because the two need opposite deadlines. A command may
+         * legitimately take as long as the handler needs, while a capabilities request happens on every discovery
+         * heartbeat and must not outlast it — one unresponsive instance would otherwise hold up the round that rebuilds
+         * the routing ring for every member.
+         *
+         * @param properties the connector's properties
+         * @return the client used to ask other instances for their capabilities
+         */
+        @Bean(CAPABILITIES_REST_CLIENT_BEAN)
+        @ConditionalOnMissingBean(name = CAPABILITIES_REST_CLIENT_BEAN)
+        public RestClient axoniqSpringCloudCapabilitiesRestClient(SpringCloudProperties properties) {
+            Duration timeout = properties.getCapabilitiesTimeout();
+            return RestClient.builder()
+                             .requestFactory(requestFactory(timeout, timeout))
+                             .build();
+        }
+
+        private static ClientHttpRequestFactory requestFactory(Duration connectTimeout, Duration readTimeout) {
+            ClientHttpRequestFactorySettings settings =
+                    ClientHttpRequestFactorySettings.defaults()
+                                                    .withConnectTimeout(connectTimeout)
+                                                    .withReadTimeout(readTimeout);
+            return ClientHttpRequestFactoryBuilder.detect().build(settings);
         }
 
         /**
@@ -250,17 +308,22 @@ public class SpringCloudAutoConfiguration {
         @Bean
         @ConditionalOnMissingBean
         public CapabilityDiscoveryMode axoniqSpringCloudCapabilityDiscoveryMode(
-                @Qualifier(REST_CLIENT_BEAN) RestClient restClient,
+                @Qualifier(CAPABILITIES_REST_CLIENT_BEAN) RestClient restClient,
                 SpringCloudProperties properties
         ) {
             return new IgnoreListingDiscoveryMode(
                     new RestCapabilityDiscoveryMode(restClient, properties.getCapabilitiesEndpoint()),
-                    properties.getIgnoreListingExpireThreshold()
+                    properties.getIgnorePeriod()
             );
         }
 
         /**
          * Bean creation method for the {@link SpringCloudMemberRegistry} maintaining the routing ring.
+         * <p>
+         * An application can narrow which discovered instances are considered at all by contributing a
+         * {@code Predicate<ServiceInstance>} bean. That is worth doing on a registry holding many services: instances
+         * rejected by the predicate are never asked for their capabilities, which is cheaper than letting the ignore
+         * list learn about them one heartbeat at a time. Every instance is considered when no such bean is present.
          *
          * @param discoveryClientProvider provides the client reporting the service instances making up the cluster
          * @param registrationProvider    provides the registration representing this application
@@ -274,12 +337,13 @@ public class SpringCloudAutoConfiguration {
                 ObjectProvider<DiscoveryClient> discoveryClientProvider,
                 ObjectProvider<Registration> registrationProvider,
                 CapabilityDiscoveryMode discoveryMode,
+                ObjectProvider<Predicate<ServiceInstance>> instanceFilterProvider,
                 SpringCloudProperties properties
         ) {
             return new SpringCloudMemberRegistry(required(discoveryClientProvider, DiscoveryClient.class),
                                                  required(registrationProvider, Registration.class),
                                                  discoveryMode,
-                                                 instance -> true,
+                                                 instanceFilterProvider.getIfAvailable(() -> instance -> true),
                                                  properties.getContextRootMetadataPropertyName());
         }
 
@@ -356,19 +420,19 @@ public class SpringCloudAutoConfiguration {
         }
 
         /**
-         * Bean creation method for the {@link IncomingCommandGateway} handling commands sent by other members.
+         * Bean creation method for the {@link IncomingCommandInvoker} handling commands sent by other members.
          *
-         * @param registry          the registry naming this member in the failures the gateway reports
+         * @param registry          the registry naming this member in the failures the invoker reports
          * @param converterProvider provides the {@link MessageConverter}, if one is available
-         * @return the gateway handling commands sent by other members
+         * @return the invoker handling commands sent by other members
          */
         @Bean
         @ConditionalOnMissingBean
-        public IncomingCommandGateway axoniqSpringCloudIncomingCommandGateway(
+        public IncomingCommandInvoker axoniqSpringCloudIncomingCommandInvoker(
                 SpringCloudMemberRegistry registry,
                 ObjectProvider<MessageConverter> converterProvider
         ) {
-            return new IncomingCommandGateway(() -> registry.localMember().name(),
+            return new IncomingCommandInvoker(() -> registry.localMember().name(),
                                               converterProvider.getIfAvailable());
         }
 
@@ -381,12 +445,12 @@ public class SpringCloudAutoConfiguration {
         @Bean
         @ConditionalOnMissingBean
         @ConditionalOnWebApplication(type = Type.SERVLET)
-        public SpringCloudCommandController axoniqSpringCloudCommandController(IncomingCommandGateway gateway) {
+        public SpringCloudCommandController axoniqSpringCloudCommandController(IncomingCommandInvoker gateway) {
             return new SpringCloudCommandController(gateway);
         }
 
         /**
-         * Bean creation method for the {@link IncomingQueryGateway} answering queries sent by other members.
+         * Bean creation method for the {@link IncomingQueryInvoker} answering queries sent by other members.
          *
          * @param registry          the registry naming this member in the failures the gateway reports
          * @param converterProvider provides the {@link MessageConverter}, if one is available
@@ -394,11 +458,11 @@ public class SpringCloudAutoConfiguration {
          */
         @Bean
         @ConditionalOnMissingBean
-        public IncomingQueryGateway axoniqSpringCloudIncomingQueryGateway(
+        public IncomingQueryInvoker axoniqSpringCloudIncomingQueryInvoker(
                 SpringCloudMemberRegistry registry,
                 ObjectProvider<MessageConverter> converterProvider
         ) {
-            return new IncomingQueryGateway(() -> registry.localMember().name(),
+            return new IncomingQueryInvoker(() -> registry.localMember().name(),
                                             converterProvider.getIfAvailable());
         }
 
@@ -444,7 +508,7 @@ public class SpringCloudAutoConfiguration {
         @ConditionalOnMissingBean
         @ConditionalOnWebApplication(type = Type.SERVLET)
         public SpringCloudQueryController axoniqSpringCloudQueryController(
-                IncomingQueryGateway gateway,
+                IncomingQueryInvoker gateway,
                 @Qualifier(QUERY_SCHEDULER_BEAN) ScheduledExecutorService scheduler,
                 @Qualifier(KEEP_ALIVE_EXECUTOR_BEAN) Executor keepAliveExecutor,
                 SpringCloudProperties properties

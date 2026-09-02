@@ -22,7 +22,7 @@ package io.axoniq.framework.springcloud;
 import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
-import io.axoniq.framework.springcloud.transport.IncomingQueryGateway;
+import io.axoniq.framework.springcloud.transport.IncomingQueryInvoker;
 import io.axoniq.framework.springcloud.transport.RecordingRemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.transport.SubscriptionQueryMembersChangedException;
 import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
@@ -93,7 +93,7 @@ class SpringCloudQueryBusConnectorTest {
         dispatcher = new RecordingRemoteQueryDispatcher();
         entitlementManager = new RecordingEntitlementManager();
         testSubject = new SpringCloudQueryBusConnector(registry,
-                                                       new IncomingQueryGateway(() -> "node-a", null),
+                                                       new IncomingQueryInvoker(() -> "node-a", null),
                                                        dispatcher,
                                                        null,
                                                        entitlementManager);
@@ -125,7 +125,7 @@ class SpringCloudQueryBusConnectorTest {
     }
 
     private Member remoteMember() {
-        return registry.ring().getMembers().stream()
+        return registry.ring().members().stream()
                        .filter(member -> !member.local())
                        .filter(member -> member.name().contains("node-b"))
                        .findFirst()
@@ -133,7 +133,7 @@ class SpringCloudQueryBusConnectorTest {
     }
 
     private Member otherRemoteMember() {
-        return registry.ring().getMembers().stream()
+        return registry.ring().members().stream()
                        .filter(member -> !member.local())
                        .filter(member -> member.name().contains("node-c"))
                        .findFirst()
@@ -261,7 +261,7 @@ class SpringCloudQueryBusConnectorTest {
         void reportsNoHandlerWhenTheConnectorHasNoneYet() {
             // given a member advertising the query before its handler was registered on the connector
             SpringCloudQueryBusConnector unbound = new SpringCloudQueryBusConnector(
-                    registry, new IncomingQueryGateway(() -> "node-a", null), dispatcher, null, entitlementManager
+                    registry, new IncomingQueryInvoker(() -> "node-a", null), dispatcher, null, entitlementManager
             );
             unbound.subscribe(FIND_COURSE);
 
@@ -487,7 +487,7 @@ class SpringCloudQueryBusConnectorTest {
             JoiningBetweenResolutions joining =
                     new JoiningBetweenResolutions(discoveryClient, localInstance, discoveryMode);
             SpringCloudQueryBusConnector connector = new SpringCloudQueryBusConnector(
-                    joining, new IncomingQueryGateway(() -> "node-a", null), dispatcher, null, entitlementManager
+                    joining, new IncomingQueryInvoker(() -> "node-a", null), dispatcher, null, entitlementManager
             );
             connector.onIncomingQuery(handler);
             discoveryClient.register("university", localInstance, remoteInstance);

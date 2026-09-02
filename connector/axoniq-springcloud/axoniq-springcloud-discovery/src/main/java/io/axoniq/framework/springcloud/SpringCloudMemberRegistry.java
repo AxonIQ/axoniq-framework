@@ -39,17 +39,25 @@ import org.springframework.context.event.EventListener;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -82,6 +90,14 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
 
     private static final Logger logger = LoggerFactory.getLogger(SpringCloudMemberRegistry.class);
 
+    /**
+     * A backstop on how long one discovery round may take.
+     * <p>
+     * The real bound is the per-request timeout on the client asking for capabilities; this only stops a round from
+     * outliving every heartbeat behind it should a client be configured without one.
+     */
+    private static final Duration DISCOVERY_ROUND_TIMEOUT = Duration.ofSeconds(30);
+
     private final DiscoveryClient discoveryClient;
     private final Registration localRegistration;
     private final CapabilityDiscoveryMode discoveryMode;
@@ -112,7 +128,7 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
      *
      * @param discoveryClient   the client reporting the service instances making up the cluster
      * @param localRegistration the registration representing this application, used to tell this application's own
-     *                          instance apart from the others.
+     *                          instance apart from the others
      * @param discoveryMode     the mode used to learn what each discovered instance handles
      */
     public SpringCloudMemberRegistry(DiscoveryClient discoveryClient,
@@ -126,7 +142,7 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
      *
      * @param discoveryClient                 the client reporting the service instances making up the cluster
      * @param localRegistration               the registration representing this application, used to tell this
-     *                                        application's own instance apart from the others.
+     *                                        application's own instance apart from the others
      * @param discoveryMode                   the mode used to learn what each discovered instance handles
      * @param serviceInstanceFilter           decides which discovered instances are considered at all. Instances
      *                                        rejected here are never asked for their capabilities, which is cheaper
@@ -134,7 +150,7 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
      *                                        front.
      * @param contextRootMetadataPropertyName the {@link ServiceInstance#getMetadata() metadata} key holding an
      *                                        instance's context root, to be appended to its URI, or {@code null} when
-     *                                        instances are served from the root.
+     *                                        instances are served from the root
      */
     public SpringCloudMemberRegistry(DiscoveryClient discoveryClient,
                                      Registration localRegistration,
@@ -165,7 +181,7 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
     public Optional<Member> findCommandDestination(String routingKey, QualifiedName commandName) {
         Objects.requireNonNull(routingKey, "The routingKey must not be null.");
         Objects.requireNonNull(commandName, "The commandName must not be null.");
-        return ring.getMember(routingKey, commandName);
+        return ring.memberFor(routingKey, commandName);
     }
 
     /**
@@ -252,7 +268,7 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
     }
 
     private static List<Member> candidatesFor(ConsistentHash ring, QualifiedName queryName) {
-        return ring.getMembers()
+        return ring.members()
                    .stream()
                    .filter(member -> ring.capabilitiesOf(member)
                                          .filter(c -> c.handlesQuery(queryName))
@@ -333,7 +349,7 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
      *
      * @param member the member that could not be reached
      */
-    public void suspect(Member member) {
+    public void markUnreachable(Member member) {
         Objects.requireNonNull(member, "The member must not be null.");
         synchronized (this) {
             ConsistentHash updated = ring.without(member);
@@ -380,13 +396,13 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
      */
     public void updateMemberships() {
         List<ServiceInstance> instances = discoveredInstances();
-        ConsistentHash rebuilt = new ConsistentHash();
-        for (ServiceInstance instance : instances) {
-            Optional<MemberCapabilities> capabilities = capabilitiesOf(instance);
-            if (capabilities.isPresent()) {
-                rebuilt = rebuilt.with(buildMember(instance), capabilities.get());
-            }
+        Optional<Map<Member, MemberCapabilities>> discovered = discoverCapabilities(instances);
+        if (discovered.isEmpty()) {
+            // The round did not finish. Leaving the ring as it is beats rebuilding it from a partial answer, which
+            // would drop every member this round had not reached yet.
+            return;
         }
+        ConsistentHash rebuilt = ring.withOnly(discovered.get());
         discoveryMode.retainOnly(instances.stream()
                                           .map(ServiceInstanceKey::of)
                                           .collect(Collectors.toUnmodifiableSet()));
@@ -404,6 +420,73 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
         }
         notifyMembershipChanged(updated);
         logger.debug("Rebuilt the ring from [{}] discovered instances: [{}]", instances.size(), rebuilt);
+    }
+
+    /**
+     * Asks every given instance what it handles, and returns the memberships to rebuild the ring from.
+     * <p>
+     * The requests run concurrently. Asking each instance in turn would let one unresponsive instance delay every
+     * instance behind it, so that a round over a registry holding many instances outlasts the heartbeat interval and
+     * the ring stops converging; the requests are independent, so the round costs the slowest single response rather
+     * than the sum of all of them.
+     * <p>
+     * Results are collected in discovery's own order, not in completion order, so that two instances resolving to the
+     * same member name resolve the same way on every member of the cluster.
+     *
+     * @param instances the instances discovery currently reports
+     * @return the memberships to rebuild the ring from, or an empty {@code Optional} when the round did not complete
+     */
+    private Optional<Map<Member, MemberCapabilities>> discoverCapabilities(List<ServiceInstance> instances) {
+        if (instances.isEmpty()) {
+            return Optional.of(Map.of());
+        }
+        List<Callable<Optional<MemberCapabilities>>> requests =
+                instances.stream()
+                         .<Callable<Optional<MemberCapabilities>>>map(
+                                 instance -> () -> capabilitiesOf(instance)
+                         )
+                         .toList();
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<Optional<MemberCapabilities>>> answers =
+                    executor.invokeAll(requests, DISCOVERY_ROUND_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            Map<Member, MemberCapabilities> memberships = new LinkedHashMap<>();
+            for (int i = 0; i < answers.size(); i++) {
+                ServiceInstance instance = instances.get(i);
+                capabilitiesFrom(answers.get(i), instance)
+                        .ifPresent(capabilities -> memberships.put(buildMember(instance), capabilities));
+            }
+            return Optional.of(memberships);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.info("The discovery round was interrupted, so the ring is left as it is.");
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Reads one instance's answer, treating a request that failed or never finished as an instance to leave out.
+     *
+     * @param answer   the pending answer to the capabilities request
+     * @param instance the instance that was asked
+     * @return what the instance handles, or an empty {@code Optional} when it could not be established
+     */
+    private Optional<MemberCapabilities> capabilitiesFrom(Future<Optional<MemberCapabilities>> answer,
+                                                          ServiceInstance instance) {
+        if (answer.isCancelled()) {
+            logger.info("Leaving ServiceInstance [{}] out of the ring, as it did not answer within {}.",
+                        ServiceInstanceKey.of(instance), DISCOVERY_ROUND_TIMEOUT);
+            return Optional.empty();
+        }
+        try {
+            return answer.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return Optional.empty();
+        } catch (ExecutionException e) {
+            logger.info("Leaving ServiceInstance [{}] out of the ring, as discovering its capabilities failed.",
+                        ServiceInstanceKey.of(instance), e.getCause());
+            return Optional.empty();
+        }
     }
 
     private Optional<MemberCapabilities> capabilitiesOf(ServiceInstance instance) {
@@ -535,7 +618,7 @@ public class SpringCloudMemberRegistry implements DescribableComponent {
         descriptor.describeProperty("localMember", localMember().name());
         descriptor.describeProperty("localCapabilities", localCapabilities.toString());
         descriptor.describeProperty("ringVersion", current.version());
-        descriptor.describeProperty("members", memberNames(current.getMembers()));
+        descriptor.describeProperty("members", memberNames(current.members()));
     }
 
     private static List<String> memberNames(Set<Member> members) {

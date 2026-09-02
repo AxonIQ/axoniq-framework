@@ -82,6 +82,11 @@ class MemberCapabilitiesTest {
             assertThat(MemberCapabilities.INCAPABLE.loadFactor()).isZero();
         }
 
+    }
+
+    @Nested
+    class Construction {
+
         @Test
         void copiesTheGivenNameSets() {
             // given

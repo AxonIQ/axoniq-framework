@@ -23,6 +23,7 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.*;
 
 import java.net.URI;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -59,7 +60,7 @@ class ConsistentHashTest {
             ConsistentHash ring = new ConsistentHash();
 
             // when
-            Optional<Member> resolved = ring.getMember("course-1", CREATE_COURSE);
+            Optional<Member> resolved = ring.memberFor("course-1", CREATE_COURSE);
 
             // then
             assertThat(resolved).isEmpty();
@@ -72,7 +73,7 @@ class ConsistentHashTest {
             ConsistentHash ring = new ConsistentHash().with(only, handling(100, CREATE_COURSE));
 
             // when
-            Optional<Member> resolved = ring.getMember("course-1", CREATE_COURSE);
+            Optional<Member> resolved = ring.memberFor("course-1", CREATE_COURSE);
 
             // then
             assertThat(resolved).contains(only);
@@ -86,7 +87,7 @@ class ConsistentHashTest {
                     .with(member("node-b"), handling(100, RENAME_COURSE));
 
             // when
-            Optional<Member> resolved = ring.getMember("course-1", SUBSCRIBE_STUDENT);
+            Optional<Member> resolved = ring.memberFor("course-1", SUBSCRIBE_STUDENT);
 
             // then
             assertThat(resolved).isEmpty();
@@ -102,7 +103,7 @@ class ConsistentHashTest {
 
             // when / then — sampling many keys proves the filter holds all the way around the ring
             assertThat(IntStream.range(0, 500)
-                                .mapToObj(i -> ring.getMember("course-" + i, CREATE_COURSE))
+                                .mapToObj(i -> ring.memberFor("course-" + i, CREATE_COURSE))
                                 .toList())
                     .allSatisfy(resolved -> assertThat(resolved).contains(handler));
         }
@@ -116,8 +117,8 @@ class ConsistentHashTest {
                     .with(member("node-c"), handling(100, CREATE_COURSE));
 
             // when
-            Optional<Member> first = ring.getMember("course-1", CREATE_COURSE);
-            Optional<Member> second = ring.getMember("course-1", CREATE_COURSE);
+            Optional<Member> first = ring.memberFor("course-1", CREATE_COURSE);
+            Optional<Member> second = ring.memberFor("course-1", CREATE_COURSE);
 
             // then
             assertThat(first).isPresent().isEqualTo(second);
@@ -133,7 +134,7 @@ class ConsistentHashTest {
 
             // when
             Set<String> selected = IntStream.range(0, 500)
-                                            .mapToObj(i -> ring.getMember("course-" + i, CREATE_COURSE))
+                                            .mapToObj(i -> ring.memberFor("course-" + i, CREATE_COURSE))
                                             .flatMap(Optional::stream)
                                             .map(Member::name)
                                             .collect(Collectors.toSet());
@@ -155,8 +156,8 @@ class ConsistentHashTest {
             // then — the point of consistent hashing: adding a third member moves roughly a third of the keys,
             // not all of them, so most entities stay put
             long moved = IntStream.range(0, 600)
-                                  .filter(i -> !before.getMember("course-" + i, CREATE_COURSE)
-                                                      .equals(after.getMember("course-" + i, CREATE_COURSE)))
+                                  .filter(i -> !before.memberFor("course-" + i, CREATE_COURSE)
+                                                      .equals(after.memberFor("course-" + i, CREATE_COURSE)))
                                   .count();
             assertThat(moved).isLessThan(300);
         }
@@ -175,7 +176,7 @@ class ConsistentHashTest {
 
             // when / then
             assertThat(IntStream.range(0, 300)
-                                .mapToObj(i -> ring.getMember("course-" + i, CREATE_COURSE))
+                                .mapToObj(i -> ring.memberFor("course-" + i, CREATE_COURSE))
                                 .toList())
                     .allSatisfy(resolved -> assertThat(resolved).contains(loaded));
         }
@@ -189,7 +190,7 @@ class ConsistentHashTest {
             ConsistentHash ring = new ConsistentHash().with(incapable, MemberCapabilities.INCAPABLE);
 
             // then — it stays known, so a later heartbeat can give it capabilities without treating it as new
-            assertThat(ring.getMembers()).containsExactly(incapable);
+            assertThat(ring.members()).containsExactly(incapable);
             assertThat(ring.capabilitiesOf(incapable)).contains(MemberCapabilities.INCAPABLE);
         }
 
@@ -202,13 +203,115 @@ class ConsistentHashTest {
 
             // when
             long onNodeA = IntStream.range(0, 1000)
-                                    .mapToObj(i -> ring.getMember("course-" + i, CREATE_COURSE))
+                                    .mapToObj(i -> ring.memberFor("course-" + i, CREATE_COURSE))
                                     .flatMap(Optional::stream)
                                     .filter(resolved -> resolved.name().equals("node-a"))
                                     .count();
 
             // then — the split follows the load factors rather than member count
             assertThat(onNodeA).isGreaterThan(700);
+        }
+    }
+
+    @Nested
+    class RebuildingFromScratch {
+
+        @Test
+        void holdsExactlyTheGivenMemberships() {
+            // given
+            Member nodeA = member("node-a");
+            Member nodeB = member("node-b");
+
+            // when
+            ConsistentHash ring = new ConsistentHash().withOnly(Map.of(
+                    nodeA, handling(100, CREATE_COURSE),
+                    nodeB, handling(100, RENAME_COURSE)
+            ));
+
+            // then
+            assertThat(ring.members()).containsExactlyInAnyOrder(nodeA, nodeB);
+        }
+
+        @Test
+        void dropsMembersAbsentFromTheGivenMemberships() {
+            // given — the rebuild describes the cluster as discovery now reports it, so a member discovery left out
+            // does not survive the round
+            Member departed = member("node-a");
+            Member remaining = member("node-b");
+            ConsistentHash before = new ConsistentHash()
+                    .with(departed, handling(100, CREATE_COURSE))
+                    .with(remaining, handling(100, CREATE_COURSE));
+
+            // when
+            ConsistentHash after = before.withOnly(Map.of(remaining, handling(100, CREATE_COURSE)));
+
+            // then
+            assertThat(after.members()).containsExactly(remaining);
+            assertThat(after.members()).doesNotContain(departed);
+        }
+
+        @Test
+        void placesMembersWhereRegisteringThemOneByOneWould() {
+            // The rebuild assigns every member's ring positions in one pass rather than recomputing them per member.
+            // That is only a safe optimisation if it lands on the same ring, or members would disagree on routing
+            // depending on how their ring was built.
+            // given
+            Member nodeA = member("node-a");
+            Member nodeB = member("node-b");
+            Member nodeC = member("node-c");
+            ConsistentHash oneByOne = new ConsistentHash()
+                    .with(nodeA, handling(100, CREATE_COURSE))
+                    .with(nodeB, handling(50, CREATE_COURSE))
+                    .with(nodeC, handling(100, RENAME_COURSE));
+
+            // when
+            ConsistentHash rebuilt = new ConsistentHash().withOnly(Map.of(
+                    nodeA, handling(100, CREATE_COURSE),
+                    nodeB, handling(50, CREATE_COURSE),
+                    nodeC, handling(100, RENAME_COURSE)
+            ));
+
+            // then — every routing key resolves to the same member on both rings
+            for (int i = 0; i < 500; i++) {
+                String routingKey = "course-" + i;
+                assertThat(rebuilt.memberFor(routingKey, CREATE_COURSE))
+                        .isEqualTo(oneByOne.memberFor(routingKey, CREATE_COURSE));
+                assertThat(rebuilt.memberFor(routingKey, RENAME_COURSE))
+                        .isEqualTo(oneByOne.memberFor(routingKey, RENAME_COURSE));
+            }
+        }
+
+        @Test
+        void returnsTheSameRingWhenTheMembershipsAreUnchanged() {
+            // given
+            ConsistentHash ring = new ConsistentHash().withOnly(Map.of(member("node-a"), handling(100, CREATE_COURSE)));
+
+            // when
+            ConsistentHash rebuilt = ring.withOnly(Map.of(member("node-a"), handling(100, CREATE_COURSE)));
+
+            // then — an unchanged rebuild leaves the version alone, so readers can tell a real change from a heartbeat
+            assertThat(rebuilt).isSameAs(ring);
+            assertThat(rebuilt.version()).isEqualTo(ring.version());
+        }
+
+        @Test
+        void emptiesTheRingWhenGivenNoMemberships() {
+            // given
+            ConsistentHash ring = new ConsistentHash().with(member("node-a"), handling(100, CREATE_COURSE));
+
+            // when
+            ConsistentHash rebuilt = ring.withOnly(Map.of());
+
+            // then
+            assertThat(rebuilt.members()).isEmpty();
+            assertThat(rebuilt.memberFor("course-1", CREATE_COURSE)).isEmpty();
+        }
+
+        @Test
+        void rejectsNullMemberships() {
+            // when / then
+            assertThatThrownBy(() -> new ConsistentHash().withOnly(null))
+                    .isInstanceOf(NullPointerException.class);
         }
     }
 
@@ -239,8 +342,8 @@ class ConsistentHashTest {
             ConsistentHash updated = ring.with(node, handling(100, CREATE_COURSE, RENAME_COURSE));
 
             // then
-            assertThat(updated.getMembers()).containsExactly(node);
-            assertThat(updated.getMember("course-1", RENAME_COURSE)).contains(node);
+            assertThat(updated.members()).containsExactly(node);
+            assertThat(updated.memberFor("course-1", RENAME_COURSE)).contains(node);
             assertThat(updated.version()).isEqualTo(ring.version() + 1);
         }
 
@@ -253,7 +356,7 @@ class ConsistentHashTest {
             ring.with(member("node-b"), handling(100, CREATE_COURSE));
 
             // then — the ring is immutable, which is what lets it be published without synchronisation
-            assertThat(ring.getMembers()).extracting(Member::name).containsExactly("node-a");
+            assertThat(ring.members()).extracting(Member::name).containsExactly("node-a");
         }
 
         @Test
@@ -268,7 +371,7 @@ class ConsistentHashTest {
             ConsistentHash without = ring.without(removed);
 
             // then
-            assertThat(without.getMembers()).extracting(Member::name).containsExactly("node-a");
+            assertThat(without.members()).extracting(Member::name).containsExactly("node-a");
             assertThat(without.version()).isEqualTo(ring.version() + 1);
         }
 
@@ -314,8 +417,8 @@ class ConsistentHashTest {
             // handled on two nodes at once
             assertThat(oneOrder).isEqualTo(otherOrder);
             assertThat(IntStream.range(0, 300).allMatch(
-                    i -> oneOrder.getMember("course-" + i, CREATE_COURSE)
-                                 .equals(otherOrder.getMember("course-" + i, CREATE_COURSE))
+                    i -> oneOrder.memberFor("course-" + i, CREATE_COURSE)
+                                 .equals(otherOrder.memberFor("course-" + i, CREATE_COURSE))
             )).isTrue();
         }
 
@@ -327,7 +430,7 @@ class ConsistentHashTest {
                     .with(member("node-a"), handling(100, CREATE_COURSE));
 
             // when / then
-            assertThat(ring.getMember("course-1", CREATE_COURSE)).isPresent();
+            assertThat(ring.memberFor("course-1", CREATE_COURSE)).isPresent();
         }
     }
 
@@ -357,8 +460,8 @@ class ConsistentHashTest {
             ConsistentHash ring = new ConsistentHash();
 
             // when / then
-            assertThatThrownBy(() -> ring.getMember(null, CREATE_COURSE)).isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> ring.getMember("course-1", null)).isInstanceOf(NullPointerException.class);
+            assertThatThrownBy(() -> ring.memberFor(null, CREATE_COURSE)).isInstanceOf(NullPointerException.class);
+            assertThatThrownBy(() -> ring.memberFor("course-1", null)).isInstanceOf(NullPointerException.class);
         }
     }
 }

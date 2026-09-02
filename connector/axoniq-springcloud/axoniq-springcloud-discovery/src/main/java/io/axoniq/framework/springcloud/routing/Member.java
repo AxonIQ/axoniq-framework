@@ -40,9 +40,9 @@ import java.util.Objects;
  *
  * @param name     the unique name of this member within the cluster, derived from its service id and URI
  * @param endpoint the base {@link URI} to reach this member over HTTP, or {@code null} for a
- *                 {@link #local() local} member whose URI is not yet known.
+ *                 {@link #local() local} member whose URI is not yet known
  * @param local    {@code true} when this member represents the application it is constructed in, {@code false}
- *                 when it represents another node.
+ *                 when it represents another node
  * @author Allard Buijze
  * @since 5.4.0
  */
@@ -52,7 +52,6 @@ public record Member(String name, @Nullable URI endpoint, boolean local) {
      * Compact constructor validating that the {@code name} is present, and that a non-{@link #local() local} member
      * carries an {@code endpoint} to reach it at.
      */
-    @SuppressWarnings("MissingJavadoc")
     public Member {
         Objects.requireNonNull(name, "The member name must not be null.");
         if (!local && endpoint == null) {

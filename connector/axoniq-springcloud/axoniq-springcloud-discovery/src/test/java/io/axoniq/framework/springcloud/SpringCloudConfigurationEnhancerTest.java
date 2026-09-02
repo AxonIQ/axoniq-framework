@@ -21,7 +21,7 @@ package io.axoniq.framework.springcloud;
 
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMode;
-import io.axoniq.framework.springcloud.transport.IncomingCommandGateway;
+import io.axoniq.framework.springcloud.transport.IncomingCommandInvoker;
 import io.axoniq.framework.springcloud.transport.RecordingRemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
@@ -50,7 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SpringCloudConfigurationEnhancerTest {
 
     private SpringCloudMemberRegistry registry;
-    private IncomingCommandGateway gateway;
+    private IncomingCommandInvoker invoker;
     private RemoteCommandDispatcher dispatcher;
 
     @BeforeEach
@@ -59,7 +59,7 @@ class SpringCloudConfigurationEnhancerTest {
         registry = new SpringCloudMemberRegistry(new RecordingDiscoveryClient().register("university", localInstance),
                                                  localInstance,
                                                  new RecordingCapabilityDiscoveryMode());
-        gateway = new IncomingCommandGateway(() -> "node-a", null);
+        invoker = new IncomingCommandInvoker(() -> "node-a", null);
         dispatcher = new RecordingRemoteCommandDispatcher();
     }
 
@@ -73,7 +73,7 @@ class SpringCloudConfigurationEnhancerTest {
                                           .disableEnhancerScanning()
                                           .registerEnhancer(new SpringCloudConfigurationEnhancer())
                                           .registerComponent(SpringCloudMemberRegistry.class, c -> registry)
-                                          .registerComponent(IncomingCommandGateway.class, c -> gateway)
+                                          .registerComponent(IncomingCommandInvoker.class, c -> invoker)
                                           .registerComponent(RemoteCommandDispatcher.class, c -> dispatcher));
     }
 

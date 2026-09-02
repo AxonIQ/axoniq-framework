@@ -33,20 +33,18 @@ import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.axonframework.messaging.queryhandling.SubscriptionQueryUpdateMessage;
 import org.junit.jupiter.api.*;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests how {@link IncomingQueryGateway} answers a query from another member, and how it reports what it cannot
+ * Tests how {@link IncomingQueryInvoker} answers a query from another member, and how it reports what it cannot
  * answer.
  *
  * @author Allard Buijze
  */
-class IncomingQueryGatewayTest {
+class IncomingQueryInvokerTest {
 
     private static final MessageType FIND_COURSE_TYPE = new MessageType("university.FindCourse", "1.0.0");
     private static final MessageType RESPONSE_TYPE = new MessageType("university.Course", "1.0.0");
@@ -54,13 +52,13 @@ class IncomingQueryGatewayTest {
 
     private RecordingQueryHandler handler;
     private RecordingQueryResponseSink sink;
-    private IncomingQueryGateway testSubject;
+    private IncomingQueryInvoker testSubject;
 
     @BeforeEach
     void setUp() {
         handler = new RecordingQueryHandler();
         sink = new RecordingQueryResponseSink();
-        testSubject = new IncomingQueryGateway(() -> "node-b", null);
+        testSubject = new IncomingQueryInvoker(() -> "node-b", null);
         testSubject.bind(handler);
     }
 
@@ -153,7 +151,7 @@ class IncomingQueryGatewayTest {
                     return responses;
                 }
             };
-            testSubject = new IncomingQueryGateway(() -> "node-b", null);
+            testSubject = new IncomingQueryInvoker(() -> "node-b", null);
             testSubject.bind(handler);
 
             // when
@@ -178,7 +176,7 @@ class IncomingQueryGatewayTest {
         @BeforeEach
         void answerAsynchronously() {
             responses = new QueueMessageStream<>();
-            testSubject = new IncomingQueryGateway(() -> "node-b", null);
+            testSubject = new IncomingQueryInvoker(() -> "node-b", null);
             testSubject.bind(new RecordingQueryHandler() {
                 @Override
                 public MessageStream<QueryResponseMessage> query(QueryMessage query) {
@@ -316,7 +314,7 @@ class IncomingQueryGatewayTest {
         @Test
         void reportsNoHandlerWhenNoneIsBoundYet() {
             // given a member still starting up
-            IncomingQueryGateway unbound = new IncomingQueryGateway(() -> "node-b", null);
+            IncomingQueryInvoker unbound = new IncomingQueryInvoker(() -> "node-b", null);
 
             // when
             unbound.handleSubscription(subscription(), sink);
@@ -359,7 +357,7 @@ class IncomingQueryGatewayTest {
         @Test
         void reportsNoHandlerWhenNoneIsBoundYet() {
             // given a member still starting up
-            IncomingQueryGateway unbound = new IncomingQueryGateway(() -> "node-b", null);
+            IncomingQueryInvoker unbound = new IncomingQueryInvoker(() -> "node-b", null);
 
             // when
             unbound.handle(request(), sink);
@@ -430,7 +428,7 @@ class IncomingQueryGatewayTest {
 
         @Test
         void rejectsAMissingMemberName() {
-            assertThatThrownBy(() -> new IncomingQueryGateway(null, null))
+            assertThatThrownBy(() -> new IncomingQueryInvoker(null, null))
                     .isInstanceOf(NullPointerException.class);
         }
 

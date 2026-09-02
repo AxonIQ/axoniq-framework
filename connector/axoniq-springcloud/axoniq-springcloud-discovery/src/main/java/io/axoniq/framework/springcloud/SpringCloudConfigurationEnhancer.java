@@ -23,8 +23,8 @@ import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConne
 import io.axoniq.framework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
 import io.axoniq.framework.messaging.queryhandling.distributed.PayloadConvertingQueryBusConnector;
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
-import io.axoniq.framework.springcloud.transport.IncomingCommandGateway;
-import io.axoniq.framework.springcloud.transport.IncomingQueryGateway;
+import io.axoniq.framework.springcloud.transport.IncomingCommandInvoker;
+import io.axoniq.framework.springcloud.transport.IncomingQueryInvoker;
 import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.transport.RemoteQueryDispatcher;
 import org.axonframework.common.configuration.ApplicationConfigurer;
@@ -117,7 +117,7 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
         return ComponentDefinition.ofType(QueryBusConnector.class)
                                   .withBuilder(config -> new SpringCloudQueryBusConnector(
                                           config.getComponent(SpringCloudMemberRegistry.class),
-                                          config.getComponent(IncomingQueryGateway.class),
+                                          config.getComponent(IncomingQueryInvoker.class),
                                           config.getComponent(RemoteQueryDispatcher.class),
                                           config.getComponent(MessageConverter.class)
                                   ))
@@ -147,7 +147,7 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
         return ComponentDefinition.ofType(CommandBusConnector.class)
                                   .withBuilder(config -> new SpringCloudCommandBusConnector(
                                           config.getComponent(SpringCloudMemberRegistry.class),
-                                          config.getComponent(IncomingCommandGateway.class),
+                                          config.getComponent(IncomingCommandInvoker.class),
                                           config.getComponent(RemoteCommandDispatcher.class),
                                           config.getComponent(MessageConverter.class)
                                   ))

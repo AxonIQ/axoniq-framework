@@ -54,12 +54,12 @@ class SpringCloudQueryControllerTest {
     private static final Duration BEAT_OFTEN = Duration.ofMillis(50);
     private static final Duration NEVER_REACHED = Duration.ofHours(1);
 
-    private IncomingQueryGateway gateway;
+    private IncomingQueryInvoker gateway;
     private ScheduledExecutorService scheduler;
 
     @BeforeEach
     void setUp() {
-        gateway = new IncomingQueryGateway(() -> "node-b", null);
+        gateway = new IncomingQueryInvoker(() -> "node-b", null);
         scheduler = Executors.newSingleThreadScheduledExecutor();
     }
 

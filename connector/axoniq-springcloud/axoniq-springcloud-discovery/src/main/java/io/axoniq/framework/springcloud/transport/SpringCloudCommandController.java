@@ -50,15 +50,15 @@ public class SpringCloudCommandController {
      */
     public static final String DEFAULT_COMMAND_ENDPOINT = "/axoniq-springcloud/command";
 
-    private final IncomingCommandGateway gateway;
+    private final IncomingCommandInvoker invoker;
 
     /**
-     * Constructs a {@code SpringCloudCommandController} handing received commands to the given {@code gateway}.
+     * Constructs a {@code SpringCloudCommandController} handing received commands to the given {@code invoker}.
      *
-     * @param gateway the gateway invoking this application's local command handler
+     * @param invoker the component invoking this application's local command handler
      */
-    public SpringCloudCommandController(IncomingCommandGateway gateway) {
-        this.gateway = Objects.requireNonNull(gateway, "The gateway must not be null.");
+    public SpringCloudCommandController(IncomingCommandInvoker invoker) {
+        this.invoker = Objects.requireNonNull(invoker, "The invoker must not be null.");
     }
 
     /**
@@ -72,6 +72,6 @@ public class SpringCloudCommandController {
      */
     @PostMapping
     public CompletableFuture<CommandDispatchReply> receiveCommand(@RequestBody CommandDispatchRequest request) {
-        return gateway.handle(request);
+        return invoker.handle(request);
     }
 }
