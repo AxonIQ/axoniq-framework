@@ -24,6 +24,7 @@ import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsResponse;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
+import io.axoniq.framework.messaging.deadletter.DeadLetter;
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
@@ -31,7 +32,9 @@ import io.axoniq.framework.messaging.eventhandling.deadletter.jdbc.GenericDeadLe
 import io.axoniq.framework.messaging.eventhandling.deadletter.jdbc.JdbcSequencedDeadLetterQueue;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
+import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.axonserver.api.AxonServerTenantProvider;
 import io.axoniq.framework.messaging.multitenancy.configuration.TenantComponentProviderUtil;
 import io.axoniq.framework.messaging.multitenancy.deadletter.TenantAwareSequencedDeadLetterQueueFactory;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
@@ -42,7 +45,6 @@ import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.messaging.core.QualifiedName;
-import org.axonframework.messaging.core.sequencing.SequentialPolicy;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -64,11 +66,14 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import javax.sql.DataSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -86,6 +91,7 @@ class MultiTenantDeadLetterQueueIT {
     private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
     private static final String TENANT_A = "dlq-tenant-a";
     private static final String TENANT_B = "dlq-tenant-b";
+    private static final String UNKNOWN_TENANT = "unknown-dlq-tenant";
     private static final String PROCESSOR_NAME = "multi-tenant-dlq";
     private static final String COMPONENT_NAME = "failing-handler";
 
@@ -147,7 +153,7 @@ class MultiTenantDeadLetterQueueIT {
         assertThat(deadLetterCount(TENANT_A)).isEqualTo(1L);
         assertThat(deadLetterCount(TENANT_B)).isEqualTo(1L);
 
-        boolean processed = deadLetterProcessor().processAny(contextFor(TENANT_A)).join();
+        boolean processed = replayAnyForTenant(TENANT_A).join();
 
         // then
         assertThat(processed).isTrue();
@@ -155,6 +161,91 @@ class MultiTenantDeadLetterQueueIT {
         assertThat(deadLetterQueue().size(contextFor(TENANT_A)).join()).isZero();
         assertThat(deadLetterQueue().size(contextFor(TENANT_B)).join()).isEqualTo(1L);
         assertThat(deadLetterCount(TENANT_A)).isZero();
+        assertThat(deadLetterCount(TENANT_B)).isEqualTo(1L);
+    }
+
+    @Test
+    void replaysOnlyTheMatchingSequenceForTheTenantInTheProcessorContext() {
+        // given
+        publishEvent(TENANT_A, "matching-event");
+        publishEvent(TENANT_A, "non-matching-event");
+        publishEvent(TENANT_B, "matching-event");
+        awaitDeadLetterQueueSizes(2L, 1L);
+
+        String matchingMessageIdentifier = firstDeadLetterMessageIdentifier(TENANT_A);
+        Predicate<DeadLetter<? extends EventMessage>> matchingEvent = letter ->
+                letter.message().identifier().equals(matchingMessageIdentifier);
+
+        // when - replay only first message for tenant a
+        boolean processed = replayForTenant(TENANT_A, matchingEvent).join();
+
+        // then
+        assertThat(processed).isTrue();
+        assertThat(deadLetterQueue().size(contextFor(TENANT_A)).join()).isEqualTo(1L);
+        assertThat(deadLetterQueue().size(contextFor(TENANT_B)).join()).isEqualTo(1L);
+        assertThat(deadLetterCount(TENANT_A)).isEqualTo(1L);
+        assertThat(deadLetterCount(TENANT_B)).isEqualTo(1L);
+        assertThat(handledTenants).containsExactlyInAnyOrder(TENANT_A, TENANT_A, TENANT_A, TENANT_B);
+    }
+
+    @Test
+    void repeatedlyReplaysOnlySequencesForTheTenantInTheProcessorContext() {
+        // given
+        publishEvent(TENANT_A, "event-a-1");
+        publishEvent(TENANT_A, "event-a-2");
+        publishEvent(TENANT_B, "event-b");
+        awaitDeadLetterQueueSizes(2L, 1L);
+
+        // when
+        boolean firstReplay = replayAnyForTenant(TENANT_A).join();
+        boolean secondReplay = replayAnyForTenant(TENANT_A).join();
+        boolean noMoreSequences = replayAnyForTenant(TENANT_A).join();
+
+        // then
+        assertThat(firstReplay).isTrue();
+        assertThat(secondReplay).isTrue();
+        assertThat(noMoreSequences).isFalse();
+        assertThat(deadLetterQueue().size(contextFor(TENANT_A)).join()).isZero();
+        assertThat(deadLetterQueue().size(contextFor(TENANT_B)).join()).isEqualTo(1L);
+        assertThat(deadLetterCount(TENANT_A)).isZero();
+        assertThat(deadLetterCount(TENANT_B)).isEqualTo(1L);
+        assertThat(handledTenants).containsExactlyInAnyOrder(TENANT_A, TENANT_A, TENANT_A, TENANT_A, TENANT_B);
+    }
+
+    @Test
+    void failsAsynchronouslyWhenTheProcessorContextContainsAnUnknownTenant() {
+        // when
+        CompletableFuture<Boolean> result = replayAnyForTenant(UNKNOWN_TENANT);
+
+        // then
+        assertThat(result).isCompletedExceptionally();
+        assertThat(result.handle((ignored, exception) -> exception.getCause()))
+                .isCompletedWithValueMatching(TenantNotResolvedException.class::isInstance);
+        assertThat(factoryTenants).doesNotContain(UNKNOWN_TENANT);
+    }
+
+    @Test
+    void failsAsynchronouslyWithoutReplayingAnotherTenantWhenTheTenantIsRemoved() {
+        // given
+        publishEvent(TENANT_A, "event-a");
+        publishEvent(TENANT_B, "event-b");
+        awaitDeadLetterQueueSizes(1L, 1L);
+
+        ((AxonServerTenantProvider) application.getComponent(TenantProvider.class))
+                .removeTenant(TenantDescriptor.tenantWithId(TENANT_A));
+        await().untilAsserted(() -> assertThat(application.getComponent(TenantProvider.class).tenants())
+                .extracting(TenantDescriptor::tenantId)
+                .containsExactly(TENANT_B));
+
+        // when
+        CompletableFuture<Boolean> result = replayAnyForTenant(TENANT_A);
+
+        // then
+        assertThat(result).isCompletedExceptionally();
+        assertThat(result.handle((ignored, exception) -> exception.getCause()))
+                .isCompletedWithValueMatching(TenantNotResolvedException.class::isInstance);
+        assertThat(deadLetterCount(TENANT_A)).isEqualTo(1L);
+        assertThat(deadLetterQueue().size(contextFor(TENANT_B)).join()).isEqualTo(1L);
         assertThat(deadLetterCount(TENANT_B)).isEqualTo(1L);
     }
 
@@ -258,6 +349,34 @@ class MultiTenantDeadLetterQueueIT {
         return new StubProcessingContext().withResource(TenantDescriptor.RESOURCE_KEY, tenant);
     }
 
+    private CompletableFuture<Boolean> replayAnyForTenant(String tenantId) {
+        return replayForTenant(tenantId, letter -> true);
+    }
+
+    private CompletableFuture<Boolean> replayForTenant(
+            String tenantId, Predicate<DeadLetter<? extends EventMessage>> sequenceFilter
+    ) {
+        UnitOfWorkFactory unitOfWorkFactory = application.getComponent(UnitOfWorkFactory.class);
+        return unitOfWorkFactory.create().executeWithResult(context -> {
+            context.putResource(TenantDescriptor.RESOURCE_KEY, TenantDescriptor.tenantWithId(tenantId));
+            return deadLetterProcessor().process(sequenceFilter, context);
+        });
+    }
+
+    private void awaitDeadLetterQueueSizes(long tenantAQueueSize, long tenantBQueueSize) {
+        await().untilAsserted(() -> {
+            assertThat(deadLetterQueue().size(contextFor(TENANT_A)).join()).isEqualTo(tenantAQueueSize);
+            assertThat(deadLetterQueue().size(contextFor(TENANT_B)).join()).isEqualTo(tenantBQueueSize);
+        });
+    }
+
+    private String firstDeadLetterMessageIdentifier(String tenantId) {
+        return deadLetterQueue().deadLetters(contextFor(tenantId)).join()
+                                .iterator().next()
+                                .iterator().next()
+                                .message().identifier();
+    }
+
     @SuppressWarnings("unchecked")
     private SequencedDeadLetterQueue<EventMessage> deadLetterQueue() {
         String queueName = "DeadLetterQueue[EventHandlingComponent[" + PROCESSOR_NAME + "][" + COMPONENT_NAME + "]]";
@@ -302,12 +421,15 @@ class MultiTenantDeadLetterQueueIT {
          */
         private static SimpleEventHandlingComponent failingOnceComponent(List<String> handledTenants) {
             Map<String, AtomicInteger> attempts = new ConcurrentHashMap<>();
-            SimpleEventHandlingComponent component = SimpleEventHandlingComponent.create(COMPONENT_NAME,
-                                                                                         SequentialPolicy.INSTANCE);
+            SimpleEventHandlingComponent component = SimpleEventHandlingComponent.create(
+                    COMPONENT_NAME,
+                    (event, context) -> Optional.of(event.identifier())
+            );
             component.subscribe(new QualifiedName("test", "TenantDlqEvent"), (event, context) -> {
                 String tenantId = TenantDescriptor.fromContext(context).orElseThrow().tenantId();
                 handledTenants.add(tenantId);
-                if (attempts.computeIfAbsent(tenantId, ignored -> new AtomicInteger()).incrementAndGet() == 1) {
+                String attemptKey = tenantId + ":" + event.identifier();
+                if (attempts.computeIfAbsent(attemptKey, ignored -> new AtomicInteger()).incrementAndGet() == 1) {
                     throw new IllegalStateException("Expected failure for event " + event.identifier());
                 }
                 return org.axonframework.messaging.core.MessageStream.empty();
