@@ -42,7 +42,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -60,7 +59,8 @@ import java.util.function.Supplier;
  * different segments of the {@code QueryBus}. Depending on the implementation used, each segment may run in a different
  * JVM.
  *
- * @author Steven van Beelen, Jan Galinski
+ * @author Jan Galinski
+ * @author Steven van Beelen
  * @since 5.0.0
  */
 public class DistributedQueryBus implements QueryBus {
@@ -74,35 +74,29 @@ public class DistributedQueryBus implements QueryBus {
     private final QueryBusConnector connector;
     private final ExecutorService queryingExecutor;
     private final Map<QueryMessage, QueryBusConnector.UpdateCallback> updateRegistry = new ConcurrentHashMap<>();
-    private final boolean localQueryShortcut;
-    private final Set<QualifiedName> subscriptions = ConcurrentHashMap.newKeySet();
 
     /**
      * Constructs a {@code DistributedQueryBus} using the given {@code localSegment} for
      * {@link #subscribe(QualifiedName, QueryHandler) subscribing} handlers and the given {@code connector} to dispatch
      * and receive queries and query responses with, to and from different segments of the {@code QueryBus}.
      *
-     * @param localSegment  The local {@code QueryBus} used to subscribe handlers to.
-     * @param connector     The {@code QueryBusConnector} to dispatch and receive queries and query responses with.
-     * @param configuration The {@code DistributedCommandBusConfiguration} containing the
-     *                      {@link ExecutorService ExecutorServices} for querying and handling query responses.
+     * @param localSegment  the local {@code QueryBus} used to subscribe handlers to
+     * @param connector     the {@code QueryBusConnector} to dispatch and receive queries and query responses with
+     * @param configuration the {@code DistributedQueryBusConfiguration} containing the {@link ExecutorService} for
+     *                      query processing
      */
     public DistributedQueryBus(QueryBus localSegment,
                                QueryBusConnector connector,
                                DistributedQueryBusConfiguration configuration) {
         this.localSegment = localSegment;
         this.connector = connector;
-        this.localQueryShortcut = configuration.preferLocalQueryHandler();
         this.queryingExecutor = configuration.queryExecutorService();
         connector.onIncomingQuery(new DistributedHandler());
-
-        // TODO - Add configuration for local segment shortcut on queries
     }
 
     @Override
     public QueryBus subscribe(QualifiedName queryName,
                               QueryHandler queryHandler) {
-        subscriptions.add(queryName);
         localSegment.subscribe(queryName, queryHandler);
         FutureUtils.joinAndUnwrap(connector.subscribe(queryName));
         return this;
@@ -111,9 +105,6 @@ public class DistributedQueryBus implements QueryBus {
     @Override
     public MessageStream<QueryResponseMessage> query(QueryMessage query,
                                                      @Nullable ProcessingContext context) {
-        if (localQueryShortcut && subscriptions.contains(query.type().qualifiedName())) {
-            return localSegment.query(query, context);
-        }
         return connector.query(query, context);
     }
 

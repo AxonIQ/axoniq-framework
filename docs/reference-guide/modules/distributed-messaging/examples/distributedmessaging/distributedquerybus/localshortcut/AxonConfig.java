@@ -17,26 +17,18 @@
  *  https://www.axoniq.io/pricing
  */
 
-package distributedmessaging.distributedquerybus.spring;
+package distributedmessaging.distributedquerybus.localshortcut;
 
-// tag::query-bus-configuration-bean[]
-import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
+// tag::configure-local-query-shortcut[]
 import io.axoniq.framework.messaging.queryhandling.distributed.LocalQueryDispatchPredicate;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 
-@Configuration
 public class AxonConfig {
-
-    @Bean
-    public DistributedQueryBusConfiguration queryBusConfiguration() {
-        return DistributedQueryBusConfiguration.DEFAULT.queryThreads(20);
-    }
-
-    @Bean
-    public LocalQueryDispatchPredicate localQueryDispatchPredicate() {
-        // Prefer the local handler for every query that this node can handle.
-        return (query, context) -> true;
+    public void configureLocalQueryShortcut(MessagingConfigurer configurer) {
+        configurer.componentRegistry(registry -> registry.registerComponent(
+                LocalQueryDispatchPredicate.class,
+                config -> (query, context) -> true   // always prefer the local handler when subscribed
+        ));
     }
 }
-// end::query-bus-configuration-bean[]
+// end::configure-local-query-shortcut[]
