@@ -17,16 +17,18 @@
  *  https://www.axoniq.io/pricing
  */
 
-package distributedmessaging.distributedquerybus.disableshortcut;
+package distributedmessaging.distributedcommandbus.localshortcut;
 
-import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
+// tag::configure-local-command-shortcut[]
+import io.axoniq.framework.messaging.commandhandling.distributed.LocalCommandDispatchPredicate;
+import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 
-class DisableLocalShortcut {
-
-    void disable() {
-        // tag::disable-local-shortcut[]
-        DistributedQueryBusConfiguration config = DistributedQueryBusConfiguration.DEFAULT
-                .preferLocalQueryHandler(false);  // Force all queries through connector
-        // end::disable-local-shortcut[]
+public class AxonConfig {
+    public void configureLocalCommandShortcut(MessagingConfigurer configurer) {
+        configurer.componentRegistry(registry -> registry.registerComponent(
+                LocalCommandDispatchPredicate.class,
+                config -> (command, context) -> true   // prefer the local handler when subscribed
+        ));
     }
 }
+// end::configure-local-command-shortcut[]

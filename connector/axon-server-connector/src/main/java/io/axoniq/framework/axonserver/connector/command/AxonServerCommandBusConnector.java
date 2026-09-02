@@ -120,8 +120,8 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
             return connection.commandChannel()
                              .sendCommand(CommandConverter.convertCommandMessage(command, clientId, componentName))
                              .thenCompose(commandResponse -> CommandConverter.convertCommandResponse(
-                                     commandResponse,
-                                     converter))
+                                     commandResponse, converter, command.type()
+                             ))
                              .whenComplete((commandResponse, throwable) -> commandInTransit.end());
         }
     }
@@ -233,10 +233,8 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
         return new CommandBusConnector.ResultCallback() {
 
             @Override
-            public void onSuccess(@Nullable CommandResultMessage resultMessage) {
-                logger.debug("Command [{}] completed successfully with result [{}]",
-                             command.getName(),
-                             resultMessage);
+            public void onSuccess(CommandResultMessage resultMessage) {
+                logger.debug("Command [{}] completed successfully with result [{}]", command.getName(), resultMessage);
                 result.complete(CommandConverter.convertResultMessage(resultMessage, command.getMessageIdentifier()));
             }
 

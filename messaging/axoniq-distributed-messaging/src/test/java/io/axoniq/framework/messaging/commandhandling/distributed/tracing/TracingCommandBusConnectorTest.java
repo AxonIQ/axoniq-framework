@@ -31,10 +31,9 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.axonframework.messaging.tracing.support.TestSpanFactory;
 import org.axonframework.messaging.tracing.support.TestSpanFactory.TestSpanType;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -123,30 +122,32 @@ class TracingCommandBusConnectorTest {
         private CompletableFuture<CommandResultMessage> dispatchResult = new CompletableFuture<>();
         private ProcessingContext dispatchContext;
 
+        @NonNull
         @Override
-        public CompletableFuture<CommandResultMessage> dispatch(CommandMessage command,
+        public CompletableFuture<CommandResultMessage> dispatch(@NonNull CommandMessage command,
                                                                 @Nullable ProcessingContext processingContext) {
             this.dispatchContext = processingContext;
             return dispatchResult;
         }
 
+        @NonNull
         @Override
-        public CompletableFuture<Void> subscribe(QualifiedName commandName, int loadFactor) {
+        public CompletableFuture<Void> subscribe(@NonNull QualifiedName commandName, int loadFactor) {
             return CompletableFuture.completedFuture(null);
         }
 
         @Override
-        public boolean unsubscribe(QualifiedName commandName) {
+        public boolean unsubscribe(@NonNull QualifiedName commandName) {
             return true;
         }
 
         @Override
-        public void onIncomingCommand(Handler handler) {
+        public void onIncomingCommand(@NonNull Handler handler) {
             this.handler = handler;
         }
 
         @Override
-        public void describeTo(ComponentDescriptor descriptor) {
+        public void describeTo(@NonNull ComponentDescriptor descriptor) {
             // No component details are needed for this recording test stub.
         }
     }
@@ -154,12 +155,12 @@ class TracingCommandBusConnectorTest {
     private static final class ResultCollector implements CommandBusConnector.ResultCallback {
 
         @Override
-        public void onSuccess(@Nullable CommandResultMessage resultMessage) {
+        public void onSuccess(@NonNull CommandResultMessage resultMessage) {
             // The test only needs completion to close the tracing scope.
         }
 
         @Override
-        public void onError(Throwable cause) {
+        public void onError(@NonNull Throwable cause) {
             // The test only needs completion to close the tracing scope.
         }
     }
