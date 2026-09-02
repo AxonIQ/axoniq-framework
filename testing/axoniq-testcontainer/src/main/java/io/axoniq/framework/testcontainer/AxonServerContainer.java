@@ -68,15 +68,15 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
     private static final String AXON_SERVER_ADDRESS_TEMPLATE = "%s:%s";
 
     /**
-     * Startup timeout for both wait strategies below. A container that could still become ready given a bit more
-     * time -- e.g. under CPU contention from other concurrently-starting containers on a busy CI runner -- should
-     * not fail the build just because the default 60s Testcontainers timeout was too tight.
+     * Startup timeout for both wait strategies below. A container that could still become ready given a bit more time
+     * -- e.g. under CPU contention from other concurrently-starting containers on a busy CI runner -- should not fail
+     * the build just because the default 60s Testcontainers timeout was too tight.
      */
     private static final Duration STARTUP_TIMEOUT = Duration.ofMinutes(2);
 
     /**
-     * Threshold above which a container's actual startup time is logged, to surface slow boots (e.g. caused by
-     * CPU contention from other concurrently-starting containers) without logging on every normal, fast start.
+     * Threshold above which a container's actual startup time is logged, to surface slow boots (e.g. caused by CPU
+     * contention from other concurrently-starting containers) without logging on every normal, fast start.
      */
     private static final Duration SLOW_STARTUP_THRESHOLD = Duration.ofSeconds(30);
 
@@ -269,8 +269,8 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
      * Initialize this Axon Server test container with DCB (Dynamic Consistency Boundary) context support.
      * <p>
      * When enabled, the default context will be created with DCB support, allowing for more flexible consistency
-     * boundaries in event-sourced applications. DCB enables defining consistency boundaries dynamically based on
-     * event tags rather than being limited to aggregate-based boundaries.
+     * boundaries in event-sourced applications. DCB enables defining consistency boundaries dynamically based on event
+     * tags rather than being limited to aggregate-based boundaries.
      * <p>
      * Default value is {@code false}.
      *
