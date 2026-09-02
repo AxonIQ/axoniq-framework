@@ -23,6 +23,8 @@ import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMod
 import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
 import io.axoniq.framework.springcloud.transport.IncomingQueryInvoker;
+import io.axoniq.framework.springcloud.transport.RecordingQueryResponseSink;
+import io.axoniq.framework.springcloud.transport.SubscriptionQueryRequest;
 import io.axoniq.framework.springcloud.transport.RecordingRemoteQueryDispatcher;
 import io.axoniq.framework.springcloud.transport.SubscriptionQueryMembersChangedException;
 import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
@@ -80,6 +82,7 @@ class SpringCloudQueryBusConnectorTest {
     private RecordingQueryHandler handler;
     private RecordingRemoteQueryDispatcher dispatcher;
     private RecordingEntitlementManager entitlementManager;
+    private IncomingQueryInvoker invoker;
     private SpringCloudQueryBusConnector testSubject;
 
     @BeforeEach
@@ -92,8 +95,9 @@ class SpringCloudQueryBusConnectorTest {
         handler = new RecordingQueryHandler();
         dispatcher = new RecordingRemoteQueryDispatcher();
         entitlementManager = new RecordingEntitlementManager();
+        invoker = new IncomingQueryInvoker(() -> "node-a", null);
         testSubject = new SpringCloudQueryBusConnector(registry,
-                                                       new IncomingQueryInvoker(() -> "node-a", null),
+                                                       invoker,
                                                        dispatcher,
                                                        null,
                                                        entitlementManager);
@@ -708,6 +712,25 @@ class SpringCloudQueryBusConnectorTest {
             // then other members stop routing queries here rather than discovering it went away by timing out
             assertThat(discoveryMode.localCapabilities().queries()).isEmpty();
             assertThat(registry.findQueryDestination(FIND_COURSE)).isEmpty();
+        }
+
+        @Test
+        void endsTheSubscriptionsThisMemberIsStillAnswering() {
+            // given a subscription another member opened on this one, which this member is answering
+            RecordingQueryResponseSink sink = new RecordingQueryResponseSink();
+            invoker.handleSubscription(
+                    new SubscriptionQueryRequest("query-1", FIND_COURSE_TYPE.toString(),
+                                                 new String(PAYLOAD, StandardCharsets.UTF_8),
+                                                 Map.of(), null, 16),
+                    sink
+            );
+
+            // when
+            testSubject.disconnect();
+
+            // then the subscriber is told to establish it again, rather than left on a stream nothing will write to
+            assertThat(sink.error()).isNotNull();
+            assertThat(sink.error().errorMessage()).contains("shutting down");
         }
 
         @Test

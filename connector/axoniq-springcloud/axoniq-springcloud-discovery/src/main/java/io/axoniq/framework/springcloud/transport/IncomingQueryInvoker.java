@@ -33,9 +33,11 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -63,6 +65,10 @@ public class IncomingQueryInvoker {
     private final Supplier<String> memberName;
     private final @Nullable MessageConverter converter;
     private final AtomicReference<@Nullable Handler> handler = new AtomicReference<>();
+
+    // The subscriptions this member is currently answering, so that they can be ended when it stops. Keyed by the
+    // identifier of the request that opened each, which is what a reply is addressed by.
+    private final Map<String, OpenSubscription> openSubscriptions = new ConcurrentHashMap<>();
 
     /**
      * Constructs an {@code IncomingQueryInvoker} reporting failures as originating from the member the given
@@ -204,7 +210,59 @@ public class IncomingQueryInvoker {
             sink.error(QueryConverter.convertErrorResult(e, request.identifier(), memberName.get(), converter));
             return;
         }
-        sink.onUnavailable(registration::cancel);
+        String requestIdentifier = request.identifier();
+        openSubscriptions.put(requestIdentifier, new OpenSubscription(sink, registration));
+        sink.onUnavailable(() -> {
+            openSubscriptions.remove(requestIdentifier);
+            registration.cancel();
+        });
+    }
+
+    /**
+     * Ends every subscription this member is still answering, telling each subscriber to establish it again.
+     * <p>
+     * Called when this member stops. Leaving the streams open instead would strand every subscriber on a member that
+     * is going away: no further update is coming, yet nothing says so, so the subscription looks alive until the
+     * connection itself fails. Failing them is also what releases the response streams the web container would
+     * otherwise wait on while shutting down.
+     * <p>
+     * Reported as a failure rather than a completion on purpose. A completed subscription reads as "there is nothing
+     * more to send", which would let a subscriber conclude it has the whole story; a failed one tells it to subscribe
+     * again, which is what gets it a complete stream from a member that is still there.
+     */
+    public void endOpenSubscriptions() {
+        openSubscriptions.keySet().forEach(this::endSubscription);
+    }
+
+    private void endSubscription(String requestIdentifier) {
+        OpenSubscription subscription = openSubscriptions.remove(requestIdentifier);
+        if (subscription == null) {
+            // The subscriber released it in the meantime, which ends it just as well.
+            return;
+        }
+        subscription.registration().cancel();
+        try {
+            subscription.sink().error(QueryConverter.convertErrorResult(
+                    new QueryDispatchException(
+                            "The member answering this subscription query is shutting down. Establish the "
+                                    + "subscription query again to continue receiving updates."
+                    ),
+                    requestIdentifier, memberName.get(), converter
+            ));
+        } catch (Exception e) {
+            // The subscriber is already gone, which is the outcome this was aiming for anyway.
+            logger.debug("Could not report this member stopping to subscription query [{}].", requestIdentifier, e);
+        }
+    }
+
+    /**
+     * A subscription this member is answering, and the registration feeding it.
+     *
+     * @param sink         the stream carrying updates to the subscribing member
+     * @param registration the update handler registration producing them
+     */
+    private record OpenSubscription(QueryResponseSink sink, Registration registration) {
+
     }
 
     /**

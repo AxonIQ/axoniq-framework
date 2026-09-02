@@ -412,17 +412,24 @@ public class SpringCloudQueryBusConnector implements QueryBusConnector {
     }
 
     /**
-     * Stops advertising the queries this member handles, so that other members stop routing them here.
+     * Stops advertising the queries this member handles, and ends the subscriptions it is still answering.
      * <p>
      * Performed in the {@link Phase#INBOUND_QUERY_CONNECTOR} phase, before dispatching is shut down, so that other
      * members learn this member is leaving while it can still answer what is already in flight.
+     * <p>
+     * Ending the open subscriptions here is safe because shutdown reaches {@link Phase#INBOUND_EVENT_CONNECTORS},
+     * where event processors are stopped, before it reaches this phase. Nothing is left that could emit an update
+     * onto a subscription by the time they are ended, so no side effect is cut short.
      *
-     * @return a future that completes once this member no longer advertises any query
+     * @return a future that completes once this member no longer advertises any query, and answers no subscription
      */
     public CompletableFuture<Void> disconnect() {
         logger.debug("Disconnecting the SpringCloudQueryBusConnector.");
         subscriptions.clear();
         registry.publishLocalQueries(Set.of());
+        // Safe to end here: event processors are stopped in the INBOUND_EVENT_CONNECTORS phase, which shutdown
+        // reaches before this one, so nothing is left that could still emit an update onto these subscriptions.
+        gateway.endOpenSubscriptions();
         return FutureUtils.emptyCompletedFuture();
     }
 

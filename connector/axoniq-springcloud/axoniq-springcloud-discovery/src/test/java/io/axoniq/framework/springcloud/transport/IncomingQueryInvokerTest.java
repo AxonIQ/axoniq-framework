@@ -352,6 +352,89 @@ class IncomingQueryInvokerTest {
     }
 
     @Nested
+    class WhenThisMemberStops {
+
+        private static SubscriptionQueryRequest subscription(String identifier) {
+            return new SubscriptionQueryRequest(identifier, FIND_COURSE_TYPE.toString(), PAYLOAD, Map.of(), null, 16);
+        }
+
+        @Test
+        void failsAnOpenSubscriptionRatherThanLeavingItHanging() {
+            // given
+            testSubject.handleSubscription(subscription("query-1"), sink);
+
+            // when
+            testSubject.endOpenSubscriptions();
+
+            // then — a failure, not a completion: a completed subscription reads as "nothing more to send", which
+            // would let the subscriber conclude it has the whole story
+            assertThat(sink.error()).isNotNull();
+            assertThat(sink.error().errorMessage()).contains("shutting down");
+            assertThat(sink.subscriptionCompletedFor()).isNull();
+        }
+
+        @Test
+        void addressesTheFailureToTheSubscriptionItEnds() {
+            // given
+            testSubject.handleSubscription(subscription("query-1"), sink);
+
+            // when
+            testSubject.endOpenSubscriptions();
+
+            // then the subscribing member can tell which of its subscriptions ended
+            assertThat(sink.error().requestIdentifier()).isEqualTo("query-1");
+        }
+
+        @Test
+        void cancelsTheUpdateRegistrationSoNothingGoesOnBeingProduced() {
+            // given
+            testSubject.handleSubscription(subscription("query-1"), sink);
+
+            // when
+            testSubject.endOpenSubscriptions();
+            handler.emit(update("update-1"));
+
+            // then
+            assertThat(sink.updates()).isEmpty();
+        }
+
+        @Test
+        void endsEverySubscriptionThisMemberAnswers() {
+            // given
+            RecordingQueryResponseSink other = new RecordingQueryResponseSink();
+            testSubject.handleSubscription(subscription("query-1"), sink);
+            testSubject.handleSubscription(subscription("query-2"), other);
+
+            // when
+            testSubject.endOpenSubscriptions();
+
+            // then
+            assertThat(sink.error()).isNotNull();
+            assertThat(other.error()).isNotNull();
+        }
+
+        @Test
+        void leavesASubscriptionTheSubscriberAlreadyReleasedAlone() {
+            // given the subscriber went away first, which cancels the registration through the sink
+            testSubject.handleSubscription(subscription("query-1"), sink);
+            sink.becomeUnavailable();
+
+            // when
+            testSubject.endOpenSubscriptions();
+
+            // then nothing is reported to a stream nobody is reading
+            assertThat(sink.error()).isNull();
+        }
+
+        @Test
+        void isHarmlessWhenNoSubscriptionIsOpen() {
+            // when / then
+            testSubject.endOpenSubscriptions();
+            assertThat(sink.error()).isNull();
+        }
+    }
+
+    @Nested
     class ReportingFailures {
 
         @Test
