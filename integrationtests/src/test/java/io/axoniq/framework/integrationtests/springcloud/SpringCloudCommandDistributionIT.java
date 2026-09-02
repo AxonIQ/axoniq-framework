@@ -22,6 +22,7 @@ package io.axoniq.framework.integrationtests.springcloud;
 import io.axoniq.framework.integrationtests.springcloud.SpringCloudNodes.CreateCourse;
 import io.axoniq.framework.springcloud.SpringCloudMemberRegistry;
 import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesPayload;
+import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.routing.Member;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
 import org.junit.jupiter.api.*;
@@ -136,7 +137,7 @@ class SpringCloudCommandDistributionIT {
 
     private static Set<Member> handlingMembersOf(ConfigurableApplicationContext node) {
         SpringCloudMemberRegistry registry = node.getBean(SpringCloudMemberRegistry.class);
-        return registry.ring().getMembers().stream()
+        return registry.ring().members().stream()
                        .filter(member -> registry.ring().capabilitiesOf(member)
                                                  .filter(capabilities -> !capabilities.commands().isEmpty())
                                                  .isPresent())
@@ -264,8 +265,7 @@ class SpringCloudCommandDistributionIT {
             // when
             ResponseEntity<MemberCapabilitiesPayload> conditional =
                     restClient.get()
-                              .uri("http://localhost:" + portB
-                                           + "/axoniq-springcloud/member-capabilities")
+                              .uri(capabilitiesUri(portB))
                               .header("If-None-Match", entityTag)
                               .retrieve()
                               .toEntity(MemberCapabilitiesPayload.class);
@@ -277,9 +277,13 @@ class SpringCloudCommandDistributionIT {
 
         private ResponseEntity<MemberCapabilitiesPayload> capabilitiesOf(int port) {
             return restClient.get()
-                             .uri("http://localhost:" + port + "/axoniq-springcloud/member-capabilities")
+                             .uri(capabilitiesUri(port))
                              .retrieve()
                              .toEntity(MemberCapabilitiesPayload.class);
+        }
+
+        private String capabilitiesUri(int port) {
+            return "http://localhost:" + port + RestCapabilityDiscoveryMode.DEFAULT_CAPABILITIES_ENDPOINT;
         }
     }
 }

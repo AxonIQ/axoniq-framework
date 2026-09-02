@@ -21,7 +21,8 @@ package io.axoniq.framework.springcloud;
 
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.springcloud.routing.Member;
-import io.axoniq.framework.springcloud.transport.IncomingCommandGateway;
+import io.axoniq.framework.springcloud.transport.IncomingCommandInvoker;
+import io.axoniq.framework.springcloud.transport.MemberUnreachableException;
 import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.license.entitlement.EntitlementMessageType;
@@ -85,7 +86,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
     private static final Logger logger = LoggerFactory.getLogger(SpringCloudCommandBusConnector.class);
 
     private final SpringCloudMemberRegistry registry;
-    private final IncomingCommandGateway gateway;
+    private final IncomingCommandInvoker invoker;
     private final RemoteCommandDispatcher dispatcher;
     private final @Nullable MessageConverter converter;
     private final EntitlementManager entitlementManager;
@@ -99,17 +100,17 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
      * Constructs a {@code SpringCloudCommandBusConnector} routing with the given {@code registry}.
      *
      * @param registry   the registry holding the consistent-hash ring commands are routed with
-     * @param gateway    the gateway commands arriving from other members are handled through
+     * @param invoker    the component invoking the local handler for commands from other members
      * @param dispatcher the dispatcher sending commands to other members
      * @param converter  the converter attached to commands routed to this application, so that a locally routed
      *                   command carries the same conversion capability as one that travelled over the wire, or
-     *                   {@code null} when none is available.
+     *                   {@code null} when none is available
      */
     public SpringCloudCommandBusConnector(SpringCloudMemberRegistry registry,
-                                          IncomingCommandGateway gateway,
+                                          IncomingCommandInvoker invoker,
                                           RemoteCommandDispatcher dispatcher,
                                           @Nullable MessageConverter converter) {
-        this(registry, gateway, dispatcher, converter, EntitlementManager.INSTANCE);
+        this(registry, invoker, dispatcher, converter, EntitlementManager.INSTANCE);
         EntitlementManager.INSTANCE.registerAddon(SpringCloudAxoniqAddon.class);
     }
 
@@ -117,25 +118,25 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
      * Package-private constructor allowing an alternative {@link EntitlementManager} to be injected.
      * <p>
      * Marked {@link Internal} because production code must use
-     * {@link #SpringCloudCommandBusConnector(SpringCloudMemberRegistry, IncomingCommandGateway,
+     * {@link #SpringCloudCommandBusConnector(SpringCloudMemberRegistry, IncomingCommandInvoker,
      * RemoteCommandDispatcher, MessageConverter)}, which registers the addon and claims against
      * {@link EntitlementManager#INSTANCE}. This constructor exists so tests need not touch that singleton.
      *
      * @param registry           the registry holding the consistent-hash ring commands are routed with
-     * @param gateway            the gateway commands arriving from other members are handled through
+     * @param invoker            the component invoking the local handler for commands from other members
      * @param dispatcher         the dispatcher sending commands to other members
      * @param converter          the converter attached to commands routed to this application, or {@code null} when
-     *                           none is available.
+     *                           none is available
      * @param entitlementManager the entitlement manager dispatched commands are claimed against
      */
     @Internal
     SpringCloudCommandBusConnector(SpringCloudMemberRegistry registry,
-                                   IncomingCommandGateway gateway,
+                                   IncomingCommandInvoker invoker,
                                    RemoteCommandDispatcher dispatcher,
                                    @Nullable MessageConverter converter,
                                    EntitlementManager entitlementManager) {
         this.registry = Objects.requireNonNull(registry, "The registry must not be null.");
-        this.gateway = Objects.requireNonNull(gateway, "The gateway must not be null.");
+        this.invoker = Objects.requireNonNull(invoker, "The invoker must not be null.");
         this.dispatcher = Objects.requireNonNull(dispatcher, "The dispatcher must not be null.");
         this.converter = converter;
         this.entitlementManager = Objects.requireNonNull(entitlementManager,
@@ -212,17 +213,23 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
         return dispatcher.dispatch(member, command)
                          .whenComplete((result, cause) -> {
                              if (cause != null && isUnreachable(cause)) {
-                                 registry.suspect(member);
+                                 registry.markUnreachable(member);
                              }
                          });
     }
 
     /**
-     * Indicates whether the given {@code cause} means the member could not be reached, as opposed to its handler
-     * having failed.
+     * Indicates whether the given {@code cause} means the member could not be reached, as opposed to the member having
+     * reported a failure of its own.
      * <p>
-     * Only the former says anything about the member's availability. A handler that threw is an application outcome,
-     * and taking a member out of the ring for it would move a failing command onto every other member in turn.
+     * Only the former says anything about the member's availability. Anything the member reported — a handler that
+     * threw, or a command it could not read — is an outcome it produced while perfectly reachable, and taking it out of
+     * the ring for that would move a failing command onto every other member in turn until the ring is empty.
+     * <p>
+     * The distinction rests on {@link MemberUnreachableException}, which only the transport raises, and never on
+     * {@link CommandDispatchException} itself: a member reporting that it could not dispatch a command answers with
+     * {@link io.axoniq.framework.springcloud.transport.CommandErrorCode#COMMAND_DISPATCH_ERROR}, which is reconstructed
+     * as a plain {@code CommandDispatchException} on this side and must not evict it.
      *
      * @param cause the failure that completed a remote dispatch
      * @return {@code true} when the member could not be reached, {@code false} otherwise
@@ -231,7 +238,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
         Throwable actual = cause instanceof CompletionException && cause.getCause() != null
                 ? cause.getCause()
                 : cause;
-        return actual instanceof CommandDispatchException;
+        return actual instanceof MemberUnreachableException;
     }
 
     /**
@@ -260,7 +267,11 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
     public CompletableFuture<Void> subscribe(QualifiedName commandName, int loadFactor) {
         Objects.requireNonNull(commandName, "The commandName must not be null.");
         if (loadFactor < 0) {
-            throw new IllegalArgumentException("The load factor cannot be negative, but was [" + loadFactor + "].");
+            // Reported through the returned future rather than thrown, so that a caller composing on it sees the
+            // failure at all. Nothing is recorded, so the connector is left as it was.
+            return CompletableFuture.failedFuture(new IllegalArgumentException(
+                    "The load factor cannot be negative, but was [" + loadFactor + "]."
+            ));
         }
         logger.debug("Subscribing to command [{}] with load factor [{}].", commandName, loadFactor);
         subscriptions.put(commandName, loadFactor);
@@ -297,7 +308,7 @@ public class SpringCloudCommandBusConnector implements CommandBusConnector {
     public void onIncomingCommand(Handler handler) {
         Objects.requireNonNull(handler, "The handler must not be null.");
         this.incomingHandler = handler;
-        gateway.bind(handler);
+        invoker.bind(handler);
     }
 
     /**

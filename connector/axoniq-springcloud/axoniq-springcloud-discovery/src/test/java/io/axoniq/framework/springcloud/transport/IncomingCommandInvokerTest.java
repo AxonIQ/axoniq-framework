@@ -29,7 +29,6 @@ import org.axonframework.messaging.core.MessageType;
 import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -37,24 +36,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests how {@link IncomingCommandGateway} turns a request from another member into a local handler invocation and
+ * Tests how {@link IncomingCommandInvoker} turns a request from another member into a local handler invocation and
  * back into a reply.
  *
  * @author Allard Buijze
  */
-class IncomingCommandGatewayTest {
+class IncomingCommandInvokerTest {
 
     private static final MessageType COMMAND_TYPE = new MessageType("university.CreateCourse", "2.1.0");
     private static final MessageType RESULT_TYPE = new MessageType("university.CourseId", "1.0.0");
     private static final byte[] PAYLOAD = "{\"name\":\"Axon 5\"}".getBytes(StandardCharsets.UTF_8);
 
     private RecordingCommandHandler handler;
-    private IncomingCommandGateway testSubject;
+    private IncomingCommandInvoker testSubject;
 
     @BeforeEach
     void setUp() {
         handler = new RecordingCommandHandler();
-        testSubject = new IncomingCommandGateway(() -> "node-b", null);
+        testSubject = new IncomingCommandInvoker(() -> "node-b", null);
     }
 
     private static CommandDispatchRequest request() {
@@ -215,7 +214,7 @@ class IncomingCommandGatewayTest {
         @Test
         void rejectsANullMemberName() {
             // when / then
-            assertThatThrownBy(() -> new IncomingCommandGateway(null, null))
+            assertThatThrownBy(() -> new IncomingCommandInvoker(null, null))
                     .isInstanceOf(NullPointerException.class);
         }
 

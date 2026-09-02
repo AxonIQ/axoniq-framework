@@ -46,9 +46,9 @@ import java.util.Objects;
  * @param identifier        the identifier of this reply message
  * @param requestIdentifier the {@link CommandDispatchRequest#identifier() identifier} of the command this replies to
  * @param type              the {@link MessageType#toString() string form} of the result's
- *                          {@link CommandResultMessage#type() type}, or {@code null} when there is no result.
+ *                          {@link CommandResultMessage#type() type}, or {@code null} when there is no result
  * @param payload           the Base64-encoded {@code byte[]} payload of the result, or {@code null} when there is
- *                          none.
+ *                          none
  * @param metadata          the {@link CommandResultMessage#metadata() metadata} of the result
  * @param errorCode         the kind of failure that occurred, or {@code null} when handling succeeded
  * @param errorMessage      a description of the failure, or {@code null} when handling succeeded
@@ -59,7 +59,7 @@ import java.util.Objects;
  *                          {@code null} when it carries none. Present for wire-level observability only; the
  *                          receiving member reconstructs details as the type its own code asks for.
  * @param errorDetailsPayload the Base64-encoded serialized application-specific details carried by the failure, or
- *                          {@code null} when it carries none.
+ *                          {@code null} when it carries none
  * @author Allard Buijze
  * @since 5.4.0
  */
@@ -81,13 +81,72 @@ public record CommandDispatchReply(
      * Compact constructor requiring both identifiers, and defaulting {@code null} metadata and error details to empty
      * so a reply from a member that omits either field still reads.
      */
-    @SuppressWarnings("MissingJavadoc")
     public CommandDispatchReply {
         Objects.requireNonNull(identifier, "The reply identifier must not be null.");
         Objects.requireNonNull(requestIdentifier, "The request identifier must not be null.");
         // WireCodec rather than Map.copyOf: metadata permits null values, which Map.copyOf rejects.
         metadata = WireCodec.copyOf(metadata);
         errorDetails = errorDetails == null ? List.of() : List.copyOf(errorDetails);
+    }
+
+    /**
+     * Constructs a {@code CommandDispatchReply} carrying the successful outcome of a command.
+     *
+     * @param identifier        the identifier of the result
+     * @param requestIdentifier the identifier of the command this is a reply to
+     * @param type              the {@link MessageType#toString() string form} of the result's type, or {@code null}
+     *                          when the handler produced no result
+     * @param payload           the Base64-encoded {@code byte[]} payload of the result, or {@code null} when there is
+     *                          none
+     * @param metadata          the metadata of the result
+     * @return a reply carrying the successful outcome of a command
+     */
+    public static CommandDispatchReply result(String identifier,
+                                              String requestIdentifier,
+                                              @Nullable String type,
+                                              @Nullable String payload,
+                                              Map<String, @Nullable String> metadata) {
+        return new CommandDispatchReply(identifier, requestIdentifier, type, payload, metadata,
+                                        null, null, List.of(), null, null, null);
+    }
+
+    /**
+     * Constructs a {@code CommandDispatchReply} reporting that the handler produced no result at all.
+     *
+     * @param identifier        the identifier of the reply
+     * @param requestIdentifier the identifier of the command this is a reply to
+     * @return a reply reporting that the handler produced no result
+     */
+    public static CommandDispatchReply noResult(String identifier, String requestIdentifier) {
+        return new CommandDispatchReply(identifier, requestIdentifier, null, null, Map.of(),
+                                        null, null, List.of(), null, null, null);
+    }
+
+    /**
+     * Constructs a {@code CommandDispatchReply} reporting that handling the command failed.
+     *
+     * @param identifier          the identifier of the reply
+     * @param requestIdentifier   the identifier of the command this is a reply to
+     * @param errorCode           the kind of failure being reported
+     * @param errorMessage        the message describing the failure
+     * @param errorOrigin         the name of the member reporting the failure
+     * @param errorDetails        the descriptions making up the failure's cause chain
+     * @param errorDetailsType    the class name of the application-specific details, or {@code null} when there are
+     *                            none
+     * @param errorDetailsPayload the Base64-encoded application-specific details, or {@code null} when there are none
+     * @return a reply reporting that handling the command failed
+     */
+    public static CommandDispatchReply error(String identifier,
+                                             String requestIdentifier,
+                                             CommandErrorCode errorCode,
+                                             @Nullable String errorMessage,
+                                             @Nullable String errorOrigin,
+                                             List<String> errorDetails,
+                                             @Nullable String errorDetailsType,
+                                             @Nullable String errorDetailsPayload) {
+        return new CommandDispatchReply(identifier, requestIdentifier, null, null, Map.of(),
+                                        errorCode, errorMessage, errorDetails, errorOrigin,
+                                        errorDetailsType, errorDetailsPayload);
     }
 
     /**

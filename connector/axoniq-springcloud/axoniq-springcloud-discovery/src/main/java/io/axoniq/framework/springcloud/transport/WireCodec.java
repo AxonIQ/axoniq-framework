@@ -37,9 +37,9 @@ import java.util.Map;
 /**
  * The encoding members share when writing messages to each other, whatever kind of message they are.
  * <p>
- * Commands and queries travel over different endpoints with different shapes, but a payload is Base64-encoded and a
- * failure is described the same way in both. Keeping that here means the two directions cannot drift apart into
- * encodings that no longer read each other.
+ * Messages of different kinds travel over endpoints of their own, with shapes of their own, but a payload is
+ * Base64-encoded and a failure is described the same way in all of them. Keeping that here means those shapes cannot
+ * drift apart into encodings that no longer read each other.
  *
  * @author Allard Buijze
  * @since 5.4.0

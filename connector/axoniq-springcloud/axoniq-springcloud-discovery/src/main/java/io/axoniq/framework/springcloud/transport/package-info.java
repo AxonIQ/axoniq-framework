@@ -24,7 +24,7 @@
  * io.axoniq.framework.springcloud.transport.CommandDispatchReply} are the wire format. {@link
  * io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher} sends a command to another member, {@link
  * io.axoniq.framework.springcloud.transport.SpringCloudCommandController} receives one, and {@link
- * io.axoniq.framework.springcloud.transport.IncomingCommandGateway} turns a received request into an invocation of
+ * io.axoniq.framework.springcloud.transport.IncomingCommandInvoker} turns a received request into an invocation of
  * the local command handler and its result back into a reply.
  */
 @NullMarked

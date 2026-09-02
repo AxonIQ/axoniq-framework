@@ -22,13 +22,12 @@ package io.axoniq.framework.springcloud.transport;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.conversion.ConversionException;
 import org.axonframework.conversion.Converter;
-import org.axonframework.messaging.queryhandling.QueryExecutionException;
+import org.axonframework.messaging.commandhandling.CommandExecutionException;
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -158,7 +157,7 @@ class WireCodecTest {
         void carriesDetailsAlreadyInBytesAsTheyAre() {
             // given
             byte[] details = "{\"reason\":\"closed\"}".getBytes(StandardCharsets.UTF_8);
-            Throwable cause = new QueryExecutionException("Rejected.", null, details);
+            Throwable cause = new CommandExecutionException("Rejected.", null, details);
 
             // when / then
             assertThat(WireCodec.serializedDetailsOf(cause, null)).isEqualTo(details);
@@ -172,7 +171,7 @@ class WireCodecTest {
         @Test
         void omitsDetailsThatCannotBeConverted() {
             // given a failure whose details the converter cannot write
-            Throwable cause = new QueryExecutionException("Rejected.", null, new Object());
+            Throwable cause = new CommandExecutionException("Rejected.", null, new Object());
 
             // when / then reporting the failure matters more than reporting its details in full
             assertThat(WireCodec.serializedDetailsOf(cause, new FailingConverter())).isNull();
@@ -181,7 +180,7 @@ class WireCodecTest {
         @Test
         void omitsDetailsWhenNoConverterIsAvailable() {
             // given
-            Throwable cause = new QueryExecutionException("Rejected.", null, new Object());
+            Throwable cause = new CommandExecutionException("Rejected.", null, new Object());
 
             // when / then
             assertThat(WireCodec.serializedDetailsOf(cause, null)).isNull();

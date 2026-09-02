@@ -31,7 +31,6 @@ import org.springframework.cloud.client.discovery.event.HeartbeatEvent;
 import org.springframework.cloud.client.discovery.event.InstanceRegisteredEvent;
 
 import java.net.URI;
-import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -87,7 +86,7 @@ class SpringCloudMemberRegistryTest {
             testSubject.updateMemberships();
 
             // then
-            assertThat(testSubject.ring().getMembers()).hasSize(2);
+            assertThat(testSubject.ring().members()).hasSize(2);
         }
 
         @Test
@@ -96,7 +95,7 @@ class SpringCloudMemberRegistryTest {
             testSubject.onInstanceRegistered(new InstanceRegisteredEvent<>(this, localInstance));
 
             // when
-            Set<Member> members = testSubject.ring().getMembers();
+            Set<Member> members = testSubject.ring().members();
 
             // then — the local flag is what decides whether a command is handled here or sent over HTTP
             assertThat(members).filteredOn(Member::local).hasSize(1);
@@ -112,7 +111,7 @@ class SpringCloudMemberRegistryTest {
             testSubject.updateMemberships();
 
             // then
-            assertThat(testSubject.ring().getMembers()).hasSize(1);
+            assertThat(testSubject.ring().members()).hasSize(1);
         }
 
         @Test
@@ -124,7 +123,7 @@ class SpringCloudMemberRegistryTest {
             testSubject.updateMemberships();
 
             // then — the round must not be abandoned because one instance threw
-            assertThat(testSubject.ring().getMembers()).hasSize(1);
+            assertThat(testSubject.ring().members()).hasSize(1);
         }
 
         @Test
@@ -155,21 +154,21 @@ class SpringCloudMemberRegistryTest {
         void rebuildsTheRingOnEachHeartbeat() {
             // given
             testSubject.onHeartbeat(new HeartbeatEvent(this, "first"));
-            assertThat(testSubject.ring().getMembers()).hasSize(2);
+            assertThat(testSubject.ring().members()).hasSize(2);
 
             // when — a member leaves
             discoveryClient.deregister("university", remoteInstance);
             testSubject.onHeartbeat(new HeartbeatEvent(this, "second"));
 
             // then — rebuilding means a departed member simply does not reappear
-            assertThat(testSubject.ring().getMembers()).hasSize(1);
+            assertThat(testSubject.ring().members()).hasSize(1);
         }
 
         @Test
         void picksUpCapabilitiesAMemberGainedSinceTheLastRound() {
             // given
             testSubject.updateMemberships();
-            assertThat(testSubject.ring().getMember("course-1", RENAME_COURSE)).isEmpty();
+            assertThat(testSubject.ring().memberFor("course-1", RENAME_COURSE)).isEmpty();
 
             // when
             discoveryMode.answering(remoteInstance,
@@ -177,7 +176,7 @@ class SpringCloudMemberRegistryTest {
             testSubject.updateMemberships();
 
             // then
-            assertThat(testSubject.ring().getMember("course-1", RENAME_COURSE)).isPresent();
+            assertThat(testSubject.ring().memberFor("course-1", RENAME_COURSE)).isPresent();
         }
     }
 
@@ -278,7 +277,7 @@ class SpringCloudMemberRegistryTest {
             registry.updateMemberships();
 
             // then — the round completes, with the reachable member on the ring
-            assertThat(registry.ring().getMember("course-1", CREATE_COURSE)).isPresent();
+            assertThat(registry.ring().memberFor("course-1", CREATE_COURSE)).isPresent();
         }
 
         @Test
@@ -298,7 +297,7 @@ class SpringCloudMemberRegistryTest {
             registry.updateMemberships();
 
             // then
-            assertThat(registry.ring().getMembers())
+            assertThat(registry.ring().members())
                     .extracting(Member::endpoint)
                     .extracting(Object::toString)
                     .containsExactly("http://node-c:8080/university");
@@ -319,7 +318,7 @@ class SpringCloudMemberRegistryTest {
             registry.updateMemberships();
 
             // then
-            assertThat(registry.ring().getMembers())
+            assertThat(registry.ring().members())
                     .extracting(Member::endpoint)
                     .extracting(Object::toString)
                     .containsExactly("http://node-b:8080");
@@ -333,33 +332,33 @@ class SpringCloudMemberRegistryTest {
         void takesAnUnreachableMemberOutOfTheRing() {
             // given
             testSubject.updateMemberships();
-            Member unreachable = testSubject.ring().getMembers().stream()
+            Member unreachable = testSubject.ring().members().stream()
                                             .filter(member -> !member.local())
                                             .findFirst()
                                             .orElseThrow();
 
             // when
-            testSubject.suspect(unreachable);
+            testSubject.markUnreachable(unreachable);
 
             // then
-            assertThat(testSubject.ring().getMembers()).doesNotContain(unreachable);
+            assertThat(testSubject.ring().members()).doesNotContain(unreachable);
         }
 
         @Test
         void bringsTheMemberBackOnTheNextDiscoveryRound() {
             // given
             testSubject.updateMemberships();
-            Member unreachable = testSubject.ring().getMembers().stream()
+            Member unreachable = testSubject.ring().members().stream()
                                             .filter(member -> !member.local())
                                             .findFirst()
                                             .orElseThrow();
-            testSubject.suspect(unreachable);
+            testSubject.markUnreachable(unreachable);
 
             // when
             testSubject.updateMemberships();
 
             // then — suspecting only keeps commands away while a member is actually unreachable
-            assertThat(testSubject.ring().getMembers()).contains(unreachable);
+            assertThat(testSubject.ring().members()).contains(unreachable);
         }
 
         @Test
@@ -369,7 +368,7 @@ class SpringCloudMemberRegistryTest {
             int versionBefore = testSubject.ring().version();
 
             // when
-            testSubject.suspect(new Member("UNKNOWN[http://node-z:8080]",
+            testSubject.markUnreachable(new Member("UNKNOWN[http://node-z:8080]",
                                           URI.create("http://node-z:8080"), false));
 
             // then

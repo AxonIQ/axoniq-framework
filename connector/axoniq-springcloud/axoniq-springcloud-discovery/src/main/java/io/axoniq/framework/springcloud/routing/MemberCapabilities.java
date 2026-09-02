@@ -58,7 +58,6 @@ public record MemberCapabilities(int loadFactor, Set<QualifiedName> commands, Se
      * Compact constructor validating that the {@code loadFactor} is not negative and that neither name set is
      * {@code null}, and defensively copying both sets.
      */
-    @SuppressWarnings("MissingJavadoc")
     public MemberCapabilities {
         if (loadFactor < 0) {
             throw new IllegalArgumentException("The load factor cannot be negative, but was [" + loadFactor + "].");

@@ -83,11 +83,9 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <!-- Test-only: lets MockMvc drive the query endpoint, so what a member actually writes to the wire can
-                 be read back and checked. -->
+            <!-- Test-only: provides the servlet API the Spring MVC test support compiles against. -->
             <groupId>jakarta.servlet</groupId>
             <artifactId>jakarta.servlet-api</artifactId>
-            <version>6.1.0</version>
             <scope>test</scope>
         </dependency>
         <!-- The RestClient needs a JSON message converter to read and write the wire format. Applications get one
@@ -95,9 +93,9 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <!-- Optional, like the Spring dependencies: members exchange query responses as JSON events, which this
-                 reads and writes directly rather than through content negotiation. Any Spring Boot web application
-                 already has it. -->
+            <!-- Optional, like the Spring dependencies: members exchange commands and their replies as JSON, which
+                 this reads and writes directly rather than through content negotiation. Any Spring Boot web
+                 application already has it. -->
             <optional>true</optional>
         </dependency>
         <dependency>

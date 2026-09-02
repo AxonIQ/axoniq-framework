@@ -25,7 +25,7 @@ import io.axoniq.framework.springcloud.SpringCloudMemberRegistry;
 import io.axoniq.framework.springcloud.discovery.CapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesController;
 import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
-import io.axoniq.framework.springcloud.transport.IncomingCommandGateway;
+import io.axoniq.framework.springcloud.transport.IncomingCommandInvoker;
 import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.transport.SpringCloudCommandController;
 import org.junit.jupiter.api.*;
@@ -33,6 +33,7 @@ import org.junit.jupiter.api.*;
 import java.time.Duration;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.test.context.runner.ReactiveWebApplicationContextRunner;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import org.springframework.cloud.client.DefaultServiceInstance;
 import org.springframework.cloud.client.ServiceInstance;
@@ -74,7 +75,7 @@ class SpringCloudAutoConfigurationTest {
             contextRunner.withPropertyValues("axon.springcloud.command-endpoint=/custom/command",
                                              "axon.springcloud.capabilities-endpoint=/custom/capabilities",
                                              "axon.springcloud.command-reply-timeout=11s",
-                                             "axon.springcloud.ignore-listing-expire-threshold=14s",
+                                             "axon.springcloud.ignore-period=14s",
                                              "axon.springcloud.context-root-metadata-property-name=root")
                          // when / then each one reaches the properties the components are built from
                          .run(context -> {
@@ -82,7 +83,7 @@ class SpringCloudAutoConfigurationTest {
                              assertThat(properties.getCommandEndpoint()).isEqualTo("/custom/command");
                              assertThat(properties.getCapabilitiesEndpoint()).isEqualTo("/custom/capabilities");
                              assertThat(properties.getCommandReplyTimeout()).isEqualTo(Duration.ofSeconds(11));
-                             assertThat(properties.getIgnoreListingExpireThreshold())
+                             assertThat(properties.getIgnorePeriod())
                                      .isEqualTo(Duration.ofSeconds(14));
                              assertThat(properties.getContextRootMetadataPropertyName()).isEqualTo("root");
                          });
@@ -120,7 +121,7 @@ class SpringCloudAutoConfigurationTest {
                     .hasSingleBean(CapabilityDiscoveryMode.class)
                     .hasSingleBean(SpringCloudMemberRegistry.class)
                     .hasSingleBean(RemoteCommandDispatcher.class)
-                    .hasSingleBean(IncomingCommandGateway.class));
+                    .hasSingleBean(IncomingCommandInvoker.class));
         }
 
         @Test
@@ -133,7 +134,7 @@ class SpringCloudAutoConfigurationTest {
 
         @Test
         void namesThisMemberAfterItsRegistration() {
-            contextRunner.run(context -> assertThat(context).hasSingleBean(IncomingCommandGateway.class));
+            contextRunner.run(context -> assertThat(context).hasSingleBean(IncomingCommandInvoker.class));
         }
 
         @Test
@@ -183,7 +184,7 @@ class SpringCloudAutoConfigurationTest {
             contextRunner.withUserConfiguration(CustomRestClientConfiguration.class)
                          .run(context -> assertThat(context)
                                  .getBean(SpringCloudAutoConfiguration.REST_CLIENT_BEAN)
-                                 .isSameAs(context.getBean("axoniqSpringCloudRestClient")));
+                                 .isSameAs(CustomRestClientConfiguration.APPLICATION_REST_CLIENT));
         }
     }
 
@@ -241,6 +242,39 @@ class SpringCloudAutoConfigurationTest {
         @Test
         void startsFineWhenTheConnectorIsSwitchedOff() {
             new ApplicationContextRunner()
+                    .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
+                    .withUserConfiguration(DiscoveryConfiguration.class)
+                    .withPropertyValues("axon.springcloud.enabled=false")
+                    .run(context -> assertThat(context)
+                            .hasNotFailed()
+                            .doesNotHaveBean(SpringCloudCommandController.class)
+                            .doesNotHaveBean(MemberCapabilitiesController.class));
+        }
+    }
+
+    @Nested
+    class WithAReactiveWebApplication {
+
+        @Test
+        void refusesToStartRatherThanJoiningTheClusterUnreachable() {
+            // A reactive context is a web application, so the non-web condition does not catch it, yet the connector
+            // receives commands through Spring MVC controllers that WebFlux never maps. Left unchecked, this member
+            // registers with discovery, publishes its capabilities, and answers nothing.
+            new ReactiveWebApplicationContextRunner()
+                    .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
+                    .withUserConfiguration(DiscoveryConfiguration.class)
+                    .run(context -> assertThat(context)
+                            .hasFailed()
+                            .getFailure()
+                            .rootCause()
+                            .isInstanceOf(IllegalStateException.class)
+                            .hasMessageContaining("reactive web application")
+                            .hasMessageContaining("axon.springcloud.enabled=false"));
+        }
+
+        @Test
+        void startsFineWhenTheConnectorIsSwitchedOff() {
+            new ReactiveWebApplicationContextRunner()
                     .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
                     .withUserConfiguration(DiscoveryConfiguration.class)
                     .withPropertyValues("axon.springcloud.enabled=false")
@@ -325,9 +359,11 @@ class SpringCloudAutoConfigurationTest {
     @Configuration(proxyBeanMethods = false)
     static class CustomRestClientConfiguration {
 
+        static final RestClient APPLICATION_REST_CLIENT = RestClient.create();
+
         @Bean(SpringCloudAutoConfiguration.REST_CLIENT_BEAN)
         RestClient axoniqSpringCloudRestClient() {
-            return RestClient.create();
+            return APPLICATION_REST_CLIENT;
         }
     }
 }

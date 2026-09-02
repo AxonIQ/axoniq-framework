@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * A {@link CapabilityDiscoveryMode} for tests, answering with whatever a test configured per instance and recording
@@ -41,7 +42,8 @@ public class RecordingCapabilityDiscoveryMode implements CapabilityDiscoveryMode
     private final Map<ServiceInstanceKey, MemberCapabilities> answers = new LinkedHashMap<>();
     private final Set<ServiceInstanceKey> clientErrors = new LinkedHashSet<>();
     private final Set<ServiceInstanceKey> unknown = new LinkedHashSet<>();
-    private final List<ServiceInstanceKey> asked = new ArrayList<>();
+    // Recorded from the threads a discovery round fans out over, so this has to tolerate concurrent adds.
+    private final List<ServiceInstanceKey> asked = new CopyOnWriteArrayList<>();
     private final List<Set<ServiceInstanceKey>> retained = new ArrayList<>();
 
     private MemberCapabilities localCapabilities = MemberCapabilities.INCAPABLE;

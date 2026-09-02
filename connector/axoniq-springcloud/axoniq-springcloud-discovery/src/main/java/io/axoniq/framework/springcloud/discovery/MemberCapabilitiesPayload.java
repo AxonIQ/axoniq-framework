@@ -38,8 +38,8 @@ import java.util.stream.Collectors;
  * {@code QualifiedName} itself. Fields are ordered lists rather than sets purely so that the serialized bytes of
  * unchanged capabilities are themselves unchanged, which is what makes the {@code ETag} on the endpoint meaningful.
  * <p>
- * The {@code queries} field is part of the shape from the first release, and is served empty for as long as this
- * connector distributes commands only. Members reading it must tolerate an absent or empty list.
+ * A member distributing commands only serves an empty {@code queries} field, so members reading a payload must
+ * tolerate an absent or empty list on either field.
  *
  * @param loadFactor the relative share of command load the member asks for
  * @param commands   the {@link QualifiedName#name() names} of the commands the member subscribed to, sorted
@@ -53,7 +53,6 @@ public record MemberCapabilitiesPayload(int loadFactor, List<String> commands, L
      * Compact constructor defaulting {@code null} name lists to empty, so a payload from a member that omits a field
      * altogether still reads.
      */
-    @SuppressWarnings("MissingJavadoc")
     public MemberCapabilitiesPayload {
         commands = commands == null ? List.of() : List.copyOf(commands);
         queries = queries == null ? List.of() : List.copyOf(queries);

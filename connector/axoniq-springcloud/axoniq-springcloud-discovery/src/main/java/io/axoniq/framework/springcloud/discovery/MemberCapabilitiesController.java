@@ -72,7 +72,7 @@ public class MemberCapabilitiesController {
      * already identifies them.
      *
      * @param ifNoneMatch the {@code If-None-Match} header of the request, carrying the entity tag the requesting
-     *                    member last saw, or {@code null} when it has not seen these capabilities before.
+     *                    member last saw, or {@code null} when it has not seen these capabilities before
      * @return this application's capabilities with their entity tag, or an empty {@code 304 Not Modified} response
      */
     @GetMapping

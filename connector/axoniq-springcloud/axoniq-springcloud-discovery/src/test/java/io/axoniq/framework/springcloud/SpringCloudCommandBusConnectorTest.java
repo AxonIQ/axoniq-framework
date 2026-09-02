@@ -22,7 +22,8 @@ package io.axoniq.framework.springcloud;
 import io.axoniq.framework.springcloud.discovery.RecordingCapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.routing.MemberCapabilities;
-import io.axoniq.framework.springcloud.transport.IncomingCommandGateway;
+import io.axoniq.framework.springcloud.transport.IncomingCommandInvoker;
+import io.axoniq.framework.springcloud.transport.MemberUnreachableException;
 import io.axoniq.framework.springcloud.transport.RecordingRemoteCommandDispatcher;
 import io.axoniq.framework.springcloud.util.RecordingCommandHandler;
 import io.axoniq.framework.springcloud.util.RecordingDiscoveryClient;
@@ -85,7 +86,7 @@ class SpringCloudCommandBusConnectorTest {
         dispatcher = new RecordingRemoteCommandDispatcher();
         entitlementManager = new RecordingEntitlementManager();
         testSubject = new SpringCloudCommandBusConnector(registry,
-                                                         new IncomingCommandGateway(() -> "node-a", null),
+                                                         new IncomingCommandInvoker(() -> "node-a", null),
                                                          dispatcher,
                                                          null,
                                                          entitlementManager);
@@ -107,7 +108,7 @@ class SpringCloudCommandBusConnectorTest {
         discoveryClient.register("university", remoteInstance);
         discoveryMode.answering(remoteInstance, new MemberCapabilities(LOAD_FACTOR, Set.of(commands), Set.of()));
         registry.onInstanceRegistered(new InstanceRegisteredEvent<>(this, localInstance));
-        return registry.ring().getMembers().stream()
+        return registry.ring().members().stream()
                        .filter(member -> !member.local())
                        .findFirst()
                        .orElseThrow();
@@ -236,14 +237,33 @@ class SpringCloudCommandBusConnectorTest {
         void takesAnUnreachableMemberOutOfTheRing() {
             // given
             Member remote = discoverRemoteMemberHandling(CREATE_COURSE);
-            dispatcher.failingWith(new CommandDispatchException("connection refused"));
+            dispatcher.failingWith(new MemberUnreachableException("connection refused"));
 
             // when
             assertThatThrownBy(() -> testSubject.dispatch(command(CREATE_COURSE_TYPE, "course-1"), null).join())
                     .isInstanceOf(CompletionException.class);
 
             // then
-            assertThat(registry.ring().getMembers()).doesNotContain(remote);
+            assertThat(registry.ring().members()).doesNotContain(remote);
+        }
+
+        @Test
+        void leavesAMemberThatReportedADispatchFailureOnTheRing() {
+            // given — the member was reached and answered promptly, saying it could not read the command. That
+            // arrives as a plain CommandDispatchException, which must not be mistaken for a member it could not
+            // reach: evicting it would hand the same unreadable command to the next member, and so on until the
+            // ring is empty.
+            Member remote = discoverRemoteMemberHandling(CREATE_COURSE);
+            dispatcher.failingWith(new CommandDispatchException(
+                    "Could not read incoming command of type [university.CreateCourse]."
+            ));
+
+            // when
+            assertThatThrownBy(() -> testSubject.dispatch(command(CREATE_COURSE_TYPE, "course-1"), null).join())
+                    .isInstanceOf(CompletionException.class);
+
+            // then
+            assertThat(registry.ring().members()).contains(remote);
         }
 
         @Test
@@ -258,7 +278,7 @@ class SpringCloudCommandBusConnectorTest {
 
             // then — a failing handler says nothing about availability; removing the member would move a failing
             // command onto every other member in turn
-            assertThat(registry.ring().getMembers()).contains(remote);
+            assertThat(registry.ring().members()).contains(remote);
         }
     }
 
@@ -335,9 +355,18 @@ class SpringCloudCommandBusConnectorTest {
 
         @Test
         void rejectsANegativeLoadFactor() {
-            // when / then
-            assertThatThrownBy(() -> testSubject.subscribe(CREATE_COURSE, -1))
-                    .isInstanceOf(IllegalArgumentException.class);
+            // when — reported through the returned future, not thrown, so a caller composing on it sees the failure
+            CompletableFuture<Void> subscribed = testSubject.subscribe(CREATE_COURSE, -1);
+
+            // then
+            assertThat(subscribed).isCompletedExceptionally();
+            assertThatThrownBy(subscribed::join)
+                    .isInstanceOf(CompletionException.class)
+                    .cause()
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("cannot be negative");
+            // and the rejected subscription was not recorded
+            assertThat(discoveryMode.localCapabilities().commands()).doesNotContain(CREATE_COURSE);
         }
 
         @Test
@@ -467,17 +496,17 @@ class SpringCloudCommandBusConnectorTest {
         @Test
         void rejectsNullCollaborators() {
             // given
-            IncomingCommandGateway gateway = new IncomingCommandGateway(() -> "node-a", null);
+            IncomingCommandInvoker invoker = new IncomingCommandInvoker(() -> "node-a", null);
 
             // when / then
             assertThatThrownBy(() -> new SpringCloudCommandBusConnector(
-                    null, gateway, dispatcher, null, entitlementManager
+                    null, invoker, dispatcher, null, entitlementManager
             )).isInstanceOf(NullPointerException.class);
             assertThatThrownBy(() -> new SpringCloudCommandBusConnector(
                     registry, null, dispatcher, null, entitlementManager
             )).isInstanceOf(NullPointerException.class);
             assertThatThrownBy(() -> new SpringCloudCommandBusConnector(
-                    registry, gateway, null, null, entitlementManager
+                    registry, invoker, null, null, entitlementManager
             )).isInstanceOf(NullPointerException.class);
         }
 

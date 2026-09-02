@@ -21,7 +21,7 @@ package io.axoniq.framework.springcloud;
 
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
-import io.axoniq.framework.springcloud.transport.IncomingCommandGateway;
+import io.axoniq.framework.springcloud.transport.IncomingCommandInvoker;
 import io.axoniq.framework.springcloud.transport.RemoteCommandDispatcher;
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.ComponentDecorator;
@@ -92,14 +92,11 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
                 .registerDecorator(CommandBusConnector.class, 0, payloadConvertingCommandDecorator());
     }
 
-
-
-
     private static ComponentDefinition<CommandBusConnector> commandBusConnectorDefinition() {
         return ComponentDefinition.ofType(CommandBusConnector.class)
                                   .withBuilder(config -> new SpringCloudCommandBusConnector(
                                           config.getComponent(SpringCloudMemberRegistry.class),
-                                          config.getComponent(IncomingCommandGateway.class),
+                                          config.getComponent(IncomingCommandInvoker.class),
                                           config.getComponent(RemoteCommandDispatcher.class),
                                           config.getComponent(MessageConverter.class)
                                   ))

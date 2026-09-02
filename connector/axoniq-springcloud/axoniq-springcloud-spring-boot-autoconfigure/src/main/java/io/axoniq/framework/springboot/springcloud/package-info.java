@@ -23,5 +23,7 @@
  * Sits under {@code io.axoniq.framework.springboot} with the framework's other Spring Boot wiring, rather than under
  * the connector's own package, so that nothing here is a dependency of the connector on its own consumers.
  */
-@org.jspecify.annotations.NullMarked
+@NullMarked
 package io.axoniq.framework.springboot.springcloud;
+
+import org.jspecify.annotations.NullMarked;
