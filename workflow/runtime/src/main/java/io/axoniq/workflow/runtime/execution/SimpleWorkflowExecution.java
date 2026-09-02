@@ -114,7 +114,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                     },
                     CheckpointWorkStateListener.NO_OP
             );
-    private final SequencedAppender appendCondition = new SequencedAppender();
+    private final SequencedAppender appender = new SequencedAppender();
     private final WorkflowEventPublisher workflowEventPublisher;
 
     /**
@@ -574,7 +574,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     @Override
     public CompletableFuture<Void> appendWorkflowEvent(EventMessage eventMessage, Context parentContext) {
-        return appendCondition.appendSequentially(marker -> workflowEventPublisher.publish(
+        return appender.appendSequentially(marker -> workflowEventPublisher.publish(
                 eventMessage,
                 parentContext,
                 appendConditionFor(marker)
@@ -648,7 +648,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     @Override
     public void restoreAppendPosition(@Nullable ConsistencyMarker position) {
-        appendCondition.updateMarker(position);
+        appender.updateMarker(position);
     }
 
     @Override
