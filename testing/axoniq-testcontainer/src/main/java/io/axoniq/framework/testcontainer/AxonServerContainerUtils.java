@@ -31,6 +31,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -178,7 +179,7 @@ public class AxonServerContainerUtils {
     private static void waitForContextsCondition(String hostname,
                                                  int port,
                                                  Predicate<List<String>> condition) {
-        await().atMost(60, TimeUnit.SECONDS)
+        await().atMost(Duration.ofMinutes(1))
                .pollInterval(100, TimeUnit.MILLISECONDS)
                .ignoreExceptionsInstanceOf(IOException.class)
                .until(() -> condition.test(internalContexts(hostname, port)));
