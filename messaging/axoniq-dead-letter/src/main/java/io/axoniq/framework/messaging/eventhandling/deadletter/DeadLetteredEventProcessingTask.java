@@ -90,21 +90,6 @@ class DeadLetteredEventProcessingTask {
      * {@link DeadLetter#RESOURCE_KEY}) so that parameter resolvers can access it during processing. The message from
      * the dead letter is also added to the context via {@link Message#RESOURCE_KEY}.
      *
-     * @param letter The {@link DeadLetter dead letter} to process.
-     * @return A {@link CompletableFuture} containing an {@link EnqueueDecision} describing what to do after processing
-     * the given {@code letter}.
-     */
-    public CompletableFuture<EnqueueDecision<EventMessage>> process(DeadLetter<? extends EventMessage> letter) {
-        return process(letter, null);
-    }
-
-    /**
-     * Processes the given {@code letter} through this task's delegate {@link EventHandlingComponent} using the given
-     * {@code context} as additional retry context.
-     * <p>
-     * The retry context is merged into the fresh {@link ProcessingContext} before the context captured in the dead
-     * letter. Captured resources retain precedence because they describe the original failed message.
-     *
      * @param letter  The {@link DeadLetter dead letter} to process.
      * @param context the context supplied for the retry, if any
      * @return A {@link CompletableFuture} containing an {@link EnqueueDecision} describing what to do after processing
@@ -119,12 +104,12 @@ class DeadLetteredEventProcessingTask {
 
         UnitOfWork unitOfWork = unitOfWorkFactory.create();
         return unitOfWork.executeWithResult(unitOfWorkContext -> {
-            ProcessingContext context = retryContext == null
+            ProcessingContext ctx = context == null
                     ? unitOfWorkContext
-                    : mergeContextResources(unitOfWorkContext, retryContext);
+                    : mergeContextResources(unitOfWorkContext, context);
             MessageStream.Empty<Message> result = delegate.handle(
                     message,
-                    mergeContextResources(context, letter.context())
+                    mergeContextResources(ctx, letter.context())
                             .withResource(DeadLetter.RESOURCE_KEY, letter)
                             .withResource(Message.RESOURCE_KEY, message)
             );

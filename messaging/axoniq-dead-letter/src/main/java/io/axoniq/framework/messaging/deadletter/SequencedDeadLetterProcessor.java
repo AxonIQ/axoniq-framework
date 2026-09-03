@@ -64,8 +64,8 @@ public interface SequencedDeadLetterProcessor<M extends Message> {
      * Process a sequence of {@link DeadLetter dead letters} matching the given {@code sequenceFilter} in the given
      * {@code context}.
      * <p>
-     * The default implementation delegates to {@link #process(Predicate)} and ignores the context. Implementations
-     * that use the context to select dead-letter storage should override this method.
+     * The {@code context} can provide resources that may be required during dead-letter processing. The default
+     * implementation delegates to {@link #process(Predicate)} and ignores the context.
      *
      * @param sequenceFilter a filter for the first {@link DeadLetter dead letter} entries of each sequence
      * @param context        the processing context in which to process the dead letters, if any
@@ -96,8 +96,8 @@ public interface SequencedDeadLetterProcessor<M extends Message> {
     /**
      * Process any sequence of {@link DeadLetter dead letters} belonging to this component in the given {@code context}.
      * <p>
-     * The default implementation delegates to {@link #processAny()} and ignores the context. Implementations that use
-     * the context to select dead-letter storage should override this method.
+     * The {@code context} can provide resources that may be required during dead-letter processing. The default
+     * implementation delegates to {@link #processAny()} and ignores the context.
      *
      * @param context the processing context in which to process the dead letters, if any
      * @return a {@link CompletableFuture} with {@code true} if at least one {@link DeadLetter dead letter} was

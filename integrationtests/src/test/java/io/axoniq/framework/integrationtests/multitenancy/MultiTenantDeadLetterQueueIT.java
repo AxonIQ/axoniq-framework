@@ -44,6 +44,7 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
@@ -432,7 +433,7 @@ class MultiTenantDeadLetterQueueIT {
                 if (attempts.computeIfAbsent(attemptKey, ignored -> new AtomicInteger()).incrementAndGet() == 1) {
                     throw new IllegalStateException("Expected failure for event " + event.identifier());
                 }
-                return org.axonframework.messaging.core.MessageStream.empty();
+                return MessageStream.empty();
             });
             return component;
         }
