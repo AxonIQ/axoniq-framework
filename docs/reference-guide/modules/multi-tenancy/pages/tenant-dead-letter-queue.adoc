@@ -39,7 +39,7 @@ include::example$multitenancy/deadletter/SpringTenantDeadLetterQueueConfiguratio
 [[replaying-tenant-dead-letters]]
 == Replaying a tenant's dead letters
 
-When replaying dead letters, create a unit of work through your JDBC-configured `UnitOfWorkFactory` and provide the tenant explicitly in its `ProcessingContext`.
+When replaying dead letters, create a unit of work by retrieving the `UnitOfWorkFactory` from the configuration and provide the tenant explicitly in its `ProcessingContext` as a resource.
 The routing queue resolves its tenant before it reads a dead letter, so it cannot derive the tenant from the dead letter's captured context.
 
 Set `TenantDescriptor.RESOURCE_KEY` on the unit of work's context and call the context-aware overload of `processAny` or `process`.
