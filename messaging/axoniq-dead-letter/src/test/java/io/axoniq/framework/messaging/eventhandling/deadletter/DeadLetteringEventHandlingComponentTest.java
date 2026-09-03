@@ -19,6 +19,12 @@
 
 package io.axoniq.framework.messaging.eventhandling.deadletter;
 
+import io.axoniq.framework.messaging.deadletter.DeadLetter;
+import io.axoniq.framework.messaging.deadletter.Decisions;
+import io.axoniq.framework.messaging.deadletter.EnqueuePolicy;
+import io.axoniq.framework.messaging.deadletter.GenericDeadLetter;
+import io.axoniq.framework.messaging.deadletter.InMemorySequencedDeadLetterQueue;
+import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.EmptyApplicationContext;
@@ -30,12 +36,6 @@ import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import io.axoniq.framework.messaging.deadletter.DeadLetter;
-import io.axoniq.framework.messaging.deadletter.Decisions;
-import io.axoniq.framework.messaging.deadletter.EnqueuePolicy;
-import io.axoniq.framework.messaging.deadletter.GenericDeadLetter;
-import io.axoniq.framework.messaging.deadletter.InMemorySequencedDeadLetterQueue;
-import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventTestUtils;
@@ -54,7 +54,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -197,8 +197,12 @@ class DeadLetteringEventHandlingComponentTest {
             // given
             RuntimeException enqueueException = new RuntimeException("queue failure");
             SequencedDeadLetterQueue<EventMessage> failingQueue = mock(SequencedDeadLetterQueue.class);
-            when(failingQueue.enqueueIfPresent(any(), any(), any())).thenReturn(CompletableFuture.completedFuture(false));
-            when(failingQueue.enqueue(any(), any(), any())).thenReturn(CompletableFuture.failedFuture(enqueueException));
+            when(failingQueue.enqueueIfPresent(any(),
+                                               any(),
+                                               any())).thenReturn(CompletableFuture.completedFuture(false));
+            when(failingQueue.enqueue(any(),
+                                      any(),
+                                      any())).thenReturn(CompletableFuture.failedFuture(enqueueException));
 
             testSubject = new DeadLetteringEventHandlingComponent(
                     delegate, failingQueue, enqueuePolicy, unitOfWorkFactory, true
@@ -337,7 +341,7 @@ class DeadLetteringEventHandlingComponentTest {
             delegate = new StubEventHandlingComponent(TEST_SEQUENCE_ID) {
                 @Override
                 public MessageStream.@NonNull Empty<Message> handle(@NonNull EventMessage event,
-                                                                     @NonNull ProcessingContext context) {
+                                                                    @NonNull ProcessingContext context) {
                     receivedResource.set(context.getResource(retryResource));
                     return super.handle(event, context);
                 }
@@ -1012,7 +1016,8 @@ class DeadLetteringEventHandlingComponentTest {
         }
 
         @Override
-        public MessageStream.@NonNull Empty<Message> handle(@NonNull EventMessage event, @NonNull ProcessingContext context) {
+        public MessageStream.@NonNull Empty<Message> handle(@NonNull EventMessage event,
+                                                            @NonNull ProcessingContext context) {
             handledEvent.set(event);
             if (failWith != null) {
                 return MessageStream.failed(failWith).ignoreEntries();

@@ -19,6 +19,7 @@
 
 package multitenancy.deadletter;
 
+// tag::replay-for-tenant[]
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -29,20 +30,19 @@ import java.util.concurrent.CompletableFuture;
 public class TenantDeadLetterReplay {
 
     private final SequencedDeadLetterProcessor<EventMessage> processor;
-    private final UnitOfWorkFactory jdbcUnitOfWorkFactory;
+    private final UnitOfWorkFactory uowFactory;
 
     public TenantDeadLetterReplay(SequencedDeadLetterProcessor<EventMessage> processor,
-                                  UnitOfWorkFactory jdbcUnitOfWorkFactory) {
+                                  UnitOfWorkFactory uowFactory) {
         this.processor = processor;
-        this.jdbcUnitOfWorkFactory = jdbcUnitOfWorkFactory;
+        this.uowFactory = uowFactory;
     }
 
-    // tag::replay-for-tenant[]
-    public CompletableFuture<Boolean> replayOldestSequence(String tenantId) {
-        return jdbcUnitOfWorkFactory.create().executeWithResult(context -> {
+    public CompletableFuture<Boolean> processAnyLetterFor(String tenantId) {
+        return uowFactory.create().executeWithResult(context -> {
             context.putResource(TenantDescriptor.RESOURCE_KEY, TenantDescriptor.tenantWithId(tenantId));
             return processor.processAny(context);
         });
     }
-    // end::replay-for-tenant[]
 }
+// end::replay-for-tenant[]

@@ -131,7 +131,7 @@ class MultiTenantDeadLetterQueueIT {
     private AxonConfiguration application;
 
     @Test
-    void replaysDeadLettersForTheTenantInTheProcessorContext() {
+    void replaysDeadLettersForTheTenantResourceInContext() {
         // given
         publishEvent(TENANT_A, "event-a");
         publishEvent(TENANT_B, "event-b");
@@ -166,7 +166,7 @@ class MultiTenantDeadLetterQueueIT {
     }
 
     @Test
-    void replaysOnlyTheMatchingSequenceForTheTenantInTheProcessorContext() {
+    void replaysOnlyTheMatchingSequenceForTheTenantResourceInContext() {
         // given
         publishEvent(TENANT_A, "matching-event");
         publishEvent(TENANT_A, "non-matching-event");
@@ -190,7 +190,7 @@ class MultiTenantDeadLetterQueueIT {
     }
 
     @Test
-    void repeatedlyReplaysOnlySequencesForTheTenantInTheProcessorContext() {
+    void repeatedlyReplaysOnlySequencesForTheTenantResourceInContext() {
         // given
         publishEvent(TENANT_A, "event-a-1");
         publishEvent(TENANT_A, "event-a-2");
@@ -214,7 +214,7 @@ class MultiTenantDeadLetterQueueIT {
     }
 
     @Test
-    void failsAsynchronouslyWhenTheProcessorContextContainsAnUnknownTenant() {
+    void failsAsynchronouslyWhenContextContainsAnUnknownTenant() {
         // when
         CompletableFuture<Boolean> result = replayAnyForTenant(UNKNOWN_TENANT);
 

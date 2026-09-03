@@ -19,6 +19,10 @@
 
 package io.axoniq.framework.messaging.eventhandling.deadletter;
 
+import io.axoniq.framework.messaging.deadletter.DeadLetter;
+import io.axoniq.framework.messaging.deadletter.Decisions;
+import io.axoniq.framework.messaging.deadletter.EnqueueDecision;
+import io.axoniq.framework.messaging.deadletter.EnqueuePolicy;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.Message;
@@ -26,10 +30,6 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import io.axoniq.framework.messaging.deadletter.DeadLetter;
-import io.axoniq.framework.messaging.deadletter.Decisions;
-import io.axoniq.framework.messaging.deadletter.EnqueueDecision;
-import io.axoniq.framework.messaging.deadletter.EnqueuePolicy;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
@@ -82,18 +82,18 @@ class DeadLetteredEventProcessingTask {
      * <p>
      * Each dead letter is processed in its own {@link UnitOfWork}, which provides proper transaction boundaries.
      * Returns an {@link EnqueueDecision} to
-     * {@link io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue#evict(DeadLetter, ProcessingContext) evict} the
-     * {@code letter} on successful handling. On unsuccessful event handling, the configured {@link EnqueuePolicy} is
-     * used to decide what to do with the {@code letter}.
+     * {@link io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue#evict(DeadLetter, ProcessingContext)
+     * evict} the {@code letter} on successful handling. On unsuccessful event handling, the configured
+     * {@link EnqueuePolicy} is used to decide what to do with the {@code letter}.
      * <p>
      * The dead letter is added to the {@link UnitOfWork}'s {@link ProcessingContext} as a resource (via
      * {@link DeadLetter#RESOURCE_KEY}) so that parameter resolvers can access it during processing. The message from
      * the dead letter is also added to the context via {@link Message#RESOURCE_KEY}.
      *
-     * @param letter  The {@link DeadLetter dead letter} to process.
+     * @param letter  the {@link DeadLetter dead letter} to process
      * @param context the context supplied for the retry, if any
-     * @return A {@link CompletableFuture} containing an {@link EnqueueDecision} describing what to do after processing
-     * the given {@code letter}.
+     * @return a {@link CompletableFuture} containing an {@link EnqueueDecision} describing what to do after processing
+     * the given {@code letter}
      */
     public CompletableFuture<EnqueueDecision<EventMessage>> process(DeadLetter<? extends EventMessage> letter,
                                                                     @Nullable ProcessingContext context) {
@@ -103,13 +103,11 @@ class DeadLetteredEventProcessingTask {
         }
 
         UnitOfWork unitOfWork = unitOfWorkFactory.create();
-        return unitOfWork.executeWithResult(unitOfWorkContext -> {
-            ProcessingContext ctx = context == null
-                    ? unitOfWorkContext
-                    : mergeContextResources(unitOfWorkContext, context);
+        return unitOfWork.executeWithResult(uow -> {
+            ProcessingContext processingContext = context == null ? uow : mergeContextResources(uow, context);
             MessageStream.Empty<Message> result = delegate.handle(
                     message,
-                    mergeContextResources(ctx, letter.context())
+                    mergeContextResources(processingContext, letter.context())
                             .withResource(DeadLetter.RESOURCE_KEY, letter)
                             .withResource(Message.RESOURCE_KEY, message)
             );
@@ -156,8 +154,8 @@ class DeadLetteredEventProcessingTask {
      * {@link org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken} at the time of
      * original failure, or the legacy aggregate identity resources) take precedence over any same-keyed resources in
      * the fresh {@link ProcessingContext} created for the retry. This is intentional: the letter's context is
-     * message-specific and point-in-time, whereas the retry-time {@link ProcessingContext} is a generic runtime
-     * context that has no knowledge of the original event.
+     * message-specific and point-in-time, whereas the retry-time {@link ProcessingContext} is a generic runtime context
+     * that has no knowledge of the original event.
      *
      * @param target The {@link ProcessingContext} to merge resources into.
      * @param source The {@link Context} whose resources are merged into {@code target}, winning on key conflicts.
