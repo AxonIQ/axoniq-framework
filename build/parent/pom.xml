@@ -76,6 +76,7 @@
         <!-- Logging -->
         <log4j.version>2.26.1</log4j.version>
         <slf4j.version>2.0.18</slf4j.version>
+        <kotlin-logging.version>8.0.4</kotlin-logging.version>
         <!-- Metrics -->
         <dropwizard.metrics.version>5.0.6</dropwizard.metrics.version>
         <micrometer.version>1.16.4</micrometer.version>
@@ -385,11 +386,28 @@
                 <version>${jakarta.persistence.version}</version>
             </dependency>
 
+            <!-- Kotlin -->
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-stdlib</artifactId>
+                <version>${kotlin.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-reflect</artifactId>
+                <version>${kotlin.version}</version>
+            </dependency>
+
             <!-- Logging -->
             <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-api</artifactId>
                 <version>${slf4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.oshai</groupId>
+                <artifactId>kotlin-logging-jvm</artifactId>
+                <version>${kotlin-logging.version}</version>
             </dependency>
 
             <!-- Other -->
@@ -661,6 +679,35 @@
                             <groupId>com.puppycrawl.tools</groupId>
                             <artifactId>checkstyle</artifactId>
                             <version>${checkstyle.version}</version>
+                        </dependency>
+                    </dependencies>
+                </plugin>
+                <plugin>
+                    <!-- KAPT is optional and has to be configured in modules using it -->
+                    <groupId>org.jetbrains.kotlin</groupId>
+                    <artifactId>kotlin-maven-plugin</artifactId>
+                    <version>${kotlin.version}</version>
+                    <extensions>true</extensions>
+
+                    <configuration>
+                        <jvmTarget>${java.version}</jvmTarget>
+                        <compilerPlugins>
+                            <plugin>no-arg</plugin>
+                            <plugin>all-open</plugin>
+                            <plugin>spring</plugin>
+                        </compilerPlugins>
+                    </configuration>
+
+                    <dependencies>
+                        <dependency>
+                            <groupId>org.jetbrains.kotlin</groupId>
+                            <artifactId>kotlin-maven-allopen</artifactId>
+                            <version>${kotlin.version}</version>
+                        </dependency>
+                        <dependency>
+                            <groupId>org.jetbrains.kotlin</groupId>
+                            <artifactId>kotlin-maven-noarg</artifactId>
+                            <version>${kotlin.version}</version>
                         </dependency>
                     </dependencies>
                 </plugin>
