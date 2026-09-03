@@ -21,10 +21,10 @@ package io.axoniq.example.simple.kotlin.user
 import io.axoniq.example.simple.kotlin.user.MagicHappenedEvent
 import io.axoniq.example.simple.kotlin.user.NotificationService
 import io.axoniq.example.simple.kotlin.user.UserService
-import io.axoniq.workflow.dsl.kotlin.Kontext
-import io.axoniq.workflow.runtime.api.annotation.Workflow
-import io.axoniq.workflow.runtime.api.execution.context.EventConditions
-import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy
+import io.axoniq.framework.workflow.dsl.kotlin.Kontext
+import io.axoniq.framework.workflow.runtime.api.annotation.Workflow
+import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions
+import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy
 import io.github.oshai.kotlinlogging.KotlinLogging
 import java.time.Instant
 import kotlin.time.Duration.Companion.seconds

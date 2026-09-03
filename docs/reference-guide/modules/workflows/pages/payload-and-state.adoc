@@ -59,7 +59,7 @@ The `Payload` class wraps the raw map with convenient accessor methods:
 
 [source,java]
 ----
-import static io.axoniq.workflow.dsl.api.Payload.payload;
+import static io.axoniq.framework.workflow.dsl.api.Payload.payload;
 
 var email = payload(ctx.workflowPayload()).get("email"); // <1>
 ----

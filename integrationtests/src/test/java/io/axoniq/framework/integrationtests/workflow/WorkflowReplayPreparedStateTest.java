@@ -20,21 +20,21 @@ package io.axoniq.framework.integrationtests.workflow;
 
 import org.jspecify.annotations.Nullable;
 
-import io.axoniq.workflow.configuration.WorkflowConfigurer;
-import io.axoniq.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
-import io.axoniq.workflow.configuration.WorkflowModule;
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
-import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
-import io.axoniq.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.execution.WorkflowEngine;
-import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
-import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
-import io.axoniq.workflow.runtime.util.MetadataUtils;
+import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
+import io.axoniq.framework.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
+import io.axoniq.framework.workflow.configuration.WorkflowModule;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
+import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
+import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
+import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver;
+import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
+import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
@@ -65,9 +65,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import static io.axoniq.workflow.dsl.api.EventAssociationsUtils.equalsTo;
-import static io.axoniq.workflow.runtime.association.Associations.associate;
-import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
+import static io.axoniq.framework.workflow.dsl.api.EventAssociationsUtils.equalsTo;
+import static io.axoniq.framework.workflow.runtime.association.Associations.associate;
+import static io.axoniq.framework.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -389,7 +389,7 @@ class WorkflowReplayPreparedStateTest {
             ).sorted().toList();
         }
 
-        private Optional<io.axoniq.workflow.history.api.WorkflowHistory> history(String workflowId) {
+        private Optional<io.axoniq.framework.workflow.history.api.WorkflowHistory> history(String workflowId) {
             return configuration.getComponent(MutableWorkflowHistoryRepository.class).findById(workflowId);
         }
 

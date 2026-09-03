@@ -9,7 +9,7 @@ ADR-001 defines runtime command mode. This ADR defines the DSL DTO layer above i
 
 ## Decision
 
-The DSL uses these top-level DTOs in `io.axoniq.workflow.runtime.api.execution.context`:
+The DSL uses these top-level DTOs in `io.axoniq.framework.workflow.runtime.api.execution.context`:
 
 - `ExecuteStepDefinition`
 - `WaitForStepDefinition`

@@ -15,4 +15,4 @@
 # For licensing information and to register, visit:
 #  https://www.axoniq.io/pricing
 org.springframework.test.context.TestExecutionListener=\
-io.axoniq.workflow.springboot.WorkflowShutdownTestExecutionListener
+io.axoniq.framework.workflow.springboot.WorkflowShutdownTestExecutionListener

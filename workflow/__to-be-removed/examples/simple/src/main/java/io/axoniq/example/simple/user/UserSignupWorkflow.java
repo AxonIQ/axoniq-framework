@@ -18,10 +18,10 @@
  */
 package io.axoniq.example.simple.user;
 
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.workflow.runtime.api.annotation.WorkflowCompletedHandler;
-import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowCompletedHandler;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,10 +29,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 
-import static io.axoniq.workflow.runtime.association.Associations.associate;
-import static io.axoniq.workflow.dsl.api.Payload.payload;
-import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
-import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
+import static io.axoniq.framework.workflow.runtime.association.Associations.associate;
+import static io.axoniq.framework.workflow.dsl.api.Payload.payload;
+import static io.axoniq.framework.workflow.dsl.base.BaseWorkflowContext.equalsTo;
+import static io.axoniq.framework.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 
 /**
  * Sample user registration.

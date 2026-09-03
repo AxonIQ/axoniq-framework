@@ -18,18 +18,18 @@
  */
 package io.axoniq.framework.integrationtests.workflow;
 
-import io.axoniq.workflow.configuration.WorkflowModule;
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
-import io.axoniq.workflow.history.inmemory.MutableWorkflowHistoryRepository;
-import io.axoniq.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.execution.WorkflowEventTagResolver;
-import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
-import io.axoniq.workflow.runtime.test.fixture.WorkflowTestDriver;
-import io.axoniq.workflow.runtime.util.MetadataUtils;
+import io.axoniq.framework.workflow.configuration.WorkflowModule;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
+import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
+import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
+import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver;
+import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
+import io.axoniq.framework.workflow.runtime.test.fixture.WorkflowTestDriver;
+import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
@@ -57,7 +57,7 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static io.axoniq.workflow.runtime.execution.WorkflowEventTags.*;
+import static io.axoniq.framework.workflow.runtime.execution.WorkflowEventTags.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 

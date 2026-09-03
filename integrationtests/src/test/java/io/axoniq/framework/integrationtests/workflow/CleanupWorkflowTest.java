@@ -18,14 +18,14 @@
  */
 package io.axoniq.framework.integrationtests.workflow;
 
-import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
-import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
-import io.axoniq.workflow.dsl.base.BaseWorkflowContext;
-import io.axoniq.workflow.dsl.base.BaseWorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowFailedException;
-import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
-import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
+import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
+import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
+import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContext;
+import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContextFactory;
+import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
+import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 
@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
+import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 
 /**
  * Test making sure that after the execution of a workflow, its execution is not present on the workflow engine

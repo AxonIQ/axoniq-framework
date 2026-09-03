@@ -650,7 +650,7 @@ When a step also has its own customizer, the two are merged—**step-level wins*
 
 |`namespace`
 |The prefix for all event names (for example, `io.myapp.orders`)
-|`io.axoniq.workflow`
+|`io.axoniq.framework.workflow`
 |Yes—set it once, all steps use it
 
 |`capitalizeSimpleName`
@@ -736,8 +736,8 @@ These static methods from `DefaultEventNameCustomizer.Builder` create a customiz
 |Builder method |Effect |Example result
 
 |`defaults()`
-|Default naming: namespace `io.axoniq.workflow`, capitalized step name + suffix
-|`io.axoniq.workflow.ReserveStockCompleted`
+|Default naming: namespace `io.axoniq.framework.workflow`, capitalized step name + suffix
+|`io.axoniq.framework.workflow.ReserveStockCompleted`
 
 |`namespace("io.payments")`
 |Changes the namespace prefix
@@ -745,15 +745,15 @@ These static methods from `DefaultEventNameCustomizer.Builder` create a customiz
 
 |`baseName("ProcessPayment")`
 |Replaces the step name in the event name
-|`io.axoniq.workflow.ProcessPaymentCompleted`
+|`io.axoniq.framework.workflow.ProcessPaymentCompleted`
 
 |`capitalizeSimpleName(false)`
 |Keeps the step name lowercase
-|`io.axoniq.workflow.reserveStockCompleted`
+|`io.axoniq.framework.workflow.reserveStockCompleted`
 
 |`appendToBaseName(false)`
 |Omits the step name entirely, leaving only the suffix
-|`io.axoniq.workflow.Completed`
+|`io.axoniq.framework.workflow.Completed`
 |===
 
 All builders return a `DefaultEventNameCustomizer` that supports fluent chaining:

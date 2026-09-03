@@ -14,5 +14,5 @@
 #
 # For licensing information and to register, visit:
 #  https://www.axoniq.io/pricing
-io.axoniq.workflow.runtime.test.configuration.WorkflowTestEventPublicationEnhancer
-io.axoniq.workflow.runtime.test.configuration.WorkflowTestPrettyRecordingEventStoreEnhancer
+io.axoniq.framework.workflow.runtime.test.configuration.WorkflowTestEventPublicationEnhancer
+io.axoniq.framework.workflow.runtime.test.configuration.WorkflowTestPrettyRecordingEventStoreEnhancer

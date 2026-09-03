@@ -20,16 +20,16 @@ package io.axoniq.framework.integrationtests.workflow;
 
 import org.jspecify.annotations.Nullable;
 
-import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
-import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
-import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
+import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
+import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
+import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.annotation.Event;
@@ -43,10 +43,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import static io.axoniq.workflow.dsl.api.EventAssociationsUtils.equalsTo;
-import static io.axoniq.workflow.runtime.association.Associations.associate;
-import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
-import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
+import static io.axoniq.framework.workflow.dsl.api.EventAssociationsUtils.equalsTo;
+import static io.axoniq.framework.workflow.runtime.association.Associations.associate;
+import static io.axoniq.framework.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
+import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 
 /**
  * Integration test for COMBINE result reducer for WaitFor primitive.

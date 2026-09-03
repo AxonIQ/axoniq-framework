@@ -18,18 +18,18 @@
  */
 package io.axoniq.framework.integrationtests.workflow;
 
-import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
-import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowCancelledException;
-import io.axoniq.workflow.runtime.api.execution.state.StepInterruptedException;
-import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.execution.WorkflowExecutionRepository;
-import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import io.axoniq.workflow.runtime.test.utils.SleepUtils;
+import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
+import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
+import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
+import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
+import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
+import io.axoniq.framework.workflow.runtime.test.utils.SleepUtils;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -41,14 +41,14 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
-import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
+import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
  * Verifies that when a whole-workflow {@code cancel()} interrupts a step the body is parked on, the body's blocking
  * wait unblocks with a catchable {@link StepInterruptedException} (a
- * {@link io.axoniq.workflow.runtime.api.execution.state.StepFailedException}), so it can run compensation, even though
+ * {@link io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException}), so it can run compensation, even though
  * no durable {@code <step>:CANCELLED} record is ever published for the interrupted step.
  *
  * @author Stefan Dragisic

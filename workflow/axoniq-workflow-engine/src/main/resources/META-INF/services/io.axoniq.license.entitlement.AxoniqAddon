@@ -14,4 +14,4 @@
 #
 # For licensing information and to register, visit:
 #  https://www.axoniq.io/pricing
-io.axoniq.workflow.runtime.execution.WorkflowAxoniqAddon
+io.axoniq.framework.workflow.runtime.execution.WorkflowAxoniqAddon

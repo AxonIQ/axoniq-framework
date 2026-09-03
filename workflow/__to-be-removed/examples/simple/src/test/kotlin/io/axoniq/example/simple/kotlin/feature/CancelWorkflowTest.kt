@@ -20,18 +20,18 @@ package io.axoniq.example.simple.kotlin.feature
 
 
 import io.axoniq.example.simple.kotlin.user.RegistrationReceivedEvent
-import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase
-import io.axoniq.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase
-import io.axoniq.workflow.dsl.kotlin.Kontext
-import io.axoniq.workflow.dsl.kotlin.WorkflowKontext
-import io.axoniq.workflow.dsl.kotlin.WorkflowKontextFactory
-import io.axoniq.workflow.runtime.api.execution.context.EventConditions
-import io.axoniq.workflow.runtime.api.execution.context.retry.RetryPolicy
-import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus
-import io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace
-import io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
-import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase
-import io.axoniq.workflow.runtime.test.utils.DelayedPublisher
+import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase
+import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase
+import io.axoniq.framework.workflow.dsl.kotlin.Kontext
+import io.axoniq.framework.workflow.dsl.kotlin.WorkflowKontext
+import io.axoniq.framework.workflow.dsl.kotlin.WorkflowKontextFactory
+import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions
+import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus
+import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace
+import io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute
+import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase
+import io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher
 import org.junit.jupiter.api.Test
 import java.util.function.Function
 import kotlin.time.Duration.Companion.minutes

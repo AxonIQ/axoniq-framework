@@ -18,18 +18,18 @@
  */
 package io.axoniq.example.simple.user;
 
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.test.fixture.WorkflowTestFixture;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
+import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.test.fixture.WorkflowTestFixture;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.util.Map;
 import java.util.function.UnaryOperator;
 
-import static io.axoniq.workflow.runtime.test.fixture.WorkflowTestFixture.workflowModule;
+import static io.axoniq.framework.workflow.runtime.test.fixture.WorkflowTestFixture.workflowModule;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

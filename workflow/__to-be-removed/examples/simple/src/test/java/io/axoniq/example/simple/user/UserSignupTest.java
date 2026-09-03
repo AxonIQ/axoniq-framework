@@ -18,28 +18,28 @@
  */
 package io.axoniq.example.simple.user;
 
-import io.axoniq.workflow.configuration.WorkflowModule;
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.workflow.runtime.api.execution.context.EventConditions;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.workflow.runtime.test.AbstractWorkflowTestBase;
-import io.axoniq.workflow.runtime.test.fixture.WorkflowTestDriver;
-import io.axoniq.workflow.runtime.test.utils.DelayedPublisher;
+import io.axoniq.framework.workflow.configuration.WorkflowModule;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
+import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
+import io.axoniq.framework.workflow.runtime.test.fixture.WorkflowTestDriver;
+import io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import static io.axoniq.workflow.runtime.association.Associations.associate;
-import static io.axoniq.workflow.dsl.base.BaseWorkflowContext.equalsTo;
-import static io.axoniq.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
-import static io.axoniq.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace;
-import static io.axoniq.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
-import static io.axoniq.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
+import static io.axoniq.framework.workflow.runtime.association.Associations.associate;
+import static io.axoniq.framework.workflow.dsl.base.BaseWorkflowContext.equalsTo;
+import static io.axoniq.framework.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
+import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.namespace;
+import static io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
+import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 
 /**
  * Simple workflow test based on {@link SimpleWorkflowContext}.
