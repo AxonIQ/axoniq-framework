@@ -31,7 +31,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPol
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
@@ -63,7 +62,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Stefan Dragisic
  */
-class StepTimeoutWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
+class StepTimeoutWorkflowTest extends AbstractWorkflowIntegrationTestBase<BaseWorkflowContext> {
 
     private StepTimeoutWorkflow workflow;
 

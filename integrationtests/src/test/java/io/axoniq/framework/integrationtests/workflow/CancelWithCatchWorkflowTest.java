@@ -25,7 +25,6 @@ import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.framework.workflow.runtime.test.utils.PrettyPrintingRecordingEventStore;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -48,7 +47,7 @@ import static org.assertj.core.api.Fail.fail;
  *
  * @author Stefan Dragisic
  */
-class CancelWithCatchWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
+class CancelWithCatchWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
     public CancelWithCatchWorkflowTest() {
         super(SimpleWorkflowContext.class, c -> new SimpleWorkflowContextFactory());

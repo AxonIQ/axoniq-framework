@@ -27,7 +27,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellation
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -50,7 +49,7 @@ import static org.awaitility.Awaitility.await;
  *
  * @author Stefan Dragisic
  */
-class CancelledSleepSurfacesTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
+class CancelledSleepSurfacesTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
     public CancelledSleepSurfacesTest() {
         super(SimpleWorkflowContext.class, c -> new SimpleWorkflowContextFactory());

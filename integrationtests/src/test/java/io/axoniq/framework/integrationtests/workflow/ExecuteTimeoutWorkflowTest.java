@@ -28,7 +28,6 @@ import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -56,7 +55,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Stefan Dragisic
  */
-class ExecuteTimeoutWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
+class ExecuteTimeoutWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
     private ExecuteTimeoutWorkflow workflow;
 

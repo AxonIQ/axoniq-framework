@@ -28,7 +28,6 @@ import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 
@@ -46,7 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Stefan Dragisic
  */
-class ParallelExecutionsWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
+class ParallelExecutionsWorkflowTest extends AbstractWorkflowIntegrationTestBase<BaseWorkflowContext> {
 
     public ParallelExecutionsWorkflowTest() {
         super(BaseWorkflowContext.class, c -> new BaseWorkflowContextFactory());
@@ -60,7 +59,7 @@ class ParallelExecutionsWorkflowTest extends AbstractWorkflowTestBase<BaseWorkfl
 
     @Override
     protected UnaryOperator<WorkflowConfigurer> configure() {
-        return c -> c.componentRegistry(r -> r.registerModule(
+        return c -> super.configure().apply(c).componentRegistry(r -> r.registerModule(
                                                 WorkflowModule
                                                         .defaults("another", BaseWorkflowContext.class)
                                                         .workflowContextFactory(conf -> new BaseWorkflowContextFactory())

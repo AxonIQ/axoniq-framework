@@ -29,7 +29,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfig
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.annotation.Event;
@@ -52,7 +51,7 @@ import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.S
  * Integration test for COMBINE result reducer for WaitFor primitive.
  */
 class WaitForCombineResultWorkflowTest
-        extends AbstractWorkflowTestBase<WaitForCombineResultWorkflowTest.WaitForCombineWorkflowContext> {
+        extends AbstractWorkflowIntegrationTestBase<WaitForCombineResultWorkflowTest.WaitForCombineWorkflowContext> {
 
     public WaitForCombineResultWorkflowTest() {
         super(WaitForCombineWorkflowContext.class, c -> new WaitForCombineWorkflowContextFactory());

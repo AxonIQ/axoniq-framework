@@ -26,7 +26,6 @@ import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
@@ -39,7 +38,7 @@ import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.S
  * Verifies that the termination callback of the process instance (removing it from executionRepository) is executed in
  * all possible terminal states of the workflow (complete, fail, timeout, cancel).
  */
-class TerminationCleanupWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
+class TerminationCleanupWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
     public TerminationCleanupWorkflowTest() {
         super(SimpleWorkflowContext.class, c -> new SimpleWorkflowContextFactory());

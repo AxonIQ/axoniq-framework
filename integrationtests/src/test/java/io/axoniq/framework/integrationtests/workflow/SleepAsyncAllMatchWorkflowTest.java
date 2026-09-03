@@ -26,7 +26,6 @@ import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 
@@ -37,7 +36,7 @@ import java.util.function.Function;
 
 import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 
-class SleepAsyncAllMatchWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
+class SleepAsyncAllMatchWorkflowTest extends AbstractWorkflowIntegrationTestBase<BaseWorkflowContext> {
 
     public SleepAsyncAllMatchWorkflowTest() {
         super(BaseWorkflowContext.class, c -> new BaseWorkflowContextFactory());

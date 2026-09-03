@@ -20,6 +20,8 @@ package io.axoniq.framework.integrationtests.workflow;
 
 import org.jspecify.annotations.Nullable;
 
+import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.framework.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
@@ -345,17 +347,19 @@ class WorkflowReplayPreparedStateTest {
             var configurer = WorkflowConfigurer.create();
             var workflow = new ReplayAwareWorkflow(executedWorkflowIds);
 
-            configurer.componentRegistry(cr -> cr
-                    .registerComponent(EventStorageEngine.class, cfg -> eventStorageEngine)
-                    .registerComponent(MutableWorkflowHistoryRepository.class, cfg -> historyRepository)
-                    .registerComponent(TokenStore.class, cfg -> processingTokenStore)
-                    .registerModule(
-                            WorkflowModule.defaults("replay-prepared-state", SimpleWorkflowContext.class)
-                                          .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
-                                          .definition(d -> d
-                                                  .autodetected(c -> workflow)
-                                          )
-                    ));
+            configurer.componentRegistry(MultiTenancyUtils::disable)
+                      .componentRegistry(r -> r.disableEnhancer(AxonServerConfigurationEnhancer.class))
+                      .componentRegistry(cr -> cr
+                              .registerComponent(EventStorageEngine.class, cfg -> eventStorageEngine)
+                              .registerComponent(MutableWorkflowHistoryRepository.class, cfg -> historyRepository)
+                              .registerComponent(TokenStore.class, cfg -> processingTokenStore)
+                              .registerModule(
+                                      WorkflowModule.defaults("replay-prepared-state", SimpleWorkflowContext.class)
+                                                    .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
+                                                    .definition(d -> d
+                                                            .autodetected(c -> workflow)
+                                                    )
+                              ));
 
             return new WorkflowTestApp(configurer.start());
         }

@@ -28,7 +28,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellation
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.framework.workflow.runtime.test.utils.SleepUtils;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,7 +64,7 @@ import static org.awaitility.Awaitility.await;
  *
  * @author Stefan Dragisic
  */
-class CancelAllThenCancelWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
+class CancelAllThenCancelWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
     private static final Logger logger = LoggerFactory.getLogger(CancelAllThenCancelWorkflowTest.class);
 

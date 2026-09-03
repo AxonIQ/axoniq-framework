@@ -23,7 +23,6 @@ import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinit
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -43,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Stefan Dragisic
  */
-class ExceptionBetweenStepsWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
+class ExceptionBetweenStepsWorkflowTest extends AbstractWorkflowIntegrationTestBase<BaseWorkflowContext> {
 
     public ExceptionBetweenStepsWorkflowTest() {
         super(BaseWorkflowContext.class, c -> new BaseWorkflowContextFactory());

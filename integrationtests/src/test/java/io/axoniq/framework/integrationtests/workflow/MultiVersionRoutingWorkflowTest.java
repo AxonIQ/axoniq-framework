@@ -25,7 +25,6 @@ import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 
@@ -44,7 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Stefan Dragisic
  */
-class MultiVersionRoutingWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
+class MultiVersionRoutingWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
     private static final String WORKFLOW_NAME = "MultiVersionOrder";
     private static final String NAMESPACE = "io.axoniq.dsl.multiversion";

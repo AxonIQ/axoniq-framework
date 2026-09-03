@@ -28,7 +28,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellation
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.framework.workflow.runtime.test.utils.PrettyPrintingRecordingEventStore;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.eventhandling.annotation.Event;
@@ -56,7 +55,7 @@ import static org.awaitility.Awaitility.await;
  *
  * @author Stefan Dragisic
  */
-class ExternalStepCancellationWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
+class ExternalStepCancellationWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
     private static final String WORKFLOW_ID = "external-cancel-1";
 

@@ -25,7 +25,6 @@ import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.framework.workflow.runtime.test.utils.PrettyPrintingRecordingEventStore;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -47,7 +46,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Stefan Dragisic
  */
-class FailWithCatchWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
+class FailWithCatchWorkflowTest extends AbstractWorkflowIntegrationTestBase<BaseWorkflowContext> {
 
     public FailWithCatchWorkflowTest() {
         super(BaseWorkflowContext.class, c -> new BaseWorkflowContextFactory());

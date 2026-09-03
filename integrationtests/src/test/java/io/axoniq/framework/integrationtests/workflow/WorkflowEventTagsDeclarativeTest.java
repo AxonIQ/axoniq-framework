@@ -24,7 +24,6 @@ import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
@@ -51,7 +50,7 @@ import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.S
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
-class WorkflowEventTagsDeclarativeTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
+class WorkflowEventTagsDeclarativeTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
     WorkflowEventTagsDeclarativeTest() {
         super(SimpleWorkflowContext.class, c -> new SimpleWorkflowContextFactory());

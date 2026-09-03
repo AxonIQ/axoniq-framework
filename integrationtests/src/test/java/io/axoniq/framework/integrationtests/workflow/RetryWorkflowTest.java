@@ -31,7 +31,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellation
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.framework.workflow.runtime.test.utils.SleepUtils;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
@@ -57,7 +56,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Stefan Dragisic
  */
-class RetryWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
+class RetryWorkflowTest extends AbstractWorkflowIntegrationTestBase<BaseWorkflowContext> {
 
     private RetryWorkflow workflow;
 

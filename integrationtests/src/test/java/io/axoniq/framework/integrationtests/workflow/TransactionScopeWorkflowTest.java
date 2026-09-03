@@ -24,7 +24,6 @@ import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinit
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.core.unitofwork.transaction.Transaction;
 import org.axonframework.messaging.core.unitofwork.transaction.TransactionManager;
 import org.axonframework.messaging.eventhandling.annotation.Event;
@@ -57,7 +56,7 @@ import static org.awaitility.Awaitility.await;
  *
  * @author Stefan Dragisic
  */
-class TransactionScopeWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
+class TransactionScopeWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
     private CountingTransactionManager countingTm;
 
@@ -68,7 +67,7 @@ class TransactionScopeWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkfl
     @Override
     protected UnaryOperator<WorkflowConfigurer> configure() {
         countingTm = new CountingTransactionManager();
-        return configurer -> configurer.componentRegistry(
+        return configurer -> super.configure().apply(configurer).componentRegistry(
                 r -> r.registerComponent(TransactionManager.class, cfg -> countingTm));
     }
 

@@ -25,7 +25,6 @@ import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.Test;
 
@@ -45,7 +44,7 @@ import static org.awaitility.Awaitility.await;
  *
  * @author Stefan Dragisic
  */
-class SleepTimesOutNormallyTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
+class SleepTimesOutNormallyTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
     public SleepTimesOutNormallyTest() {
         super(SimpleWorkflowContext.class, c -> new SimpleWorkflowContextFactory());

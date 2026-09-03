@@ -23,7 +23,6 @@ import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinit
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 
@@ -44,7 +43,7 @@ import static org.awaitility.Awaitility.await;
  * The node handing a segment over must stop working on that segment's instances before another node resumes them from
  * their persisted state.
  */
-class SegmentReleaseDrainTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
+class SegmentReleaseDrainTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
     private static final String WORKFLOW_ID = "user-parked";
 

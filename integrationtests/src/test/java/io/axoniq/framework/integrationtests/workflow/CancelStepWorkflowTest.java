@@ -25,7 +25,6 @@ import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.framework.workflow.runtime.test.utils.SleepUtils;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
@@ -44,7 +43,7 @@ import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.S
  *
  * @author Stefan Dragisic
  */
-class CancelStepWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
+class CancelStepWorkflowTest extends AbstractWorkflowIntegrationTestBase<BaseWorkflowContext> {
 
     public CancelStepWorkflowTest() {
         super(BaseWorkflowContext.class, c -> new BaseWorkflowContextFactory());

@@ -18,6 +18,8 @@
  */
 package io.axoniq.framework.integrationtests.workflow;
 
+import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
@@ -199,11 +201,14 @@ class ConcurrentWriterFencingTest {
                                    .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
                                    .definition(d -> d.autodetected(c -> workflow));
 
-        return WorkflowTestDriver.live(module, configurer -> configurer.componentRegistry(cr -> cr
-                .registerComponent(EventStorageEngine.class, cfg -> eventStorageEngine)
-                .registerComponent(MutableWorkflowHistoryRepository.class,
-                                   cfg -> new InMemoryWorkflowHistoryRepository())
-                .registerComponent(TokenStore.class, cfg -> new InMemoryTokenStore())));
+        return WorkflowTestDriver.live(module, configurer -> configurer
+                .componentRegistry(MultiTenancyUtils::disable)
+                .componentRegistry(r -> r.disableEnhancer(AxonServerConfigurationEnhancer.class))
+                .componentRegistry(cr -> cr
+                        .registerComponent(EventStorageEngine.class, cfg -> eventStorageEngine)
+                        .registerComponent(MutableWorkflowHistoryRepository.class,
+                                           cfg -> new InMemoryWorkflowHistoryRepository())
+                        .registerComponent(TokenStore.class, cfg -> new InMemoryTokenStore())));
     }
 
     /**

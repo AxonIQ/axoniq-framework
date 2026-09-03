@@ -28,7 +28,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedE
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import io.axoniq.framework.workflow.runtime.test.utils.SleepUtils;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
@@ -53,7 +52,7 @@ import static org.awaitility.Awaitility.await;
  *
  * @author Stefan Dragisic
  */
-class CancelWorkflowInterruptsStepWithCatchableExceptionTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
+class CancelWorkflowInterruptsStepWithCatchableExceptionTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
     private static final Logger logger =
             LoggerFactory.getLogger(CancelWorkflowInterruptsStepWithCatchableExceptionTest.class);

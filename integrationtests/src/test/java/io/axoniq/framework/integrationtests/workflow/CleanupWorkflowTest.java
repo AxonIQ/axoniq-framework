@@ -25,7 +25,6 @@ import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 
@@ -39,7 +38,7 @@ import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.S
  * Test making sure that after the execution of a workflow, its execution is not present on the workflow engine
  * anymore.
  */
-class CleanupWorkflowTest extends AbstractWorkflowTestBase<BaseWorkflowContext> {
+class CleanupWorkflowTest extends AbstractWorkflowIntegrationTestBase<BaseWorkflowContext> {
 
     public CleanupWorkflowTest() {
         super(BaseWorkflowContext.class, c -> new BaseWorkflowContextFactory());

@@ -29,7 +29,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellation
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -53,7 +52,7 @@ import static org.awaitility.Awaitility.await;
  *
  * @author Stefan Dragisic
  */
-class BackoffWindowCancellationWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
+class BackoffWindowCancellationWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
     private static final String WORKFLOW_ID = "backoff-cancel-1";
     private static final Duration BACKOFF = Duration.ofMillis(500);

@@ -27,7 +27,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.test.AbstractWorkflowTestBase;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -56,7 +55,7 @@ import static org.awaitility.Awaitility.await;
  *
  * @author Stefan Dragisic
  */
-class CompletedLifecycleHookWorkflowTest extends AbstractWorkflowTestBase<SimpleWorkflowContext> {
+class CompletedLifecycleHookWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
     /**
      * Records every COMPLETED notification observed for the running workflow. The drift this test guards against is the
