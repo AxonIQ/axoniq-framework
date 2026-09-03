@@ -1,10 +1,10 @@
 # Refactoring / Integration
 v integrate `runtime` (rename the module to `*-engine`), `spring-boot`, `dsl`, `test` as maven modules underneath of `workflow`
 v double-check maven coordinates
-- change package structure !!!
+v change package structure !!!
 v integrate example/integrationtests
 v integrate docs
-- move examples out -> put them into axon-framework repo as a separate commit (just copy) -> prefix with workflow
+v move examples out -> put them into axon-framework repo as a separate commit (just copy) -> prefix with workflow
 v change @since -> use LLM
 v validate build
 v integrate archunit / checkstyle (validate)
