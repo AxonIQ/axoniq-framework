@@ -67,7 +67,7 @@ public interface SequencedDeadLetterProcessor<M extends Message> {
      * The default implementation delegates to {@link #process(Predicate)} and ignores the context. Implementations
      * that use the context to select dead-letter storage should override this method.
      *
-     * @param sequenceFilter A filter for the first {@link DeadLetter dead letter} entries of each sequence.
+     * @param sequenceFilter a filter for the first {@link DeadLetter dead letter} entries of each sequence
      * @param context        the processing context in which to process the dead letters, if any
      * @return a {@link CompletableFuture} with {@code true} if at least one {@link DeadLetter dead letter} was
      * processed successfully, {@code false} otherwise
