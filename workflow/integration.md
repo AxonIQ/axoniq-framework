@@ -21,3 +21,4 @@ v integrate coverage
 - junit4 is on classpath
 - spring boot version is 3.5.16
 - docs integration -> help needed
+- discuss integration with multi-tenancy and axon server in tests
