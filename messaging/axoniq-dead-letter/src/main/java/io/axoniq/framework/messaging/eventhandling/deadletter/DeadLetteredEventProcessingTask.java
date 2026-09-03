@@ -111,7 +111,7 @@ class DeadLetteredEventProcessingTask {
      * the given {@code letter}.
      */
     public CompletableFuture<EnqueueDecision<EventMessage>> process(DeadLetter<? extends EventMessage> letter,
-                                                                    @Nullable ProcessingContext retryContext) {
+                                                                    @Nullable ProcessingContext context) {
         EventMessage message = letter.message();
         if (logger.isDebugEnabled()) {
             logger.debug("Start evaluation of dead letter with message id [{}].", message.identifier());
