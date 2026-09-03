@@ -1,0 +1,94 @@
+= Payload and State
+:navtitle: Payload & State
+
+Every workflow instance carries a _payload_—a `Map<String, Object>` that persists durably across all steps.
+The triggering event's fields become the initial payload, and you can read, modify, and pass it to steps throughout the workflow.
+
+== Reading payload
+
+When the `OrderPlaced` event triggers our workflow, its fields (`orderId`, `customerId`, `email`, `amount`) automatically become the initial payload:
+
+[source,java]
+----
+var payload = ctx.workflowPayload(); // <1>
+var orderId = payload.get("orderId");
+var email = payload.get("email");
+----
+
+<.> Returns the current workflow payload as a `Map<String, Object>`.
+This always reflects the latest state, including any modifications made by previous steps.
+
+== Setting payload
+
+After receiving the payment confirmation, we want to store the transaction details so later steps can access them:
+
+[source,java]
+----
+var confirmation = ctx.awaitEvent("awaitPayment",
+        PaymentConfirmed.class,
+        associate(payloadProperty("orderId"),
+                  equalsTo(ctx.workflowPayload().get("orderId"))),
+        step -> step.timeout(Duration.ofMinutes(15)));
+
+ctx.setPayload("storePaymentDetails", confirmation); // <1>
+----
+
+<.> Merges the `PaymentConfirmed` fields (`orderId`, `transactionId`) into the workflow payload.
+After this call, `ctx.workflowPayload()` contains both the original `OrderPlaced` fields _and_ the `transactionId` from the confirmation.
+
+Every `setPayload` call is a named step.
+The engine records it as an event, so the payload state survives crashes and replays.
+
+== Passing payload to steps
+
+You can pass the workflow payload as input to any step:
+
+[source,java]
+----
+ctx.awaitExecute("shipOrder",
+                 ctx.workflowPayload(), // <1>
+                 ShippingService::shipOrder,
+                 step -> step.timeout(Duration.ofMinutes(5)));
+----
+
+<.> The shipping service receives the full payload—including the `transactionId` we stored in the previous step.
+
+== The `Payload` helper
+
+The `Payload` class wraps the raw map with convenient accessor methods:
+
+[source,java]
+----
+import static io.axoniq.workflow.dsl.api.Payload.payload;
+
+var email = payload(ctx.workflowPayload()).get("email"); // <1>
+----
+
+<.> `payload(...)` wraps a `Map<String, Object>` and provides type-safe `get` methods.
+You can also use `payload(ctx, object)` to convert any object into a payload map.
+
+== Payload reducers
+
+Under the hood, each step has two _payload reducers_ that control how data flows in and out:
+
+[cols="<,<,<"]
+|===
+|Reducer |Behavior |Default
+
+|`GlobalOnlyPayloadReducer.INSTANCE` |Step receives the workflow payload, ignoring local input |Default result reducer for `execute` and `waitForEvent`
+|`LocalOnlyPayloadReducer.INSTANCE` |Step receives only its own local input, ignoring workflow payload |Default parameter reducer for `execute`
+|`CombineGlobalAndLocalPayloadReducer.INSTANCE` |Merges both—local values overwrite duplicates |Typical choice when a step should both see and update shared workflow state
+|===
+
+[NOTE]
+====
+For most workflows, the defaults work well.
+You'll only need custom reducers for advanced payload merging scenarios.
+See xref:understanding-steps.adoc#payload-reducers[Payload Reducers] for details.
+====
+
+== Durability
+
+Every payload modification is recorded as an event.
+If the application crashes and replays, the engine restores the payload to the exact state it was in before the crash.
+You never need to manage state persistence manually.
