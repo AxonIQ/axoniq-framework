@@ -202,6 +202,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     }
 
     @Override
+    @Nullable
     public WorkflowStep getStep(String stepName) {
         return steps.get(stepName);
     }
@@ -220,6 +221,11 @@ public class EventSourcedWorkflowState implements WorkflowState {
     @Override
     public boolean hasVersionMigrationStep(String changeId) {
         return versions.containsKey(changeId);
+    }
+
+    @Override
+    public Map<String, String> versionMigrations() {
+        return Map.copyOf(versions);
     }
 
     @Override

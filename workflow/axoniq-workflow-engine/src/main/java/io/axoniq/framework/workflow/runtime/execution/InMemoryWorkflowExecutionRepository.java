@@ -19,6 +19,8 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
+import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.slf4j.Logger;
@@ -59,6 +61,14 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
     @Override
     public Set<WorkflowExecution> findAll(Predicate<WorkflowExecution> predicate) {
         return Set.copyOf(workflowExecutions.values().stream().filter(predicate).toList());
+    }
+
+    @Override
+    public Set<WorkflowExecution> findAll(WorkflowStateQuery query) {
+        return Set.copyOf(workflowExecutions.values().stream()
+                                           .filter(execution -> WorkflowStateQueryMatcher.matches(query,
+                                                                                                    execution.state()))
+                                           .toList());
     }
 
     @Override

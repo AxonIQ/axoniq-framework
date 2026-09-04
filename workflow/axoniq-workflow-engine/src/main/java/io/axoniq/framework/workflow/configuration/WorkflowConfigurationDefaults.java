@@ -21,7 +21,9 @@ package io.axoniq.framework.workflow.configuration;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
+import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.DefaultExecuteStepActionResolver;
 import io.axoniq.framework.workflow.runtime.execution.DefaultWorkflowScheduler;
@@ -31,6 +33,7 @@ import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowStore;
 import io.axoniq.framework.workflow.runtime.execution.ExecuteStepActionResolver;
 import io.axoniq.framework.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
+import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
@@ -129,6 +132,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowExecutionRepository(componentRegistry);
         registerWorkflowCancellationService(componentRegistry);
         registerMutableWorkflowHistoryRepository(componentRegistry);
+        registerWorkflowManager(componentRegistry);
         registerWorkflowConfigurationRegistry(componentRegistry);
         registerWorkflowStore(componentRegistry);
         registerWorkflowEngine(componentRegistry);
@@ -319,6 +323,18 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     void registerWorkflowCancellationService(ComponentRegistry componentRegistry) {
         componentRegistry.registerIfNotPresent(WorkflowCancellationService.class,
                                                cfg -> new WorkflowCancellationService());
+    }
+
+    void registerWorkflowManager(ComponentRegistry componentRegistry) {
+        componentRegistry.registerIfNotPresent(
+                WorkflowManager.class,
+                cfg -> new SimpleWorkflowManager(
+                        cfg.getComponent(WorkflowHistoryRepository.class),
+                        cfg.getComponent(WorkflowExecutionRepository.class),
+                        cfg.getComponent(WorkflowCancellationService.class),
+                        cfg.getComponent(ExecutorService.class, WORKFLOW_ENGINE_EXECUTOR)
+                )
+        );
     }
 
     void registerMutableWorkflowHistoryRepository(ComponentRegistry componentRegistry) {

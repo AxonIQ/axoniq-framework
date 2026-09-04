@@ -20,6 +20,7 @@ package io.axoniq.framework.workflow.history;
 
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
+import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
@@ -71,6 +72,20 @@ class InMemoryWorkflowHistoryRepositoryTest {
         List<WorkflowHistory> all = repository.findAll();
         assertThat(all).hasSize(2);
         assertThat(all).containsExactlyInAnyOrder(history1, history2);
+    }
+
+    @Test
+    void shouldFindOnlyEntriesMatchingAStateQuery() {
+        WorkflowHistory payment = new WorkflowHistory("wf-1",
+                                                       new EventSourcedWorkflowState("wf-1", DEFINITION_ID));
+        WorkflowHistory shipping = new WorkflowHistory(
+                "wf-2", new EventSourcedWorkflowState("wf-2", new MessageType("ShippingWorkflow", "0.0.1"))
+        );
+        repository.save(payment);
+        repository.save(shipping);
+
+        assertThat(repository.findAll(WorkflowStateQuery.all().workflowDefinitionId(DEFINITION_ID)))
+                .containsExactly(payment);
     }
 
     @Test

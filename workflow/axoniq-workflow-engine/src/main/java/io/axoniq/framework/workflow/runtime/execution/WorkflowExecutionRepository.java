@@ -19,6 +19,7 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
 
@@ -55,6 +56,14 @@ public interface WorkflowExecutionRepository extends DescribableComponent {
     default Set<WorkflowExecution> findAll() {
         return findAll(e -> true);
     }
+
+    /**
+     * Returns all stored workflow executions whose state matches a query.
+     *
+     * @param query state criteria to apply
+     * @return an unmodifiable collection of matching workflow executions
+     */
+    Set<WorkflowExecution> findAll(WorkflowStateQuery query);
 
     /**
      * Returns all stored workflow executions matching the given predicate, with at most one execution per workflow

@@ -20,6 +20,8 @@ package io.axoniq.framework.workflow.history.inmemory;
 
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
+import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
+import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
 import org.axonframework.common.annotation.Internal;
 
 import java.util.List;
@@ -38,8 +40,10 @@ public class InMemoryWorkflowHistoryRepository implements MutableWorkflowHistory
     private final ConcurrentHashMap<String, WorkflowHistory> workflowHistoryMap = new ConcurrentHashMap<>();
 
     @Override
-    public List<WorkflowHistory> findAll() {
-        return List.copyOf(workflowHistoryMap.values());
+    public List<WorkflowHistory> findAll(WorkflowStateQuery query) {
+        return workflowHistoryMap.values().stream()
+                                 .filter(history -> WorkflowStateQueryMatcher.matches(query, history.state()))
+                                 .toList();
     }
 
     @Override

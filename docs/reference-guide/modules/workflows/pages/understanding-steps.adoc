@@ -403,6 +403,22 @@ Both approaches produce a CANCELLED event in the event store:
 <!-- vale off -->
 ++++
 
+An external caller can request the same single-step cancellation through `WorkflowManager` when the workflow is live:
+
+[source,java]
+----
+workflowManager.findOne(WorkflowStateQuery.all().workflowId(orderId))
+               .single()
+               .thenAccept(instance -> {
+                   if (instance != null) {
+                       instance.requestStepCancellation("awaitApproval", null);
+                   }
+               });
+----
+
+The returned `CompletableFuture<Boolean>` is `true` when the terminal cancellation was recorded. See
+xref:workflow-manager.adoc[Managing Workflow Instances] for outside-in cancellation and instance lookup.
+
 [IMPORTANT]
 ====
 Step cancellation only affects the individual step.

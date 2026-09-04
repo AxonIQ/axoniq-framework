@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.history.api;
 
-
+import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import java.util.List;
 import java.util.Optional;
 
@@ -31,11 +31,21 @@ import java.util.Optional;
 public interface WorkflowHistoryRepository {
 
     /**
+     * Returns all stored workflow history entries matching a state query.
+     *
+     * @param query state criteria to apply
+     * @return an unmodifiable collection of matching workflow history entries
+     */
+    List<WorkflowHistory> findAll(WorkflowStateQuery query);
+
+    /**
      * Returns all stored workflow history entries.
      *
-     * @return an unmodifiable collection of all workflow history entries.
+     * @return an unmodifiable collection of all workflow history entries
      */
-    List<WorkflowHistory> findAll();
+    default List<WorkflowHistory> findAll() {
+        return findAll(WorkflowStateQuery.all());
+    }
 
 
     /**
