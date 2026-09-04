@@ -14,23 +14,14 @@
  * limitations under the License.
  */
 
-package org.axonframework.modelling.saga;
+package org.axonframework.modelling.saga.repository;
 
-import org.axonframework.common.AxonException;
+import org.axonframework.common.AxonNonTransientException;
 
 /**
- * Exception triggered by a saga while it is processing an event or processing a task.
+ * Exception triggered when a new saga instance could not be instantiated.
  */
-public class SagaExecutionException extends AxonException {
-
-    /**
-     * Initializes the exception using the given {@code message}.
-     *
-     * @param message the message describing the exception
-     */
-    public SagaExecutionException(String message) {
-        super(message);
-    }
+public class SagaCreationException extends AxonNonTransientException {
 
     /**
      * Initializes the exception using the given {@code message} and {@code cause}.
@@ -38,7 +29,7 @@ public class SagaExecutionException extends AxonException {
      * @param message The message describing the exception
      * @param cause   The underlying cause of the exception
      */
-    public SagaExecutionException(String message, Throwable cause) {
+    public SagaCreationException(String message, Throwable cause) {
         super(message, cause);
     }
 }
