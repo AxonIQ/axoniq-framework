@@ -25,41 +25,52 @@
         <version>${revision}</version>
     </parent>
 
-    <artifactId>axoniq-workflow-spring-boot</artifactId>
-    <name>Axoniq Framework - Workflow - Spring-Boot</name>
+    <artifactId>axoniq-workflow-dsl-kotlin</artifactId>
+    <name>Axoniq Framework - Workflow - Standard Kotlin DSL</name>
+
+    <properties>
+        <kotlin-logging.version>8.0.4</kotlin-logging.version>
+    </properties>
 
     <dependencies>
-        <dependency>
-            <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-workflow-engine</artifactId>
-            <version>${project.version}</version>
-        </dependency>
         <dependency>
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-workflow-dsl</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- Kotlin -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-autoconfigure</artifactId>
-            <optional>true</optional>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-stdlib</artifactId>
+            <version>${kotlin.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-reflect</artifactId>
+            <version>${kotlin.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.axonframework.extensions.spring</groupId>
-            <artifactId>axon-spring-boot-starter</artifactId>
-            <scope>test</scope>
+            <groupId>com.fasterxml.jackson.module</groupId>
+            <artifactId>jackson-module-kotlin</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-workflow-test</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
+            <groupId>io.github.oshai</groupId>
+            <artifactId>kotlin-logging-jvm</artifactId>
+            <version>${kotlin-logging.version}</version>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

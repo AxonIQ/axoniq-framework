@@ -16,7 +16,7 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.springboot
+package io.axoniq.framework.workflow.springboot.kotlin
 
 import io.axoniq.framework.workflow.dsl.kotlin.Kontext
 import io.axoniq.framework.workflow.dsl.kotlin.WorkflowKontext

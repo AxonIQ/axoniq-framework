@@ -4,7 +4,7 @@
   ~
   ~ Licensed under the AXONIQ SOFTWARE SUBSCRIPTION AGREEMENT TERMS,
   ~ Version September 2025 (the "License");
-  ~ The software is available under Non-Production Free License.
+  ~ the software is available under Non-Production Free License.
   ~ Production use requires a paid license. See the License for the
   ~ specific language governing permissions and limitations under
   ~ the License.
@@ -16,7 +16,8 @@
   ~
   -->
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -25,18 +26,18 @@
         <version>${revision}</version>
     </parent>
 
-    <artifactId>axoniq-workflow-spring-boot</artifactId>
-    <name>Axoniq Framework - Workflow - Spring-Boot</name>
+    <artifactId>axoniq-workflow-spring-boot-kotlin</artifactId>
+    <name>Axoniq Framework - Workflow - Spring-Boot Kotlin</name>
 
     <dependencies>
         <dependency>
             <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-workflow-engine</artifactId>
+            <artifactId>axoniq-workflow-spring-boot</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-workflow-dsl</artifactId>
+            <artifactId>axoniq-workflow-dsl-kotlin</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -44,6 +45,7 @@
             <artifactId>spring-boot-autoconfigure</artifactId>
             <optional>true</optional>
         </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -61,5 +63,18 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

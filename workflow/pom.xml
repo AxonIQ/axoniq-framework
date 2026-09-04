@@ -37,8 +37,10 @@
 
     <modules>
         <module>axoniq-workflow-dsl</module>
+        <module>axoniq-workflow-dsl-kotlin</module>
         <module>axoniq-workflow-engine</module>
         <module>axoniq-workflow-spring-boot</module>
+        <module>axoniq-workflow-spring-boot-kotlin</module>
         <module>axoniq-workflow-test</module>
     </modules>
 
