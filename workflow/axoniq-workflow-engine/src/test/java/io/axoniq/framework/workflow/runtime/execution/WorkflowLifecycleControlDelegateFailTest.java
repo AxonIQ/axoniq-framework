@@ -18,9 +18,6 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
 import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
@@ -28,6 +25,9 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailed
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.test.appender.ListAppender;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -36,7 +36,6 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.junit.jupiter.api.*;
-import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -169,8 +168,8 @@ class WorkflowLifecycleControlDelegateFailTest {
         var publicationFailure = new IllegalStateException("publication failed");
         when(workflowExecution.appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class)))
                 .thenReturn(CompletableFuture.failedFuture(publicationFailure));
-        Logger logger = (Logger) LoggerFactory.getLogger(WorkflowLifecycleControlDelegate.class);
-        var appender = new ListAppender<ILoggingEvent>();
+        Logger logger = (Logger) LogManager.getLogger(WorkflowLifecycleControlDelegate.class);
+        var appender = new ListAppender("WorkflowLifecycleControlDelegateFailTest");
         appender.start();
         logger.addAppender(appender);
 
@@ -178,14 +177,14 @@ class WorkflowLifecycleControlDelegateFailTest {
             assertThatThrownBy(() -> delegate.failWorkflow(failWorkflow(new RuntimeException("boom"), eventNameCustomizer)))
                     .isSameAs(publicationFailure);
 
-            assertThat(appender.list)
+            assertThat(appender.getEvents())
                     .anySatisfy(event -> {
-                        assertThat(event.getFormattedMessage())
+                        assertThat(event.getMessage().getFormattedMessage())
                                 .contains("Failed to publish FAILED terminal event for workflow 'wf-1'");
-                        assertThat(event.getThrowableProxy().getMessage()).isEqualTo("publication failed");
+                        assertThat(event.getThrown().getMessage()).isEqualTo("publication failed");
                     });
         } finally {
-            logger.detachAppender(appender);
+            logger.removeAppender(appender);
             appender.stop();
         }
     }
