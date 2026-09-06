@@ -38,6 +38,7 @@ import org.axonframework.common.FutureUtils;
 import org.axonframework.common.Registration;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.messaging.core.AbstractMessageStream;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.conversion.MessageConverter;
@@ -54,6 +55,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
@@ -85,6 +87,8 @@ public class MultiTenantAxonServerQueryBusConnector
     private final Set<TenantDescriptor> tenantDescriptors = ConcurrentHashMap.newKeySet();
     private final Map<String, AxonServerQueryBusConnector> tenantConnectors = new ConcurrentHashMap<>();
     private final Set<QualifiedName> knownSubscriptions = ConcurrentHashMap.newKeySet();
+    private final Map<String, Set<TenantAwareSubscriptionQueryStream>> tenantSubscriptionStreams =
+            new ConcurrentHashMap<>();
 
     private final AtomicBoolean started = new AtomicBoolean(false);
     private @Nullable Handler incomingHandler;
@@ -133,6 +137,10 @@ public class MultiTenantAxonServerQueryBusConnector
     /**
      * Resolves the {@link TenantResolver connector for the current tenant} and subsequently dispatches the given
      * subscription {@code query} to it.
+     * <p>
+     * The returned stream is tracked for the resolved tenant so that {@link #removeTenant(TenantDescriptor)} can
+     * forcefully terminate it if the tenant is removed while the subscription query is still active, instead of leaving
+     * it dangling on a connection that may never signal its own termination.
      *
      * @param query            the subscription query message to dispatch
      * @param context          the processing context for the query
@@ -143,7 +151,22 @@ public class MultiTenantAxonServerQueryBusConnector
     public MessageStream<QueryResponseMessage> subscriptionQuery(QueryMessage query,
                                                                  @Nullable ProcessingContext context,
                                                                  int updateBufferSize) {
-        return resolveConnector(query, context).subscriptionQuery(query, context, updateBufferSize);
+        String tenantId = resolveTenant(query, context).tenantId();
+        MessageStream<QueryResponseMessage> delegate =
+                resolveConnector(query, context).subscriptionQuery(query, context, updateBufferSize);
+        TenantAwareSubscriptionQueryStream stream = new TenantAwareSubscriptionQueryStream(
+                delegate, terminated -> untrackSubscriptionStream(tenantId, terminated)
+        );
+        tenantSubscriptionStreams.computeIfAbsent(tenantId, id -> ConcurrentHashMap.newKeySet())
+                                 .add(stream);
+        return stream;
+    }
+
+    private void untrackSubscriptionStream(String tenantId, TenantAwareSubscriptionQueryStream stream) {
+        tenantSubscriptionStreams.computeIfPresent(tenantId, (id, streams) -> {
+            streams.remove(stream);
+            return streams.isEmpty() ? null : streams;
+        });
     }
 
     /**
@@ -248,13 +271,7 @@ public class MultiTenantAxonServerQueryBusConnector
      */
     private AxonServerQueryBusConnector resolveConnector(QueryMessage query,
                                                          @Nullable ProcessingContext context) {
-        // Three steps, in descending authority: the tenant the context carries, the tenant of the message being handled
-        // in that context, then the tenant the dispatched query itself names. The router owns the first two.
-        TenantDescriptor tenantDescriptor = tenantRouter.resolveFromContext(context)
-                                                        .or(() -> tenantRouter.resolveFromMessage(query))
-                                                        .orElseThrow(TenantNotResolvedException.tenantNotResolved(
-                                                                "No known tenant for query [%s]",
-                                                                query.type().qualifiedName()));
+        TenantDescriptor tenantDescriptor = resolveTenant(query, context);
         AxonServerQueryBusConnector connector = tenantConnectors.get(tenantDescriptor.tenantId());
         if (connector == null) {
             logger.warn("No query bus connector found for tenant [{}] while dispatching query [{}].",
@@ -265,13 +282,24 @@ public class MultiTenantAxonServerQueryBusConnector
         return connector;
     }
 
+    private TenantDescriptor resolveTenant(QueryMessage query, @Nullable ProcessingContext context) {
+        // Three steps, in descending authority: the tenant the context carries, the tenant of the message being handled
+        // in that context, then the tenant the dispatched query itself names. The router owns the first two.
+        return tenantRouter.resolveFromContext(context)
+                           .or(() -> tenantRouter.resolveFromMessage(query))
+                           .orElseThrow(TenantNotResolvedException.tenantNotResolved(
+                                   "No known tenant for query [%s]",
+                                   query.type().qualifiedName()
+                           ));
+    }
+
     private Registration addTenant(TenantDescriptor tenantDescriptor) {
         tenantDescriptors.add(tenantDescriptor);
         tenantConnectors.computeIfAbsent(tenantDescriptor.tenantId(), tenantId -> {
             AxonServerQueryBusConnector connector = createConnector(tenantDescriptor);
             // Known subscriptions are replayed only while creating a new connector. An already-registered tenant's
-            // connector is already in sync, and re-subscribing it would be a needless no-op at best; at worst it
-            // risks the same orphaned-registration pitfall the command bus connector guards against.
+            // connector is already in sync, making a replay onto it a no-op for every query that tenant already
+            // handles.
             replaySubscriptions(connector, tenantId);
             logger.info("Added query bus connection for tenant [{}]", tenantDescriptor.tenantId());
             return connector;
@@ -293,6 +321,7 @@ public class MultiTenantAxonServerQueryBusConnector
             return false;
         }
         logger.info("Removed query bus connection for tenant [{}]", tenantDescriptor.tenantId());
+        terminateSubscriptionQueriesFor(tenantDescriptor);
         connector.disconnect().whenComplete((ignored, throwable) -> {
             if (throwable != null) {
                 logger.warn("Failed to disconnect query bus connection for tenant [{}].",
@@ -301,6 +330,22 @@ public class MultiTenantAxonServerQueryBusConnector
             }
         });
         return true;
+    }
+
+    private void terminateSubscriptionQueriesFor(TenantDescriptor tenantDescriptor) {
+        Set<TenantAwareSubscriptionQueryStream> streams =
+                tenantSubscriptionStreams.remove(tenantDescriptor.tenantId());
+        if (streams == null || streams.isEmpty()) {
+            return;
+        }
+        if (logger.isDebugEnabled()) {
+            logger.debug("Terminating [{}] open subscription quer{} for removed tenant [{}].",
+                         streams.size(), streams.size() == 1 ? "y" : "ies", tenantDescriptor.tenantId());
+        }
+
+        streams.forEach(stream -> stream.forceError(new IllegalStateException(
+                "Closing stream forcefully since tenant [" + tenantDescriptor.tenantId() + "] has been removed."
+        )));
     }
 
     private AxonServerQueryBusConnector createConnector(TenantDescriptor tenant) {
@@ -318,5 +363,44 @@ public class MultiTenantAxonServerQueryBusConnector
             connector.onIncomingQuery(incomingHandler);
         }
         return connector;
+    }
+
+    /**
+     * A {@link MessageStream} decorator for subscription queries, allowing the
+     * {@code MultiTenantAxonServerQueryBusConnector} to forcefully terminate it independently of the delegate stream's
+     * own state.
+     * <p>
+     * This is required to ensure we do not leak subscription query streams whenever a tenant has been removed.
+     */
+    private static final class TenantAwareSubscriptionQueryStream extends AbstractMessageStream<QueryResponseMessage> {
+
+        private final MessageStream<QueryResponseMessage> delegate;
+        private final Consumer<TenantAwareSubscriptionQueryStream> onTerminated;
+        @Nullable
+        private volatile Throwable forcedError;
+
+        TenantAwareSubscriptionQueryStream(MessageStream<QueryResponseMessage> delegate,
+                                           Consumer<TenantAwareSubscriptionQueryStream> onTerminated) {
+            this.delegate = delegate;
+            this.onTerminated = onTerminated;
+            delegate.setCallback(this::signalProgress);
+        }
+
+        void forceError(Throwable error) {
+            this.forcedError = requireNonNull(error, "The error must not be null.");
+            hasNextAvailable();
+        }
+
+        @Override
+        protected FetchResult<Entry<QueryResponseMessage>> fetchNext() {
+            Throwable error = forcedError;
+            return error != null ? FetchResult.error(error) : FetchResult.of(delegate);
+        }
+
+        @Override
+        protected void onCompleted() {
+            delegate.close();
+            onTerminated.accept(this);
+        }
     }
 }

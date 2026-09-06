@@ -1,0 +1,107 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+
+package io.axoniq.framework.messaging.multitenancy.deadletter;
+
+import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
+import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
+import org.axonframework.common.AxonConfigurationException;
+import org.axonframework.common.annotation.Internal;
+import org.axonframework.common.configuration.ComponentRegistry;
+import org.axonframework.common.configuration.ConfigurationEnhancer;
+import org.axonframework.common.configuration.SearchScope;
+import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
+
+import static org.axonframework.common.configuration.DecoratorDefinition.forType;
+
+/**
+ * Makes an enabled dead-letter queue configuration tenant-aware by routing its configured queue factory per tenant.
+ * <p>
+ * This enhancer does nothing if the optional dependency for dead-letter queue support is not present on the classpath.
+ *
+ * @author Jan Galinski
+ * @since 5.4.0
+ */
+@Internal
+public class DeadLetterMultiTenancyConfigurationEnhancer implements ConfigurationEnhancer {
+
+    private static final String DEAD_LETTER_QUEUE_CONFIGURATION =
+            "io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration";
+
+    /**
+     * The order at which dead-letter queue support is configured after the general and Axon Server multi-tenancy
+     * components.
+     */
+    public static final int ENHANCER_ORDER = MultiTenancyConfigurationDefaults.ENHANCER_ORDER + 4;
+
+    private static final String EXP_MSG = "A TenantAwareSequencedDeadLetterQueueFactory must be configured when multi-tenancy and the dead-letter queue are enabled.";
+
+    @Override
+    public int order() {
+        return ENHANCER_ORDER;
+    }
+
+    private static void registerDeadLetterQueueDecorator(ComponentRegistry componentRegistry) {
+        componentRegistry.registerDecorator(
+                forType(PooledStreamingEventProcessorConfiguration.class).with(
+                        (config, name, processorConfiguration) -> {
+                            DeadLetterQueueConfiguration dlqConfig =
+                                    processorConfiguration.extension(DeadLetterQueueConfiguration.class);
+                            if (dlqConfig != null && dlqConfig.isEnabled()) {
+                                TenantAwareSequencedDeadLetterQueueFactory tenantFactory =
+                                        config.getOptionalComponent(TenantAwareSequencedDeadLetterQueueFactory.class)
+                                              .orElseThrow(() -> new AxonConfigurationException(EXP_MSG));
+
+                                dlqConfig.factory(new TenantRoutingSequencedDeadLetterQueueFactory(
+                                        tenantFactory,
+                                        config.getComponent(TenantRoutingSequencedDeadLetterQueueRegistry.class)
+                                ));
+                            }
+                            return processorConfiguration;
+                        }
+                )
+        );
+    }
+
+    /**
+     * Checks whether the optional dead-letter queue module is available to the supplied class loader.
+     *
+     * @param classLoader the class loader to inspect
+     * @return {@code true} when dead-letter queue support is available
+     */
+    public static boolean isDeadLetterQueuePresent(ClassLoader classLoader) {
+        try {
+            Class.forName(DEAD_LETTER_QUEUE_CONFIGURATION, false, classLoader);
+            return true;
+        } catch (ClassNotFoundException | LinkageError ignored) {
+            return false;
+        }
+    }
+
+    @Override
+    public void enhance(ComponentRegistry componentRegistry) {
+        if (!isDeadLetterQueuePresent(getClass().getClassLoader())) {
+            return;
+        }
+        componentRegistry.registerIfNotPresent(TenantRoutingSequencedDeadLetterQueueRegistry.class,
+                                               configuration -> new TenantRoutingSequencedDeadLetterQueueRegistry(),
+                                               SearchScope.ALL);
+        registerDeadLetterQueueDecorator(componentRegistry);
+    }
+}

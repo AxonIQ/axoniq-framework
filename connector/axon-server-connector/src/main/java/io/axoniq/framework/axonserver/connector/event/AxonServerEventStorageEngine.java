@@ -48,6 +48,7 @@ import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
+import org.axonframework.messaging.eventstreaming.Tag;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,7 +57,9 @@ import java.lang.invoke.MethodHandles;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * An {@link EventStorageEngine} implementation using Axon Server through the {@code axonserver-connector-java}
@@ -73,9 +76,9 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
     private final TaggedEventConverter converter;
 
     /**
-     * Constructs an {@code AxonServerEventStorageEngine} with the given {@code connection} and {@code converter},
-     * using {@link EventTypeResolver#DEFAULT} to resolve {@link org.axonframework.messaging.core.MessageType
-     * MessageTypes} when reading events back from Axon Server.
+     * Constructs an {@code AxonServerEventStorageEngine} with the given {@code connection} and {@code converter}, using
+     * {@link EventTypeResolver#DEFAULT} to resolve {@link org.axonframework.messaging.core.MessageType MessageTypes}
+     * when reading events back from Axon Server.
      *
      * @param connection the context-specific backing connection to Axon Server
      * @param converter  the converter to use to serialize {@link EventMessage#payload() payloads} and complex
@@ -93,9 +96,9 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
      * @param connection        the context-specific backing connection to Axon Server
      * @param converter         the converter to use to serialize {@link EventMessage#payload() payloads} and complex
      *                          {@link Metadata} values into bytes
-     * @param eventTypeResolver the resolver used to construct a {@link org.axonframework.messaging.core.MessageType
-     *                          MessageType} from the event name and version stored in Axon Server, handling missing or
-     *                          empty versions for legacy events
+     * @param eventTypeResolver the resolver used to construct a
+     *                          {@link org.axonframework.messaging.core.MessageType MessageType} from the event name and
+     *                          version stored in Axon Server, handling missing or empty versions for legacy events
      */
     public AxonServerEventStorageEngine(AxonServerConnection connection,
                                         EventConverter converter,
@@ -125,7 +128,7 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
                   appendTransaction.append(taggedEvent);
               });
 
-        return CompletableFuture.completedFuture(new AxonServerAppendTransaction(appendTransaction));
+        return CompletableFuture.completedFuture(new AxonServerAppendTransaction(appendTransaction, condition));
     }
 
     @Override
@@ -191,7 +194,8 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
     }
 
     private record AxonServerAppendTransaction(
-            DcbEventChannel.AppendEventsTransaction appendTransaction
+            DcbEventChannel.AppendEventsTransaction appendTransaction,
+            AppendCondition condition
     ) implements AppendTransaction<AppendEventsResponse> {
 
         /**
@@ -228,13 +232,20 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
         public CompletableFuture<AppendEventsResponse> commit() {
             logger.debug("Committing append event transaction...");
             return appendTransaction.commit()
-                                    .exceptionallyCompose(AxonServerAppendTransaction::mapCommitFailure);
+                                    .exceptionallyCompose(failure -> mapCommitFailure(failure, condition));
         }
 
-        private static CompletableFuture<AppendEventsResponse> mapCommitFailure(Throwable failure) {
+        private static CompletableFuture<AppendEventsResponse> mapCommitFailure(Throwable failure,
+                                                                                AppendCondition condition) {
             if (isConsistencyConditionFailure(failure)) {
+                Set<Tag> tags = condition.criteria()
+                                         .flatten()
+                                         .stream()
+                                         .flatMap(criterion -> criterion.tags().stream())
+                                         .collect(Collectors.toSet());
+
                 AppendEventsTransactionRejectedException rejection =
-                        new AppendEventsTransactionRejectedException(failure.getMessage());
+                        new AppendEventsTransactionRejectedException(failure.getMessage(), tags);
                 rejection.initCause(failure);
                 return CompletableFuture.failedFuture(rejection);
             }

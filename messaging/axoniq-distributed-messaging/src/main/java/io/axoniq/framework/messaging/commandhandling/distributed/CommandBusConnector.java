@@ -19,12 +19,12 @@
 
 package io.axoniq.framework.messaging.commandhandling.distributed;
 
-import org.jspecify.annotations.Nullable;
+import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
-import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
@@ -46,15 +46,19 @@ public interface CommandBusConnector extends DescribableComponent {
     /**
      * Dispatches the given {@code command} to the appropriate command bus, which may be local or remote.
      *
-     * @param command           The command message to dispatch.
-     * @param processingContext The processing context for the command.
-     * @return A {@link CompletableFuture} that will complete with the result of the command handling.
+     * @param command           the command message to dispatch
+     * @param processingContext the processing context for the command
+     * @return a {@link CompletableFuture} that will complete with the result of the command handling
      */
     CompletableFuture<CommandResultMessage> dispatch(CommandMessage command,
                                                      @Nullable ProcessingContext processingContext);
 
     /**
      * Subscribes to a command with the given {@code commandName} and a {@code loadFactor}.
+     * <p>
+     * Subscribing a {@code commandName} this connector is already subscribed to replaces the earlier subscription,
+     * adopting the given {@code loadFactor}. A single {@link #unsubscribe(QualifiedName) unsubscribe} of that
+     * {@code commandName} undoes any number of subscriptions to it.
      *
      * @param commandName The {@link QualifiedName} of the command to subscribe to.
      * @param loadFactor  The load factor for the command, which can be used to control the distribution of command
@@ -66,6 +70,9 @@ public interface CommandBusConnector extends DescribableComponent {
 
     /**
      * Unsubscribes from a command with the given {@code commandName}.
+     * <p>
+     * Undoes any number of {@link #subscribe(QualifiedName, int) subscriptions} to the given {@code commandName},
+     * leaving no command of that name routed to this connector.
      *
      * @param commandName The {@link QualifiedName} of the command to unsubscribe from.
      * @return {@code true} if the unsubscription was successful, {@code false} otherwise.
@@ -105,15 +112,16 @@ public interface CommandBusConnector extends DescribableComponent {
         /**
          * Called when the command processing is successful.
          *
-         * @param resultMessage The result message containing the outcome of the command processing. If the message
-         *                      handling yielded no result message, a {@code null} should be passed.
+         * @param resultMessage the result message containing the outcome of the command processing. If the message
+         *                      handling yielded no result message, a {@link CommandResultMessage} with a {@code null}
+         *                      {@link CommandResultMessage#payload()} is expected
          */
-        void onSuccess(@Nullable CommandResultMessage resultMessage);
+        void onSuccess(CommandResultMessage resultMessage);
 
         /**
          * Called when an error occurs during command processing.
          *
-         * @param cause The exception that caused the error.
+         * @param cause the exception that caused the error
          */
         void onError(Throwable cause);
     }

@@ -259,9 +259,8 @@ public class MultiTenantAxonServerCommandBusConnector
         tenantConnectors.computeIfAbsent(tenantDescriptor.tenantId(), tenantId -> {
             AxonServerCommandBusConnector connector = createConnector(tenantDescriptor);
             // Known subscriptions are replayed only while creating a new connector. An already-registered tenant's
-            // connector is already in sync, and re-subscribing it would leak an orphaned registration, since
-            // AxonServerCommandBusConnector#subscribe(QualifiedName, int) does not cancel a prior registration for the
-            // same command name.
+            // connector is already in sync, making a replay onto it a needless round trip to Axon Server for every
+            // command that tenant already handles.
             replaySubscriptions(connector, tenantId);
             logger.info("Added command bus connection for tenant [{}]", tenantDescriptor.tenantId());
             return connector;

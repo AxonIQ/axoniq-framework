@@ -23,11 +23,9 @@ import io.axoniq.axonserver.connector.event.PersistentStreamProperties;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamSequencingPolicy;
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
-import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.axonserver.eventstreaming.MultiTenantPersistentStreamEventSourceFactory;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.Configuration;
@@ -156,11 +154,7 @@ class MultiTenantPersistentStreamIT {
     private AxonConfiguration buildApplication() {
         return EventSourcingConfigurer.create()
                                       .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
-                                      .componentRegistry(cr -> cr.registerComponent(TenantResolver.class,
-                                                                                    c -> new MetadataBasedTenantResolver()))
-                                      .componentRegistry(cr -> cr.registerComponent(
-                                              TenantConnectPredicate.class,
-                                              c -> d -> !Set.of(ADMIN_CONTEXT, DEFAULT_CONTEXT).contains(d.tenantId())))
+                                      .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
                                       .messaging(messaging -> messaging.eventProcessing(
                                               processing -> processing.subscribing(
                                                       subscribing -> subscribing.processor(buildProcessorModule()))))

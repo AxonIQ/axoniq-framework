@@ -27,7 +27,6 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
-import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfiguration;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.DefaultAxonApplication;
@@ -62,6 +61,7 @@ import static io.axoniq.framework.axonserver.connector.api.AxonServerConfigurati
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
  * Integration test for the multi-tenancy feature exercising queries through the {@link QueryGateway} and
@@ -124,11 +124,7 @@ class MultiTenantQueryHandlingIT {
                         DistributedQueryBusConfiguration.class,
                         cfg -> DistributedQueryBusConfiguration.DEFAULT
                                 .preferLocalQueryHandler(preferLocalQueryHandler)))
-                .componentRegistry(cr -> cr.registerComponent(TenantResolver.class,
-                                                              c -> new MetadataBasedTenantResolver()))
-                .componentRegistry(cr -> cr.registerComponent(
-                        TenantConnectPredicate.class,
-                        c -> d -> !Set.of(ADMIN_CONTEXT, DEFAULT_CONTEXT).contains(d.tenantId())))
+                .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
                 // Identity factory: the tenant-scoped component IS the resolved TenantDescriptor, so injecting it
                 // into the annotated handler below proves parameter resolution picks the dispatched tenant's instance.
                 .componentRegistry(registry -> registry.registerComponent(TenantComponentProvider.class,
@@ -264,6 +260,36 @@ class MultiTenantQueryHandlingIT {
             assertThat(streamB.hasNextAvailable()).isFalse();
             assertThat(streamB.isCompleted()).isTrue();
         });
+    }
+
+    /**
+     * The subscription query stream must terminate when its tenant's connector is removed, rather than waiting.
+     */
+    @Test
+    void activeSubscriptionQueryTerminatesAfterItsTenantConnectorIsRemoved() {
+        assumeFalse(preferLocalQueryHandler,
+                    "The tenant connector is only used when local query handling is not preferred.");
+        QueryBus queryBus = application.getComponent(QueryBus.class);
+        QueryGateway queryGateway = application.getComponent(QueryGateway.class);
+
+        // given an active subscription query which has delivered an initial result and an update
+        MessageStream<QueryResponseMessage> stream = subscriptionQuery(queryBus, TENANT_A);
+        assertThat(nextPayload(stream)).isEqualTo(TENANT_A);
+        await().untilAsserted(() -> assertThat(capturedEmitters).containsKey(TENANT_A));
+        capturedEmitters.get(TENANT_A).emit(SubscriptionTenantQuery.class, query -> true, updatePayload(TENANT_A));
+        assertThat(nextPayload(stream)).isEqualTo(updatePayload(TENANT_A));
+
+        // when the tenant context is deleted
+        contextManager.deleteContext(TENANT_A);
+
+        // and its connector has actually been removed, rather than merely its descriptor from the provider
+        await().untilAsserted(() -> assertThat(dispatchFailure(queryGateway,
+                                                                 new RecordTenantQuery("after-deletion"),
+                                                                 TENANT_A))
+                       .isInstanceOf(TenantNotResolvedException.class));
+
+        // then the already-active stream terminates instead of waiting indefinitely
+        await().untilAsserted(() -> assertThat(stream.isCompleted() || stream.error().isPresent()).isTrue());
     }
 
     @Test

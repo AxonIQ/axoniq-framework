@@ -77,6 +77,11 @@ public interface QueryBusConnector extends DescribableComponent {
 
     /**
      * Subscribes this connector to queries matching the given {@code name}.
+     * <p>
+     * A connector serves queries of a given {@code name} with a single handler. Subscribing a {@code name} this
+     * connector is already subscribed to therefore has no further effect, and completes as soon as the subscription
+     * that is already in place is acknowledged. A single {@link #unsubscribe(QualifiedName) unsubscribe} of that
+     * {@code name} undoes any number of subscriptions to it.
      *
      * @param name The {@link org.axonframework.messaging.core.QualifiedName} of the
      *             {@link QueryMessage#type()} to subscribe to.
@@ -87,6 +92,9 @@ public interface QueryBusConnector extends DescribableComponent {
 
     /**
      * Unsubscribes this connector from queries with the given {@code name}.
+     * <p>
+     * Undoes any number of {@link #subscribe(QualifiedName) subscriptions} to the given {@code name}, leaving no query
+     * of that name routed to this connector.
      *
      * @param name The {@link org.axonframework.messaging.core.QualifiedName} of the {@link QueryMessage#type()} to unsubscribe from.
      * @return {@code true} if unsubscribing was successful, {@code false} otherwise.

@@ -245,7 +245,9 @@ class AxonServerCommandBusConnectorTest {
         // Assert
         assertThat(result).isCompleted();
         CommandResultMessage resultMessage = result.join();
-        assertThat(resultMessage).isNull();
+        assertThat(resultMessage).isNotNull();
+        assertThat(resultMessage.payload()).isNull();
+        assertThat(resultMessage.type()).isEqualTo(ANY_TEST_TYPE);
     }
 
     @Test

@@ -22,6 +22,7 @@ package io.axoniq.framework.messaging.multitenancy;
 import io.axoniq.framework.messaging.multitenancy.annotation.TenantComponentParameterResolverFactoryConfigurationEnhancer;
 import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
+import io.axoniq.framework.messaging.multitenancy.deadletter.DeadLetterMultiTenancyConfigurationEnhancer;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 
@@ -58,7 +59,8 @@ public final class MultiTenancyUtils {
      */
     private static final List<Class<? extends ConfigurationEnhancer>> ENHANCERS = List.of(
             MultiTenancyConfigurationDefaults.class,
-            AxonServerMultiTenancyConfigurationDefaults.class
+            AxonServerMultiTenancyConfigurationDefaults.class,
+            DeadLetterMultiTenancyConfigurationEnhancer.class
     );
 
     private MultiTenancyUtils() {

@@ -120,8 +120,8 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
             return connection.commandChannel()
                              .sendCommand(CommandConverter.convertCommandMessage(command, clientId, componentName))
                              .thenCompose(commandResponse -> CommandConverter.convertCommandResponse(
-                                     commandResponse,
-                                     converter))
+                                     commandResponse, converter, command.type()
+                             ))
                              .whenComplete((commandResponse, throwable) -> commandInTransit.end());
         }
     }
@@ -130,11 +130,18 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
     public CompletableFuture<Void> subscribe(QualifiedName commandName, int loadFactor) {
         Assert.isTrue(loadFactor >= 0, () -> "Load factor must be greater than 0.");
         logger.debug("Subscribing to command [{}] with load factor [{}]", commandName, loadFactor);
-        Registration registration = connection.commandChannel()
+        // Registering within the atomic computation guarantees the retained registration is the one registered last.
+        // Registering outside of it allows a concurrent subscription for the same command name to retain the
+        // registration of the handler the command channel no longer routes to, making a later unsubscribe a no-op.
+        // A superseded registration needs no cancellation: the command channel routes a command name to the handler
+        // registered last for it, and ignores the cancellation of any earlier registration for that name.
+        Registration registration = subscriptions.compute(
+                commandName,
+                (name, previous) -> connection.commandChannel()
                                               .registerCommandHandler(this::handleCommand,
                                                                       loadFactor,
-                                                                      commandName.name());
-        subscriptions.put(commandName, registration);
+                                                                      name.name())
+        );
         CompletableFuture<Void> completion = new CompletableFuture<>();
         registration.onAck(() -> completion.complete(null));
         return completion;
@@ -226,10 +233,8 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
         return new CommandBusConnector.ResultCallback() {
 
             @Override
-            public void onSuccess(@Nullable CommandResultMessage resultMessage) {
-                logger.debug("Command [{}] completed successfully with result [{}]",
-                             command.getName(),
-                             resultMessage);
+            public void onSuccess(CommandResultMessage resultMessage) {
+                logger.debug("Command [{}] completed successfully with result [{}]", command.getName(), resultMessage);
                 result.complete(CommandConverter.convertResultMessage(resultMessage, command.getMessageIdentifier()));
             }
 

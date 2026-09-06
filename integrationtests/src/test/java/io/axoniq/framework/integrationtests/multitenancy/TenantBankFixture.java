@@ -48,6 +48,7 @@ import org.axonframework.messaging.queryhandling.QueryUpdateEmitter;
 import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
 import org.axonframework.messaging.queryhandling.configuration.QueryHandlingModule;
 import org.axonframework.modelling.annotation.InjectEntity;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
 import java.util.Set;
@@ -197,9 +198,9 @@ public final class TenantBankFixture {
 
         @CommandHandler
         void handle(OpenAccount command,
-                    @InjectEntity(idProperty = "accountId") Account state,
+                    @Nullable @InjectEntity(idProperty = "accountId") Account state,
                     EventAppender appender) {
-            if (!state.open) {
+            if (state == null || !state.open) {
                 appender.append(new AccountOpened(command.accountId()));
             }
         }
@@ -361,8 +362,7 @@ public final class TenantBankFixture {
                           .disableEnhancer(io.axoniq.license.entitlement.source.axonserver.AxonServerLicenseSourceConfigurationEnhancer.class))
                   .componentRegistry(registry -> registry.registerComponent(
                           TenantConnectPredicate.class,
-                          config -> descriptor -> !Set.of(ADMIN_CONTEXT, DEFAULT_CONTEXT)
-                                                      .contains(descriptor.tenantId())
+                          config -> descriptor -> TenantFixture.CONNECT_ONLY_CUSTOM_TENANTS.test(descriptor)
                                                   && descriptor.tenantId().startsWith(tenantPrefix)))
                   .componentRegistry(registry -> registry.registerComponent(
                           TenantComponentProvider.class,

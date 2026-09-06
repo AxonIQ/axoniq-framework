@@ -20,7 +20,6 @@
 package io.axoniq.framework.messaging.multitenancy.axonserver.queryhandling;
 
 import io.axoniq.axonserver.connector.AxonServerConnection;
-import io.axoniq.axonserver.connector.AxonServerConnectionFactory;
 import io.axoniq.axonserver.connector.ErrorCategory;
 import io.axoniq.axonserver.connector.FlowControl;
 import io.axoniq.axonserver.connector.ReplyChannel;
@@ -43,6 +42,7 @@ import io.axoniq.axonserver.grpc.query.QueryResponse;
 import io.axoniq.axonserver.grpc.query.QueryUpdate;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.axonserver.connector.api.RecordingAxonServerConnectionManager;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
@@ -64,6 +64,7 @@ import org.axonframework.messaging.queryhandling.QueryResponseMessage;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -130,7 +131,7 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             assertThat(result).isNotNull();
             assertThat(connection1.recordingQueryChannel().sentQueries()).isEmpty();
             assertThat(connection2.recordingQueryChannel().sentQueries()).hasSize(1);
-            assertThat(connection2.recordingQueryChannel().sentQueries().get(0).getMessageIdentifier())
+            assertThat(connection2.recordingQueryChannel().sentQueries().getFirst().getMessageIdentifier())
                     .isEqualTo(query.identifier());
         }
 
@@ -420,6 +421,42 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             assertThat(connection1.disconnectCalls()).isZero();
             assertThat(connection2.disconnectCalls()).isZero();
         }
+
+        @Test
+        void disconnectsSlowQueriesForAllTenantsWithinASingleDrainTimeout() {
+            // given two tenants with an active query each
+            TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1, TENANT_2));
+            RecordingConnection connection1 = new RecordingConnection();
+            RecordingConnection connection2 = new RecordingConnection();
+            MultiTenantAxonServerQueryBusConnector testSubject = createSubject(tenantProvider,
+                                                                               Map.of(TENANT_1.tenantId(),
+                                                                                      connection1,
+                                                                                      TENANT_2.tenantId(),
+                                                                                      connection2));
+            ArrayDeque<MessageStream<QueryResponseMessage>> responses = new ArrayDeque<>(List.of(
+                    MessageStream.fromFuture(new CompletableFuture<>()),
+                    MessageStream.fromFuture(new CompletableFuture<>())
+            ));
+            testSubject.onIncomingQuery(incomingQueryHandler(responses));
+            testSubject.subscribe(QUERY_ONE).join();
+            connection1.recordingQueryChannel()
+                       .simulateIncomingQuery(incomingQuery(), new NoOpReplyChannel())
+                       .request(Long.MAX_VALUE);
+            connection2.recordingQueryChannel()
+                       .simulateIncomingQuery(incomingQuery(), new NoOpReplyChannel())
+                       .request(Long.MAX_VALUE);
+
+            // when disconnecting all tenant query connectors
+            long startNanos = System.nanoTime();
+            CompletableFuture<Void> disconnect = testSubject.disconnect();
+            long invocationDurationMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+
+            // then disconnect returns asynchronously and drains both tenants within a single timeout
+            assertThat(invocationDurationMillis).isLessThan(1_000);
+            assertThat(disconnect)
+                    .isNotCompleted()
+                    .succeedsWithin(6, TimeUnit.SECONDS);
+        }
     }
 
     @Nested
@@ -565,7 +602,7 @@ class MultiTenantAxonServerQueryBusConnectorTest {
         MessageConverter converter = Mockito.mock(MessageConverter.class);
         MultiTenantAxonServerQueryBusConnector connector = new MultiTenantAxonServerQueryBusConnector(
                 routerFor(tenantProvider),
-                new RecordingConnectionManager(configuration, connections),
+                new RecordingAxonServerConnectionManager(configuration, connections),
                 configuration,
                 unused -> converter
         );
@@ -621,6 +658,23 @@ class MultiTenantAxonServerQueryBusConnectorTest {
         };
     }
 
+    private static QueryBusConnector.Handler incomingQueryHandler(
+            ArrayDeque<MessageStream<QueryResponseMessage>> responses
+    ) {
+        return new QueryBusConnector.Handler() {
+            @Override
+            public MessageStream<QueryResponseMessage> query(QueryMessage query) {
+                return responses.removeFirst();
+            }
+
+            @Override
+            public Registration registerUpdateHandler(QueryMessage subscriptionQueryMessage,
+                                                      QueryBusConnector.UpdateCallback updateCallback) {
+                return () -> true;
+            }
+        };
+    }
+
     private static QueryRequest incomingQuery() {
         return QueryRequest.newBuilder()
                            .setMessageIdentifier("incoming-message-id")
@@ -659,71 +713,6 @@ class MultiTenantAxonServerQueryBusConnectorTest {
         private void addTenant(TenantDescriptor tenantDescriptor) {
             tenants.add(tenantDescriptor);
             components.forEach(component -> component.registerAndStartTenant(tenantDescriptor));
-        }
-    }
-
-    private static final class RecordingConnectionManager extends AxonServerConnectionManager {
-
-        private final Map<String, RecordingConnection> connections;
-
-        private RecordingConnectionManager(AxonServerConfiguration configuration,
-                                           Map<String, RecordingConnection> connections) {
-            super(builder(configuration), new RecordingConnectionFactory(builder(configuration), connections));
-            this.connections = connections;
-        }
-
-        @Override
-        public AxonServerConnection getConnection(String context) {
-            RecordingConnection connection = connections.get(context);
-            if (connection == null) {
-                throw new IllegalArgumentException("Unknown context " + context);
-            }
-            return connection;
-        }
-
-        private static AxonServerConnectionManager.Builder builder(AxonServerConfiguration configuration) {
-            return AxonServerConnectionManager.builder()
-                                              .axonServerConfiguration(configuration)
-                                              .routingServers("localhost:8124");
-        }
-    }
-
-    private static final class RecordingConnectionFactory extends AxonServerConnectionFactory {
-
-        private final Map<String, RecordingConnection> connections;
-
-        private RecordingConnectionFactory(AxonServerConnectionManager.Builder builder,
-                                           Map<String, RecordingConnection> connections) {
-            super(new AxonServerConnectionFactoryBuilder(builder));
-            this.connections = connections;
-        }
-
-        @Override
-        public AxonServerConnection connect(String context) {
-            RecordingConnection connection = connections.get(context);
-            if (connection == null) {
-                throw new IllegalArgumentException("Unknown context " + context);
-            }
-            return connection;
-        }
-
-        @Override
-        public void shutdown() {
-            // no-op
-        }
-    }
-
-    private static final class AxonServerConnectionFactoryBuilder
-            extends AxonServerConnectionFactory.Builder {
-
-        private AxonServerConnectionFactoryBuilder(AxonServerConnectionManager.Builder builder) {
-            super("component-name", "client-id");
-            routingServers(new io.axoniq.axonserver.connector.impl.ServerAddress("localhost", 8124));
-        }
-
-        @Override
-        public AxonServerConnectionFactory build() {
-            throw new UnsupportedOperationException("Not used in tests");
         }
     }
 

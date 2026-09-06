@@ -39,27 +39,40 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * A real {@link AxonServerConnectionManager} test double that never talks to Axon Server. It hands out an inert
  * connection per context and records which contexts were requested, so tests can assert per-tenant routing without
- * mocking. The connection's channels are not backed by a server, so only construction-level behavior can be exercised
- * through it.
+ * mocking. The connection's channels are not backed by a server, so only construction-level behavior can be
+ * exercised through it.
  */
 public class RecordingAxonServerConnectionManager extends AxonServerConnectionManager {
 
     private final List<String> requestedContexts = new CopyOnWriteArrayList<>();
     private final Map<String, AxonServerConnection> connections = new ConcurrentHashMap<>();
+    private final boolean fixedConnections;
 
     /**
-     * Constructs a {@code RecordingAxonServerConnectionManager} handing out inert connections, so no test reaches a
-     * real Axon Server.
+     * Creates a connection manager that returns an inert connection for every requested context.
      */
     public RecordingAxonServerConnectionManager() {
         super(managerBuilder(), new InertConnectionFactory());
+        fixedConnections = false;
     }
 
     /**
-     * Returns the contexts a connection was requested for, so a test can assert which tenants were connected to and in
-     * what order.
+     * Creates a connection manager that returns the supplied recording connection for each configured context.
      *
-     * @return the contexts passed to {@link #getConnection(String)}, in call order
+     * @param configuration the Axon Server configuration used to construct the manager
+     * @param connections   the connections returned by context
+     */
+    public RecordingAxonServerConnectionManager(AxonServerConfiguration configuration,
+                                                Map<String, ? extends AxonServerConnection> connections) {
+        super(managerBuilder(configuration), new FixedConnectionFactory(connections));
+        this.connections.putAll(connections);
+        fixedConnections = true;
+    }
+
+    /**
+     * Returns the contexts requested from this manager, in call order.
+     *
+     * @return the contexts passed to {@link #getConnection(String)}
      */
     public List<String> requestedContexts() {
         return List.copyOf(requestedContexts);
@@ -68,6 +81,9 @@ public class RecordingAxonServerConnectionManager extends AxonServerConnectionMa
     @Override
     public AxonServerConnection getConnection(String context) {
         requestedContexts.add(context);
+        if (fixedConnections && !connections.containsKey(context)) {
+            throw new IllegalArgumentException("Unknown context " + context);
+        }
         return connections.computeIfAbsent(context, ignored -> new InertConnection());
     }
 
@@ -75,8 +91,11 @@ public class RecordingAxonServerConnectionManager extends AxonServerConnectionMa
         AxonServerConfiguration configuration = new AxonServerConfiguration();
         configuration.setClientId("client-id");
         configuration.setComponentName("component-name");
-        return AxonServerConnectionManager.builder()
-                                          .axonServerConfiguration(configuration)
+        return managerBuilder(configuration);
+    }
+
+    private static Builder managerBuilder(AxonServerConfiguration configuration) {
+        return AxonServerConnectionManager.builder().axonServerConfiguration(configuration)
                                           .routingServers("localhost:8124");
     }
 
@@ -89,6 +108,30 @@ public class RecordingAxonServerConnectionManager extends AxonServerConnectionMa
         @Override
         public AxonServerConnection connect(String context) {
             return new InertConnection();
+        }
+
+        @Override
+        public void shutdown() {
+            // no-op
+        }
+    }
+
+    private static final class FixedConnectionFactory extends AxonServerConnectionFactory {
+
+        private final Map<String, ? extends AxonServerConnection> connections;
+
+        private FixedConnectionFactory(Map<String, ? extends AxonServerConnection> connections) {
+            super(new InertConnectionFactoryBuilder());
+            this.connections = Map.copyOf(connections);
+        }
+
+        @Override
+        public AxonServerConnection connect(String context) {
+            AxonServerConnection connection = connections.get(context);
+            if (connection == null) {
+                throw new IllegalArgumentException("Unknown context " + context);
+            }
+            return connection;
         }
 
         @Override

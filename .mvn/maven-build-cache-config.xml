@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cache xmlns="http://maven.apache.org/BUILD-CACHE-CONFIG/1.4.0"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://maven.apache.org/BUILD-CACHE-CONFIG/1.4.0 https://maven.apache.org/xsd/build-cache-config-1.4.0.xsd">
+
+    <!-- Disabled by default: activated explicitly in CI via MAVEN_OPTS. A developer building
+         locally, especially one iterating against a locally installed Axon Framework SNAPSHOT
+         via cross-repo development, has no equivalent of the CI fingerprinting step that
+         detects such a SNAPSHOT changing, so a stale cache hit there would silently serve
+         output built against an old jar. Opt in locally with -Dmaven.build.cache.enabled=true
+         once you know that risk does not apply to what you are doing. -->
+
+    <configuration>
+        <enabled>false</enabled>
+        <hashAlgorithm>XX</hashAlgorithm>
+        <validateXml>true</validateXml>
+        <local>
+            <!-- Bounds how many historical entries per module accumulate in the persisted
+                 cache directory across CI runs, independent of GitHub Actions' own cache eviction. -->
+            <maxBuildsCached>10</maxBuildsCached>
+        </local>
+    </configuration>
+
+    <input>
+        <global>
+            <!-- No <glob> override: several modules register services via extensionless
+                 ServiceLoader/Spring factories files under META-INF (e.g. META-INF/services/*),
+                 so the default "*" glob is kept to avoid silently excluding them from the
+                 input hash, which would let a changed SPI registration go undetected by the cache. -->
+            <excludes>
+                <!-- pom.xml changes are already accounted for via the extension's effective-POM
+                     handling; hashing the raw file too is redundant and template-recommended
+                     to exclude. -->
+                <exclude>pom.xml</exclude>
+            </excludes>
+        </global>
+    </input>
+
+</cache>

@@ -14,6 +14,11 @@ jobs:
     name: Test and Build on JDK ${{ matrix.java-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      # The build cache extension defaults to disabled (see .mvn/maven-build-cache-config.xml);
+      # CI is the only place with the SNAPSHOT-fingerprinting safety net, so it is the only place
+      # that opts back in.
+      MAVEN_OPTS: -Dmaven.build.cache.enabled=true
     strategy:
       fail-fast: false
       matrix:
@@ -28,7 +33,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up JDK ${{ matrix.java-version }}
-        uses: actions/setup-java@v5.7.0
+        uses: actions/setup-java@v6.0.0
         with:
           distribution: 'zulu'
           java-version: ${{ matrix.java-version }}
@@ -36,6 +41,17 @@ jobs:
           server-id: central
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
+
+      - name: Restore/save Maven build cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2/build-cache
+          key: maven-build-cache-${{ runner.os }}-jdk${{ matrix.java-version }}-${{ github.run_id }}
+          restore-keys: |
+            maven-build-cache-${{ runner.os }}-jdk${{ matrix.java-version }}-
+
+      - name: Fingerprint SNAPSHOT dependencies for build cache
+        run: ./.github/scripts/fingerprint-snapshot-deps.sh
 
       - name: Write Axon Server test license
         run: |
@@ -49,14 +65,14 @@ jobs:
       - name: Regular Build
         if: ${{ !matrix.sonar-enabled }}
         run: |
-          ./mvnw -B -U -ntp -Dstyle.color=always -Possrh -Pintegration-test -Djacoco.skip=true clean verify \
+          ./mvnw -B -U -ntp -Dstyle.color=always -fae -Possrh -Pintegration-test -Djacoco.skip=true clean verify \
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
           -Dparallel=classes -DthreadCount=1 -DforkCount=2
 
       - name: Build with Coverage reports
         if: matrix.sonar-enabled
         run: |
-          ./mvnw -B -U -ntp -Dstyle.color=always -Possrh -Dcoverage clean verify \
+          ./mvnw -B -U -ntp -Dstyle.color=always -fae -Possrh -Dcoverage clean verify \
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
           -Dparallel=classes -DthreadCount=1 -DforkCount=2
 

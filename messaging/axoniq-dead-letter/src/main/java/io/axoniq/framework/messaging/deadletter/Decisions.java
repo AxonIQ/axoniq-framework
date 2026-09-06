@@ -35,7 +35,7 @@ import java.util.function.Function;
  * @see EnqueuePolicy
  * @since 4.6.0
  */
-public abstract class Decisions {
+public final class Decisions {
 
     /**
      * Construct an {@link Ignore} defining that a {@link DeadLetter dead letter} should remain in the queue.

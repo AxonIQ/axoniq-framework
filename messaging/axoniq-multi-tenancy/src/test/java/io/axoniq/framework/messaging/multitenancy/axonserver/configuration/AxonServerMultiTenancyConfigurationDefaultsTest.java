@@ -56,6 +56,7 @@ import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageE
 import org.axonframework.eventsourcing.snapshot.inmemory.InMemorySnapshotStore;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
 import org.mockito.*;
@@ -74,8 +75,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
- * Verifies the {@link AxonServerMultiTenancyConfigurationDefaults} against a real {@link MessagingConfigurer}: the
- * Axon Server-backed multi-tenancy components are wired for a given configuration out of the box, and stay away once
+ * Verifies the {@link AxonServerMultiTenancyConfigurationDefaults} against a real {@link MessagingConfigurer}: the Axon
+ * Server-backed multi-tenancy components are wired for a given configuration out of the box, and stay away once
  * multi-tenancy is disabled.
  *
  * @author Jan Galinski
@@ -94,7 +95,11 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         // when
         AxonConfiguration configuration =
                 MessagingConfigurer.create()
-                                   .componentRegistry(MultiTenancyUtils::disable)
+                                   .componentRegistry(registry -> {
+                                       registry.registerComponent(AxonServerConnectionManager.class,
+                                                                  config -> stubConnectionManager());
+                                       MultiTenancyUtils.disable(registry);
+                                   })
                                    .build();
 
         // then none of the Axon Server-backed multi-tenancy defaults were registered
@@ -144,164 +149,12 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         }
     }
 
-    @Nested
-    class DefaultComponentRegistration {
-
-        private final TenantComponentProvider<CourseRepository> componentProvider =
-                TenantComponentProvider.withFactory(CourseRepository.class, CourseRepository::new);
-
-        private AxonConfiguration configuration;
-
-        @BeforeEach
-        void buildConfiguration() {
-            configuration = MessagingConfigurer.create()
-                                               .componentRegistry(registry -> registry.registerComponent(
-                                                       TenantComponentProvider.class,
-                                                       config -> componentProvider))
-                                               .build();
-        }
-
-        @Test
-        void registersTheDefaultAxonServerTenantProvider() {
-            assertThat(configuration.getComponent(TenantProvider.class))
-                    .isInstanceOf(AxonServerTenantProvider.class);
-        }
-
-        @Test
-        void registersTheDefaultMultiTenantAxonServerCommandBusConnector() throws Exception {
-            assertThat(commandBusConnectorDelegate(configuration))
-                    .isInstanceOf(MultiTenantAxonServerCommandBusConnector.class);
-        }
-
-        @Test
-        void registersTheMultiTenantEventStorageEngineAsTheEventStorageEngine() {
-            assertThat(configuration.getComponent(EventStorageEngine.class))
-                    .isInstanceOf(MultiTenantEventStorageEngine.class);
-        }
-
-        @Test
-        void subscribesTheFactoriesBeforeTheRoutingEngineThatComposesFromThem() {
-            // The engine announces a tenant only once it holds it, and whatever acts on that announcement composes
-            // through the factories, so a factory that has not been told yet fails the merged stream for every tenant.
-            StubTenantProvider orderedProvider = new StubTenantProvider();
-            AxonConfiguration orderedConfiguration =
-                    MessagingConfigurer.create()
-                                       .componentRegistry(registry -> registry
-                                               .registerComponent(TenantProvider.class, config -> orderedProvider)
-                                               .registerComponent(TenantComponentProvider.class,
-                                                                  config -> componentProvider))
-                                       .build();
-            orderedConfiguration.start();
-            try {
-                List<Class<?>> subscriptionOrder = orderedProvider.subscribedComponents()
-                                                                  .stream()
-                                                                  .<Class<?>>map(Object::getClass)
-                                                                  .toList();
-
-                assertThat(subscriptionOrder).containsSubsequence(AxonServerTenantSnapshotStoreFactory.class,
-                                                                  MultiTenantEventStorageEngine.class);
-                assertThat(subscriptionOrder).containsSubsequence(AxonServerTenantEventStorageEngineFactory.class,
-                                                                  MultiTenantEventStorageEngine.class);
-            } finally {
-                orderedConfiguration.shutdown();
-            }
-        }
-
-        @Test
-        void subscribesAndFollowsTheRoutingEngineItselfWhenTheEventStorageEngineIsDecorated() {
-            // A decorator returns the decorated type, so resolving the event storage engine no longer yields the
-            // tenant-routing engine. Both the tenant lifecycle subscription and the restarter's listener still have to
-            // reach the engine itself, which they do because a start handler is bound to its own component rather than
-            // to the decorated one. Resolving instead would follow a decorator that announces no tenant change.
-            StubTenantProvider decoratedProvider = new StubTenantProvider();
-            AxonConfiguration decoratedConfiguration =
-                    MessagingConfigurer.create()
-                                       .componentRegistry(registry -> registry
-                                               .registerComponent(TenantProvider.class, config -> decoratedProvider)
-                                               .registerComponent(TenantComponentProvider.class,
-                                                                  config -> componentProvider)
-                                               .registerDecorator(EventStorageEngine.class, 0,
-                                                                  (config, name, delegate) ->
-                                                                          SnapshotCapableEventStorageEngine.decorate(
-                                                                                  delegate,
-                                                                                  new InMemorySnapshotStore())))
-                                       .build();
-            decoratedConfiguration.start();
-            try {
-                MultiTenantEventStorageEngine routingEngine =
-                        decoratedProvider.subscribedComponents()
-                                         .stream()
-                                         .filter(MultiTenantEventStorageEngine.class::isInstance)
-                                         .map(MultiTenantEventStorageEngine.class::cast)
-                                         .findFirst()
-                                         .orElseThrow();
-                MockComponentDescriptor descriptor = new MockComponentDescriptor();
-                routingEngine.describeTo(descriptor);
-
-                assertThat(decoratedConfiguration.getComponent(EventStorageEngine.class))
-                        .isInstanceOf(SnapshotCapableEventStorageEngine.class);
-                assertThat(decoratedProvider.subscribedComponents())
-                        .filteredOn(MultiTenantEventStorageEngine.class::isInstance)
-                        .hasSize(1);
-                // The restarter's listener sits on the routing engine, not on the decorator wrapping it.
-                assertThat(descriptor.getDescribedProperties()).containsEntry("tenantChangeListenerCount", 1);
-            } finally {
-                decoratedConfiguration.shutdown();
-            }
-        }
-
-        @Test
-        void subscribesTheRoutingEngineToTheTenantProviderExactlyOnce() {
-            // Registering the engine twice, or wrapping a second registration in a subscribed component, would register
-            // every tenant with it twice and recompose each tenant's engine.
-            StubTenantProvider countingProvider = new StubTenantProvider();
-            AxonConfiguration countedConfiguration =
-                    MessagingConfigurer.create()
-                                       .componentRegistry(registry -> registry
-                                               .registerComponent(TenantProvider.class, config -> countingProvider)
-                                               .registerComponent(TenantComponentProvider.class,
-                                                                  config -> componentProvider))
-                                       .build();
-            countedConfiguration.start();
-            try {
-                assertThat(countingProvider.subscribedComponents())
-                        .filteredOn(MultiTenantEventStorageEngine.class::isInstance)
-                        .hasSize(1);
-            } finally {
-                countedConfiguration.shutdown();
-            }
-        }
-
-        @Test
-        void registersTheMultiTenantSnapshotStoreAsTheSnapshotStore() {
-            assertThat(configuration.getComponent(SnapshotStore.class))
-                    .isInstanceOf(MultiTenantSnapshotStore.class);
-        }
-
-        @Test
-        void leavesTheRoutingEngineUndecoratedSoSnapshotSourcingReachesEachTenantsOwnEngine() {
-            // the application-wide snapshot composition is disabled, so the framework does not decorate the routing
-            // engine with the snapshot store above the tenant fan-out
-            assertThat(configuration.getComponent(EventStorageEngine.class))
-                    .isNotInstanceOf(SnapshotCapableEventStorageEngine.class);
-        }
-
-        @Test
-        void routesWithTheTenantRouterFromTheConfiguration() {
-            MockComponentDescriptor descriptor = new MockComponentDescriptor();
-
-            configuration.getComponent(EventStorageEngine.class).describeTo(descriptor);
-
-            assertThat(descriptor.getDescribedProperties())
-                    .containsEntry("tenantRouter", configuration.getComponent(TenantRouter.class));
-        }
-
-        @Test
-        void registersTheDefaultMultiTenantAxonServerQueryBusConnector() {
-            assertThat(configuration.getComponent(QueryBusConnector.class))
-                    .extracting("delegate")
-                    .isInstanceOf(MultiTenantAxonServerQueryBusConnector.class);
-        }
+    private static AxonServerConnectionManager stubConnectionManager() {
+        AxonServerConnectionManager connectionManager = mock(AxonServerConnectionManager.class);
+        AxonServerConnection connection = mock(AxonServerConnection.class);
+        when(connectionManager.getConnection()).thenReturn(connection);
+        when(connectionManager.getConnection(anyString())).thenReturn(connection);
+        return connectionManager;
     }
 
     @Nested
@@ -329,6 +182,10 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         void acceptsTheDefaultEventSourcingSetupAndYieldsTheRoutingEngine() {
             AxonConfiguration defaultSetup =
                     EventSourcingConfigurer.create()
+                                           .componentRegistry(registry -> registry.registerComponent(
+                                                   AxonServerConnectionManager.class,
+                                                   config -> stubConnectionManager()
+                                           ))
                                            .build();
 
             assertThat(defaultSetup.getComponent(EventStorageEngine.class))
@@ -350,130 +207,6 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
                     .isInstanceOf(AxonConfigurationException.class)
                     .hasMessageContaining("SnapshotStore")
                     .hasMessageContaining("TenantSnapshotStoreFactory");
-        }
-    }
-
-    @Nested
-    class TenantLifecycleWiring {
-
-        private final StubTenantProvider tenantProvider = new StubTenantProvider();
-        private final TenantComponentProvider<CourseRepository> componentProvider =
-                TenantComponentProvider.withFactory(CourseRepository.class, CourseRepository::new);
-
-        private AxonConfiguration configuration;
-
-        @BeforeEach
-        void buildAndStartConfiguration() {
-            tenantProvider.addTenant(TENANT_A);
-            configuration = MessagingConfigurer.create()
-                                               .componentRegistry(registry -> registry
-                                                       .registerComponent(TenantProvider.class,
-                                                                          config -> tenantProvider)
-                                                       .registerComponent(TenantComponentProvider.class,
-                                                                          config -> componentProvider))
-                                               .build();
-            configuration.start();
-        }
-
-        @AfterEach
-        void shutdownConfiguration() {
-            configuration.shutdown();
-        }
-
-        @Test
-        void subscribesTheCommandBusConnectorToTheTenantProviderAtStartup() throws Exception {
-            // given
-            MultiTenantAwareComponent connector = commandBusConnectorDelegate(configuration);
-
-            // then
-            assertThat(tenantProvider.subscribedComponents()).contains(connector);
-        }
-
-        @Test
-        void cancelsTheCommandBusConnectorSubscriptionOnShutdown() throws Exception {
-            // given
-            MultiTenantAwareComponent connector = commandBusConnectorDelegate(configuration);
-
-            // when
-            configuration.shutdown();
-
-            // then
-            assertThat(tenantProvider.subscribedComponents()).doesNotContain(connector);
-        }
-
-        @Test
-        void subscribesTheQueryBusConnectorToTheTenantProviderAtStartup() throws Exception {
-            // given
-            MultiTenantAwareComponent connector = queryBusConnectorDelegate(configuration);
-
-            // then
-            assertThat(tenantProvider.subscribedComponents()).contains(connector);
-        }
-
-        @Test
-        void cancelsTheQueryBusConnectorSubscriptionOnShutdown() throws Exception {
-            // given
-            MultiTenantAwareComponent connector = queryBusConnectorDelegate(configuration);
-
-            // when
-            configuration.shutdown();
-
-            // then
-            assertThat(tenantProvider.subscribedComponents()).doesNotContain(connector);
-        }
-
-        @Test
-        void subscribesTheEventStorageEngineFactoryToTheTenantProviderAtStartup() {
-            MultiTenantAwareComponent factory =
-                    (MultiTenantAwareComponent) configuration.getComponent(TenantEventStorageEngineFactory.class);
-
-            assertThat(tenantProvider.subscribedComponents()).contains(factory);
-        }
-
-        @Test
-        void cancelsTheEventStorageEngineFactorySubscriptionOnShutdown() {
-            MultiTenantAwareComponent factory =
-                    (MultiTenantAwareComponent) configuration.getComponent(TenantEventStorageEngineFactory.class);
-
-            configuration.shutdown();
-
-            assertThat(tenantProvider.subscribedComponents()).doesNotContain(factory);
-        }
-
-        @Test
-        void subscribesTheRoutingEngineToTheTenantProviderAtStartup() {
-            MultiTenantAwareComponent routingEngine =
-                    (MultiTenantAwareComponent) configuration.getComponent(EventStorageEngine.class);
-
-            assertThat(tenantProvider.subscribedComponents()).contains(routingEngine);
-        }
-
-        @Test
-        void cancelsTheRoutingEngineSubscriptionOnShutdown() {
-            MultiTenantAwareComponent routingEngine =
-                    (MultiTenantAwareComponent) configuration.getComponent(EventStorageEngine.class);
-
-            configuration.shutdown();
-
-            assertThat(tenantProvider.subscribedComponents()).doesNotContain(routingEngine);
-        }
-
-        @Test
-        void subscribesTheSnapshotStoreFactoryToTheTenantProviderAtStartup() {
-            MultiTenantAwareComponent factory =
-                    (MultiTenantAwareComponent) configuration.getComponent(TenantSnapshotStoreFactory.class);
-
-            assertThat(tenantProvider.subscribedComponents()).contains(factory);
-        }
-
-        @Test
-        void cancelsTheSnapshotStoreFactorySubscriptionOnShutdown() {
-            MultiTenantAwareComponent factory =
-                    (MultiTenantAwareComponent) configuration.getComponent(TenantSnapshotStoreFactory.class);
-
-            configuration.shutdown();
-
-            assertThat(tenantProvider.subscribedComponents()).doesNotContain(factory);
         }
     }
 
@@ -562,30 +295,354 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         }
     }
 
+    @Nested
+    class DefaultComponentRegistration {
+
+        private final TenantComponentProvider<CourseRepository> componentProvider =
+                TenantComponentProvider.withFactory(CourseRepository.class, CourseRepository::new);
+
+        private AxonConfiguration configuration;
+
+        @BeforeEach
+        void buildConfiguration() {
+            configuration = MessagingConfigurer.create()
+                                               .componentRegistry(registry -> registry.registerComponent(
+                                                       TenantComponentProvider.class,
+                                                       config -> componentProvider)
+                                                                 .registerComponent(AxonServerConnectionManager.class,
+                                                                                    config -> stubConnectionManager()))
+                                               .build();
+        }
+
+        @Test
+        void registersTheDefaultAxonServerTenantProvider() {
+            assertThat(configuration.getComponent(TenantProvider.class))
+                    .isInstanceOf(AxonServerTenantProvider.class);
+        }
+
+        @Test
+        void registersTheDefaultMultiTenantAxonServerCommandBusConnector() throws Exception {
+            assertThat(commandBusConnectorDelegate(configuration))
+                    .isInstanceOf(MultiTenantAxonServerCommandBusConnector.class);
+        }
+
+        @Test
+        void registersTheMultiTenantEventStorageEngineAsTheEventStorageEngine() {
+            assertThat(configuration.getComponent(EventStorageEngine.class))
+                    .isInstanceOf(MultiTenantEventStorageEngine.class);
+        }
+
+        @Test
+        void subscribesTheFactoriesBeforeTheRoutingEngineThatComposesFromThem() {
+            // The engine announces a tenant only once it holds it, and whatever acts on that announcement composes
+            // through the factories, so a factory that has not been told yet fails the merged stream for every tenant.
+            StubTenantProvider orderedProvider = new StubTenantProvider();
+            AxonConfiguration orderedConfiguration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TenantProvider.class, config -> orderedProvider)
+                                               .registerComponent(TenantComponentProvider.class,
+                                                                  config -> componentProvider)
+                                               .registerComponent(AxonServerConnectionManager.class,
+                                                                  config -> stubConnectionManager()))
+                                       .build();
+            orderedConfiguration.start();
+            try {
+                List<Class<?>> subscriptionOrder = orderedProvider.subscribedComponents()
+                                                                  .stream()
+                                                                  .<Class<?>>map(Object::getClass)
+                                                                  .toList();
+
+                assertThat(subscriptionOrder).containsSubsequence(AxonServerTenantSnapshotStoreFactory.class,
+                                                                  MultiTenantEventStorageEngine.class);
+                assertThat(subscriptionOrder).containsSubsequence(AxonServerTenantEventStorageEngineFactory.class,
+                                                                  MultiTenantEventStorageEngine.class);
+            } finally {
+                orderedConfiguration.shutdown();
+            }
+        }
+
+        @Test
+        void subscribesAndFollowsTheRoutingEngineItselfWhenTheEventStorageEngineIsDecorated() {
+            // A decorator returns the decorated type, so resolving the event storage engine no longer yields the
+            // tenant-routing engine. Both the tenant lifecycle subscription and the restarter's listener still have to
+            // reach the engine itself, which they do because a start handler is bound to its own component rather than
+            // to the decorated one. Resolving instead would follow a decorator that announces no tenant change.
+            StubTenantProvider decoratedProvider = new StubTenantProvider();
+            AxonConfiguration decoratedConfiguration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TenantProvider.class, config -> decoratedProvider)
+                                               .registerComponent(TenantComponentProvider.class,
+                                                                  config -> componentProvider)
+                                               .registerComponent(AxonServerConnectionManager.class,
+                                                                  config -> stubConnectionManager())
+                                               .registerDecorator(EventStorageEngine.class, 0,
+                                                                  (config, name, delegate) ->
+                                                                          SnapshotCapableEventStorageEngine.decorate(
+                                                                                  delegate,
+                                                                                  new InMemorySnapshotStore())))
+                                       .build();
+            decoratedConfiguration.start();
+            try {
+                MultiTenantEventStorageEngine routingEngine =
+                        decoratedProvider.subscribedComponents()
+                                         .stream()
+                                         .filter(MultiTenantEventStorageEngine.class::isInstance)
+                                         .map(MultiTenantEventStorageEngine.class::cast)
+                                         .findFirst()
+                                         .orElseThrow();
+                MockComponentDescriptor descriptor = new MockComponentDescriptor();
+                routingEngine.describeTo(descriptor);
+
+                assertThat(decoratedConfiguration.getComponent(EventStorageEngine.class))
+                        .isInstanceOf(SnapshotCapableEventStorageEngine.class);
+                assertThat(decoratedProvider.subscribedComponents())
+                        .filteredOn(MultiTenantEventStorageEngine.class::isInstance)
+                        .hasSize(1);
+                // The restarter's listener sits on the routing engine, not on the decorator wrapping it.
+                assertThat(descriptor.getDescribedProperties()).containsEntry("tenantChangeListenerCount", 1);
+            } finally {
+                decoratedConfiguration.shutdown();
+            }
+        }
+
+        @Test
+        void subscribesTheRoutingEngineToTheTenantProviderExactlyOnce() {
+            // Registering the engine twice, or wrapping a second registration in a subscribed component, would register
+            // every tenant with it twice and recompose each tenant's engine.
+            StubTenantProvider countingProvider = new StubTenantProvider();
+            AxonConfiguration countedConfiguration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TenantProvider.class, config -> countingProvider)
+                                               .registerComponent(TenantComponentProvider.class,
+                                                                  config -> componentProvider)
+                                               .registerComponent(AxonServerConnectionManager.class,
+                                                                  config -> stubConnectionManager()))
+                                       .build();
+            countedConfiguration.start();
+            try {
+                assertThat(countingProvider.subscribedComponents())
+                        .filteredOn(MultiTenantEventStorageEngine.class::isInstance)
+                        .hasSize(1);
+            } finally {
+                countedConfiguration.shutdown();
+            }
+        }
+
+        @Test
+        void registersTheMultiTenantSnapshotStoreAsTheSnapshotStore() {
+            assertThat(configuration.getComponent(SnapshotStore.class))
+                    .isInstanceOf(MultiTenantSnapshotStore.class);
+        }
+
+        @Test
+        void leavesTheRoutingEngineUndecoratedSoSnapshotSourcingReachesEachTenantsOwnEngine() {
+            // the application-wide snapshot composition is disabled, so the framework does not decorate the routing
+            // engine with the snapshot store above the tenant fan-out
+            assertThat(configuration.getComponent(EventStorageEngine.class))
+                    .isNotInstanceOf(SnapshotCapableEventStorageEngine.class);
+        }
+
+        @Test
+        void routesWithTheTenantRouterFromTheConfiguration() {
+            MockComponentDescriptor descriptor = new MockComponentDescriptor();
+
+            configuration.getComponent(EventStorageEngine.class).describeTo(descriptor);
+
+            assertThat(descriptor.getDescribedProperties())
+                    .containsEntry("tenantRouter", configuration.getComponent(TenantRouter.class));
+        }
+
+        @Test
+        void registersTheDefaultMultiTenantAxonServerQueryBusConnector() throws Exception {
+            assertThat(queryBusConnectorDelegate(configuration))
+                    .isInstanceOf(MultiTenantAxonServerQueryBusConnector.class);
+        }
+    }
+
+    @Nested
+    class TenantLifecycleWiring {
+
+        private final StubTenantProvider tenantProvider = new StubTenantProvider();
+        private final TenantComponentProvider<CourseRepository> componentProvider =
+                TenantComponentProvider.withFactory(CourseRepository.class, CourseRepository::new);
+
+        private AxonConfiguration configuration;
+
+        @BeforeEach
+        void buildAndStartConfiguration() {
+            tenantProvider.addTenant(TENANT_A);
+            configuration = MessagingConfigurer.create()
+                                               .componentRegistry(registry -> registry
+                                                       .registerComponent(TenantProvider.class,
+                                                                          config -> tenantProvider)
+                                                       .registerComponent(TenantComponentProvider.class,
+                                                                          config -> componentProvider)
+                                                       .registerComponent(AxonServerConnectionManager.class,
+                                                                          config -> stubConnectionManager()))
+                                               .build();
+            configuration.start();
+        }
+
+        @AfterEach
+        void shutdownConfiguration() {
+            configuration.shutdown();
+        }
+
+        @Test
+        void subscribesTheCommandBusConnectorToTheTenantProviderAtStartup() throws Exception {
+            // given
+            MultiTenantAwareComponent connector = commandBusConnectorDelegate(configuration);
+
+            // then
+            assertThat(tenantProvider.subscribedComponents()).contains(connector);
+        }
+
+        @Test
+        void cancelsTheCommandBusConnectorSubscriptionOnShutdown() throws Exception {
+            // given
+            MultiTenantAwareComponent connector = commandBusConnectorDelegate(configuration);
+
+            // when
+            configuration.shutdown();
+
+            // then
+            assertThat(tenantProvider.subscribedComponents()).doesNotContain(connector);
+        }
+
+        @Test
+        void subscribesTheQueryBusConnectorToTheTenantProviderAtStartup() throws Exception {
+            // given
+            MultiTenantAwareComponent connector = queryBusConnectorDelegate(configuration);
+
+            // then
+            assertThat(tenantProvider.subscribedComponents()).contains(connector);
+        }
+
+        @Test
+        void cancelsTheQueryBusConnectorSubscriptionOnShutdown() throws Exception {
+            // given
+            MultiTenantAwareComponent connector = queryBusConnectorDelegate(configuration);
+
+            // when
+            configuration.shutdown();
+
+            // then
+            assertThat(tenantProvider.subscribedComponents()).doesNotContain(connector);
+        }
+
+        @Test
+        void subscribesTheEventStorageEngineFactoryToTheTenantProviderAtStartup() {
+            MultiTenantAwareComponent factory =
+                    (MultiTenantAwareComponent) configuration.getComponent(TenantEventStorageEngineFactory.class);
+
+            assertThat(tenantProvider.subscribedComponents()).contains(factory);
+        }
+
+        @Test
+        void cancelsTheEventStorageEngineFactorySubscriptionOnShutdown() {
+            MultiTenantAwareComponent factory =
+                    (MultiTenantAwareComponent) configuration.getComponent(TenantEventStorageEngineFactory.class);
+
+            configuration.shutdown();
+
+            assertThat(tenantProvider.subscribedComponents()).doesNotContain(factory);
+        }
+
+        @Test
+        void subscribesAReplacementEventStorageEngineFactoryToTheTenantProviderAtStartup() {
+            TenantEventStorageEngineFactory replacement = mock(TenantEventStorageEngineFactory.class,
+                                                               withSettings().extraInterfaces(
+                                                                       MultiTenantAwareComponent.class));
+            MultiTenantAwareComponent awareReplacement = (MultiTenantAwareComponent) replacement;
+            when(awareReplacement.registerTenant(any())).thenReturn(() -> true);
+
+            AxonConfiguration replacementConfiguration =
+                    MessagingConfigurer.create()
+                                       .componentRegistry(registry -> registry
+                                               .registerComponent(TenantProvider.class, config -> tenantProvider)
+                                               .registerComponent(TenantEventStorageEngineFactory.class,
+                                                                  config -> replacement)
+                                               .registerComponent(AxonServerConnectionManager.class,
+                                                                  config -> stubConnectionManager()))
+                                       .build();
+            replacementConfiguration.start();
+            try {
+                assertThat(tenantProvider.subscribedComponents()).contains(awareReplacement);
+            } finally {
+                replacementConfiguration.shutdown();
+            }
+
+            assertThat(tenantProvider.subscribedComponents()).doesNotContain(awareReplacement);
+        }
+
+        @Test
+        void subscribesTheRoutingEngineToTheTenantProviderAtStartup() {
+            MultiTenantAwareComponent routingEngine =
+                    (MultiTenantAwareComponent) configuration.getComponent(EventStorageEngine.class);
+
+            assertThat(tenantProvider.subscribedComponents()).contains(routingEngine);
+        }
+
+        @Test
+        void cancelsTheRoutingEngineSubscriptionOnShutdown() {
+            MultiTenantAwareComponent routingEngine =
+                    (MultiTenantAwareComponent) configuration.getComponent(EventStorageEngine.class);
+
+            configuration.shutdown();
+
+            assertThat(tenantProvider.subscribedComponents()).doesNotContain(routingEngine);
+        }
+
+        @Test
+        void subscribesTheSnapshotStoreFactoryToTheTenantProviderAtStartup() {
+            MultiTenantAwareComponent factory =
+                    (MultiTenantAwareComponent) configuration.getComponent(TenantSnapshotStoreFactory.class);
+
+            assertThat(tenantProvider.subscribedComponents()).contains(factory);
+        }
+
+        @Test
+        void cancelsTheSnapshotStoreFactorySubscriptionOnShutdown() {
+            MultiTenantAwareComponent factory =
+                    (MultiTenantAwareComponent) configuration.getComponent(TenantSnapshotStoreFactory.class);
+
+            configuration.shutdown();
+
+            assertThat(tenantProvider.subscribedComponents()).doesNotContain(factory);
+        }
+    }
+
     private static MultiTenantAwareComponent commandBusConnectorDelegate(AxonConfiguration configuration)
             throws Exception {
         return multiTenantDelegate(configuration.getComponent(CommandBusConnector.class));
     }
 
-    private static MultiTenantAwareComponent queryBusConnectorDelegate(AxonConfiguration configuration)
-            throws Exception {
+    private static MultiTenantAwareComponent queryBusConnectorDelegate(
+            AxonConfiguration configuration
+    ) throws Exception {
         return multiTenantDelegate(configuration.getComponent(QueryBusConnector.class));
     }
 
     private static MultiTenantAwareComponent multiTenantDelegate(Object connector) throws Exception {
-        Field delegateField = delegateField(connector.getClass());
-        if (delegateField == null) {
-            // No decorator in front of it (e.g. PayloadConvertingCommandBusConnector or
-            // PayloadConvertingQueryBusConnector, wired by the AxonServerConnector module's own enhancer): the
-            // resolved component already is the multi-tenant connector itself.
-            return (MultiTenantAwareComponent) connector;
+        Object current = connector;
+        while (!(current instanceof MultiTenantAwareComponent)) {
+            Field delegateField = delegateField(current.getClass());
+            if (delegateField == null) {
+                throw new IllegalStateException(
+                        "No MultiTenantAwareComponent found in the decorator chain starting at " + connector);
+            }
+            delegateField.setAccessible(true);
+            current = delegateField.get(current);
         }
-        delegateField.setAccessible(true);
-        return (MultiTenantAwareComponent) delegateField.get(connector);
+        return (MultiTenantAwareComponent) current;
     }
 
     // The PayloadConvertingCommandBusConnector decorator declares "delegate" on a superclass, not on itself.
     // Returns null when no such field exists anywhere in the hierarchy, i.e. connector isn't wrapped at all.
+    @Nullable
     private static Field delegateField(Class<?> type) {
         for (Class<?> current = type; current != null; current = current.getSuperclass()) {
             try {
@@ -597,18 +654,11 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         return null;
     }
 
-    private static final class CourseRepository implements AutoCloseable {
-
-        private final TenantDescriptor tenant;
-        private boolean closed;
-
-        private CourseRepository(TenantDescriptor tenant) {
-            this.tenant = tenant;
-        }
+    private record CourseRepository(TenantDescriptor tenant) implements AutoCloseable {
 
         @Override
         public void close() {
-            this.closed = true;
+            // unused, but the component provider requires AutoCloseable to be able to close all tenant components on shutdown
         }
     }
 }

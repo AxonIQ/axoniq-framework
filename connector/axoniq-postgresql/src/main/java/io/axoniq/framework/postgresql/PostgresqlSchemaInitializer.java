@@ -59,6 +59,8 @@ final class PostgresqlSchemaInitializer {
             Connection connection = dataSource.getConnection();
             Statement statement = connection.createStatement();
         ) {
+            connection.setAutoCommit(false);
+
             statement.execute(
                 """
                 CREATE TABLE IF NOT EXISTS events (
@@ -159,6 +161,8 @@ final class PostgresqlSchemaInitializer {
                     return;  // migration already installed
                 }
             }
+
+            connection.setAutoCommit(false);
 
             statement.execute(
                 """
