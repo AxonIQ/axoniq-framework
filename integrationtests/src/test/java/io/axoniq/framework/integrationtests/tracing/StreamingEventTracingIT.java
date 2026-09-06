@@ -49,7 +49,7 @@ import static org.awaitility.Awaitility.await;
  * Verifies the default streaming trace topology through a pooled streaming processor: the batch span parents the
  * per-event span and both spans identify their processor.
  */
-class StreamingEventTracingIntegrationTest {
+class StreamingEventTracingIT {
 
     private static final String BATCH_SPAN = "StreamingEventProcessor.batch";
     private static final String PROCESS_SPAN_PREFIX = "EventProcessor.process";

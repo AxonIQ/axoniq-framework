@@ -68,10 +68,10 @@ import static org.awaitility.Awaitility.await;
  * <p>
  * The trace shape asserted here is the simplest in-scope command flow ({@code CommandBus.dispatch} ->
  * {@code CommandBus.handle} -> {@code @CommandHandler} enhancer span); the full multi-component trace tree is
- * exercised by {@link MicrometerTracingEndToEndIntegrationTest} against the {@code InMemorySpanExporter}.
+ * exercised by {@link MicrometerTracingEndToEndIT} against the {@code InMemorySpanExporter}.
  */
 @Testcontainers
-class TracingJaegerIntegrationTest {
+class TracingJaegerIT {
 
     private static final int JAEGER_OTLP_HTTP_PORT = 4318;
     private static final int JAEGER_QUERY_PORT = 16686;

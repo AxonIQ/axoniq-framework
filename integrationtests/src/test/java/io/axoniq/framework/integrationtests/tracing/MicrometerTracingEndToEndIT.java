@@ -63,7 +63,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * and installs the thread-local bridge. Spans are captured with an in-memory OpenTelemetry exporter. The test covers
  * command and query results, their span trees, current tracer context inside a handler, and bridge installation.
  */
-class MicrometerTracingEndToEndIntegrationTest {
+class MicrometerTracingEndToEndIT {
 
     private static final AtomicReference<@Nullable String> CURRENT_TRACE_ID_IN_HANDLER = new AtomicReference<>();
     private static @Nullable Tracer handlerTracer;

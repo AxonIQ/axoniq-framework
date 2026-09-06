@@ -100,7 +100,7 @@ import static org.assertj.core.api.Assertions.*;
  * @author Mateusz Nowak
  * @since 5.0.0
  */
-public abstract class DeadLetteringEventIntegrationTest {
+public abstract class AbstractDeadLetteringEventIT {
 
     protected static final String PROCESSING_GROUP = "problematicProcessingGroup";
     private static final boolean SUCCEED = true;
