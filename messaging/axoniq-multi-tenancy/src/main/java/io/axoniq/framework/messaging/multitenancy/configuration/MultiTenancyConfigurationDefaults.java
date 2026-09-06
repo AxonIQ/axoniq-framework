@@ -29,6 +29,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
+import io.axoniq.framework.messaging.multitenancy.api.TenantSequencingPolicy;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBusConfigurationEnhancer;
 import io.axoniq.license.entitlement.EntitlementManager;
 import org.axonframework.common.annotation.Internal;
@@ -51,6 +52,7 @@ import static org.axonframework.common.configuration.DecoratorDefinition.forType
  * <ul>
  *     <li>the default {@link TenantResolver}, which resolves the tenant from message metadata, unless a user registered a custom {@link TenantResolver}</li>
  *     <li>the {@link TenantRouter} that every tenant-routing component shares to decide the tenant of a message</li>
+ *     <li>the {@link TenantSequencingPolicy} applications can use to sequence message handling per tenant</li>
  *     <li>the {@link TenantComponentProviderSubscriber} to subscribe every {@link TenantComponentProvider} to the {@link TenantProvider} at startup</li>
  *     <li>the {@link RegisterTenantDescriptorHandlerInterceptor} which takes the resolved {@link TenantDescriptor} from the message and stores it in the {@link ProcessingContext}</li>
  *     <li>the {@link AttachTenantDescriptorDispatchInterceptor} which attaches the tenant of the dispatching {@link ProcessingContext} onto a dispatched command or query, so it survives a distributed round trip</li>
@@ -170,6 +172,13 @@ public class MultiTenancyConfigurationDefaults implements ConfigurationEnhancer 
         componentRegistry.registerIfNotPresent(TenantRouter.class,
                                                config -> new TenantRouter(config.getComponent(TenantResolver.class),
                                                                           config.getComponent(TenantProvider.class)),
+                                               SearchScope.ALL);
+
+        // Register the opt-in tenant sequencing policy. This makes it available for application configuration without
+        // changing any command or event-processing defaults.
+        componentRegistry.registerIfNotPresent(TenantSequencingPolicy.class,
+                                               config -> TenantSequencingPolicy.from(
+                                                       config.getComponent(TenantRouter.class)),
                                                SearchScope.ALL);
 
         // Keep tenant-scoped providers and tenant-aware storage factories in sync with the TenantProvider.

@@ -1,0 +1,19 @@
+[.axoniq-feature]
+= Tenant Sequencing
+:navtitle: Tenant sequencing
+:reftext: Tenant sequencing
+
+Tenant sequencing lets an application order message handling within one tenant without making every tenant wait for the same sequence.
+
+The multi-tenancy module registers a `TenantSequencingPolicy` component backed by the same tenant routing rules as the rest of the module.
+It first uses the tenant carried by the processing context.
+When the context carries no tenant, it falls back to the configured `TenantResolver` and checks the result against the known tenants.
+Messages resolving to the same tenant use the same sequence identifier.
+Messages resolving to different tenants can be handled independently.
+
+Use the registered `TenantSequencingPolicy` component wherever the component you configure accepts a `SequencingPolicy`.
+
+When no known tenant can be resolved, the policy returns no sequence identifier.
+That keeps unlabelled messages from accidentally sharing one global tenant sequence.
+
+For a single sequence across every tenant, use the framework's `SequentialPolicy` instead.

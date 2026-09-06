@@ -10,6 +10,12 @@ Covers how tenants become known to the application: static configuration at star
 
 See xref:multi-tenancy:tenant-management.adoc[Tenant management] for details.
 
+== Tenant sequencing
+
+Covers configuring sequential message handling per tenant, so messages for one tenant are ordered without forcing other tenants through the same sequence.
+
+See xref:multi-tenancy:tenant-sequencing.adoc[Tenant sequencing] for details.
+
 == Tenant-scoped components
 
 Covers registering application-specific, tenant-scoped components, such as a per-tenant SQL datasource, and injecting the correct tenant's instance into message handling methods.

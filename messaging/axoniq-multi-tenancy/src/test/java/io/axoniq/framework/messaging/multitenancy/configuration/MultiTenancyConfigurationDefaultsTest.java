@@ -32,6 +32,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantRouter;
+import io.axoniq.framework.messaging.multitenancy.api.TenantSequencingPolicy;
 import io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.MultiTenantEventStorageEngine;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
@@ -134,6 +135,11 @@ class MultiTenancyConfigurationDefaultsTest {
         @Test
         void registersTheTenantRouterForTenantRoutingComponentsToShare() {
             assertThat(configuration.getComponent(TenantRouter.class)).isNotNull();
+        }
+
+        @Test
+        void registersTheTenantSequencingPolicyForApplicationConfiguration() {
+            assertThat(configuration.getComponent(TenantSequencingPolicy.class)).isNotNull();
         }
 
         @Test
