@@ -1,0 +1,163 @@
+= Project Setup
+:navtitle: Project Setup
+
+Before we can build our order fulfillment workflow, we need to set up the project dependencies and define our domain classes.
+
+== Prerequisites
+
+* Java 21 or higher
+* Axon Framework 5.1.0
+* Maven (Gradle works too, but this tutorial uses Maven)
+
+== Adding dependencies
+
+To use the Axon Workflow Engine, add the following dependencies to your `pom.xml`:
+
+[source,xml]
+.pom.xml
+----
+<dependencies>
+    <!-- Workflow Engine DSL (includes both Java and Kotlin DSL) -->
+    <dependency>
+        <groupId>io.axoniq.framework.workflow</groupId>
+        <artifactId>axon-workflow-dsl</artifactId>
+        <version>${workflow.version}</version>
+    </dependency>
+
+    <!-- Workflow Engine Test utilities -->
+    <dependency>
+        <groupId>io.axoniq.framework.workflow</groupId>
+        <artifactId>axon-workflow-test</artifactId>
+        <version>${workflow.version}</version>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+----
+
+[NOTE]
+====
+The `axon-workflow-dsl` module includes both Java DSL layers (`BaseWorkflowContext` and the convenience-focused `SimpleWorkflowContext`) plus the Kotlin DSL (`WorkflowKontext` with the author-facing `Kontext` wrapper).
+You don't need separate dependencies for Kotlin support.
+====
+
+== Module overview
+
+The Axon Workflow Engine consists of four modules:
+
+[cols="<,<"]
+|===
+|Module |Purpose
+
+|`runtime` |Core engine: primitives, combinators, execution, configuration
+|`dsl` |DSL layers for Java (`BaseWorkflowContext` and `SimpleWorkflowContext`) and Kotlin (`WorkflowKontext` and `Kontext`)
+|`test` |Testing utilities: `AbstractWorkflowTestBase`, `DelayedPublisher`
+|`example` |Example workflows demonstrating all features
+|===
+
+== Define your domain events
+
+Our order fulfillment workflow needs two events.
+The first triggers the workflow, and the second is an external event the workflow will wait for.
+
+Let's define them as Java records:
+
+[source,java]
+.src/main/java/io/axoniq/example/order/OrderPlaced.java
+----
+public record OrderPlaced(
+    String orderId,    // <1>
+    String customerId,
+    String email,
+    double amount
+) {}
+----
+
+<.> The `orderId` will serve as the workflow instance identifier.
+When this event is published, the engine creates a new workflow instance and populates its payload with these fields.
+
+[source,java]
+.src/main/java/io/axoniq/example/order/PaymentConfirmed.java
+----
+public record PaymentConfirmed(
+    String orderId,       // <1>
+    String transactionId
+) {}
+----
+
+<.> The `orderId` field lets us correlate this event to the correct workflow instance.
+We'll use this in xref:first-workflow.adoc[Your First Workflow] when we add an `awaitEvent` call.
+
+[NOTE]
+====
+In a real application, you would annotate events with `@Event(namespace = "...", name = "...")` for qualified event naming.
+We keep it simple here for the tutorial.
+====
+
+== Define service stubs
+
+Our workflow will call several services during execution.
+For the tutorial, we'll create simple stubs that log what they're doing:
+
+[source,java]
+.src/main/java/io/axoniq/example/order/InventoryService.java
+----
+public class InventoryService {
+
+    static Logger logger = LoggerFactory.getLogger(InventoryService.class);
+
+    public static boolean reserveStock() {
+        logger.info("Reserving stock for order.");
+        return true;
+    }
+
+    public static boolean reserveStock(Map<String, Object> payload) {
+        logger.info("Reserving stock for order: {}", payload);
+        return true;
+    }
+}
+----
+
+[source,java]
+.src/main/java/io/axoniq/example/order/PaymentService.java
+----
+public class PaymentService {
+
+    static Logger logger = LoggerFactory.getLogger(PaymentService.class);
+
+    public static Map<String, Object> initiatePayment(ProcessingContext pc,
+                                                       Map<String, Object> payload) {
+        logger.info("Initiating payment for order: {}", payload.get("orderId"));
+        return Map.of();
+    }
+}
+----
+
+[source,java]
+.src/main/java/io/axoniq/example/order/ShippingService.java
+----
+public class ShippingService {
+
+    static Logger logger = LoggerFactory.getLogger(ShippingService.class);
+
+    public static Map<String, Object> shipOrder(ProcessingContext pc,
+                                                 Map<String, Object> payload) {
+        logger.info("Shipping order: {}", payload.get("orderId"));
+        return Map.of("shipped", true);
+    }
+}
+----
+
+[source,java]
+.src/main/java/io/axoniq/example/order/NotificationService.java
+----
+public class NotificationService {
+
+    static Logger logger = LoggerFactory.getLogger(NotificationService.class);
+
+    public static void sendConfirmation(String email) {
+        logger.info("Sending order confirmation to {}.", email);
+    }
+}
+----
+
+With our project set up and domain classes defined, let's create our first workflow!
