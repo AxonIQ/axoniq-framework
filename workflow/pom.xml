@@ -42,6 +42,7 @@
         <module>axoniq-workflow-spring-boot</module>
         <module>axoniq-workflow-spring-boot-kotlin</module>
         <module>axoniq-workflow-test</module>
+        <module>axoniq-workflow-simulation</module>
     </modules>
 
     <dependencies>

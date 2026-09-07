@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (c) 2010-2026. AxonIQ B.V.
+  ~
+  ~ Licensed under the AXONIQ TERMS OF SERVICE,
+  ~ Version 29 April 2026 (the "License");
+  ~
+  ~ The software is available for evaluation use without registration.
+  ~ Continued use beyond the evaluation period requires registration
+  ~ and a commercial license. See the License for the specific language
+  ~ governing permissions and limitations under the License.
+  ~ You may not use this file except in compliance with the License.
+  ~
+  ~ You may obtain a copy of the License at:
+  ~  https://www.axoniq.io/legal/terms-of-service
+  ~
+  ~ For licensing information and to register, visit:
+  ~  https://www.axoniq.io/pricing
+  -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.axoniq.framework</groupId>
+        <artifactId>axoniq-workflow-parent</artifactId>
+        <version>${revision}</version>
+    </parent>
+
+    <artifactId>axoniq-workflow-simulation</artifactId>
+    <name>Axoniq Framework - Workflow - Deterministic Simulation Testing</name>
+    <description>
+        Seeded, single-threaded deterministic simulation testing (DST) harness that drives the real workflow engine
+        through the Phase-3 determinism seams under injected faults, asserting the protocol invariants (INV-1..6 plus
+        INV-7 TerminalIsFinal) after every step. Smoke seeds run on every build; the long fuzz is gated behind
+        -Ddst.seeds and the "fuzz" JUnit tag.
+    </description>
+
+    <properties>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
+        <maven.source.skip>true</maven.source.skip>
+        <gpg.skip>true</gpg.skip>
+        <!--
+          Tests in this module are deterministic by construction (a single seeded RNG drives all fault choices).
+          Reruns would mask a real, reproducible invariant break, so this module never relies on the repo-wide
+          -Dsurefire.rerunFailingTestsCount; pin it to 0 here.
+        -->
+        <surefire.rerunFailingTestsCount>0</surefire.rerunFailingTestsCount>
+        <!--
+          JUnit tag(s) excluded from the per-PR / default build. Defaults to "fuzz" so the long deterministic fuzz
+          stays out of every normal build; the nightly job overrides it with -Ddst.excludedGroups= (empty) to enable
+          the fuzz. This MUST be a property (not a literal in the surefire config) so the command-line override works.
+        -->
+        <dst.excludedGroups>fuzz</dst.excludedGroups>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-workflow-engine</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-workflow-dsl</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!--
+          The Phase-3 deterministic seams (MutableClock, ManualWorkflowScheduler, SeededWorkflowIdGenerator,
+          SameThreadExecutorService) live in axoniq-workflow-test. The harness is compiled into main scope (not test)
+          so the seeded loop can be reused by both the smoke and fuzz suites; pull the test module into compile scope.
+        -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-workflow-test</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Scenarios record the engine's rejection warnings through log4j2, the logging backend the build uses. -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
+        <!--
+          junit-jupiter, assertj-core and awaitility are inherited (test scope) from the parent POM's <dependencies>;
+          they are not redeclared here.
+        -->
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!--
+                      The per-PR / default build runs only the fast smoke seeds. The long fuzz is tagged "fuzz" and
+                      excluded here via the overridable dst.excludedGroups property (default "fuzz"); a nightly job
+                      re-enables it with -Ddst.excludedGroups= and -Ddst.seeds=<N>.
+                    -->
+                    <excludedGroups>${dst.excludedGroups}</excludedGroups>
+                    <!-- Phase 2: DeterministicVirtualThreadExecutor reflects the JDK VirtualThreadBuilder(Executor)
+                         test constructor to mount virtual threads on a single deterministic carrier. -->
+                    <argLine>--add-opens java.base/java.lang=ALL-UNNAMED</argLine>
+                    <systemPropertyVariables>
+                        <dst.seeds>${dst.seeds}</dst.seeds>
+                        <dst.seed>${dst.seed}</dst.seed>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

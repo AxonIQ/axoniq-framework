@@ -1,0 +1,13 @@
+# TLC model-checker run artifacts
+states/
+*.toolbox/
+*_TTrace_*.tla
+*_TTrace_*.cfg
+trace.tla
+*.out
+*.dot
+*.st
+MC.out
+
+# Downloaded model checker (re-fetch via README / CI — see README.md)
+tools/*.jar

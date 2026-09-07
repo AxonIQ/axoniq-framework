@@ -1,0 +1,47 @@
+# Copyright (c) 2010-2026. AxonIQ B.V.
+#
+# Licensed under the AXONIQ TERMS OF SERVICE,
+# Version 29 April 2026 (the "License");
+#
+# The software is available for evaluation use without registration.
+# Continued use beyond the evaluation period requires registration
+# and a commercial license. See the License for the specific language
+# governing permissions and limitations under the License.
+# You may not use this file except in compliance with the License.
+#
+# You may obtain a copy of the License at:
+#  https://www.axoniq.io/legal/terms-of-service
+#
+# For licensing information and to register, visit:
+#  https://www.axoniq.io/pricing
+
+# Everything the rig varies per node (rig.node-id, spring.datasource.url, axon.axonserver.servers,
+# axoniq.workflow.initial-segment-count) arrives as a -D system property from ShardCluster.
+spring:
+  application:
+    name: shard-node
+  main:
+    banner-mode: off
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    username: rig
+    password: rig
+    hikari:
+      maximum-pool-size: 10
+      # Short on purpose: a partitioned node must fail fast and visibly rather than block a scenario for 30 seconds.
+      connection-timeout: 3000
+      validation-timeout: 1000
+  jpa:
+    hibernate:
+      # The rig creates rig_step_log itself and lets the first node create TokenEntry; nodes are started one at a
+      # time, so no two Hibernate instances issue DDL concurrently.
+      ddl-auto: update
+    open-in-view: false
+server:
+  port: 0
+  shutdown: graceful
+logging:
+  level:
+    root: WARN
+    io.axoniq.framework.workflow: INFO
+    org.axonframework.messaging.eventhandling.processing.streaming: INFO
