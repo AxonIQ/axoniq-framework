@@ -146,4 +146,4 @@ jobs:
               fi
             done
           } > combined-report.md
-          gh pr comment "${{ github.event.pull_request.number }}" --edit-last --create-if-none --body-file combined-report.md
+          gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --edit-last --create-if-none --body-file combined-report.md
