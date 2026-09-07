@@ -83,7 +83,7 @@ jobs:
         run: |
           if [ -f build.log ]; then
             ./.github/scripts/generate-build-report.sh build.log "JDK ${{ matrix.java-version }}" build-report.md \
-              || echo "_Build status report generation failed; see the raw build log for details._" > build-report.md
+              || echo "_Could not generate the per-module status table (a script error, not a build failure) -- see the 'Generate build status report' step log for details._" > build-report.md
           else
             echo "_Build did not reach the Maven build step; no per-module status available._" > build-report.md
           fi
