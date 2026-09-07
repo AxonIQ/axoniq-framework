@@ -21,7 +21,7 @@ include::partial$advanced-modules.excalidraw[]
 |<<Axoniq dead letter queue>>     |`axoniq-dead-letter-queue`      |`io.axoniq.framework` |https://central.sonatype.com/search?q=axoniq-dead-letter-queue[available]
 |<<Axoniq message transformation>> |`axoniq-message-transformation` |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-message-transformation[available]
 |<<Axoniq multi-tenancy>>          |`axoniq-multi-tenancy`          |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-multi-tenancy[available]
-// |<<Axoniq tracing OpenTelemetry>> |`axon-tracing-opentelemetry`    |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axon-tracing-opentelemetry[available]
+|<<Axoniq tracing OpenTelemetry>> |`axon-tracing-opentelemetry`    |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axon-tracing-opentelemetry[available]
 |<<Axoniq Workflow Engine>> |`axon-workflow-runtime`    |`io.axoniq.framework.workflow` |https://central.sonatype.com/search?q=a:axon-workflow-runtime[available]
 ifdef::data-protection[]
 |<<Axoniq Data Protection>> |`axoniq-data-protection`    |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-data-protection[available]
@@ -55,9 +55,9 @@ See the xref:message-transformation:index.adoc[event transformation reference] t
 This module lets a single application instance serve multiple tenants, separating tenant data in transit and at rest by mapping each tenant to a dedicated Axon Server context.
 See the xref:multi-tenancy:index.adoc[multi-tenancy reference] to get started.
 
-// === Axoniq tracing OpenTelemetry
-//
-// This extension contains the components needed to xref:tracing:index.adoc[enable tracing with OpenTelemetry].
+=== Axoniq tracing OpenTelemetry
+
+This extension contains the components needed to xref:tracing:index.adoc[enable tracing with OpenTelemetry].
 
 === Axoniq Workflow Engine
 
