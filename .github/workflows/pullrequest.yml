@@ -83,9 +83,9 @@ jobs:
         run: |
           if [ -f build.log ]; then
             ./.github/scripts/generate-build-report.sh build.log "JDK ${{ matrix.java-version }}" build-report.md \
-              || echo "_Could not generate the per-module status table (a script error, not a build failure) -- see the 'Generate build status report' step log for details._" > build-report.md
+              || echo "#### JDK ${{ matrix.java-version }} - _Could not generate the per-module status table (a script error, not a build failure) -- see the 'Generate build status report' step log for details._" > build-report.md
           else
-            echo "_Build did not reach the Maven build step; no per-module status available._" > build-report.md
+            echo "#### JDK ${{ matrix.java-version }} - _Build did not reach the Maven build step; no per-module status available._" > build-report.md
           fi
 
       - name: Upload build status report
@@ -137,12 +137,10 @@ jobs:
             for dir in reports/build-report-jdk*/; do
               jdk="$(basename "$dir" | sed 's/build-report-jdk//')"
               echo
-              echo "#### JDK ${jdk}"
-              echo
               if [ -f "${dir}build-report.md" ]; then
                 cat "${dir}build-report.md"
               else
-                echo "_No report available for this leg._"
+                echo "#### JDK ${jdk} - _No report available for this leg._"
               fi
             done
           } > combined-report.md

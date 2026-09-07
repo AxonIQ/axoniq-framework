@@ -142,9 +142,9 @@ failureCount=$(awk -F'\t' '$3 == "FAILURE"' "$RAW_ROWS" | wc -l)
 skippedCount=$(awk -F'\t' '$3 == "SKIPPED"' "$RAW_ROWS" | wc -l)
 
 if [ "$failureCount" -gt 0 ]; then
-  summary="**FAILURE** - ${successCount} succeeded, ${failureCount} failed, ${skippedCount} skipped (${cachedCount} cached, ${builtCount} built)"
+  summary="#### ${LABEL} - **FAILURE** - ${successCount} succeeded, ${failureCount} failed, ${skippedCount} skipped (${cachedCount} cached, ${builtCount} built)"
 else
-  summary="**SUCCESS** - ${total} modules (${cachedCount} cached, ${builtCount} built)"
+  summary="#### ${LABEL} - **SUCCESS** - ${total} modules (${cachedCount} cached, ${builtCount} built)"
 fi
 
 {
