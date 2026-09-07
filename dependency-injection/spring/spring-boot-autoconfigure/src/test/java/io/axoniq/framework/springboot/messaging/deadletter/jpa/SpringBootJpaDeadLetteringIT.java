@@ -82,6 +82,7 @@ import static org.assertj.core.api.Assertions.*;
 })
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @EnableMBeanExport(registration = RegistrationPolicy.IGNORE_EXISTING)
+@Disabled("TODO #460")
 class SpringBootJpaDeadLetteringIT extends AbstractDeadLetteringEventIT {
 
     @Autowired

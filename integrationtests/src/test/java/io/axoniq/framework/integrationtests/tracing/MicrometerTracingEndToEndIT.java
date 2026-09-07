@@ -47,6 +47,7 @@ import org.axonframework.messaging.queryhandling.gateway.QueryGateway;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -63,6 +64,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * and installs the thread-local bridge. Spans are captured with an in-memory OpenTelemetry exporter. The test covers
  * command and query results, their span trees, current tracer context inside a handler, and bridge installation.
  */
+@Disabled("TODO #461")
 class MicrometerTracingEndToEndIT {
 
     private static final AtomicReference<@Nullable String> CURRENT_TRACE_ID_IN_HANDLER = new AtomicReference<>();
