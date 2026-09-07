@@ -43,9 +43,8 @@
         <module>support</module>
         <module>connector</module>
         <module>conformance</module>
-        <module>queryhandling</module>
         <module>tracing</module>
-        <module>deadletter</module>
+        <module>dead-letter</module>
         <module>multitenancy</module>
         <module>workflow</module>
     </modules>
