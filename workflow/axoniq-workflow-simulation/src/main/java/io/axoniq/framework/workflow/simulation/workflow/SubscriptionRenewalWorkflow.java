@@ -20,6 +20,7 @@ package io.axoniq.framework.workflow.simulation.workflow;
 
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.RenewalDecidedEvent;
 
@@ -131,6 +132,8 @@ public class SubscriptionRenewalWorkflow {
                     step -> step.timeout(SagaOrderWorkflow.GENEROUS_STEP_TIMEOUT)
             );
             ctx.cancel();
+        } catch (StepInterruptedException e) {
+            throw e; // an engine interrupt is not a step failure: the step resumes on the next start
         } catch (StepFailedException e) {
             // Fuzz-workload hardening (the OrderWorkflow pattern): a crash-interrupted execute step resolves through
             // the engine's at-most-once flow to FAILED (StepIndeterminateException); propagate explicitly to a

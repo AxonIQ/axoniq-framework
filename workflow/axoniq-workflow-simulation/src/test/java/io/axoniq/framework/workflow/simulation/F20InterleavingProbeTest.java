@@ -37,8 +37,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * What this pins TODAY (an exploration substrate, not yet the strict F-20 acceptance):
  * <ul>
  *   <li>The probe RUNS under the carrier for every explored schedule — the interleaving dimension is drivable.</li>
- *   <li>Whatever count a schedule produces, it is in the known F-19/F-20 gap alphabet — never the fixed-engine 1
- *       (see the {@code LoopAndStormTest} Phase-1' re-pin for the 0 / ≥2 bimodality).</li>
+ *   <li>Every schedule yields 0: the F-19 non-blocking sleep never terminates, and the F-20 duplicate mode is closed
+ *       (the terminal transition discards queued publishes; see the {@code LoopAndStormTest} pin).</li>
  * </ul>
  * The observed spread is printed for the report. When an engine fix lands (F-19 blocking sleep + F-20 durable-gated
  * publish) every schedule must yield exactly 1 — flip the alphabet assertion then. Residual honesty: enqueue timing
@@ -62,12 +62,15 @@ class F20InterleavingProbeTest {
             }
         }
         logger.info("[SPIKE] F-20 probe, retryDelay terminals by interleaving seed: " + countBySchedule);
-        // Gap alphabet: every schedule yields 0 (timer never fired before exhaustion) or >=2 (duplicates) —
-        // never the fixed-engine exactly-1 (the same contract as the Phase-1' re-pin, now per schedule).
+        // Every schedule yields exactly 0: the non-blocking sleep (F-19, open) never terminates before the spinning
+        // body exhausts, and the >=2 duplicate mode (F-20) is unreachable since the terminal transition discards the
+        // queued timed-out publishes before it publishes (SimpleWorkflowExecution.transitionToTerminalState). The
+        // ungated in-memory publish gate in AbstractStepExecutor survives, so F-20 stays open on FOLLOW-UPS. A fixed
+        // F-19 yields exactly 1; flip then.
         countBySchedule.forEach((seed, count) ->
                 assertThat(count)
-                        .as("interleaving seed %d must sit in the F-19/F-20 gap alphabet (0 or >=2), got %d",
-                            seed, count)
-                        .isNotEqualTo(1));
+                        .as("interleaving seed %d: the reused-name sleep records no terminal (F-19 open, F-20 mode "
+                                    + "closed by the terminal-transition queue discard), got %d", seed, count)
+                        .isEqualTo(0));
     }
 }

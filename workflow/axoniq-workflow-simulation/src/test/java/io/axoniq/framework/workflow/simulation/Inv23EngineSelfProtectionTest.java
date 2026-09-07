@@ -36,7 +36,7 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.EventSink;
+import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
 import org.junit.jupiter.api.Test;
@@ -298,7 +298,7 @@ class Inv23EngineSelfProtectionTest {
         when(pc.component(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
         when(pc.component(Clock.class)).thenReturn(Clock.systemUTC());
         when(pc.component(eq(ExecutorService.class), any())).thenReturn(mock(ExecutorService.class));
-        when(pc.component(EventSink.class)).thenReturn(mock(EventSink.class));
+        when(pc.component(EventStore.class)).thenReturn(mock(EventStore.class));
         when(pc.component(WorkflowScheduler.class)).thenReturn(mock(WorkflowScheduler.class));
         when(pc.component(ExecuteStepActionResolver.class)).thenReturn(new DefaultExecuteStepActionResolver());
 

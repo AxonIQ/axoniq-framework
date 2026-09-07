@@ -207,15 +207,22 @@ public final class ParkedSubscriptionScenario {
             runOrderToCompletion(world, "churn3");
             world.crashAndRecover();
 
-            // Distinguish failure modes before the wake attempt: the recovered engine must still hold the parked
-            // instance live, with its wait re-registered (the rescheduled wait-timeout is the observable proxy).
+            // The recovered engine must still hold the parked instance (restored from the running-workflows record).
             Polling.awaitOrFail(DEADLINE, "the parked instance to be LIVE in the recovered engine",
                                 () -> world.engine().liveWorkflowIds().contains(workflowId));
-            Polling.awaitOrFail(DEADLINE, "the recovered wait to be re-registered (timeout rescheduled)",
-                                () -> world.scheduler().pendingTasks() > 0);
 
-            // The decision arrives — twice (a duplicate delivery, as flaky transports do).
+            // The decision arrives twice (a duplicate delivery, as flaky transports do). The FIRST delivery is also what
+            // closes the recovered segment's catch-up (F-40): a restored body starts only once its segment sees a
+            // delivered event whose token covers the startup head, and after this crash the log's tail belongs to the
+            // churn instance's segment, not this one. So the first decision starts the body, which re-registers the
+            // wait and reschedules its timeout; the same delivery may then wake it at once, so the resume is observed
+            // either as the rescheduled timeout or as the completed wait.
             world.engine().publish(new RenewalDecidedEvent(orderId));
+            Polling.awaitOrFail(DEADLINE, "the recovered body to resume (wait re-registered, or already woken)",
+                                () -> world.scheduler().pendingTasks() > 0
+                                        || hasStepRecord(world.committedLog(), workflowId,
+                                                         SubscriptionRenewalWorkflow.STEP_AWAIT_DECISION,
+                                                         StepStatus.COMPLETED));
             world.engine().publish(new RenewalDecidedEvent(orderId));
             Polling.awaitOrFail(DEADLINE, "the parked instance to complete after the (duplicated) decision",
                                 () -> workflowStatusRecords(world.committedLog(), workflowId,

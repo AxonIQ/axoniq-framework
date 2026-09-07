@@ -29,6 +29,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedE
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionCheckpointingSupport.ExecutionTaskQueue;
+import io.axoniq.framework.workflow.runtime.util.Buggify;
 import io.axoniq.framework.workflow.runtime.util.ProcessingContextUtils;
 import org.axonframework.common.ExceptionUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -49,6 +50,7 @@ import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -84,6 +86,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private boolean running = false;
     private boolean stoppedForRecovery = false;
     private volatile Thread workflowThread;
+    private volatile boolean shuttingDown = false;
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
     private final EventWaitConditions eventWaitConditions;
     private final RunningSteps runningSteps;
@@ -334,9 +337,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         }
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         switch (exception) {
-            case Throwable fenced when isRejected(fenced) -> {
+            case Throwable fenced when isLostWriter(fenced) -> {
                 logger.debug("Workflow {} stopped after an append rejection because another writer already recorded "
-                                     + "the event this execution tried to append.", workflowId());
+                                     + "the event this execution tried to append, or because the engine is shutting down.",
+                             workflowId());
             }
             case WorkflowFailedException wfe -> {
                 // if events are already sent by WorkflowLifecycleControlDelegate, just let it propagate
@@ -471,6 +475,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     private void transitionToTerminalState(Runnable terminalEventPublication) {
+        if (shuttingDown) {
+            // The engine is stopping, not the workflow. A terminal event written now would turn an interrupted step
+            // into a durable outcome; the step resumes on the next start instead.
+            logger.debug("Workflow {} skips its terminal transition because the engine is shutting down.", workflowId);
+            return;
+        }
         runningSteps.cancelAll(new StepInterruptedException("Workflow reached terminal state"), cancelled -> {
         });
         // Keep checkpoint barriers until finishWorkflow can release their callbacks after the terminal event is durable.
@@ -519,6 +529,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     @Override
     public void stopForShutdown() {
+        shuttingDown = true;
         runningSteps.cancelAll(new StepInterruptedException("Workflow engine shutdown"), s -> {
         });
         // Unblock the workflow driver thread parked on taskQueue.take() inside the current step's await() loop.
@@ -559,6 +570,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     @Override
     public void appendTask(Consumer<WorkflowExecution> task) {
+        // BUGGIFY point (test-activated only, production no-op): widen the enqueue-vs-drain window.
+        Buggify.fire("execution.append-task");
         checkpointingSupport.appendTask(task);
     }
 
@@ -590,6 +603,15 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     boolean isRejected(Throwable failure) {
         return ExceptionUtils.findException(failure, AppendEventsTransactionRejectedException.class).isPresent();
+    }
+
+    /**
+     * An append that failed because another writer owns the instance, or because this engine's executor is already
+     * shutting down. In both cases this execution no longer speaks for the instance and must publish nothing.
+     */
+    boolean isLostWriter(Throwable failure) {
+        return isRejected(failure)
+                || ExceptionUtils.findException(failure, RejectedExecutionException.class).isPresent();
     }
 
     private AppendCondition appendConditionFor(@Nullable ConsistencyMarker marker) {

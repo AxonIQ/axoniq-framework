@@ -1,7 +1,7 @@
 --------------------------- MODULE BackoffCancel ---------------------------
 (***************************************************************************)
 (* Design-level model of the cancellation-during-retry-backoff gap         *)
-(* (candidate finding, corroborating the DST BackoffCancelSwallowedTest /  *)
+(* (candidate finding, corroborating the DST BackoffCancelHonoredTest /  *)
 (* BackoffCancelScenario pin).                                             *)
 (*                                                                         *)
 (* While a retrying step waits out its backoff, the only registered        *)

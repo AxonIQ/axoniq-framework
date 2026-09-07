@@ -123,12 +123,12 @@ class RollingDeployTest {
                 .as("EXPECTED GAP: the drift-paused instance is evicted from the live repository as if finished")
                 .isFalse();
 
-        // EXPECTED GAP (F-17 continued): the documented drift remedy — deploy a matching body and 'the next replay
-        // will try again' — is unfulfillable: recovery resets to the LATEST safe point, replays nothing, and never
-        // re-creates the instance. The order is permanently abandoned mid-completion, with a consumed approval.
+        // F-17, second half CLOSED: rehydration on claim restores every non-terminal instance from its own history,
+        // independently of the safe point, so rolling forward to the matching body brings the abandoned instance back
+        // (live again, drift-paused at the step the polluted history disagrees on). The eviction half above remains.
         assertThat(outcome.restoredByRollForward())
-                .as("EXPECTED GAP: rolling forward to the matching body never restores the abandoned instance")
-                .isFalse();
+                .as("rolling forward to the matching body restores the abandoned instance")
+                .isTrue();
         assertThat(outcome.terminalAfterRollForward()).isNull();
         assertThat(outcome.fraudChecksTotal()).isEqualTo(1);
     }

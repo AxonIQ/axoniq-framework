@@ -706,8 +706,8 @@ public final class Invariants {
      * Comparing per-instance is required because the single global log interleaves independent instances
      * non-deterministically (the F-2 surface, ARCHITECTURE.md §8/§11) — another instance's {@code STARTED} landing here
      * is irrelevant; this instance opening a second live lifecycle is what is forbidden. This mirrors the engine's
-     * spawn-dedup (axon-flow-workflow skill §6.1; {@code WorkflowSpawnRouting.resolveWorkflowIdForNewSpawn} returns
-     * {@code null} for a live duplicate, {@code WorkflowSpawnRouting.java:67-76}) and the after-terminal eviction that
+     * spawn-dedup ({@code NewWorkflowInstanceRouting.resolveWorkflowIdForNewInstance} returns {@code null} for a live
+     * duplicate at the same or a lower version) and the after-terminal eviction that
      * produces F-3 ({@code WorkflowEngine.java:161,194}). A genuine break (a second {@code STARTED} with no intervening
      * terminal — a real dedup failure distinct from F-3) throws {@link InvariantViolation}; that would be a new finding,
      * to be triaged per the POC rules — not silently tolerated.
@@ -718,7 +718,9 @@ public final class Invariants {
         // Per-workflow append-ordered view: index 0..n-1 is this instance's own committed order.
         var byWorkflow = new LinkedHashMap<String, List<EventMessage>>();
         for (EventMessage event : committedLog) {
-            byWorkflow.computeIfAbsent(MetadataUtils.getWorkflowId(event.metadata()), k -> new ArrayList<>())
+            // Group by the business key: a cross-version sibling spawned as "<id>#<version>" is the same start, so two
+            // live lifecycles under one base id must fail this invariant whatever suffix the engine gave them.
+            byWorkflow.computeIfAbsent(businessKey(MetadataUtils.getWorkflowId(event.metadata())), k -> new ArrayList<>())
                       .add(event);
         }
         for (var entry : byWorkflow.entrySet()) {
@@ -749,6 +751,11 @@ public final class Invariants {
                 }
             }
         }
+    }
+
+    private static String businessKey(String workflowId) {
+        int suffix = workflowId.indexOf('#');
+        return suffix < 0 ? workflowId : workflowId.substring(0, suffix);
     }
 
     // ----------------------------------------------------------------------------------------------------------------

@@ -1,5 +1,7 @@
 # Hunting campaign — widening axes (2026-07-20)
 
+> Status 2026-09-07: `F20BuggifyInterleavingProbeTest` (section 5) was removed. The ≥2 duplicate mode it promoted is unreachable since the cancellation and termination rework; see the F-20 status note in `POC-TLA-DST.adoc`.
+
 Branch `poc/tla_dst` (fast-forwarded onto the determinism-hardening phases 1-4 machinery,
 commit `107e3540`). One variable at a time over the new DST machinery: the virtual-timeout
 seam, the deterministic carrier, the schedule axis, and the widening axes

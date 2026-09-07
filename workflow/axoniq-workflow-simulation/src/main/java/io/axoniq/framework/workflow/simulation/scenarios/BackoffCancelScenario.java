@@ -85,14 +85,13 @@ public final class BackoffCancelScenario {
      * The observables of the in-body-cancel drive.
      *
      * @param cancelledDuringBackoff whether a {@code <workflow>:CANCELLED} record appeared while the flaky step was
-     *                               still waiting out its backoff (expected {@code false} — the cancel is held
-     *                               hostage).
+     *                               still waiting out its backoff (expected {@code true}: the cancel lands at once).
      * @param effectsBeforeAdvance   flaky-action effect count observed after the cancel was requested but before the
      *                               backoff elapsed (expected 1 — only the first, failed attempt).
-     * @param effectsAfterAdvance    flaky-action effect count after the backoff elapsed (expected 2 — the doomed
-     *                               retry attempt ran its side effect despite the cancel).
-     * @param flakyTerminalStatus    the flaky step's terminal record after settling (expected COMPLETED — the
-     *                               "cancelled" step finished normally).
+     * @param effectsAfterAdvance    flaky-action effect count after the backoff elapsed (expected 1: the cancelled
+     *                               retry attempt never runs).
+     * @param flakyTerminalStatus    the flaky step's terminal record after settling (expected {@code null}: the
+     *                               terminal workflow leaves its retrying step without a terminal step record).
      * @param workflowCancelled      whether the workflow finally recorded CANCELLED once the step went terminal.
      */
     public record InBodyOutcome(boolean cancelledDuringBackoff,
@@ -107,12 +106,12 @@ public final class BackoffCancelScenario {
      * The observables of the external-cancel drive.
      *
      * @param stepCancelRecorded   whether the externally-cancelled step ever committed a CANCELLED record (expected
-     *                             {@code false} — the cancel is swallowed).
+     *                             {@code true}).
      * @param effectsBeforeAdvance flaky-action effect count after the external cancel, before the backoff elapsed
      *                             (expected 1).
-     * @param effectsAfterAdvance  flaky-action effect count after the backoff elapsed (expected 2 — the retry ran
-     *                             anyway).
-     * @param flakyTerminalStatus  the flaky step's terminal record (expected COMPLETED, as if never cancelled).
+     * @param effectsAfterAdvance  flaky-action effect count after the backoff elapsed (expected 1: the retry was
+     *                             unscheduled).
+     * @param flakyTerminalStatus  the flaky step's terminal record (expected CANCELLED).
      * @param workflowCompleted    whether the workflow reached its normal terminal COMPLETED.
      */
     public record ExternalOutcome(boolean stepCancelRecorded,
@@ -150,11 +149,11 @@ public final class BackoffCancelScenario {
                                                                                    WorkflowStatus.CANCELLED));
             long effectsBefore = effects.count(workflowId, STEP_FLAKY);
 
-            // Fire the backoff: the "cancelled" step's retry attempt runs anyway, and only then can the cancel land.
+            // Fire the backoff: the cancelled retry must stay unscheduled. The flaky step keeps no terminal record of its
+            // own (the terminal transition drops the queued step CANCELLED task), so this is a bounded absence check.
             world.advanceTime(BACKOFF_DELAY.plusSeconds(1));
-            Polling.awaitOrFail(DEADLINE, "the flaky step to reach a terminal record after the backoff fired",
-                                () -> terminalStepStatus(world.committedLog(), workflowId, STEP_FLAKY) != null);
-            Polling.awaitOrFail(DEADLINE, "the workflow to finally record CANCELLED",
+            Polling.await(ABSENCE_WINDOW, () -> terminalStepStatus(world.committedLog(), workflowId, STEP_FLAKY) != null);
+            Polling.awaitOrFail(DEADLINE, "the workflow to record CANCELLED",
                                 () -> hasWorkflowStatus(world.committedLog(), workflowId, WorkflowStatus.CANCELLED));
 
             return new InBodyOutcome(

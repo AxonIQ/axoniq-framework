@@ -20,6 +20,7 @@ package io.axoniq.framework.workflow.simulation.workflow;
 
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.PollSignalEvent;
 
 import java.time.Duration;
@@ -192,6 +193,8 @@ public class LoopingPollWorkflow {
             } else {
                 ctx.fail(new IllegalStateException("poll loop exhausted after " + MAX_SPINS + " iterations"));
             }
+        } catch (StepInterruptedException e) {
+            throw e; // an engine interrupt is not a step failure: the step resumes on the next start
         } catch (StepFailedException e) {
             // Fuzz-workload hardening (OrderWorkflow pattern): a crash-resolved step failure (e.g. the process step
             // interrupted mid-flight) is propagated explicitly to terminal FAILED instead of the F-15 wedge sink.

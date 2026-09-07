@@ -77,13 +77,14 @@ public final class FencedVersionMigrationScenario {
         var marker = MigratingOrderWorkflow.CHANGE_ID;
         var appender = FenceOracles.attachRejectionAppender();
         try (var world = new SimulationWorld(seed, EngineInstance.migratingOrderWorkflow(effects))) {
+            // Arm the fence on the migrated branch's own first append, not on the marker: the marker must commit so the
+            // scenario measures a branch that runs at the migrated version and is then fenced.
+            world.eventStore().armForeignWriteBeforeCommitOf(MigratingOrderWorkflow.STEP_PROCESS_V2, StepStatus.STARTED);
             world.engine().publish(new MigrateRequestedEvent(orderId));
-            Polling.awaitOrFail(DEADLINE, "the migration marker to commit",
-                                () -> FenceOracles.stepRecords(world.committedLog(), workflowId, marker,
-                                                               StepStatus.COMPLETED) >= 1);
+            Polling.awaitOrFail(DEADLINE, "the fence to consume the migrated branch's first commit",
+                                () -> !world.eventStore().isFenceArmed());
 
             int before = FenceOracles.records(world.committedLog(), workflowId);
-            world.eventStore().appendForeign(workflowId);
 
             Polling.await(REJECTION_WINDOW, () -> FenceOracles.rejections(appender, workflowId) >= 1);
             return new Outcome(before,

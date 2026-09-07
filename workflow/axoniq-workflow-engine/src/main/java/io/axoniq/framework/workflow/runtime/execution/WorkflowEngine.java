@@ -21,6 +21,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.license.entitlement.EntitlementManager;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.framework.workflow.runtime.util.Buggify;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import io.axoniq.framework.workflow.runtime.util.ProcessingContextUtils;
 import org.axonframework.common.annotation.Internal;
@@ -397,6 +398,8 @@ public class WorkflowEngine implements
     }
 
     private void activateSegmentWhenCaughtUp(@Nullable Segment segment, @Nullable TrackingToken currentToken) {
+        // BUGGIFY point (test-activated only, production no-op): widen the replay-to-live boundary window.
+        Buggify.fire("engine.live-switch");
         if (!catchUpSupport.recordDelivery(segment, currentToken)) {
             return;
         }

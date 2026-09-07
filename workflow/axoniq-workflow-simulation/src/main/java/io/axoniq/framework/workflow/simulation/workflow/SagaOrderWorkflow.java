@@ -22,6 +22,7 @@ import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.retry.BackoffStrategy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.FulfillmentConfirmedEvent;
 
@@ -267,6 +268,8 @@ public class SagaOrderWorkflow {
             // Fulfillment never confirmed: stock was reserved AND payment charged — compensate both, cancel the order.
             compensate(ctx, workflowId, true);
             ctx.cancel();
+        } catch (StepInterruptedException e) {
+            throw e; // an engine interrupt is not a step failure: the step resumes on the next start
         } catch (StepFailedException e) {
             // Charge declined (or resolved indeterminate after a crash): nothing charged — release the stock, fail.
             compensate(ctx, workflowId, false);

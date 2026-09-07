@@ -22,6 +22,7 @@ import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.retry.BackoffStrategy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.PaymentConfirmedEvent;
 
 import java.time.Duration;
@@ -165,6 +166,8 @@ public class OrderWorkflow {
                     step -> step.retryPolicy(RetryPolicy.maxRetries(SHIP_ORDER_MAX_RETRIES)
                                                         .withBackoff(BackoffStrategy.fixed(Duration.ofMillis(200))))
             );
+        } catch (StepInterruptedException e) {
+            throw e; // an engine interrupt is not a step failure: the step resumes on the next start
         } catch (StepFailedException e) {
             // AT-MOST-ONCE (F-0): a step whose action was in-flight at a crash is NOT re-run on recovery; it surfaces
             // here as a StepFailedException (cause StepIndeterminateException). The engine does not auto-fail the

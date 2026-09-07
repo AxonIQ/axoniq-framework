@@ -46,7 +46,10 @@ class InterruptedTerminalTransitionTest {
     @Test
     @Timeout(value = 5, unit = TimeUnit.MINUTES)
     void anInterruptedTerminalTransitionRecordsItsTerminalFactTwice() {
-        var outcome = InterruptedTerminalTransitionScenario.run(5L, "dbl", 6);
+        // The window between the terminal event being durable and being evolved back into state is sub-millisecond, so
+        // an attempt misses it more often than not on a loaded machine; a missed attempt costs about 10 ms, so budget
+        // many fresh worlds rather than a few.
+        var outcome = InterruptedTerminalTransitionScenario.run(5L, "dbl", 40);
         logger.info("Interrupted terminal transition: {}", outcome);
 
         assertThat(outcome.caughtWindow())

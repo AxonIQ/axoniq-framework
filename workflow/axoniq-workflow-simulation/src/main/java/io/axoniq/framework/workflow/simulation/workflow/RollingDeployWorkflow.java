@@ -20,6 +20,7 @@ package io.axoniq.framework.workflow.simulation.workflow;
 
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.ApprovalGrantedEvent;
 
@@ -124,6 +125,8 @@ public class RollingDeployWorkflow {
             fulfill(ctx, workflowId);
         } catch (StepTimedOutException e) {
             ctx.cancel();
+        } catch (StepInterruptedException e) {
+            throw e; // an engine interrupt is not a step failure: the step resumes on the next start
         } catch (StepFailedException e) {
             // Fuzz-workload hardening (OrderWorkflow pattern): drive crash-resolved step failures to terminal FAILED.
             ctx.fail(e);
@@ -147,6 +150,8 @@ public class RollingDeployWorkflow {
             fulfill(ctx, workflowId);
         } catch (StepTimedOutException e) {
             ctx.cancel();
+        } catch (StepInterruptedException e) {
+            throw e; // an engine interrupt is not a step failure: the step resumes on the next start
         } catch (StepFailedException e) {
             ctx.fail(e);
         }
@@ -168,6 +173,8 @@ public class RollingDeployWorkflow {
             fulfill(ctx, workflowId);
         } catch (StepTimedOutException e) {
             ctx.cancel();
+        } catch (StepInterruptedException e) {
+            throw e; // an engine interrupt is not a step failure: the step resumes on the next start
         } catch (StepFailedException e) {
             ctx.fail(e);
         }

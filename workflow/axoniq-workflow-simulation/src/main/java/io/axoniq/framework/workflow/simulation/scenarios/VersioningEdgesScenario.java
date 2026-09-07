@@ -176,9 +176,11 @@ public final class VersioningEdgesScenario {
             // deliver the signal yet — the instance must still be mid-flight at the crash so the resumed final step runs
             // under whatever the recovered registry routes it to.
             world.engine().publish(new VersioningEdgesRequestedEvent(orderId));
+            // Wait for the awaitSignal STARTED record itself: crashing on the mere presence of a downgradeRejected record
+            // could land between its STARTED and COMPLETED, and the recovered body would then resolve that step as
+            // indeterminate instead of parking.
             Polling.awaitOrFail(Duration.ofSeconds(10), "vedge routing instance to suspend at awaitSignal",
-                                () -> hasStep(world.committedLog(), workflowId,
-                                              VersioningEdgesWorkflow.STEP_DOWNGRADE_REJECTED)
+                                () -> hasStep(world.committedLog(), workflowId, VersioningEdgesWorkflow.STEP_AWAIT_SIGNAL)
                                         && !isTerminal(world.committedLog(), workflowId));
 
             // 2. Crash + recover under the REDUCED registry (highest version 2.0.0 dropped; only 1.0.0 + 1.5.0 remain).

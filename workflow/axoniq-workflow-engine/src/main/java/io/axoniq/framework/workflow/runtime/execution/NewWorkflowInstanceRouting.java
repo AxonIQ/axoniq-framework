@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -106,6 +107,15 @@ final class NewWorkflowInstanceRouting {
                             + "treated as a duplicate. To run two instances of the same version in parallel, "
                             + "use a different idProperty value.",
                     baseWorkflowId, existingVersion, eventMessage.type().qualifiedName()
+            );
+            return null;
+        }
+        if (Version.of(existingVersion).isGreaterThan(Version.of(newInstanceVersion))) {
+            logger.warn(
+                    "A workflow with id '{}' is already running at version '{}', above the requested version '{}'; "
+                            + "ignoring new start request triggered by event '{}'. The running instance migrated past "
+                            + "the registered version, so this start is treated as a duplicate.",
+                    baseWorkflowId, existingVersion, newInstanceVersion, eventMessage.type().qualifiedName()
             );
             return null;
         }

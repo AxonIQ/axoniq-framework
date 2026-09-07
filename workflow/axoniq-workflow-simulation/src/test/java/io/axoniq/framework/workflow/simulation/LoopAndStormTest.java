@@ -76,10 +76,14 @@ class LoopAndStormTest {
         // and flips exactly when the fixes land. The remaining nondeterminism (0 vs ≥2) is real thread
         // scheduling — the dimension Phase 2 (deterministic scheduler / interleaving fuzz) makes seeded and
         // explorable; the strict F-20 acceptance then moves to that probe.
+        // 2026-09: the >=2 mode is closed. The cancellation and termination rework discards the queued tasks before the
+        // terminal event is published (SimpleWorkflowExecution.transitionToTerminalState), so the duplicate timed-out
+        // publishes never run. The in-memory publish gate itself is unchanged (AbstractStepExecutor), so F-20 stays on
+        // FOLLOW-UPS as a latent gate; only the count is now pinned tight. A fixed F-19 (blocking sleep) yields 1.
         assertThat(outcome.retryDelayTerminalRecords())
-                .as("EXPECTED GAP (Phase-1' re-pin): reused-name sleep records 0 (never fired before exhaustion) "
-                            + "or ≥2 (duplicate terminals) — never the fixed-engine 1; see comment")
-                .isNotEqualTo(1);
+                .as("EXPECTED GAP: the reused-name sleep records no terminal (F-19 open; F-20 duplicate mode closed by "
+                            + "the terminal-transition queue discard); a fixed F-19 yields exactly 1")
+                .isEqualTo(0);
 
         // The probe body bounds the spin and fails explicitly; a production body (the canonical example has no
         // bound) would spin forever, non-terminal and invisible.
