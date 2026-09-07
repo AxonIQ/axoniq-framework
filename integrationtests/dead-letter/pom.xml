@@ -28,7 +28,7 @@
         <relativePath>../../build/parent/pom.xml</relativePath>
     </parent>
 
-    <artifactId>axoniq-integrationtests-deadletter</artifactId>
+    <artifactId>axoniq-integrationtests-dead-letter</artifactId>
 
     <name>Axoniq Framework - Integration Tests - Dead Letter</name>
     <description>

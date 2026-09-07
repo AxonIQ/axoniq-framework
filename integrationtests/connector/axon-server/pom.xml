@@ -25,15 +25,15 @@
         <groupId>io.axoniq.framework</groupId>
         <artifactId>axoniq-framework-parent</artifactId>
         <version>${revision}</version>
-        <relativePath>../../build/parent/pom.xml</relativePath>
+        <relativePath>../../../build/parent/pom.xml</relativePath>
     </parent>
 
-    <artifactId>axoniq-integrationtests-queryhandling</artifactId>
+    <artifactId>axoniq-integrationtests-connector-axon-server</artifactId>
 
-    <name>Axoniq Framework - Integration Tests - Query Handling</name>
+    <name>Axoniq Framework - Integration Tests - Connector - Axon Server</name>
     <description>
-        Integration tests for the distributed query bus against a real Axon Server. Does not
-        contain any production code.
+        Integration tests for the Axon Server connector: snapshotting, persistent streams and the
+        distributed query bus against a real Axon Server. Does not contain any production code.
     </description>
 
     <dependencies>
@@ -51,11 +51,24 @@
         </dependency>
         <dependency>
             <groupId>org.axonframework</groupId>
+            <artifactId>axon-eventsourcing</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.axonframework</groupId>
             <artifactId>axon-integrationtests</artifactId>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-integrationtests-support</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axon-server-connector</artifactId>
