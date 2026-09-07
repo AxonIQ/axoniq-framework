@@ -134,7 +134,25 @@ unescape_xml() {
     | sed -E 's/[[:space:]]+/ /g; s/^[[:space:];]+//; s/[[:space:];]+$//; s/;( ;)+/;/g'
 }
 
+total=$(wc -l < "$RAW_ROWS")
+cachedCount=$(awk -F'\t' '$2 == "cached"' "$RAW_ROWS" | wc -l)
+builtCount=$(awk -F'\t' '$2 == "built"' "$RAW_ROWS" | wc -l)
+successCount=$(awk -F'\t' '$3 == "SUCCESS"' "$RAW_ROWS" | wc -l)
+failureCount=$(awk -F'\t' '$3 == "FAILURE"' "$RAW_ROWS" | wc -l)
+skippedCount=$(awk -F'\t' '$3 == "SKIPPED"' "$RAW_ROWS" | wc -l)
+
+if [ "$failureCount" -gt 0 ]; then
+  summary="**FAILURE** - ${successCount} succeeded, ${failureCount} failed, ${skippedCount} skipped (${cachedCount} cached, ${builtCount} built)"
+else
+  summary="**SUCCESS** - ${total} modules (${cachedCount} cached, ${builtCount} built)"
+fi
+
 {
+  echo "$summary"
+  echo
+  echo "<details>"
+  echo "<summary>Per-module details</summary>"
+  echo
   echo "| Module | Cache | Status | Time | Details |"
   echo "|---|---|---|---|---|"
   while IFS=$'\t' read -r artifact cache status time; do
@@ -158,6 +176,8 @@ unescape_xml() {
     fi
     printf '| %s | %s | %s | %s | %s |\n' "$artifact" "$cache" "$status" "$time" "$details"
   done < "$RAW_ROWS"
+  echo
+  echo "</details>"
 } > "$OUT_FILE"
 
 echo "Report written to $OUT_FILE"
