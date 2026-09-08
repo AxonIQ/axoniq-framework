@@ -246,6 +246,14 @@ public abstract class AbstractStepExecutor {
         ), getContext(stepName));
     }
 
+    protected CompletableFuture<Void> retryStarted(String stepName,
+                                                   StepRetryInfo retryInfo,
+                                                   EventNameCustomizer eventNameCustomizer) {
+        return sendStepEvent(stepName, retryStartedStep(workflowContext, stepName, retryInfo,
+                                                        merge(parentEventNameCustomizer, eventNameCustomizer)
+        ), getContext(stepName));
+    }
+
     protected CompletableFuture<Void> timedOut(String stepName,
                                                EventNameCustomizer eventNameCustomizer) {
         return timedOut(stepName, Instant.now(clock), eventNameCustomizer);

@@ -29,6 +29,11 @@ package io.axoniq.framework.workflow.runtime.api.execution.status;
 public enum StepStatus {
     STARTED,
     RETRYING,
+    /**
+     * A retry attempt was accepted by the store and is running. Recorded once per retry attempt, after the
+     * {@link #RETRYING} record of the attempt that failed.
+     */
+    RETRY_STARTED,
     COMPLETED,
     FAILED,
     TIMED_OUT,
@@ -41,7 +46,7 @@ public enum StepStatus {
      */
     public boolean isTerminal() {
         return switch (this) {
-            case STARTED, RETRYING -> false;
+            case STARTED, RETRYING, RETRY_STARTED -> false;
             case COMPLETED, FAILED, CANCELLED, TIMED_OUT -> true;
         };
     }

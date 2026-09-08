@@ -182,6 +182,33 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
+    void evolveStepRetryStartedAfterRetrying() {
+        // given a step whose first attempt failed
+        String stepName = "testStep";
+        WorkflowError error = WorkflowError.from(new RuntimeException("retry error"));
+        state.evolve(stepEvent(stepName, StepStatus.RETRYING, new StepRetryInfo(1, 3, error)), processingContext);
+
+        // when the store accepts the start of attempt 2
+        StepRetryInfo attemptTwo = new StepRetryInfo(2, 3, error);
+        state.evolve(stepEvent(stepName, StepStatus.RETRY_STARTED, attemptTwo), processingContext);
+
+        // then the step is running attempt 2 and keeps the error that triggered the retry
+        WorkflowStep step = state.getStep(stepName);
+        assertThat(step.status()).isEqualTo(StepStatus.RETRY_STARTED);
+        assertThat(step.result()).isEqualTo(attemptTwo);
+        assertThat(step.error()).isInstanceOfSatisfying(WorkflowExecutionException.class, e ->
+                assertThat(e.getMessage()).isEqualTo("retry error"));
+    }
+
+    private static EventMessage stepEvent(String stepName, StepStatus status, StepRetryInfo retryInfo) {
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(MetadataUtils.create("workflowId", stepName, status));
+        when(eventMessage.timestamp()).thenReturn(Instant.now());
+        when(eventMessage.payloadAs(StepRetryInfo.class)).thenReturn(retryInfo);
+        return eventMessage;
+    }
+
+    @Test
     void evolveStepCompletedAndEvolvePayload() {
         String stepName = "testStep";
         Map<String, @Nullable Object> initialPayload = Map.of("key1", "value1");

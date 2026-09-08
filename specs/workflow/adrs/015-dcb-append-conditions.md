@@ -99,15 +99,18 @@ sequenceDiagram
 ## Consequences
 
 Duplicate side effects are prevented, not just detected: a step publishes `STARTED` and blocks until it is redelivered
-before invoking its action, so a rejected `STARTED` means the action never runs.
+before invoking its action, so a rejected `STARTED` means the action never runs. Every retry attempt passes the same
+gate with its own `RETRY_STARTED` record, whose payload carries the attempt number. A node that lost the instance during
+a retry backoff has that append rejected when its timer fires and never runs the action. Cost: 1 event per retry
+attempt. The per-attempt timeout starts at the attempt's own `RETRY_STARTED`, not at the preceding `RETRYING`.
 
 A body already inside its call when the claim moved still lands that effect, and nobody re-runs it, so the step ends
 indeterminate with an orphan effect.
 
 Re-spawning a used workflow id is rejected by the `ORIGIN`-anchored first append instead of silently lost.
 
-`RETRYING` needs no special case: conditions assert nothing new after the marker, not the absence of a fact, so
-legitimate repeats pass.
+`RETRYING` and `RETRY_STARTED` need no special case: conditions assert nothing new after the marker, not the absence
+of a fact, so legitimate repeats pass.
 
 No new tags. The step-scoped tags a previous iteration added (`stepName`, `stepEvent`, `workflowEvent=terminal`) are
 gone; `workflowId` was already on every engine event.

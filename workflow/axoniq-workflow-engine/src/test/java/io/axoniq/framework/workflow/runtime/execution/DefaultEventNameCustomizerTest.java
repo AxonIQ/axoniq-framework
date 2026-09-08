@@ -172,6 +172,19 @@ class DefaultEventNameCustomizerTest {
         }
 
         @Test
+        void testStepRetryStartedDefaultsToRetryStarted() {
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.RETRY_STARTED).localName())
+                    .isEqualTo("StepRetryStarted");
+        }
+
+        @Test
+        void testStepRetryStarted() {
+            customizer.stepRetryStarted("Reattempt");
+            assertThat(customizer.getEventName("step", Map.of(), StepStatus.RETRY_STARTED).localName())
+                    .isEqualTo("StepReattempt");
+        }
+
+        @Test
         void testStepTimedOut() {
             customizer.stepTimedOut("Timeout");
             assertThat(customizer.getEventName("step", Map.of(), StepStatus.TIMED_OUT).localName()).isEqualTo("StepTimeout");
