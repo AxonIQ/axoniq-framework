@@ -19,7 +19,6 @@
 
 package io.axoniq.framework.integrationtests.testsuite.infrastructure;
 
-import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.integrationtests.testsuite.infrastructure.InMemoryTestInfrastructure;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
@@ -28,13 +27,9 @@ import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastru
  * {@link TestInfrastructure} implementation backed by Axon Framework's {@link InMemoryTestInfrastructure}, with
  * multi-tenancy switched off.
  * <p>
- * This module carries {@code axoniq-multi-tenancy} on its classpath, so its enhancers reach every configuration built
- * here through the {@link java.util.ServiceLoader}. Tenants are Axon Server contexts, so multi-tenancy cannot function
- * on an in-memory infrastructure at all: its tenant provider resolves an Axon Server connection manager and fails when
- * there is none. Leaf tests in this module therefore use this class rather than {@link InMemoryTestInfrastructure}
- * directly, which also keeps Axon Framework free of any knowledge of multi-tenancy.
- * <p>
- * Opting out itself is {@link MultiTenancyUtils#disable(ComponentRegistry)}.
+ * Tenants are Axon Server contexts, so multi-tenancy cannot function on an in-memory infrastructure at all: its tenant
+ * provider resolves an Axon Server connection manager and fails when there is none. Leaf tests therefore use this class
+ * rather than {@link InMemoryTestInfrastructure} directly.
  * <p>
  * Leaf test classes should hold a {@code private static final} instance of this class:
  * <pre>{@code
@@ -61,7 +56,7 @@ public final class SingleTenantInMemoryTestInfrastructure implements TestInfrast
     @Override
     public void configureInfrastructure(ComponentRegistry registry) {
         delegate.configureInfrastructure(registry);
-        MultiTenancyUtils.disable(registry);
+        AxonIntegrationTestSupport.disableMultiTenancy.accept(registry);
     }
 
     @Override

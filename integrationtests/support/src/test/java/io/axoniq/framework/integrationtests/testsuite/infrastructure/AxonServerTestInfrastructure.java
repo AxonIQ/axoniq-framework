@@ -20,9 +20,9 @@
 package io.axoniq.framework.integrationtests.testsuite.infrastructure;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
-import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
 import org.slf4j.Logger;
@@ -36,6 +36,8 @@ import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.*;
+import static io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonIntegrationTestSupport.disableMultiTenancy;
+import static io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonIntegrationTestSupport.isMultiTenancyAvailable;
 
 /**
  * {@link TestInfrastructure} implementation that wires tests against a real Axon Server instance managed by
@@ -56,10 +58,8 @@ import static io.axoniq.framework.axonserver.connector.api.AxonServerConfigurati
  * }
  * }</pre>
  * <p>
- * This module carries {@code axoniq-multi-tenancy} on its classpath, so its enhancers reach every configuration built
- * here through the {@link java.util.ServiceLoader}. Instances are therefore created through
- * {@link #singleTenant(Consumer...)} or {@link #multiTenant(Consumer...)}, so each suite states whether it exercises
- * multi-tenancy instead of leaving that to be inferred.
+ * Instances are created through {@link #singleTenant(Consumer...)} or {@link #multiTenant(Consumer...)}, so each suite
+ * states whether it exercises multi-tenancy instead of leaving that to be inferred.
  *
  * @since 5.1.0
  */
@@ -68,6 +68,8 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
     private static final Logger LOG = LoggerFactory.getLogger(AxonServerTestInfrastructure.class);
 
     public static final String AXON_SERVER_TEST_LICENSE = "axon-server-test.license";
+    private static final String MULTI_TENANCY_UTILS =
+            "io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils";
     private static final AxonServerContainer CONTAINER =
             new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:latest")
                     .withAxonServerHostname("localhost")
@@ -133,9 +135,16 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
      */
     private AxonServerTestInfrastructure(List<Consumer<ComponentRegistry>> infrastructureConfigurators,
                                          boolean multiTenancyActive) {
+        if (multiTenancyActive && !isMultiTenancyAvailable()) {
+            throw new AxonConfigurationException(
+                    "Cannot create a multi-tenant AxonServerTestInfrastructure: "
+                            + MULTI_TENANCY_UTILS + " is not on the classpath"
+            );
+        }
+
         this.infrastructureConfigurators = multiTenancyActive
                 ? List.copyOf(infrastructureConfigurators)
-                : Stream.concat(Stream.of(MultiTenancyUtils::disable), infrastructureConfigurators.stream()).toList();
+                : Stream.concat(Stream.of(disableMultiTenancy), infrastructureConfigurators.stream()).toList();
     }
 
     @Override
