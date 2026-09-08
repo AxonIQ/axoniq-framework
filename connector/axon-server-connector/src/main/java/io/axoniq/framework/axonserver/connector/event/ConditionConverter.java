@@ -28,7 +28,6 @@ import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.Tag;
 import io.axoniq.axonserver.grpc.event.dcb.TagsAndNamesCriterion;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
@@ -42,8 +41,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 
-import static java.util.Objects.requireNonNull;
-
 /**
  * Utility class containing operations to convert Axon Framework's {@link SourcingCondition} and
  * {@link StreamingCondition} into an Axon Server {@link SourceEventsRequest} and {@link StreamEventsRequest}
@@ -54,8 +51,6 @@ import static java.util.Objects.requireNonNull;
  */
 @Internal
 public final class ConditionConverter {
-
-    private static final ByteString SNAPSHOT_KEY_SEPARATOR = ByteString.copyFrom(new byte[]{0});
 
     /**
      * Converts the given {@code condition} into a {@link ConsistencyCondition}.
@@ -95,46 +90,18 @@ public final class ConditionConverter {
     }
 
     /**
-     * Converts the given {@code condition} into a {@link SnapshottedSourceRequest}.
-     * <p>
-     * The {@code name} and {@code identifier} (converted to bytes using the given {@code converter}) identify the
-     * snapshot Axon Server should prefix the resulting stream with, if one is present, translating to the
-     * {@link SnapshottedSourceRequest#getSnapshotKey() snapshot key value}. The {@link SourcingCondition#criteria()}
-     * are {@link EventCriteria#flatten() flattened} before being mapped to {@link Criterion}.
+     * Converts the given {@code condition} and {@code snapshotKey} into a {@link SnapshottedSourceRequest}.
      *
-     * @param condition  the {@code SourcingCondition} to base the {@link SnapshottedSourceRequest} on
-     * @param converter  the {@code Converter} used to convert the {@code name} and {@code identifier} into the snapshot
-     *                   key bytes
-     * @param name       the {@link QualifiedName} defining the snapshot type to prefix the resulting stream with, if
-     *                   present
-     * @param identifier the identifier of the snapshotted entity to prefix the resulting stream with, if present
-     * @return a {@code SnapshottedSourceRequest} based on the given {@code condition}, {@code name}, and
-     * {@code identifier}
+     * @param condition   the {@code SourcingCondition} to base the {@link SnapshottedSourceRequest} on
+     * @param snapshotKey the key identifying the snapshotted entity to prefix the resulting stream with, if present
+     * @return a {@code SnapshottedSourceRequest} based on the given {@code condition} and {@code snapshotKey}
      */
     public static SnapshottedSourceRequest convertSnapshottedSourcingCondition(SourcingCondition condition,
-                                                                               Converter converter,
-                                                                               QualifiedName name,
-                                                                               Object identifier) {
+                                                                               ByteString snapshotKey) {
         return SnapshottedSourceRequest.newBuilder()
-                                       .setSnapshotKey(convertSnapshotKey(converter, name, identifier))
+                                       .setSnapshotKey(snapshotKey)
                                        .addAllCriterion(convertEventCriterion(condition.criteria().flatten()))
                                        .build();
-    }
-
-    private static ByteString convertSnapshotKey(Converter converter,
-                                                 QualifiedName name,
-                                                 Object identifier) {
-        byte[] nameAsBytes = requireNonNull(
-                converter.convert(name.name(), byte[].class),
-                "Converted name must not be null."
-        );
-        byte[] idAsBytes = requireNonNull(
-                converter.convert(identifier, byte[].class),
-                "Converted identifier must not be null."
-        );
-        return ByteString.copyFrom(nameAsBytes)
-                         .concat(SNAPSHOT_KEY_SEPARATOR)
-                         .concat(ByteString.copyFrom(idAsBytes));
     }
 
     /**

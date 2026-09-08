@@ -26,8 +26,6 @@ import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceRequest;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.TagsAndNamesCriterion;
-import org.axonframework.conversion.Converter;
-import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPositions;
@@ -128,20 +126,16 @@ class ConditionConverterTest {
 
     @Test
     void convertSnapshottedSourcingConditionThrowsNullPointerExceptionForNullSourcingCondition() {
-        Converter converter = new JacksonConverter();
-        QualifiedName qualifiedName = new QualifiedName("test-entity");
+        ByteString snapshotKey = ByteString.copyFromUtf8("test-entity");
         //noinspection DataFlowIssue
-        assertThatThrownBy(() -> ConditionConverter.convertSnapshottedSourcingCondition(
-                null, converter, qualifiedName, "entity-id"
-        )).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> ConditionConverter.convertSnapshottedSourcingCondition(null, snapshotKey))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void convertSnapshottedSourcingConditionConstructsSnapshottedSourceRequestAsExpected() {
         // given...
-        Converter converter = new JacksonConverter();
-        QualifiedName qualifiedName = new QualifiedName("test-entity");
-        String identifier = "entity-id";
+        ByteString snapshotKey = ByteString.copyFromUtf8("test-entity" + '\0' + "entity-id");
         SourcingCondition testCondition = SourcingCondition.conditionFor(
                 EventCriteria.havingTags(
                                      Tag.of("key1OnCriterion1", "value1OnCriterion1"),
@@ -159,14 +153,10 @@ class ConditionConverterTest {
         );
         // when...
         SnapshottedSourceRequest result = ConditionConverter.convertSnapshottedSourcingCondition(
-                testCondition, converter, qualifiedName, identifier
+                testCondition, snapshotKey
         );
         // then...
-        ByteString expectedSnapshotKey =
-                ByteString.copyFrom(converter.convert(qualifiedName.name(), byte[].class))
-                          .concat(ByteString.copyFrom(new byte[]{0}))
-                          .concat(ByteString.copyFrom(converter.convert(identifier, byte[].class)));
-        assertThat(result.getSnapshotKey()).isEqualTo(expectedSnapshotKey);
+        assertThat(result.getSnapshotKey()).isEqualTo(snapshotKey);
         List<Criterion> resultCriterion = result.getCriterionList();
         assertThat(resultCriterion).hasSize(3);
         validateCriterion(resultCriterion.getFirst().getTagsAndNames());

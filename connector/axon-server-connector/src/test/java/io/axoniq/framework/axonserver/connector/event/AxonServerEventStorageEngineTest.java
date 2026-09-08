@@ -19,19 +19,23 @@
 
 package io.axoniq.framework.axonserver.connector.event;
 
+import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.ResultStream;
 import io.axoniq.axonserver.connector.event.DcbEventChannel;
 import io.axoniq.axonserver.connector.event.SnapshotChannel;
+import io.axoniq.axonserver.grpc.event.dcb.AddSnapshotRequest;
 import io.axoniq.axonserver.grpc.event.dcb.AddSnapshotResponse;
 import io.axoniq.axonserver.grpc.event.dcb.AppendEventsResponse;
 import io.axoniq.axonserver.grpc.event.dcb.Event;
+import io.axoniq.axonserver.grpc.event.dcb.GetLastSnapshotRequest;
 import io.axoniq.axonserver.grpc.event.dcb.GetLastSnapshotResponse;
 import io.axoniq.axonserver.grpc.event.dcb.SequencedEvent;
 import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceEventsResponse;
 import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceRequest;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsResponse;
+import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
 import io.grpc.Status;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
@@ -42,6 +46,7 @@ import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
 import org.axonframework.eventsourcing.eventstore.Position;
+import org.axonframework.eventsourcing.eventstore.SnapshotEventMessage;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
@@ -52,6 +57,7 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
@@ -84,6 +90,7 @@ class AxonServerEventStorageEngineTest {
     private ResultStream<SourceEventsResponse> sourcingStream;
     private DcbEventChannel dcbEventChannel;
     private SnapshotChannel snapshotChannel;
+    private EventConverter eventConverter;
 
     private AxonServerEventStorageEngine testSubject;
 
@@ -94,6 +101,7 @@ class AxonServerEventStorageEngineTest {
         dcbEventChannel = mock(DcbEventChannel.class);
         sourcingStream = mock(ResultStream.class);
         snapshotChannel = mock(SnapshotChannel.class);
+        eventConverter = new DelegatingEventConverter(new JacksonConverter());
 
         when(connection.dcbEventChannel()).thenReturn(dcbEventChannel);
         when(connection.snapshotChannel()).thenReturn(snapshotChannel);
@@ -101,10 +109,7 @@ class AxonServerEventStorageEngineTest {
         when(sourcingStream.getError()).thenReturn(java.util.Optional.empty());
         when(sourcingStream.isClosed()).thenReturn(true);
 
-        testSubject = new AxonServerEventStorageEngine(
-                connection,
-                new DelegatingEventConverter(new JacksonConverter())
-        );
+        testSubject = new AxonServerEventStorageEngine(connection, eventConverter);
     }
 
     @Test
@@ -149,7 +154,7 @@ class AxonServerEventStorageEngineTest {
         private final String identifier = "entity-id";
 
         @Test
-        void storeDelegatesToTheInternalSnapshotStore() {
+        void storeDelegatesToTheInternalSnapshotStoreUsingTheSharedKeyFormat() {
             // given
             when(snapshotChannel.addSnapshot(any()))
                     .thenReturn(CompletableFuture.completedFuture(AddSnapshotResponse.newBuilder().build()));
@@ -160,12 +165,15 @@ class AxonServerEventStorageEngineTest {
             // when
             testSubject.store(qualifiedName, identifier, snapshot, null).orTimeout(5, TimeUnit.SECONDS).join();
 
-            // then
-            verify(snapshotChannel).addSnapshot(any());
+            // then the key sent to Axon Server matches the single owner of the snapshot key wire format
+            ArgumentCaptor<AddSnapshotRequest> captor = ArgumentCaptor.forClass(AddSnapshotRequest.class);
+            verify(snapshotChannel).addSnapshot(captor.capture());
+            ByteString expectedKey = AxonServerSnapshotStore.snapshotKey(eventConverter, qualifiedName, identifier);
+            assertThat(captor.getValue().getKey()).isEqualTo(expectedKey);
         }
 
         @Test
-        void loadDelegatesToTheInternalSnapshotStore() {
+        void loadDelegatesToTheInternalSnapshotStoreUsingTheSharedKeyFormat() {
             // given
             io.axoniq.axonserver.grpc.event.dcb.Snapshot storedSnapshot =
                     io.axoniq.axonserver.grpc.event.dcb.Snapshot.newBuilder()
@@ -186,18 +194,42 @@ class AxonServerEventStorageEngineTest {
             // then
             assertThat(result).isNotNull();
             assertThat(result.position()).isEqualTo(new GlobalIndexPosition(42L));
-            verify(snapshotChannel).getLastSnapshot(any());
+            ArgumentCaptor<GetLastSnapshotRequest> captor = ArgumentCaptor.forClass(GetLastSnapshotRequest.class);
+            verify(snapshotChannel).getLastSnapshot(captor.capture());
+            ByteString expectedKey = AxonServerSnapshotStore.snapshotKey(eventConverter, qualifiedName, identifier);
+            assertThat(captor.getValue().getKey()).isEqualTo(expectedKey);
         }
 
         @Test
         @SuppressWarnings("unchecked")
-        void sourceWithUnboundedSnapshotStrategyUsesTheSingleRoundTripPath() {
-            // given
+        void sourceWithUnboundedSnapshotStrategyEmitsStoredSnapshotBeforeSubsequentEvents() {
+            // given a snapshot followed by one event and the consistency marker on the single-round-trip stream
             ResultStream<SnapshottedSourceEventsResponse> snapshottedStream = mock(ResultStream.class);
             when(snapshottedStream.getError()).thenReturn(java.util.Optional.empty());
             when(snapshottedStream.isClosed()).thenReturn(true);
+
+            io.axoniq.axonserver.grpc.event.dcb.Snapshot storedSnapshot =
+                    io.axoniq.axonserver.grpc.event.dcb.Snapshot.newBuilder()
+                                                                .setName(qualifiedName.fullName())
+                                                                .setVersion("0.0.1")
+                                                                .setTimestamp(Instant.now().toEpochMilli())
+                                                                .build();
+            Event storedEvent = Event.newBuilder()
+                                     .setIdentifier(UUID.randomUUID().toString())
+                                     .setTimestamp(Instant.now().toEpochMilli())
+                                     .setName(EVENT_NAME)
+                                     .setVersion("0.0.1")
+                                     .build();
             when(snapshottedStream.nextIfAvailable()).thenReturn(
-                    SnapshottedSourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null
+                    SnapshottedSourceEventsResponse.newBuilder().setSnapshot(storedSnapshot).build(),
+                    SnapshottedSourceEventsResponse.newBuilder()
+                                                   .setEvent(SequencedEvent.newBuilder()
+                                                                           .setEvent(storedEvent)
+                                                                           .setSequence(5L)
+                                                                           .build())
+                                                   .build(),
+                    SnapshottedSourceEventsResponse.newBuilder().setConsistencyMarker(5L).build(),
+                    null
             );
             when(dcbEventChannel.source(any(SnapshottedSourceRequest.class))).thenReturn(snapshottedStream);
 
@@ -206,8 +238,14 @@ class AxonServerEventStorageEngineTest {
                     EventCriteria.havingTags("AGGREGATE_TYPE", identifier)
             );
 
-            // when / then
+            // when / then the snapshot comes first, positioned right before the event that follows it
             StepVerifier.create(FluxUtils.of(testSubject.source(condition, null)))
+                        .assertNext(entry -> {
+                            assertThat(entry.message()).isInstanceOf(SnapshotEventMessage.class);
+                            Snapshot emitted = ((SnapshotEventMessage) entry.message()).payload();
+                            assertThat(emitted.position()).isEqualTo(new GlobalIndexPosition(4L));
+                        })
+                        .assertNext(entry -> assertThat(entry.message().type().name()).isEqualTo(EVENT_NAME))
                         .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
                         .verifyComplete();
 
@@ -240,6 +278,96 @@ class AxonServerEventStorageEngineTest {
             verify(dcbEventChannel).source(captor.capture());
             assertThat(captor.getValue().getFromSequence()).isEqualTo(GlobalIndexPosition.toIndex(Position.START));
             verify(dcbEventChannel, never()).source(any(SnapshottedSourceRequest.class));
+        }
+
+        @Test
+        void sourceWithBoundedSnapshotStrategyPrependsSnapshotWhenWithinMaximumPosition() {
+            // given a snapshot at position 50, within the requested maximum position of 100
+            io.axoniq.axonserver.grpc.event.dcb.Snapshot storedSnapshot =
+                    io.axoniq.axonserver.grpc.event.dcb.Snapshot.newBuilder()
+                                                                .setName(qualifiedName.fullName())
+                                                                .setVersion("0.0.1")
+                                                                .putMetadata("__AxonFramework__:Position-Type", "GIP")
+                                                                .build();
+            when(snapshotChannel.getLastSnapshot(any())).thenReturn(CompletableFuture.completedFuture(
+                    GetLastSnapshotResponse.newBuilder().setSnapshot(storedSnapshot).setSequence(50L).build()
+            ));
+            when(sourcingStream.nextIfAvailable())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(50L).build(), null);
+            when(sourcingStream.peek())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(50L).build(), null);
+
+            SourcingCondition condition = SourcingCondition.conditionFor(
+                    new SourcingStrategy.Snapshot(qualifiedName, identifier, new GlobalIndexPosition(100L)),
+                    EventCriteria.havingTags("AGGREGATE_TYPE", identifier)
+            );
+
+            // when / then the snapshot is emitted first, followed by events sourced from the snapshot's position
+            StepVerifier.create(FluxUtils.of(testSubject.source(condition, null)))
+                        .assertNext(entry -> assertThat(entry.message()).isInstanceOf(SnapshotEventMessage.class))
+                        .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
+                        .verifyComplete();
+
+            ArgumentCaptor<SourceEventsRequest> captor = ArgumentCaptor.forClass(SourceEventsRequest.class);
+            verify(dcbEventChannel).source(captor.capture());
+            assertThat(captor.getValue().getFromSequence()).isEqualTo(50L);
+        }
+
+        @Test
+        void sourceWithBoundedSnapshotStrategyFallsBackToStartWhenSnapshotIsAfterMaximumPosition() {
+            // given a snapshot at position 150, beyond the requested maximum position of 100
+            io.axoniq.axonserver.grpc.event.dcb.Snapshot storedSnapshot =
+                    io.axoniq.axonserver.grpc.event.dcb.Snapshot.newBuilder()
+                                                                .setName(qualifiedName.fullName())
+                                                                .setVersion("0.0.1")
+                                                                .putMetadata("__AxonFramework__:Position-Type", "GIP")
+                                                                .build();
+            when(snapshotChannel.getLastSnapshot(any())).thenReturn(CompletableFuture.completedFuture(
+                    GetLastSnapshotResponse.newBuilder().setSnapshot(storedSnapshot).setSequence(150L).build()
+            ));
+            when(sourcingStream.nextIfAvailable())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null);
+            when(sourcingStream.peek())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null);
+
+            SourcingCondition condition = SourcingCondition.conditionFor(
+                    new SourcingStrategy.Snapshot(qualifiedName, identifier, new GlobalIndexPosition(100L)),
+                    EventCriteria.havingTags("AGGREGATE_TYPE", identifier)
+            );
+
+            // when / then the snapshot is discarded, sourcing falls back to the very beginning
+            StepVerifier.create(FluxUtils.of(testSubject.source(condition, null)))
+                        .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
+                        .verifyComplete();
+
+            ArgumentCaptor<SourceEventsRequest> captor = ArgumentCaptor.forClass(SourceEventsRequest.class);
+            verify(dcbEventChannel).source(captor.capture());
+            assertThat(captor.getValue().getFromSequence()).isEqualTo(GlobalIndexPosition.toIndex(Position.START));
+        }
+
+        @Test
+        void sourceWithBoundedSnapshotStrategyFallsBackToFullReconstructionWhenSnapshotLoadFails() {
+            // given the snapshot load fails with something other than "not found"
+            when(snapshotChannel.getLastSnapshot(any()))
+                    .thenReturn(CompletableFuture.failedFuture(Status.UNAVAILABLE.asRuntimeException()));
+            when(sourcingStream.nextIfAvailable())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null);
+            when(sourcingStream.peek())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null);
+
+            SourcingCondition condition = SourcingCondition.conditionFor(
+                    new SourcingStrategy.Snapshot(qualifiedName, identifier, new GlobalIndexPosition(100L)),
+                    EventCriteria.havingTags("AGGREGATE_TYPE", identifier)
+            );
+
+            // when / then the failure does not propagate; sourcing falls back to full reconstruction instead
+            StepVerifier.create(FluxUtils.of(testSubject.source(condition, null)))
+                        .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
+                        .verifyComplete();
+
+            ArgumentCaptor<SourceEventsRequest> captor = ArgumentCaptor.forClass(SourceEventsRequest.class);
+            verify(dcbEventChannel).source(captor.capture());
+            assertThat(captor.getValue().getFromSequence()).isEqualTo(GlobalIndexPosition.toIndex(Position.START));
         }
     }
 

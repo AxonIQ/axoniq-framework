@@ -43,6 +43,8 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * An Axon Server based implementation of {@link SnapshotStore}.
  * <p>
@@ -54,7 +56,7 @@ import java.util.concurrent.CompletionException;
 public class AxonServerSnapshotStore implements SnapshotStore {
 
     private static final String POSITION_TYPE_KEY = "__AxonFramework__:Position-Type";  // reserved key in metadata
-    private static final ByteString NUL = ByteString.copyFrom(new byte[] {0});
+    private static final ByteString SNAPSHOT_KEY_SEPARATOR = ByteString.copyFrom(new byte[]{0});
 
     private final AxonServerConnection connection;
     private final Converter converter;
@@ -70,12 +72,6 @@ public class AxonServerSnapshotStore implements SnapshotStore {
         this.converter = Objects.requireNonNull(converter, "The converter parameter must not be null.");
     }
 
-    private ByteString makeKey(QualifiedName qn, Object identifier) {
-        return ByteString.copyFrom(converter.convert(qn.name(), byte[].class))
-            .concat(NUL)
-            .concat(ByteString.copyFrom(converter.convert(identifier, byte[].class)));
-    }
-
     @Override
     public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
                                          @Nullable ProcessingContext context) {
@@ -83,7 +79,7 @@ public class AxonServerSnapshotStore implements SnapshotStore {
         Objects.requireNonNull(identifier, "The identifier parameter must not be null.");
         Objects.requireNonNull(snapshot, "The snapshot parameter must not be null.");
 
-        ByteString key = makeKey(qualifiedName, identifier);
+        ByteString key = snapshotKey(qualifiedName, identifier);
         ByteString data = converter.convert(snapshot.payload(), byte[].class) instanceof byte[] ba ? ByteString.copyFrom(ba) : ByteString.EMPTY;
 
         return connection.snapshotChannel()
@@ -118,7 +114,7 @@ public class AxonServerSnapshotStore implements SnapshotStore {
         Objects.requireNonNull(qualifiedName, "The qualifiedName parameter must not be null.");
         Objects.requireNonNull(identifier, "The identifier parameter must not be null.");
 
-        ByteString key = makeKey(qualifiedName, identifier);
+        ByteString key = snapshotKey(qualifiedName, identifier);
 
         /*
          * Note, even though getLastSnapshot is documented to not return a snapshot when none is available,
@@ -161,6 +157,27 @@ public class AxonServerSnapshotStore implements SnapshotStore {
 
                 throw new CompletionException("Snapshot loading failed for %s with identifier %s".formatted(qualifiedName.toString(), identifier.toString()), e);
             });
+    }
+
+    /**
+     * Converts the given {@code name} and {@code identifier} into the Axon Server snapshot key wire format.
+     *
+     * @param name       the {@link QualifiedName} defining the snapshotted entity's type
+     * @param identifier the identifier of the snapshotted entity
+     * @return the snapshot key bytes for the given {@code name} and {@code identifier}
+     */
+    public ByteString snapshotKey(QualifiedName name, Object identifier) {
+        byte[] nameAsBytes = requireNonNull(
+                converter.convert(name.name(), byte[].class),
+                "Converted name must not be null."
+        );
+        byte[] idAsBytes = requireNonNull(
+                converter.convert(identifier, byte[].class),
+                "Converted identifier must not be null."
+        );
+        return ByteString.copyFrom(nameAsBytes)
+                         .concat(SNAPSHOT_KEY_SEPARATOR)
+                         .concat(ByteString.copyFrom(idAsBytes));
     }
 
     @Override

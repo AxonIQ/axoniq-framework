@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.axonserver.connector.event;
 
+import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.ResultStream;
 import io.axoniq.axonserver.connector.event.DcbEventChannel;
@@ -88,7 +89,6 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
 
     private final AxonServerConnection connection;
     private final TaggedEventConverter converter;
-    private final EventConverter eventConverter;
     private final AxonServerSnapshotStore snapshotStore;
 
     /**
@@ -120,8 +120,7 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
                                         EventConverter converter,
                                         EventTypeResolver eventTypeResolver) {
         this.connection = Objects.requireNonNull(connection, "The Axon Server connection cannot be null.");
-        this.eventConverter = Objects.requireNonNull(converter, "The EventConverter cannot be null.");
-        ;
+        Objects.requireNonNull(converter, "The EventConverter cannot be null.");
         this.converter = new TaggedEventConverter(converter, eventTypeResolver);
         this.snapshotStore = new AxonServerSnapshotStore(connection, converter);
     }
@@ -167,14 +166,15 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
 
     private MessageStream<EventMessage> sourceWithSnapshot(SourcingCondition condition,
                                                            SourcingStrategy.Snapshot snapshotStrategy) {
-        SnapshottedSourceRequest sourcingRequest = ConditionConverter.convertSnapshottedSourcingCondition(
-                condition, eventConverter, snapshotStrategy.qualifiedName(), snapshotStrategy.identifier()
+        ByteString snapshotKey = snapshotStore.snapshotKey(
+                snapshotStrategy.qualifiedName(), snapshotStrategy.identifier()
         );
+        SnapshottedSourceRequest sourcingRequest =
+                ConditionConverter.convertSnapshottedSourcingCondition(condition, snapshotKey);
         ResultStream<SnapshottedSourceEventsResponse> sourcingStream = eventChannel().source(sourcingRequest);
         return new SnapshottedSourcingEventMessageStream(sourcingStream, converter);
     }
 
-    @SuppressWarnings("DataFlowIssue") // Suppressing since maximumPosition is checked to be non-null before this method
     private MessageStream<EventMessage> sourceWithBoundedSnapshot(SourcingCondition condition,
                                                                   SourcingStrategy.Snapshot snapshotStrategy,
                                                                   @Nullable ProcessingContext context) {
@@ -182,12 +182,18 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
         return DelayedMessageStream.create(
                 load(snapshotStrategy.qualifiedName(), snapshotStrategy.identifier(), context)
                         .thenApply(snapshot -> buildBoundedSnapshotStream(snapshot, condition, maximumPosition))
+                        .exceptionally(e -> {
+                            logger.warn("Snapshot loading failed, falling back to full reconstruction for [{}] "
+                                                + "with identifier [{}].",
+                                        snapshotStrategy.qualifiedName(), snapshotStrategy.identifier(), e);
+                            return sourceEvents(SourcingCondition.conditionFor(Position.START, condition.criteria()));
+                        })
         );
     }
 
     private MessageStream<EventMessage> buildBoundedSnapshotStream(@Nullable Snapshot snapshot,
                                                                    SourcingCondition condition,
-                                                                   Position maximumPosition) {
+                                                                   @Nullable Position maximumPosition) {
         if (snapshot == null || isAfter(snapshot.position(), maximumPosition)) {
             return sourceEvents(SourcingCondition.conditionFor(Position.START, condition.criteria()));
         }
@@ -203,8 +209,8 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
         return new SourcingEventMessageStream(sourcingStream, converter);
     }
 
-    private static boolean isAfter(Position position, Position maximumPosition) {
-        return !position.min(maximumPosition).equals(position);
+    private static boolean isAfter(Position position, @Nullable Position maximumPosition) {
+        return maximumPosition != null && !position.min(maximumPosition).equals(position);
     }
 
     @Override
