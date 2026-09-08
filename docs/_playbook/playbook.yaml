@@ -10,9 +10,6 @@ content:
   - url: https://github.com/AxonIQ/extension-data-protection.git # include docs from extension-data-protection repo
     start_paths: [ 'docs/*', '!docs/_*' ]   # from every folder in `docs` except those starting with underscore
     branches: [ 'main' ]
-  - url: https://github.com/AxonIQ/extension-workflow.git # include docs from extension-data-protection repo
-    start_paths: [ 'docs/*', '!docs/_*' ]   # from every folder in `docs` except those starting with underscore
-    branches: [ 'main' ]
   - url: ../..
     start_paths: ['docs/*', '!docs/_*', '!docs/reference/*']
 

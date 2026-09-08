@@ -95,6 +95,30 @@
             <artifactId>axoniq-testcontainer</artifactId>
             <version>${project.version}</version>
         </dependency>
+
+        <!-- Axoniq Framework: Workflows -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-workflow-engine</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-workflow-dsl</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-workflow-test</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-workflow-spring-boot</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+
     </dependencies>
 
     <profiles>
