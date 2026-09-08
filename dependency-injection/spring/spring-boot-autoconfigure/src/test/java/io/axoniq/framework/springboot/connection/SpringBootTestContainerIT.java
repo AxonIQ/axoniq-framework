@@ -38,7 +38,7 @@ import static org.awaitility.Awaitility.await;
 
 @SpringBootTest
 @Testcontainers
-class SpringBootTestContainerIntegrationTest {
+class SpringBootTestContainerIT {
 
     @Container
     @ServiceConnection

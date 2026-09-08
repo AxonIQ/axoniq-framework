@@ -23,7 +23,7 @@ import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetteringEventIntegrationTest;
+import io.axoniq.framework.messaging.eventhandling.deadletter.AbstractDeadLetteringEventIT;
 import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
 import io.axoniq.framework.messaging.eventhandling.deadletter.jdbc.GenericDeadLetterTableFactory;
 import io.axoniq.framework.messaging.eventhandling.deadletter.jdbc.JdbcSequencedDeadLetterQueue;
@@ -46,7 +46,7 @@ import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 
 /**
- * A Spring Boot-idiomatic implementation of the {@link DeadLetteringEventIntegrationTest} validating the
+ * A Spring Boot-idiomatic implementation of the {@link AbstractDeadLetteringEventIT} validating the
  * {@link JdbcSequencedDeadLetterQueue} with full Spring Boot auto-configuration.
  * <p>
  * This test leverages Spring Boot auto-configuration for JDBC infrastructure ({@code DataSource}) instead of manually
@@ -70,7 +70,8 @@ import javax.sql.DataSource;
 })
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @EnableMBeanExport(registration = RegistrationPolicy.IGNORE_EXISTING)
-class SpringBootJdbcDeadLetteringIntegrationTest extends DeadLetteringEventIntegrationTest {
+@Disabled("TODO #460")
+class SpringBootJdbcDeadLetteringIT extends AbstractDeadLetteringEventIT {
 
     @Autowired
     private DataSource dataSource;

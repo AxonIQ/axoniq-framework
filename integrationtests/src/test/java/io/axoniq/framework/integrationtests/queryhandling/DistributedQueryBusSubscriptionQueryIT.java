@@ -58,9 +58,9 @@ import static org.awaitility.Awaitility.await;
  * @author Steven van Beelen
  */
 @Testcontainers
-class DistributedQueryBusSubscriptionQueryTest extends AbstractSubscriptionQueryTestSuite {
+class DistributedQueryBusSubscriptionQueryIT extends AbstractSubscriptionQueryTestSuite {
 
-    protected static final Logger logger = LoggerFactory.getLogger(DistributedQueryBusSubscriptionQueryTest.class);
+    protected static final Logger logger = LoggerFactory.getLogger(DistributedQueryBusSubscriptionQueryIT.class);
 
     private static final AxonServerContainer container = new AxonServerContainer(
             "docker.axoniq.io/axoniq/axonserver:2025.2.0")

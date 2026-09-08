@@ -38,7 +38,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
  * @see CachingSequencedDeadLetterQueue
  * @see SequenceIdentifierCache
  */
-class InMemoryWithCacheDeadLetteringIntegrationTest extends DeadLetteringEventIntegrationTest {
+class InMemoryWithCacheDeadLetteringIT extends AbstractDeadLetteringEventIT {
 
     @Override
     protected SequencedDeadLetterQueue<EventMessage> buildDeadLetterQueue() {
