@@ -17,7 +17,7 @@ For a single sequence across every tenant, use the framework's `SequentialPolicy
 
 == Configuration
 
-=== Tenant Command Sequencing
+=== Tenant command sequencing
 
 Register `TenantSequencingPolicy` as the named command sequencing policy component:
 
@@ -28,7 +28,7 @@ include::example$multitenancy/tenantsequencing/TenantSequencingConfiguration.jav
 
 For details on configuring a custom command sequencing policy see the xref:tuning:command-processing.adoc#command-sequencing[Command sequencing chapter] in the tuning section.
 
-=== Tenant Event Sequencing
+=== Tenant event sequencing
 
 Create the event handling component with `TenantSequencingPolicy`:
 
