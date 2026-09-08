@@ -95,8 +95,7 @@ public record CommandDispatchReply(
      * @param requestIdentifier the identifier of the command this is a reply to
      * @param type              the {@link MessageType#toString() string form} of the result's type, or {@code null}
      *                          when the handler produced no result
-     * @param payload           the Base64-encoded {@code byte[]} payload of the result, or {@code null} when there is
-     *                          none
+     * @param payload           the payload of the result as text, or {@code null} when there is none
      * @param metadata          the metadata of the result
      * @return a reply carrying the successful outcome of a command
      */
