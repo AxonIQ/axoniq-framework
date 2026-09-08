@@ -155,7 +155,7 @@ management:
       endpoint: http://localhost:4318/v1/traces
 ----
 
-`TracingJaegerIntegrationTest` starts Jaeger with Testcontainers, dispatches a command, and verifies the exported trace through Jaeger's HTTP API.
+`TracingJaegerIT` starts Jaeger with Testcontainers, dispatches a command, and verifies the exported trace through Jaeger's HTTP API.
 
 == Environment and component controls
 

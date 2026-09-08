@@ -16,4 +16,3 @@
 #  https://www.axoniq.io/pricing
 io.axoniq.framework.workflow.springboot.WorkflowAutoConfiguration
 io.axoniq.framework.workflow.springboot.WorkflowDefaultContextFactoryAutoConfiguration
-
