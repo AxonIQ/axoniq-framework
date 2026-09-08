@@ -69,7 +69,7 @@ inSummary && /^\[INFO\] [A-Za-z0-9].* \.+ (SUCCESS|FAILURE|SKIPPED)/ {
     line = $0
     sub(/^\[INFO\] /, "", line)
     rowTime = ""
-    if (match(line, / \[ *[0-9.]+ s\]$/)) {
+    if (match(line, / \[[0-9:. ]+ (ms|s|min|h)\]$/)) {
         t = substr(line, RSTART, RLENGTH)
         gsub(/^ \[ */, "", t); gsub(/\]$/, "", t)
         rowTime = t
@@ -141,7 +141,9 @@ successCount=$(awk -F'\t' '$3 == "SUCCESS"' "$RAW_ROWS" | wc -l)
 failureCount=$(awk -F'\t' '$3 == "FAILURE"' "$RAW_ROWS" | wc -l)
 skippedCount=$(awk -F'\t' '$3 == "SKIPPED"' "$RAW_ROWS" | wc -l)
 
-if [ "$failureCount" -gt 0 ]; then
+if [ "$total" -eq 0 ]; then
+  summary="#### ${LABEL} - **UNKNOWN** - no per-module data found; the build likely did not complete (e.g. timed out or was cancelled) -- check the build step's own log"
+elif [ "$failureCount" -gt 0 ]; then
   summary="#### ${LABEL} - **FAILURE** - ${successCount} succeeded, ${failureCount} failed, ${skippedCount} skipped (${cachedCount} cached, ${builtCount} built)"
 else
   summary="#### ${LABEL} - **SUCCESS** - ${total} modules (${cachedCount} cached, ${builtCount} built)"
