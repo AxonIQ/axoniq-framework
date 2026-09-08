@@ -19,17 +19,23 @@ For a single sequence across every tenant, use the framework's `SequentialPolicy
 
 === Tenant Command Sequencing
 
-Consider the following snippets when configuring a (custom) `SequencingPolicy`:
+Register `TenantSequencingPolicy` as the named command sequencing policy component:
 
-// TODO include code example similar to the referenced section
+[source,java]
+----
+include::example$multitenancy/tenantsequencing/TenantSequencingConfiguration.java[tag=command-sequencing,indent=0]
+----
 
 For details on configuring a custom command sequencing policy see the xref:tuning:command-processing.adoc#command-sequencing[Command sequencing chapter] in the tuning section.
 
 === Tenant Event Sequencing
 
-Consider the following snippets when configuring a (custom) `SequencingPolicy`:
+Create the event handling component with `TenantSequencingPolicy`:
 
-// TODO include code example similar to the referenced section
+[source,java]
+----
+include::example$multitenancy/tenantsequencing/TenantSequencingConfiguration.java[tag=event-sequencing,indent=0]
+----
 
 For details on configuring a custom event sequencing policy see the
 xref:events:event-processors/streaming.adoc#sequential_processing[sequential processing chapter] in the streaming event processors section.

@@ -18,14 +18,18 @@ that common policy.
 The issue also asks whether sequential processing must be isolated per tenant, or whether applications should be able
 to choose one sequence shared by all tenants.
 
-## Decision: support both behaviours through separate policies
+## Decision: provide an explicit policy factory and leave configuration to the application
 
-The multi-tenancy module registers a new opt-in `TenantSequencingPolicy` component. It sequences messages by their
-resolved tenant. Messages for one tenant use the same sequence identifier; messages for different tenants use different
-identifiers and may therefore progress independently.
+The multi-tenancy module provides a `TenantSequencingPolicy` factory that sequences messages by their resolved tenant.
+Messages for one tenant use the same sequence identifier; messages for different tenants use different identifiers and
+may therefore progress independently.
 
 Applications that require one sequence across every tenant continue to configure the framework's existing
 `SequentialPolicy`. The tenant policy does not gain a switch for global sequencing.
+
+Applications must explicitly choose where to apply the policy. Command sequencing and event sequencing use different
+framework configuration mechanisms, so the multi-tenancy defaults enhancer does not register a policy component and does
+not change either default.
 
 This keeps the meaning of each policy precise:
 
@@ -41,21 +45,21 @@ existing global policy.
 ## Implementation
 
 `TenantSequencingPolicy` lives in the multi-tenancy API package as a functional interface extending the generic
-`SequencingPolicy<Message>` contract shared by command and event processing. Its default implementation is a lambda
-backed by the registered `TenantRouter`, so it uses the same tenant-routing component as the rest of the
-multi-tenancy module.
+`SequencingPolicy<Message>` contract shared by command and event processing. Its factory returns a lambda backed by a
+`TenantRouter`, so applications can use the same tenant-routing component as the rest of the multi-tenancy module when
+they configure command or event sequencing.
 
 The processing context is considered first, and only an absent context tenant falls back to message-based resolution.
 Only known tenants are used as sequence identifiers. When no known tenant can be resolved, the policy returns no
 sequence identifier.
 
 The policy is opt-in. No default command or event-processing sequencing configuration changes.
-The multi-tenancy configuration registers the policy as a component so applications can refer to it from their own
-command or event-processing configuration.
 
 ## Consequences
 
 - Tenant-aware applications gain a supported, reusable ordering policy without re-implementing tenant resolution.
 - Sequential work for one tenant does not impose ordering on another tenant when `TenantSequencingPolicy` is selected.
 - No compatibility or default-behaviour change is introduced for applications that do not opt in.
+- Users choose the command sequencing policy, event sequencing policy, or both, depending on which processing path needs
+  tenant-local ordering.
 - Cross-tenant ordering remains available, but is a deliberate application-level choice through `SequentialPolicy`.
