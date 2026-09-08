@@ -58,6 +58,7 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
     DefaultEventNameCustomizer() {
         stepStarted("Started");
         stepRetrying("Retrying");
+        stepRetryStarted("RetryStarted");
         stepCompleted("Completed");
         stepTimedOut("TimedOut");
         stepFailed("Failed");
@@ -133,6 +134,17 @@ public class DefaultEventNameCustomizer implements EventNameCustomizer {
      */
     public DefaultEventNameCustomizer stepRetrying(String retrying) {
         this.stepStatusToName.put(StepStatus.RETRYING, retrying);
+        return this;
+    }
+
+    /**
+     * Sets the step status suffix for retry started status.
+     *
+     * @param retryStarted suffix appended to the step base name when a retry attempt starts.
+     * @return current instance for fluent API.
+     */
+    public DefaultEventNameCustomizer stepRetryStarted(String retryStarted) {
+        this.stepStatusToName.put(StepStatus.RETRY_STARTED, retryStarted);
         return this;
     }
 

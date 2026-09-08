@@ -98,13 +98,19 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
 
         var stepName = command.stepName();
 
-        // Crash recovery: resume from persisted RETRYING state
+        // Crash recovery: resume from persisted retry state
         if (workflowExecution.state().containsStep(stepName)) {
             var step = workflowExecution.state().getStep(stepName);
             if (step.status() == StepStatus.RETRYING && step.result() instanceof StepRetryInfo info) {
+                // Backoff was pending: schedule the next attempt from the recorded RETRYING time.
                 Instant retryReadyAt = computeRetryReadyAt(retryPolicy, info.attempt(), step.timestamp());
                 scheduleRetryAttempt(command, info.attempt() + 1, retryReadyAt);
                 return stateBased(stepName, command.eventNameCustomizer(), workflowExecution);
+            }
+            if (step.status() == StepStatus.RETRY_STARTED && step.result() instanceof StepRetryInfo info) {
+                // Attempt info.attempt() was in flight. The delegate sees a start record that is not its own and
+                // routes the attempt through the failure handler as indeterminate, keeping the attempt count.
+                return launchWithRetry(command, info.attempt());
             }
         }
 
