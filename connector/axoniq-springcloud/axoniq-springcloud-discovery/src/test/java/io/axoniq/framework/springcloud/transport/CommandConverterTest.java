@@ -20,13 +20,13 @@
 package io.axoniq.framework.springcloud.transport;
 
 import org.axonframework.common.AxonNonTransientException;
+import org.axonframework.conversion.ConversionException;
 import org.axonframework.messaging.commandhandling.CommandExecutionException;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
 import org.axonframework.messaging.commandhandling.GenericCommandMessage;
 import org.axonframework.messaging.commandhandling.GenericCommandResultMessage;
 import org.axonframework.messaging.commandhandling.NoHandlerForCommandException;
-import org.axonframework.conversion.ConversionException;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.RemoteHandlingException;

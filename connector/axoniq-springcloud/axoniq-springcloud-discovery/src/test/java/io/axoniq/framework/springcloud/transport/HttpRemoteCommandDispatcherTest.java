@@ -119,6 +119,7 @@ class HttpRemoteCommandDispatcherTest {
             String body = requestFactory.lastRequest().getBodyAsString();
             assertThat(body).contains("\"identifier\":\"command-1\"")
                             .contains("\"type\":\"university.CreateCourse#1.0.0\"")
+                            .contains("\"payload\":" + asJsonString(PAYLOAD))
                             .contains("\"routingKey\":\"course-1\"")
                             .contains("\"priority\":5");
         }
