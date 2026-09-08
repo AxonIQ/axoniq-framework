@@ -35,7 +35,7 @@ import java.util.Map;
 
 /**
  * Deterministic scenario for INVARIANTS.md INV-8 ({@code RetryBound}): for a step configured with
- * {@code RetryPolicy.maxRetries(n)}, the number of attempt records (STARTED/RETRYING) for that
+ * {@code RetryPolicy.maxRetries(n)}, the number of attempt records (STARTED/RETRY_STARTED) for that
  * {@code (workflowId, stepName)} in the committed history is at most {@code n + 1}, even across a crash/replay.
  * <p>
  * Drives {@link RetryingWorkflow}, whose {@code flakyShip} step always fails under {@code maxRetries(k)}. The engine
@@ -48,7 +48,7 @@ import java.util.Map;
  * Steps:
  * <ol>
  *   <li>publish the start event; the body records {@code reserveInventory}, then drives {@code flakyShip} to retry
- *       exhaustion (STARTED + RETRYING×k + FAILED) and reaches a terminal workflow status;</li>
+ *       exhaustion (STARTED + (RETRYING + RETRY_STARTED)×k + FAILED) and reaches a terminal workflow status;</li>
  *   <li>assert {@link Invariants#assertRetryBound} holds and capture the attempt-record count for {@code flakyShip}
  *       (expected to be exactly {@code k + 1});</li>
  *   <li>crash + recover (drives the real replay path) <strong>alone</strong> — no event is redelivered; the recovered
@@ -73,7 +73,7 @@ public final class Inv8RetryBoundScenario {
      *
      * @param reachedTerminal              whether the instance recorded a terminal workflow status.
      * @param maxRetries                   the configured {@code maxRetries} of the flaky step (bound is this + 1).
-     * @param attemptRecordsAtExhaustion   number of {@code flakyShip} attempt records (STARTED/RETRYING) once the step
+     * @param attemptRecordsAtExhaustion   number of {@code flakyShip} attempt records (STARTED/RETRY_STARTED) once the step
      *                                     reached retry exhaustion. INV-8 requires this to be {@code ≤ maxRetries + 1};
      *                                     for an always-failing step it is exactly {@code maxRetries + 1}.
      * @param attemptRecordsAfterCrash     number of {@code flakyShip} attempt records after a crash + replay
@@ -130,7 +130,7 @@ public final class Inv8RetryBoundScenario {
     }
 
     /**
-     * Counts attempt records (non-terminal step events: STARTED/RETRYING) for a {@code (workflowId, stepName)}.
+     * Counts attempt records (STARTED / RETRY_STARTED step events) for a {@code (workflowId, stepName)}.
      */
     private static int attemptRecords(List<EventMessage> committedLog, String workflowId,
                                       String stepName) {
@@ -138,7 +138,8 @@ public final class Inv8RetryBoundScenario {
                 .filter(e -> workflowId.equals(MetadataUtils.getWorkflowId(e.metadata()))
                         && stepName.equals(MetadataUtils.getStepName(e.metadata())))
                 .filter(e -> MetadataUtils.getStepStatus(e.metadata())
-                                          .map(s -> !s.isTerminal()).orElse(false))
+                                          .map(s -> s == StepStatus.STARTED || s == StepStatus.RETRY_STARTED)
+                                          .orElse(false))
                 .count();
     }
 

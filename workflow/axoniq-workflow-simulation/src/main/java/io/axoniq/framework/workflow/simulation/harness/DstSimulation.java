@@ -111,7 +111,8 @@ public final class DstSimulation {
     private static final int MAX_NUDGES_PER_SETTLE = 30;
     private static final int HORIZON_ROUNDS = 8;
     // INV-8 (RetryBound): the configured maxRetries per retrying step of the fuzz workhorse (OrderWorkflow). The
-    // assertion bounds attempt records (STARTED/RETRYING) at maxRetries+1; steps absent here carry no retry policy and
+    // assertion bounds attempt records (STARTED/RETRY_STARTED) at maxRetries+1 and RETRYING records at maxRetries; steps
+    // absent here carry no retry policy and
     // are not constrained. Taken from the workflow's own policy constant so the bound is not a magic number.
     private static final Map<String, Integer> RETRY_BOUNDS =
             Map.of(OrderWorkflow.STEP_SHIP_ORDER, OrderWorkflow.SHIP_ORDER_MAX_RETRIES);
@@ -569,7 +570,7 @@ public final class DstSimulation {
             // genuine live-dedup failure (two concurrent live instances) throws.
             Invariants.assertOneInstancePerStart(committedLog);
             // INV-8: retry bound — the OrderWorkflow shipOrder step genuinely retries (maxRetries=2), so its attempt
-            // records (STARTED/RETRYING) must stay ≤ maxRetries+1 per (workflowId, stepName), even when a crash/restart
+            // records (STARTED/RETRY_STARTED) must stay ≤ maxRetries+1 per (workflowId, stepName), even when a crash/restart
             // fault interrupts a retry. Record-level (cf. INV-6/F-0 which is effect-level).
             Invariants.assertRetryBound(committedLog, RETRY_BOUNDS);
             // INV-11: version routing is sound — the VersionedOrderWorkflow instance (registered at two versions) must

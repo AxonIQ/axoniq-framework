@@ -133,11 +133,13 @@ class Inv21RetryTimingAndExhaustionEdgesTest {
 
     @Test
     void assertRetryTimingAndExhaustionEdges_passesForAWithinStrategyHistory() {
-        // fixed maxRetries(2): STARTED + RETRYING + RETRYING + COMPLETED — 2 retries, monotonic timestamps, terminal.
+        // fixed maxRetries(2): STARTED + (RETRYING + RETRY_STARTED)×2 + COMPLETED — 2 retries, monotonic, terminal.
         List<EventMessage> log = List.of(
                 step(PREFIX + "0", FIXED, StepStatus.STARTED, T0),
                 step(PREFIX + "0", FIXED, StepStatus.RETRYING, T0.plusMillis(200)),
+                step(PREFIX + "0", FIXED, StepStatus.RETRY_STARTED, T0.plusMillis(250)),
                 step(PREFIX + "0", FIXED, StepStatus.RETRYING, T0.plusMillis(400)),
+                step(PREFIX + "0", FIXED, StepStatus.RETRY_STARTED, T0.plusMillis(450)),
                 step(PREFIX + "0", FIXED, StepStatus.COMPLETED, T0.plusMillis(500)));
 
         assertThatCode(() -> Invariants.assertRetryTimingAndExhaustionEdges(
@@ -152,8 +154,11 @@ class Inv21RetryTimingAndExhaustionEdgesTest {
         List<EventMessage> log = List.of(
                 step(PREFIX + "0", FIXED, StepStatus.STARTED, T0),
                 step(PREFIX + "0", FIXED, StepStatus.RETRYING, T0.plusMillis(200)),
+                step(PREFIX + "0", FIXED, StepStatus.RETRY_STARTED, T0.plusMillis(250)),
                 step(PREFIX + "0", FIXED, StepStatus.RETRYING, T0.plusMillis(400)),
+                step(PREFIX + "0", FIXED, StepStatus.RETRY_STARTED, T0.plusMillis(450)),
                 step(PREFIX + "0", FIXED, StepStatus.RETRYING, T0.plusMillis(600)),
+                step(PREFIX + "0", FIXED, StepStatus.RETRY_STARTED, T0.plusMillis(650)),
                 step(PREFIX + "0", FIXED, StepStatus.FAILED, T0.plusMillis(700)));
 
         assertThatThrownBy(() -> Invariants.assertRetryTimingAndExhaustionEdges(
@@ -169,6 +174,7 @@ class Inv21RetryTimingAndExhaustionEdgesTest {
         List<EventMessage> log = List.of(
                 step(PREFIX + "0", FIXED, StepStatus.STARTED, T0),
                 step(PREFIX + "0", FIXED, StepStatus.RETRYING, T0.plusMillis(200)),
+                step(PREFIX + "0", FIXED, StepStatus.RETRY_STARTED, T0.plusMillis(250)),
                 step(PREFIX + "0", FIXED, StepStatus.COMPLETED, T0.plusMillis(300)));
 
         assertThatThrownBy(() -> Invariants.assertRetryTimingAndExhaustionEdges(
@@ -180,11 +186,13 @@ class Inv21RetryTimingAndExhaustionEdgesTest {
 
     @Test
     void assertRetryTimingAndExhaustionEdges_throwsWhenScheduleIsNotMonotonicInTime() {
-        // The second RETRYING is committed BEFORE the first — a non-monotonic schedule.
+        // The second RETRYING is committed BEFORE the first retry attempt started — a non-monotonic schedule.
         List<EventMessage> log = List.of(
                 step(PREFIX + "0", FIXED, StepStatus.STARTED, T0),
                 step(PREFIX + "0", FIXED, StepStatus.RETRYING, T0.plusMillis(400)),
+                step(PREFIX + "0", FIXED, StepStatus.RETRY_STARTED, T0.plusMillis(450)),
                 step(PREFIX + "0", FIXED, StepStatus.RETRYING, T0.plusMillis(200)),
+                step(PREFIX + "0", FIXED, StepStatus.RETRY_STARTED, T0.plusMillis(480)),
                 step(PREFIX + "0", FIXED, StepStatus.COMPLETED, T0.plusMillis(500)));
 
         assertThatThrownBy(() -> Invariants.assertRetryTimingAndExhaustionEdges(
@@ -197,14 +205,17 @@ class Inv21RetryTimingAndExhaustionEdgesTest {
 
     @Test
     void assertRetryTimingAndExhaustionEdges_throwsWhenLinearOrExponentialGapShrinks() {
-        // linear/exponential gaps must be non-decreasing: STARTED→r1 gap = 1500ms, r1→r2 gap = 100ms — a 1400ms shrink,
-        // unambiguously a GROSS schedule inversion (far beyond the assertion's 250ms wall-clock jitter tolerance, so
-        // this pin stays decoupled from the exact tolerance value while sub-ms real-log jitter never trips it).
+        // linear/exponential backoff gaps (RETRYING → next RETRY_STARTED) must be non-decreasing: the first backoff is
+        // 1500ms, the second 100ms — a 1400ms shrink, unambiguously a GROSS schedule inversion (far beyond the
+        // assertion's 250ms wall-clock jitter tolerance, so this pin stays decoupled from the exact tolerance value
+        // while sub-ms real-log jitter never trips it).
         List<EventMessage> log = List.of(
                 step(PREFIX + "0", LINEAR, StepStatus.STARTED, T0),
-                step(PREFIX + "0", LINEAR, StepStatus.RETRYING, T0.plusMillis(1500)),
-                step(PREFIX + "0", LINEAR, StepStatus.RETRYING, T0.plusMillis(1600)),
-                step(PREFIX + "0", LINEAR, StepStatus.COMPLETED, T0.plusMillis(1700)));
+                step(PREFIX + "0", LINEAR, StepStatus.RETRYING, T0.plusMillis(100)),
+                step(PREFIX + "0", LINEAR, StepStatus.RETRY_STARTED, T0.plusMillis(1600)),
+                step(PREFIX + "0", LINEAR, StepStatus.RETRYING, T0.plusMillis(1700)),
+                step(PREFIX + "0", LINEAR, StepStatus.RETRY_STARTED, T0.plusMillis(1800)),
+                step(PREFIX + "0", LINEAR, StepStatus.COMPLETED, T0.plusMillis(1900)));
 
         assertThatThrownBy(() -> Invariants.assertRetryTimingAndExhaustionEdges(
                 log, PREFIX, Map.of(LINEAR, new RetryStepSpec(2, 2, true))))
@@ -215,11 +226,13 @@ class Inv21RetryTimingAndExhaustionEdgesTest {
 
     @Test
     void assertRetryTimingAndExhaustionEdges_throwsWhenStepNeverResolves() {
-        // STARTED + RETRYING×2 but NO terminal record — the retrying step hung.
+        // STARTED + (RETRYING + RETRY_STARTED)×2 but NO terminal record — the retrying step hung.
         List<EventMessage> log = List.of(
                 step(PREFIX + "0", FIXED, StepStatus.STARTED, T0),
                 step(PREFIX + "0", FIXED, StepStatus.RETRYING, T0.plusMillis(200)),
-                step(PREFIX + "0", FIXED, StepStatus.RETRYING, T0.plusMillis(400)));
+                step(PREFIX + "0", FIXED, StepStatus.RETRY_STARTED, T0.plusMillis(250)),
+                step(PREFIX + "0", FIXED, StepStatus.RETRYING, T0.plusMillis(400)),
+                step(PREFIX + "0", FIXED, StepStatus.RETRY_STARTED, T0.plusMillis(450)));
 
         assertThatThrownBy(() -> Invariants.assertRetryTimingAndExhaustionEdges(
                 log, PREFIX, Map.of(FIXED, new RetryStepSpec(2, 2, false))))
@@ -237,8 +250,12 @@ class Inv21RetryTimingAndExhaustionEdgesTest {
                 step(PREFIX + "1", FIXED, StepStatus.STARTED, T0),
                 step(PREFIX + "0", FIXED, StepStatus.RETRYING, T0.plusMillis(200)),
                 step(PREFIX + "1", FIXED, StepStatus.RETRYING, T0.plusMillis(200)),
+                step(PREFIX + "0", FIXED, StepStatus.RETRY_STARTED, T0.plusMillis(250)),
+                step(PREFIX + "1", FIXED, StepStatus.RETRY_STARTED, T0.plusMillis(250)),
                 step(PREFIX + "0", FIXED, StepStatus.RETRYING, T0.plusMillis(400)),
                 step(PREFIX + "1", FIXED, StepStatus.RETRYING, T0.plusMillis(400)),
+                step(PREFIX + "0", FIXED, StepStatus.RETRY_STARTED, T0.plusMillis(450)),
+                step(PREFIX + "1", FIXED, StepStatus.RETRY_STARTED, T0.plusMillis(450)),
                 step(PREFIX + "0", FIXED, StepStatus.COMPLETED, T0.plusMillis(500)),
                 step(PREFIX + "1", FIXED, StepStatus.COMPLETED, T0.plusMillis(500)),
                 // out-of-prefix instance — ignored even with absurd retry count.

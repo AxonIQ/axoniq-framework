@@ -73,7 +73,7 @@ public final class BackoffOverflowScenario {
      *                               {@code true} — the step exhausts its retries and records terminal {@code FAILED}.
      * @param retryingRecords        committed {@code RETRYING} records for the failing step. OBSERVED:
      *                               {@code maxRetries} — one per retry decision, the full bounded schedule.
-     * @param attemptRecords         committed attempt records (STARTED + RETRYING) for the failing step. OBSERVED:
+     * @param attemptRecords         committed attempt records (STARTED + RETRY_STARTED) for the failing step. OBSERVED:
      *                               {@code maxRetries + 1} — exactly INV-8's bound (the clamped schedule retries to
      *                               exhaustion without ever exceeding the policy).
      */
@@ -149,7 +149,7 @@ public final class BackoffOverflowScenario {
         return (int) committedLog.stream()
                 .filter(e -> workflowId.equals(MetadataUtils.getWorkflowId(e.metadata()))
                         && stepName.equals(MetadataUtils.getStepName(e.metadata()))
-                        && MetadataUtils.getStepStatus(e.metadata()).map(s -> !s.isTerminal()).orElse(false))
+                        && MetadataUtils.getStepStatus(e.metadata()).map(s -> s == StepStatus.STARTED || s == StepStatus.RETRY_STARTED).orElse(false))
                 .count();
     }
 

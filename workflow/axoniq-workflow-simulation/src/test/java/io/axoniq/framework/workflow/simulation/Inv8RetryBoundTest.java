@@ -65,7 +65,7 @@ class Inv8RetryBoundTest {
         assertThat(outcome.reachedTerminal())
                 .as("RetryingWorkflow must reach a terminal workflow status (the step failure is absorbed by await())")
                 .isTrue();
-        // An always-failing step under maxRetries(k) records exactly k+1 attempts: STARTED + RETRYING×k.
+        // An always-failing step under maxRetries(k) records exactly k+1 attempts: STARTED + RETRY_STARTED×k.
         assertThat(outcome.attemptRecordsAtExhaustion())
                 .as("RetryBound: an always-failing maxRetries(%d) step records exactly maxRetries+1 attempt records",
                     outcome.maxRetries())
@@ -80,11 +80,14 @@ class Inv8RetryBoundTest {
 
     @Test
     void assertRetryBound_passesForHistoryWithinBound() {
-        // maxRetries(2) → bound 3: STARTED + RETRYING + RETRYING + COMPLETED is 3 attempt records — within bound.
+        // maxRetries(2) → bound 3: STARTED + (RETRYING + RETRY_STARTED)×2 + COMPLETED is 3 attempt records and 2 retry
+        // decisions — within bound.
         List<EventMessage> log = List.of(
                 step("retry-wf0", STEP, StepStatus.STARTED),
                 step("retry-wf0", STEP, StepStatus.RETRYING),
+                step("retry-wf0", STEP, StepStatus.RETRY_STARTED),
                 step("retry-wf0", STEP, StepStatus.RETRYING),
+                step("retry-wf0", STEP, StepStatus.RETRY_STARTED),
                 step("retry-wf0", STEP, StepStatus.COMPLETED));
 
         assertThatCode(() -> Invariants.assertRetryBound(log, Map.of(STEP, 2)))
@@ -94,13 +97,16 @@ class Inv8RetryBoundTest {
 
     @Test
     void assertRetryBound_throwsWhenAttemptsExceedBound() {
-        // The genuine break: maxRetries(2) → bound 3, but the log has 4 attempt records (STARTED + RETRYING×3). This
-        // pins that the assertion actually catches an over-bound history (so it isn't trivially satisfied).
+        // The genuine break: maxRetries(2) → bound 3, but the log has 4 attempt records (STARTED + RETRY_STARTED×3).
+        // This pins that the assertion actually catches an over-bound history (so it isn't trivially satisfied).
         List<EventMessage> log = List.of(
                 step("retry-wf0", STEP, StepStatus.STARTED),
                 step("retry-wf0", STEP, StepStatus.RETRYING),
+                step("retry-wf0", STEP, StepStatus.RETRY_STARTED),
                 step("retry-wf0", STEP, StepStatus.RETRYING),
-                step("retry-wf0", STEP, StepStatus.RETRYING), // one too many — exceeds maxRetries+1 = 3
+                step("retry-wf0", STEP, StepStatus.RETRY_STARTED),
+                step("retry-wf0", STEP, StepStatus.RETRYING),
+                step("retry-wf0", STEP, StepStatus.RETRY_STARTED), // one too many — exceeds maxRetries+1 = 3
                 step("retry-wf0", STEP, StepStatus.FAILED));
 
         assertThatThrownBy(() -> Invariants.assertRetryBound(log, Map.of(STEP, 2)))
@@ -117,8 +123,12 @@ class Inv8RetryBoundTest {
                 step("retry-wf1", STEP, StepStatus.STARTED),
                 step("retry-wf0", STEP, StepStatus.RETRYING),
                 step("retry-wf1", STEP, StepStatus.RETRYING),
+                step("retry-wf0", STEP, StepStatus.RETRY_STARTED),
+                step("retry-wf1", STEP, StepStatus.RETRY_STARTED),
                 step("retry-wf0", STEP, StepStatus.RETRYING),
-                step("retry-wf1", STEP, StepStatus.RETRYING));
+                step("retry-wf1", STEP, StepStatus.RETRYING),
+                step("retry-wf0", STEP, StepStatus.RETRY_STARTED),
+                step("retry-wf1", STEP, StepStatus.RETRY_STARTED));
 
         assertThatCode(() -> Invariants.assertRetryBound(log, Map.of(STEP, 2)))
                 .as("the bound is per (workflowId, stepName); two instances at the bound must each pass")

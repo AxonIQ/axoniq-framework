@@ -94,8 +94,8 @@ public class OrderWorkflow {
     /**
      * The {@code maxRetries} configured on {@link #STEP_SHIP_ORDER}. Exposed so the harness can assert INV-8
      * ({@code RetryBound}) against the policy bound without hard-coding the number: the engine must never record more
-     * than {@code SHIP_ORDER_MAX_RETRIES + 1} attempt events for this step (one {@code STARTED} + at most this many
-     * {@code RETRYING}).
+     * than {@code SHIP_ORDER_MAX_RETRIES + 1} attempt events for this step (one {@code STARTED} + one
+     * {@code RETRY_STARTED} per retry), nor more than this many {@code RETRYING} records.
      */
     public static final int SHIP_ORDER_MAX_RETRIES = 2;
 
@@ -153,9 +153,9 @@ public class OrderWorkflow {
                     (pc, payload) -> {
                         // Genuinely retry: fail the first SHIP_ORDER_MAX_RETRIES attempts, succeed on the next. The
                         // attempt count is the persistent CountingEffects counter (it survives a crash, like a real
-                        // external effect), so the engine emits STARTED then RETRYING up to SHIP_ORDER_MAX_RETRIES times
-                        // then COMPLETED — the attempt-record sequence INV-8 (RetryBound) bounds at
-                        // SHIP_ORDER_MAX_RETRIES + 1.
+                        // external effect), so the engine emits STARTED, then RETRYING + RETRY_STARTED up to
+                        // SHIP_ORDER_MAX_RETRIES times, then COMPLETED — the attempt-record sequence INV-8 (RetryBound)
+                        // bounds at SHIP_ORDER_MAX_RETRIES + 1.
                         int attempt = effects.record(workflowId, STEP_SHIP_ORDER);
                         if (attempt <= SHIP_ORDER_MAX_RETRIES) {
                             throw new IllegalStateException(

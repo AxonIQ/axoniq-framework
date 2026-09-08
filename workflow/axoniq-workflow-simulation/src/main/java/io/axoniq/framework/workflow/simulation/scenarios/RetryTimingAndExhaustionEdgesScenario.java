@@ -106,7 +106,7 @@ public final class RetryTimingAndExhaustionEdgesScenario {
      * @param reachedTerminal     whether the instance recorded a terminal workflow status.
      * @param slowStepStatus      the recorded terminal status of the slow {@code execute} step (expected
      *                            {@code TIMED_OUT}).
-     * @param slowAttemptRecords  committed attempt records (STARTED/RETRYING) for the slow step (bounded by
+     * @param slowAttemptRecords  committed attempt records (STARTED/RETRY_STARTED) for the slow step (bounded by
      *                            {@code maxRetries + 1}).
      */
     public record TimeoutEdgeOutcome(boolean reachedTerminal, StepStatus slowStepStatus,
@@ -276,7 +276,7 @@ public final class RetryTimingAndExhaustionEdgesScenario {
         return (int) committedLog.stream()
                 .filter(e -> workflowId.equals(MetadataUtils.getWorkflowId(e.metadata()))
                         && stepName.equals(MetadataUtils.getStepName(e.metadata()))
-                        && MetadataUtils.getStepStatus(e.metadata()).map(s -> !s.isTerminal()).orElse(false))
+                        && MetadataUtils.getStepStatus(e.metadata()).map(s -> s == StepStatus.STARTED || s == StepStatus.RETRY_STARTED).orElse(false))
                 .count();
     }
 

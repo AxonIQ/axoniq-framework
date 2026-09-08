@@ -550,10 +550,11 @@ public final class Invariants {
      * for that {@code (workflowId, stepName)} in the committed history is at most {@code n + 1} — the engine never
      * records more attempts than the policy allows, even across crashes/replays.
      * <p>
-     * An <em>attempt record</em> is a non-terminal step event for the step: a {@code STARTED} (the first attempt) or a
-     * {@code RETRYING} (each subsequent attempt), emitted by {@code RetryableExecuteDelegate} as it evaluates the
-     * {@code RetryPolicy} ({@code RetryableExecuteDelegate.java:143} {@code retrying(...)}; {@code ExecuteDelegate}
-     * emits the single {@code STARTED}). The terminal outcome ({@code COMPLETED}/{@code FAILED}/{@code TIMED_OUT}/
+     * An <em>attempt record</em> is the start record of one attempt that the store accepted to run: the
+     * {@code STARTED} of the first attempt, or the {@code RETRY_STARTED} of each retry attempt ({@code ExecuteDelegate}
+     * publishes both through the same accepted-append gate). A {@code RETRYING} record is a <em>retry decision</em>,
+     * emitted by {@code RetryableExecuteDelegate} as it evaluates the {@code RetryPolicy}; there are at most
+     * {@code maxRetries} of them. The terminal outcome ({@code COMPLETED}/{@code FAILED}/{@code TIMED_OUT}/
      * {@code CANCELLED}) is <strong>not</strong> an attempt and is excluded. This is a <strong>record-level</strong>
      * count — the deliberate contrast with INV-6 ({@code EffectAtMostOnce}/F-0): a crash in the apply→commit window can
      * make a step's <em>effect</em> run more than once, but the recorded <em>attempt count</em> for the step must still
@@ -578,13 +579,14 @@ public final class Invariants {
     public static void assertRetryBound(List<EventMessage> committedLog,
                                         Map<String, Integer> maxRetriesByStep) {
         Map<String, Integer> attemptCounts = new LinkedHashMap<>();
+        Map<String, Integer> retryDecisionCounts = new LinkedHashMap<>();
         var seenIdentifiers = new HashSet<>();
         for (EventMessage event : committedLog) {
             if (!seenIdentifiers.add(event.identifier())) {
                 continue; // an at-least-once store duplicate of an already-counted committed event, not a new attempt.
             }
             var stepStatus = MetadataUtils.getStepStatus(event.metadata());
-            // Attempt records are the non-terminal step events (STARTED / RETRYING); terminal outcomes are not attempts.
+            // Only the non-terminal step events count: STARTED / RETRY_STARTED are attempts, RETRYING is a decision.
             if (stepStatus.isEmpty() || stepStatus.get().isTerminal()) {
                 continue;
             }
@@ -594,13 +596,24 @@ public final class Invariants {
                 continue; // step carries no configured retry bound — INV-8 does not constrain it.
             }
             String key = MetadataUtils.getWorkflowId(event.metadata()) + "/" + stepName;
+            if (stepStatus.get() == StepStatus.RETRYING) {
+                int retries = retryDecisionCounts.merge(key, 1, Integer::sum);
+                if (retries > maxRetries) {
+                    throw new InvariantViolation(
+                            "RetryBound",
+                            "step '" + key + "' recorded " + retries + " RETRYING record(s) but its policy allows at "
+                                    + "most maxRetries = " + maxRetries + " — the engine recorded more retry decisions "
+                                    + "than the retry policy permits");
+                }
+                continue;
+            }
             int attempts = attemptCounts.merge(key, 1, Integer::sum);
             if (attempts > maxRetries + 1) {
                 throw new InvariantViolation(
                         "RetryBound",
-                        "step '" + key + "' recorded " + attempts + " attempt(s) (STARTED/RETRYING) but its policy "
-                                + "allows at most maxRetries+1 = " + (maxRetries + 1) + " — the engine recorded more "
-                                + "attempts than the retry policy permits");
+                        "step '" + key + "' recorded " + attempts + " attempt(s) (STARTED/RETRY_STARTED) but its "
+                                + "policy allows at most maxRetries+1 = " + (maxRetries + 1) + " — the engine recorded "
+                                + "more attempts than the retry policy permits");
             }
         }
     }
@@ -2406,17 +2419,18 @@ public final class Invariants {
      * {@code (workflowId, stepName)} four facets are checked:
      * <ul>
      *   <li><strong>within the INV-8 bound</strong>: the {@code RETRYING} record count is {@code <= maxRetries} (so the
-     *       attempt records — one {@code STARTED} + the {@code RETRYING}s — stay {@code <= maxRetries + 1}, the INV-8
-     *       ceiling this invariant builds on);</li>
+     *       attempt records — one {@code STARTED} + one {@code RETRY_STARTED} per retry — stay
+     *       {@code <= maxRetries + 1}, the INV-8 ceiling this invariant builds on);</li>
      *   <li><strong>exact retry-decision count</strong>: the {@code RETRYING} record count equals the spec's
      *       {@code expectedRetryingRecords} — the engine recorded exactly the retries the strategy/predicate dictated,
      *       neither dropping nor inventing one across crash/replay (so the assertion is not trivially self-satisfied);</li>
-     *   <li><strong>backoff timing reconstructed from the recorded {@code RETRYING} timestamps</strong>: scanning the
-     *       step's own committed {@code STARTED} + {@code RETRYING} records in append order, their timestamps are
-     *       non-decreasing (the schedule is monotonic in committed time — the engine schedules each retry from the
-     *       previously-recorded attempt's timestamp, not from in-memory state, so the schedule is a pure function of the
-     *       committed log and survives crash/replay); when {@code backoffIncreasing} is set, the gaps between successive
-     *       attempt timestamps are non-decreasing (a {@code linear}/{@code exponential} schedule's growing delay is
+     *   <li><strong>backoff timing reconstructed from the recorded timestamps</strong>: scanning the step's own
+     *       committed {@code STARTED} + {@code RETRYING} + {@code RETRY_STARTED} records in append order, their
+     *       timestamps are non-decreasing (the schedule is monotonic in committed time — the engine schedules each retry
+     *       from the previously-recorded {@code RETRYING} timestamp, not from in-memory state, so the schedule is a pure
+     *       function of the committed log and survives crash/replay); when {@code backoffIncreasing} is set, the backoff
+     *       gaps — each {@code RETRYING} to the {@code RETRY_STARTED} that follows it — are non-decreasing (a
+     *       {@code linear}/{@code exponential} schedule's growing delay is
      *       visible in the recorded timing). (Timestamps come from the in-memory event store's per-event timestamp, the
      *       same source INV-9 reads; absolute deltas are not asserted because the store stamps from the Axon
      *       {@code GenericEventMessage} static clock — the D5 residual — so only the ordering/monotonicity is cleanly
@@ -2494,7 +2508,7 @@ public final class Invariants {
                                 + "decision(s) — the engine recorded the wrong number of retries");
             }
             // Facet 3 — backoff schedule reconstructed from recorded timestamps: non-decreasing in committed time, and
-            // (for linear/exponential) non-decreasing gaps between successive attempts.
+            // (for linear/exponential) non-decreasing backoff gaps, each RETRYING to the RETRY_STARTED that follows it.
             for (int i = 1; i < attempts.size(); i++) {
                 if (attempts.get(i).timestamp().isBefore(attempts.get(i - 1).timestamp())) {
                     throw new InvariantViolation(
@@ -2505,26 +2519,33 @@ public final class Invariants {
                                     + "monotonic in committed time");
                 }
             }
-            if (spec.backoffIncreasing() && attempts.size() >= 3) {
-                // The committed RETRYING timestamps come from the in-memory event store's static WALL clock (the
-                // Phase-3 D5 residual), NOT from the injected virtual backoff scheduler — so adjacent gaps reflect
-                // wall-clock processing jitter (microseconds), not the configured linear/exponential delay. Asserting
-                // strict gap monotonicity on them is therefore both meaningless and flaky (a sub-millisecond inversion
-                // under CPU contention is just scheduling noise, not a real schedule regression). We flag only a GROSS
-                // inversion — a shrink larger than this jitter tolerance — which still catches a genuinely reversed
-                // schedule (the hand-built pin shrinks by >> the tolerance) while tolerating real-log wall-clock noise.
+            if (spec.backoffIncreasing()) {
+                var backoffGaps = new ArrayList<java.time.Duration>();
+                for (int i = 1; i < attempts.size(); i++) {
+                    if (attempts.get(i - 1).status() == StepStatus.RETRYING
+                            && attempts.get(i).status() == StepStatus.RETRY_STARTED) {
+                        backoffGaps.add(java.time.Duration.between(attempts.get(i - 1).timestamp(),
+                                                                   attempts.get(i).timestamp()));
+                    }
+                }
+                // The committed timestamps come from the in-memory event store's static WALL clock (the Phase-3 D5
+                // residual), NOT from the injected virtual backoff scheduler — so adjacent gaps reflect wall-clock
+                // processing jitter (microseconds), not the configured linear/exponential delay. Asserting strict gap
+                // monotonicity on them is therefore both meaningless and flaky (a sub-millisecond inversion under CPU
+                // contention is just scheduling noise, not a real schedule regression). We flag only a GROSS inversion
+                // — a shrink larger than this jitter tolerance — which still catches a genuinely reversed schedule (the
+                // hand-built pin shrinks by >> the tolerance) while tolerating real-log wall-clock noise.
                 var jitterTolerance = java.time.Duration.ofMillis(250);
-                for (int i = 2; i < attempts.size(); i++) {
-                    var gap = java.time.Duration.between(attempts.get(i - 1).timestamp(), attempts.get(i).timestamp());
-                    var prevGap = java.time.Duration.between(attempts.get(i - 2).timestamp(),
-                                                             attempts.get(i - 1).timestamp());
+                for (int i = 1; i < backoffGaps.size(); i++) {
+                    var gap = backoffGaps.get(i);
+                    var prevGap = backoffGaps.get(i - 1);
                     if (gap.compareTo(prevGap.minus(jitterTolerance)) < 0) {
                         throw new InvariantViolation(
                                 "RetryTimingAndExhaustionEdges",
                                 "step '" + key + "' has a shrinking backoff gap (" + prevGap + " then " + gap + ", a "
                                         + "drop beyond the " + jitterTolerance + " wall-clock jitter tolerance) but a "
-                                        + "linear/exponential strategy must produce non-decreasing gaps in the recorded "
-                                        + "RETRYING timing");
+                                        + "linear/exponential strategy must produce non-decreasing gaps between each "
+                                        + "RETRYING and the RETRY_STARTED that follows it");
                     }
                 }
             }

@@ -505,16 +505,20 @@ event is in the durable log and the instance logged a `"was rejected"` warning.
 
 | # | Combination | Verdict | Evidence | Test class |
 |---|---|---|---|---|
-| 1 | retry backoff, retry fires on the stale node | **records HOLD, action does not** | `records 5→5`, `terminalRecords=0`, `rejections=1`, `effects 1→2` | `FencedRetryBackoffTest` |
+| 1 | retry backoff, retry fires on the stale node | HOLDS (since #408; was **records HOLD, action does not**) | `records 5→5`, `terminalRecords=0`, `rejections=1`, `effects 1→1` | `FencedRetryBackoffTest` |
 | 2 | parked `waitForEvent`, timeout fires on the stale node | HOLDS | `records 4→4`, `timedOutRecords=0`, `terminalRecords=0`, `rejections=1` (3/3 runs) | `FencedParkedWaitTimeoutTest` |
 | 3 | version migration mid-flight | HOLDS | `records 4→4`, `migrationMarkers=1`, `terminalRecords=0`, `rejections=1` | `FencedVersionMigrationTest` |
 | 4 | `modifyPayload` write rejected | HOLDS | `records 7→7`, `rejections=1`, `payloadFoldConsistent=true` after the claim | `FencedPayloadWriteTest` |
 | 5 | external cancel to the stale node | HOLDS | `records 2→2`, `cancelledRecords=0`, `terminalRecords=0`, `rejections=1` | `FencedExternalCancelTest` |
 | 6 | `STARTED` gate per primitive | HOLDS for all three | retryable execute / `waitForEvent` / `sleep`: `startedRecords=0`, `terminalStepRecords=0`, `effectRuns=0`, `terminalRecords=0`, `rejections=2` | `FencedStepPrimitiveStartTest` |
 
-### FND-10 — a retry attempt runs its action without an accepted append of its own — MEDIUM, deterministic
+### FND-10 — a retry attempt runs its action without an accepted append of its own — MEDIUM, deterministic — FIXED (#408)
 
-Case 1 is the only one that does not fully hold, and it is a real hole in the guarantee commit `f01f9a5d` introduced.
+Case 1 was the only one that did not fully hold, a real hole in the guarantee commit `f01f9a5d` introduced. Fixed by
+issue #408: every retry attempt publishes its own `RETRY_STARTED` (payload `StepRetryInfo`, `attempt` = the attempt
+starting) through the same accepted-append gate as the first attempt, and `RETRYING` never runs the action any more.
+`FencedRetryBackoffTest` is inverted to `effectsAfterFence == effectsBeforeFence`. The text below records the finding
+as it was.
 
 ```
 Outcome[recordsBeforeFence=5, recordsAfterFence=5, effectsBeforeFence=1, effectsAfterFence=2,
@@ -534,8 +538,8 @@ This is the FND-6 shape of hunt 1 (records fenced, action duplicated) surviving 
 Fix shape: give a retry attempt the same gate — publish and get an accepted `RETRYING` (or a per-attempt marker) before
 invoking the action, so a fenced node's attempt is stopped by the store the way a first attempt is.
 
-Pinned as an expected-gap assertion inside `FencedRetryBackoffTest`
-(`effectsAfterFence > effectsBeforeFence`), which flips when the gate covers retries.
+Was pinned as an expected-gap assertion inside `FencedRetryBackoffTest`
+(`effectsAfterFence > effectsBeforeFence`); flipped to `==` when the gate covered retries (#408).
 
 ## Harness additions
 

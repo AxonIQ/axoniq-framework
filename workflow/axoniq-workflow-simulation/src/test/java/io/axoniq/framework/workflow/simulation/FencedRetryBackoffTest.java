@@ -29,12 +29,12 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * A retry that fires on a node that lost the instance records nothing — and runs its action anyway.
+ * A retry that fires on a node that lost the instance records nothing and does not run its action.
  * <p>
- * The record half is the fence working. The action half is an expected-gap pin: a retry attempt does not go through
- * the {@code STARTED} gate, because the step is already present in the state, so nothing makes the store confirm the
- * attempt is this execution's before the action runs. This flips the day a retry attempt has to pass an accepted
- * append of its own first.
+ * The record half is the fence working. The action half is the retry attempt passing the same accepted-append gate as
+ * the first attempt: it publishes its own {@code RETRY_STARTED} and runs only if the store accepted it. On the fenced
+ * node that append is rejected, so the step's effect counter does not move. This was an expected-gap pin (FND-10)
+ * until the gate covered retries.
  *
  * @author Stefan Dragisic
  * @since 5.4.0
@@ -45,7 +45,7 @@ class FencedRetryBackoffTest {
 
     @Test
     @Timeout(value = 3, unit = TimeUnit.MINUTES)
-    void aFencedRetryRecordsNothingButStillRunsItsAction() {
+    void aFencedRetryRecordsNothingAndDoesNotRunItsAction() {
         var outcome = FencedRetryBackoffScenario.run(11L, "r1");
         logger.info("Fenced retry backoff: {}", outcome);
 
@@ -59,7 +59,7 @@ class FencedRetryBackoffTest {
                 .as("a fenced execution publishes nothing terminal")
                 .isZero();
         assertThat(outcome.effectsAfterFence())
-                .as("the gap: a retry attempt runs its action without an accepted append of its own")
-                .isGreaterThan(outcome.effectsBeforeFence());
+                .as("a retry attempt runs its action only after an accepted RETRY_STARTED of its own")
+                .isEqualTo(outcome.effectsBeforeFence());
     }
 }

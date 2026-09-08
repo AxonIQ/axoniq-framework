@@ -14,11 +14,13 @@ error flow: no retry → FAILED w/ `StepIndeterminateException`, retry → RETRY
 `ctx.fail` terminates a workflow, by design). The remaining findings are unfixed (every one ships a
 candidate fix + a ready-made acceptance test that flips when the fix lands).
 
-**F-0 follow-up (smaller):** at-most-once is strict on the no-retry path but per-*attempt* for retried
-steps — the existing `RETRYING`-on-resume re-launch (`RetryableExecuteDelegate:100-108`) can still re-run
-a retry attempt crashed mid-flight (the durable log can't distinguish "backoff pending" from "attempt in
-flight"). Closing that would need a published "attempting" marker distinct from the `RETRYING`-waiting
-state. Low priority; the no-retry headline (the F-0 scenario) is strict at-most-once.
+**F-0 follow-up — CLOSED (issue #408 / FND-10):** at-most-once used to be per-*attempt* for retried
+steps because the durable log could not distinguish "backoff pending" from "attempt in flight". Every retry
+attempt now publishes its own `RETRY_STARTED` (payload `StepRetryInfo`, `attempt` = the attempt starting)
+through the same accepted-append gate as the first attempt, and `RETRYING` never runs the action any more.
+A crash during `RETRY_STARTED` resumes as an indeterminate attempt with the recorded attempt number, and a
+node that lost the instance during the backoff has its `RETRY_STARTED` rejected and never runs the action
+(`FencedRetryBackoffTest`, inverted from its expected-gap form).
 
 Vehicle legend: ✅ DST harness as-is · 🧪 a different vehicle (real store / Spring Boot / Kotlin / real threads) ·
 🔧 a reviewed engine change.
@@ -38,7 +40,7 @@ Vehicle legend: ✅ DST harness as-is · 🧪 a different vehicle (real store / 
 | F-9 | `exponential` backoff overflow at large `maxRetries` | low (extreme-config) | `S3BackoffExponentialOverflowTest` |
 | F-10 | `anyMatch` no-match returns `results[0]` as winner | minor | `S5AnyMatchNoMatchWinnerTest` |
 | F-13 | cancel path re-records a duplicate `<workflow>:CANCELLED` on crash/replay (cancel-path / workflow-terminal analogue of F-7; INV-2 does NOT catch workflow-status duplicates). **P1 addendum: the FAIL path is the same ungated publish, empirically pinned** (`SagaCompensationTest.failPath_…`, duplicate `<workflow>:FAILED` count 2→1) | **corruption (workflow-terminal; intermittent race)** | `F13DuplicateCancelRecordTest` (count 2→1) + `SagaCompensationTest.failPath_…` |
-| F-14 | past-deadline `execute` attempt is dispatched anyway: the action RUNS, its result is DISCARDED, the step records TIMED_OUT (`ExecuteDelegate` checks `remainingTimeout.isNegative()` only AFTER launching the action; no completion handler on the negative path). Production triggers: forward clock jump; RETRYING-resume after a gap > per-attempt timeout. Retry amplification: every doomed relaunch re-runs the effect | **effect-vs-record divergence (F-0 family)** | `SagaCompensationTest.doomedCompensation_…` (effect 1→0-or-skip, COMPLETED 0, TIMED_OUT) |
+| F-14 | past-deadline `execute` attempt is dispatched anyway: the action RUNS, its result is DISCARDED, the step records TIMED_OUT (`ExecuteDelegate` checks `remainingTimeout.isNegative()` only AFTER launching the action; no completion handler on the negative path). Production trigger: forward clock jump (the RETRYING-resume trigger is gone since #408: the per-attempt timeout now starts at the attempt's own `RETRY_STARTED`). Retry amplification: every doomed relaunch re-runs the effect | **effect-vs-record divergence (F-0 family)** | `SagaCompensationTest.doomedCompensation_…` (effect 1→0-or-skip, COMPLETED 0, TIMED_OUT) |
 | F-15 | a compensation step failing INSIDE a catch block (incl. the engine's own `StepIndeterminateException`/`StepTimedOutException` resolutions) escapes uncaught → `default`-sink wedge, saga left half-compensated and non-terminal (composes the F-0-fix resolution path with the saga pattern); retry-policy compensation survives the same window | **liveness-wedge (F-6/S-4 family, new route)** | `SagaCompensationTest.crashMidCompensation_noRetry_…` (wedge → CANCELLED) + `…_withRetryPolicy_…` (contrast) |
 | F-16 | committed signal wakes are matched only at LIVE delivery: a wake lost in a crash window (match→commit) or recovery window (pre-re-registration) is never re-delivered — the replay branch never evaluates wait conditions and nothing re-evaluates the committed suffix; the instance stalls until its (day-scale) wait timeout and takes the WRONG branch. Producer-retry rescue works (pinned) | **lost wake / HIGH (liveness + wrong-branch)** | `ParkedSubscriptionTest.lostWake_…` (park → wake) |
 | F-17 | a drift-paused instance is evicted as if finished (`finishWorkflow` runs the termination handler unconditionally — the `:335` TODO) and, repo empty, the LATEST safe point is persisted — the documented drift remedy ("revert/fix and replay") restores NOTHING; the instance is permanently abandoned | **abandoned recovery / HIGH** | `RollingDeployTest.badDeploy_…` (restoredByRollForward false → true) |
