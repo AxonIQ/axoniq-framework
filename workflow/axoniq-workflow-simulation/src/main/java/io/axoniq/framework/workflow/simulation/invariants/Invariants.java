@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.workflow.simulation.invariants;
 
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
@@ -554,8 +555,12 @@ public final class Invariants {
      * {@code STARTED} of the first attempt, or the {@code RETRY_STARTED} of each retry attempt ({@code ExecuteDelegate}
      * publishes both through the same accepted-append gate). A {@code RETRYING} record is a <em>retry decision</em>,
      * emitted by {@code RetryableExecuteDelegate} as it evaluates the {@code RetryPolicy}; there are at most
-     * {@code maxRetries} of them. The terminal outcome ({@code COMPLETED}/{@code FAILED}/{@code TIMED_OUT}/
-     * {@code CANCELLED}) is <strong>not</strong> an attempt and is excluded. This is a <strong>record-level</strong>
+     * {@code maxRetries} of them. Each {@code RETRYING} and {@code RETRY_STARTED} record carries the attempt number it
+     * belongs to ({@code StepRetryInfo.attempt}); per step every number appears at most once per record kind and stays
+     * within the policy ({@code RETRYING}: {@code 1..maxRetries}, {@code RETRY_STARTED}: {@code 2..maxRetries + 1}), so a
+     * crash-resumed or fenced attempt is never decided or started twice. The terminal outcome
+     * ({@code COMPLETED}/{@code FAILED}/{@code TIMED_OUT}/{@code CANCELLED}) is <strong>not</strong> an attempt and is
+     * excluded. This is a <strong>record-level</strong>
      * count — the deliberate contrast with INV-6 ({@code EffectAtMostOnce}/F-0): a crash in the apply→commit window can
      * make a step's <em>effect</em> run more than once, but the recorded <em>attempt count</em> for the step must still
      * stay within the policy bound.
@@ -580,6 +585,8 @@ public final class Invariants {
                                         Map<String, Integer> maxRetriesByStep) {
         Map<String, Integer> attemptCounts = new LinkedHashMap<>();
         Map<String, Integer> retryDecisionCounts = new LinkedHashMap<>();
+        // Attempt numbers carried by RETRYING / RETRY_STARTED payloads, per (key, status): each number at most once.
+        Map<String, Set<Integer>> attemptNumbers = new LinkedHashMap<>();
         var seenIdentifiers = new HashSet<>();
         for (EventMessage event : committedLog) {
             if (!seenIdentifiers.add(event.identifier())) {
@@ -596,6 +603,27 @@ public final class Invariants {
                 continue; // step carries no configured retry bound — INV-8 does not constrain it.
             }
             String key = MetadataUtils.getWorkflowId(event.metadata()) + "/" + stepName;
+            if (event.payloadAs(Object.class) instanceof StepRetryInfo info) {
+                // RETRYING(n) is the decision after attempt n failed (1 <= n <= maxRetries); RETRY_STARTED(n) is the
+                // start of attempt n (2 <= n <= maxRetries + 1). A repeated number is a re-recorded decision or a
+                // second writer starting the same attempt — both are what the append condition must prevent.
+                int lowest = stepStatus.get() == StepStatus.RETRYING ? 1 : 2;
+                int highest = stepStatus.get() == StepStatus.RETRYING ? maxRetries : maxRetries + 1;
+                if (info.attempt() < lowest || info.attempt() > highest) {
+                    throw new InvariantViolation(
+                            "RetryBound",
+                            "step '" + key + "' recorded " + stepStatus.get() + " for attempt " + info.attempt()
+                                    + " but its policy only allows attempts " + lowest + ".." + highest
+                                    + " for that record — the engine numbered an attempt outside the retry policy");
+                }
+                if (!attemptNumbers.computeIfAbsent(key + "/" + stepStatus.get(), k -> new HashSet<>())
+                                   .add(info.attempt())) {
+                    throw new InvariantViolation(
+                            "RetryBound",
+                            "step '" + key + "' recorded " + stepStatus.get() + " for attempt " + info.attempt()
+                                    + " twice — the same attempt was decided or started more than once");
+                }
+            }
             if (stepStatus.get() == StepStatus.RETRYING) {
                 int retries = retryDecisionCounts.merge(key, 1, Integer::sum);
                 if (retries > maxRetries) {

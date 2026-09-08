@@ -463,8 +463,11 @@ duplicated the *effect* while the *record* stayed ≤1, which is exactly why the
   than once, but the recorded *attempt count* must stay within the policy bound.)
 - **Formal-ish:** `∀ w ∈ Instances, ∀ s ∈ StepNames with a configured maxRetries(n) :
   Cardinality({ e ∈ history(w) : e.step = s ∧ e.stepStatus ∈ {STARTED, RETRY_STARTED} }) ≤ n + 1 ∧
-  Cardinality({ e ∈ history(w) : e.step = s ∧ e.stepStatus = RETRYING }) ≤ n`. Equivalently: at most
-  one `STARTED`, at most `n` `RETRY_STARTED` and at most `n` `RETRYING` records are ever committed for `(w, s)`. Taken **per `(workflowId,
+  Cardinality({ e ∈ history(w) : e.step = s ∧ e.stepStatus = RETRYING }) ≤ n`, and the attempt numbers carried by
+  those records are injective per record kind and within the policy: `RETRYING(k)` has `1 ≤ k ≤ n`,
+  `RETRY_STARTED(k)` has `2 ≤ k ≤ n + 1`, no `k` twice. Equivalently: at most
+  one `STARTED`, at most `n` `RETRY_STARTED` and at most `n` `RETRYING` records are ever committed for `(w, s)`, each
+  attempt decided and started at most once. Taken **per `(workflowId,
   stepName)`** (never pooled across instances or steps). The cardinality is over the **set** of committed events —
   the DST assertion counts **distinct committed events (by event identifier)**: an at-least-once durable store may
   legitimately hold the SAME committed event twice (the `DUPLICATED_APPEND` fault — a retried append whose first

@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.workflow.simulation;
 
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import io.axoniq.framework.workflow.simulation.invariants.InvariantViolation;
@@ -151,8 +152,61 @@ class Inv8RetryBoundTest {
                 .doesNotThrowAnyException();
     }
 
+    @Test
+    void assertRetryBound_passesWhenAttemptNumbersAreDistinctAndWithinThePolicy() {
+        // maxRetries(2): RETRYING carries attempts 1..2, RETRY_STARTED carries attempts 2..3, each number once.
+        List<EventMessage> log = List.of(
+                step("retry-wf0", STEP, StepStatus.STARTED),
+                attempt("retry-wf0", STEP, StepStatus.RETRYING, 1),
+                attempt("retry-wf0", STEP, StepStatus.RETRY_STARTED, 2),
+                attempt("retry-wf0", STEP, StepStatus.RETRYING, 2),
+                attempt("retry-wf0", STEP, StepStatus.RETRY_STARTED, 3),
+                step("retry-wf0", STEP, StepStatus.COMPLETED));
+
+        assertThatCode(() -> Invariants.assertRetryBound(log, Map.of(STEP, 2)))
+                .as("distinct attempt numbers within the policy satisfy INV-8")
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void assertRetryBound_throwsWhenTheSameAttemptIsStartedTwice() {
+        // Two RETRY_STARTED records for attempt 2: a second writer started the same attempt, or a crash-resumed attempt
+        // was re-started instead of being decided as RETRYING.
+        List<EventMessage> log = List.of(
+                step("retry-wf0", STEP, StepStatus.STARTED),
+                attempt("retry-wf0", STEP, StepStatus.RETRYING, 1),
+                attempt("retry-wf0", STEP, StepStatus.RETRY_STARTED, 2),
+                attempt("retry-wf0", STEP, StepStatus.RETRY_STARTED, 2),
+                step("retry-wf0", STEP, StepStatus.COMPLETED));
+
+        assertThatThrownBy(() -> Invariants.assertRetryBound(log, Map.of(STEP, 2)))
+                .isInstanceOf(InvariantViolation.class)
+                .hasMessageContaining("RetryBound")
+                .hasMessageContaining("attempt 2 twice");
+    }
+
+    @Test
+    void assertRetryBound_throwsWhenAnAttemptNumberIsOutsideThePolicy() {
+        // maxRetries(2) allows RETRY_STARTED attempts 2..3; attempt 4 was numbered past the policy.
+        List<EventMessage> log = List.of(
+                step("retry-wf0", STEP, StepStatus.STARTED),
+                attempt("retry-wf0", STEP, StepStatus.RETRYING, 1),
+                attempt("retry-wf0", STEP, StepStatus.RETRY_STARTED, 4),
+                step("retry-wf0", STEP, StepStatus.COMPLETED));
+
+        assertThatThrownBy(() -> Invariants.assertRetryBound(log, Map.of(STEP, 2)))
+                .isInstanceOf(InvariantViolation.class)
+                .hasMessageContaining("RetryBound")
+                .hasMessageContaining("outside the retry policy");
+    }
+
     private static EventMessage step(String workflowId, String stepName, StepStatus status) {
         Metadata metadata = MetadataUtils.create(workflowId, stepName, status);
         return new GenericEventMessage(new MessageType(stepName), Map.of(), metadata);
+    }
+
+    private static EventMessage attempt(String workflowId, String stepName, StepStatus status, int attempt) {
+        Metadata metadata = MetadataUtils.create(workflowId, stepName, status);
+        return new GenericEventMessage(new MessageType(stepName), new StepRetryInfo(attempt, 2, null), metadata);
     }
 }

@@ -45,6 +45,7 @@ import org.junit.jupiter.api.*;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,11 +67,15 @@ import static org.mockito.Mockito.*;
 class ExecuteDelegateRetryGateTest {
 
     private static final String STEP_NAME = "ship";
+    private static final Duration TIMEOUT = Duration.ofMinutes(1);
+    private static final Instant RETRYING_AT = Instant.parse("2026-08-18T10:00:00Z");
+    private static final Instant RETRY_STARTED_AT = RETRYING_AT.plusSeconds(90);
     private static final StepRetryInfo FIRST_ATTEMPT_FAILED =
             new StepRetryInfo(1, 2, WorkflowError.from(new IllegalStateException("first attempt failed")));
 
     private WorkflowExecution workflowExecution;
     private UnitOfWork unitOfWork;
+    private WorkflowScheduler scheduler;
     private ExecuteDelegate delegate;
     private final AtomicReference<WorkflowStep> currentStep = new AtomicReference<>();
     private final List<EventMessage> acceptedEvents = new ArrayList<>();
@@ -84,7 +89,7 @@ class ExecuteDelegateRetryGateTest {
         var workflowState = mock(WorkflowState.class);
         var unitOfWorkFactory = mock(UnitOfWorkFactory.class);
         unitOfWork = mock(UnitOfWork.class);
-        var scheduler = mock(WorkflowScheduler.class);
+        scheduler = mock(WorkflowScheduler.class);
         var timeoutTask = mock(WorkflowScheduler.ScheduledTask.class);
         var queuedTasks = new ArrayDeque<Consumer<WorkflowExecution>>();
 
@@ -122,7 +127,7 @@ class ExecuteDelegateRetryGateTest {
             acceptedEvents.add(event);
             if (MetadataUtils.getStepStatus(event.metadata()).orElseThrow() == StepStatus.RETRY_STARTED) {
                 currentStep.set(WorkflowStep.retryStarted(STEP_NAME, event.payloadAs(StepRetryInfo.class),
-                                                          Instant.now(), null));
+                                                          RETRY_STARTED_AT, null));
             }
             return CompletableFuture.completedFuture(null);
         });
@@ -133,7 +138,7 @@ class ExecuteDelegateRetryGateTest {
                 new RunningSteps(),
                 new ReachedSteps(),
                 DefaultEventNameCustomizer.Builder.defaults(),
-                Clock.systemUTC(),
+                Clock.fixed(RETRY_STARTED_AT, ZoneOffset.UTC),
                 unitOfWorkFactory,
                 Runnable::run,
                 scheduler,
@@ -147,7 +152,7 @@ class ExecuteDelegateRetryGateTest {
         @Test
         void publishesRetryStartedForTheNextAttemptBeforeRunningTheAction() {
             // given a step whose first attempt failed and whose backoff has elapsed
-            currentStep.set(WorkflowStep.retrying(STEP_NAME, FIRST_ATTEMPT_FAILED, Instant.now(), null));
+            currentStep.set(WorkflowStep.retrying(STEP_NAME, FIRST_ATTEMPT_FAILED, RETRYING_AT, null));
 
             // when the retry attempt is launched
             execute();
@@ -164,9 +169,21 @@ class ExecuteDelegateRetryGateTest {
         }
 
         @Test
+        void perAttemptTimeoutStartsAtTheAttemptsOwnRetryStarted() {
+            // given a step whose RETRYING was recorded 90 seconds before the retry attempt starts
+            currentStep.set(WorkflowStep.retrying(STEP_NAME, FIRST_ATTEMPT_FAILED, RETRYING_AT, null));
+
+            // when the retry attempt is launched
+            execute();
+
+            // then the timeout deadline is measured from RETRY_STARTED, so the backoff does not eat into it
+            verify(scheduler).schedule(RETRY_STARTED_AT.plus(TIMEOUT));
+        }
+
+        @Test
         void rejectedRetryStartedCancelsTheAttemptWithoutRunningTheAction() {
             // given a step in backoff on a node that lost the instance: the store rejects its appends
-            currentStep.set(WorkflowStep.retrying(STEP_NAME, FIRST_ATTEMPT_FAILED, Instant.now(), null));
+            currentStep.set(WorkflowStep.retrying(STEP_NAME, FIRST_ATTEMPT_FAILED, RETRYING_AT, null));
             storeAcceptsAppends = false;
 
             // when the retry attempt is launched
@@ -183,7 +200,7 @@ class ExecuteDelegateRetryGateTest {
         void foreignRetryStartedAtEntryIsReportedAsIndeterminateWithoutRunningTheAction() {
             // given another execution already started attempt 2 of this step
             var attemptTwo = new StepRetryInfo(2, 2, FIRST_ATTEMPT_FAILED.error());
-            currentStep.set(WorkflowStep.retryStarted(STEP_NAME, attemptTwo, Instant.now(), null));
+            currentStep.set(WorkflowStep.retryStarted(STEP_NAME, attemptTwo, RETRY_STARTED_AT, null));
 
             // when this execution reaches the step
             execute();
@@ -211,7 +228,7 @@ class ExecuteDelegateRetryGateTest {
                 action,
                 LocalOnlyPayloadReducer.INSTANCE,
                 GlobalOnlyPayloadReducer.INSTANCE,
-                Duration.ofMinutes(1),
+                TIMEOUT,
                 DefaultEventNameCustomizer.Builder.defaults(),
                 RetryPolicy.maxRetries(2)
         );

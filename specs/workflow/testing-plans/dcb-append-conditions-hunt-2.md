@@ -517,8 +517,14 @@ event is in the durable log and the instance logged a `"was rejected"` warning.
 Case 1 was the only one that did not fully hold, a real hole in the guarantee commit `f01f9a5d` introduced. Fixed by
 issue #408: every retry attempt publishes its own `RETRY_STARTED` (payload `StepRetryInfo`, `attempt` = the attempt
 starting) through the same accepted-append gate as the first attempt, and `RETRYING` never runs the action any more.
-`FencedRetryBackoffTest` is inverted to `effectsAfterFence == effectsBeforeFence`. The text below records the finding
-as it was.
+`FencedRetryBackoffTest` is inverted to `effectsAfterFence == effectsBeforeFence`. TLA+ corroboration:
+`formal/tla/RetryGate.tla` with `MC_retrygate.cfg` (gate off, `RetryAttemptGated` VIOLATED in 4 steps) and
+`MC_retrygate_fixed.cfg` (gate on, No error). Combination pins added with the fix: `RetryStartedGateTest` drives a
+crash while a retry attempt is in flight (recovery decides `RETRYING(2)` with the recorded number, then
+`RETRY_STARTED(3)`, attempt 2 never re-run) and an external cancel while a retry attempt is running (step `CANCELLED`,
+no further `RETRYING` / `RETRY_STARTED` / `TIMED_OUT`, effect counter frozen); INV-8 now also checks that every
+`RETRYING` / `RETRY_STARTED` attempt number is distinct and within the policy. The text below records the finding as it
+was.
 
 ```
 Outcome[recordsBeforeFence=5, recordsAfterFence=5, effectsBeforeFence=1, effectsAfterFence=2,
