@@ -23,9 +23,8 @@
 
     <parent>
         <groupId>io.axoniq.framework</groupId>
-        <artifactId>axoniq-framework-parent</artifactId>
+        <artifactId>axoniq-integrationtests</artifactId>
         <version>${revision}</version>
-        <relativePath>../../build/parent/pom.xml</relativePath>
     </parent>
 
     <artifactId>axoniq-integrationtests-dead-letter</artifactId>
@@ -65,12 +64,6 @@
         <dependency>
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-dead-letter</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-multi-tenancy</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
