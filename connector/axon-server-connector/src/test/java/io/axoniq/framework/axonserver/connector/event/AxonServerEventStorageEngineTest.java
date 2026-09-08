@@ -87,8 +87,9 @@ class AxonServerEventStorageEngineTest {
 
     private static final String EVENT_NAME = "test-event";
 
-    private ResultStream<SourceEventsResponse> sourcingStream;
+    private AxonServerConnection connection;
     private DcbEventChannel dcbEventChannel;
+    private ResultStream<SourceEventsResponse> sourcingStream;
     private SnapshotChannel snapshotChannel;
     private EventConverter eventConverter;
 
@@ -97,7 +98,7 @@ class AxonServerEventStorageEngineTest {
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
-        AxonServerConnection connection = mock(AxonServerConnection.class);
+        connection = mock(AxonServerConnection.class);
         dcbEventChannel = mock(DcbEventChannel.class);
         sourcingStream = mock(ResultStream.class);
         snapshotChannel = mock(SnapshotChannel.class);
@@ -153,6 +154,13 @@ class AxonServerEventStorageEngineTest {
         private final QualifiedName qualifiedName = new QualifiedName("test-entity");
         private final String identifier = "entity-id";
 
+        private AxonServerSnapshotStore snapshotStore;
+
+        @BeforeEach
+        void setUp() {
+            snapshotStore = new AxonServerSnapshotStore(connection, eventConverter);
+        }
+
         @Test
         void storeDelegatesToTheInternalSnapshotStoreUsingTheSharedKeyFormat() {
             // given
@@ -168,7 +176,7 @@ class AxonServerEventStorageEngineTest {
             // then the key sent to Axon Server matches the single owner of the snapshot key wire format
             ArgumentCaptor<AddSnapshotRequest> captor = ArgumentCaptor.forClass(AddSnapshotRequest.class);
             verify(snapshotChannel).addSnapshot(captor.capture());
-            ByteString expectedKey = AxonServerSnapshotStore.snapshotKey(eventConverter, qualifiedName, identifier);
+            ByteString expectedKey = snapshotStore.snapshotKey(qualifiedName, identifier);
             assertThat(captor.getValue().getKey()).isEqualTo(expectedKey);
         }
 
@@ -196,7 +204,7 @@ class AxonServerEventStorageEngineTest {
             assertThat(result.position()).isEqualTo(new GlobalIndexPosition(42L));
             ArgumentCaptor<GetLastSnapshotRequest> captor = ArgumentCaptor.forClass(GetLastSnapshotRequest.class);
             verify(snapshotChannel).getLastSnapshot(captor.capture());
-            ByteString expectedKey = AxonServerSnapshotStore.snapshotKey(eventConverter, qualifiedName, identifier);
+            ByteString expectedKey = snapshotStore.snapshotKey(qualifiedName, identifier);
             assertThat(captor.getValue().getKey()).isEqualTo(expectedKey);
         }
 
