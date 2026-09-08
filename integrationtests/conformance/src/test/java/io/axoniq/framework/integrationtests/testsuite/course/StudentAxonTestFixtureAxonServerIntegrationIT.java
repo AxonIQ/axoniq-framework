@@ -20,7 +20,6 @@
 package io.axoniq.framework.integrationtests.testsuite.course;
 
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
-import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
@@ -84,9 +83,7 @@ class StudentAxonTestFixtureAxonServerIntegrationIT {
                     container.getHttpPort());
         AxonServerConfiguration axonServerConfiguration = new AxonServerConfiguration();
         axonServerConfiguration.setServers(container.getHost() + ":" + container.getGrpcPort());
-        // Not a multi-tenancy test. See MultiTenancyUtils#disable.
-        configurer.componentRegistry(MultiTenancyUtils::disable)
-                  .componentRegistry(cr -> cr.registerComponent(
+        configurer.componentRegistry(cr -> cr.registerComponent(
                           AxonServerConfiguration.class,
                           c -> axonServerConfiguration
                   ));
