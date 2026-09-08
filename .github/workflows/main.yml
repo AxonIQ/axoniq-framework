@@ -56,10 +56,10 @@ jobs:
 
       - name: Write Axon Server test license
         run: |
-          mkdir -p integrationtests/src/test/resources
-          printf '%s' "$AXON_SERVER_LICENSE" > integrationtests/src/test/resources/axon-server-test.license
-          echo "Axon Server test license written to integrationtests/src/test/resources/axon-server-test.license"
-          echo "License file size: $(wc -c < integrationtests/src/test/resources/axon-server-test.license) bytes"
+          mkdir -p integrationtests/support/src/test/resources
+          printf '%s' "$AXON_SERVER_LICENSE" > integrationtests/support/src/test/resources/axon-server-test.license
+          echo "Axon Server test license written to integrationtests/support/src/test/resources/axon-server-test.license"
+          echo "License file size: $(wc -c < integrationtests/support/src/test/resources/axon-server-test.license) bytes"
         env:
           AXON_SERVER_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
 
