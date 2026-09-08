@@ -1,9 +1,6 @@
 name: Verify JAR Manifests
 
 on:
-  push:
-    branches:
-      - '**'
   pull_request:
 
 concurrency:
