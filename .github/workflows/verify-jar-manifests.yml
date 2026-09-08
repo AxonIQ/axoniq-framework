@@ -1,7 +1,9 @@
 name: Verify JAR Manifests
 
 on:
-  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 1 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -32,16 +34,23 @@ jobs:
         run: |
           set -euo pipefail
 
+          excluded_jar_patterns=(
+            "*-tests.jar"
+            "*-sources.jar"
+            "*-javadoc.jar"
+            "*-integrationtests-*.jar"
+            "*/docs/_samples/target/axoniq-docs-samples-*.jar"
+          )
+
           missing=0
           while IFS= read -r jar; do
-            case "$jar" in
-              *-tests.jar|*-sources.jar|*-javadoc.jar)
-                continue
-                ;;
-              */integrationtests/target/axoniq-integrationtests-*.jar|*/docs/_samples/target/axoniq-docs-samples-*.jar)
-                continue
-                ;;
-            esac
+            for excluded_pattern in "${excluded_jar_patterns[@]}"; do
+              case "$jar" in
+                $excluded_pattern)
+                  continue 2
+                  ;;
+              esac
+            done
 
             if ! unzip -p "$jar" META-INF/MANIFEST.MF | grep -q '^Automatic-Module-Name:'; then
               echo "Missing Automatic-Module-Name: $jar"
