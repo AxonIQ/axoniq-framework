@@ -24,6 +24,7 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.command.AxonServerCommandBusConnector;
 import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
 import io.axoniq.framework.axonserver.connector.event.EventProcessorControlService;
+import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
 import io.axoniq.framework.messaging.queryhandling.distributed.PayloadConvertingQueryBusConnector;
@@ -33,6 +34,7 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
@@ -84,6 +86,58 @@ class AxonServerConfigurationEnhancerTest {
         assertThat(result.getComponent(SnapshotStore.class)).isSameAs(result.getComponent(EventStorageEngine.class));
         assertThat(result.getComponent(CommandBusConnector.class)).isInstanceOf(PayloadConvertingCommandBusConnector.class);
         assertThat(result.getComponent(QueryBusConnector.class)).isInstanceOf(PayloadConvertingQueryBusConnector.class);
+    }
+
+    @Test
+    void enhanceRegistersTheLightweightSnapshotStoreWhenAUserProvidedEventStorageEngineIsAlreadyPresent() {
+        // given a user combining Axon Server for snapshots with a different event storage backend
+        EventStorageEngine userProvidedEngine = mock(EventStorageEngine.class);
+
+        // when
+        Configuration result = EventSourcingConfigurer.create()
+                                                      .componentRegistry(ComponentRegistry::disableEnhancerScanning)
+                                                      .componentRegistry(cr -> cr.registerComponent(
+                                                              EventStorageEngine.class, c -> userProvidedEngine
+                                                      ))
+                                                      .componentRegistry(cr -> testSubject.enhance(cr))
+                                                      .build();
+
+        // then SnapshotStore gets the lightweight AxonServerSnapshotStore rather than a full
+        // AxonServerEventStorageEngine -- the user's own engine, not being a SnapshotStore itself, is decorated with
+        // it by the framework's SnapshotSourcingConfigurationEnhancer to gain snapshot support
+        assertThat(result.getComponent(SnapshotStore.class))
+                .isInstanceOf(AxonServerSnapshotStore.class)
+                .isNotInstanceOf(AxonServerEventStorageEngine.class);
+    }
+
+    @Test
+    void engineSurvivesUndecoratedWhenASnapshotStoreDecoratorIsRegistered() {
+        // given the exact decoration SnapshotSourcingConfigurationEnhancer applies in the framework: decorate
+        // EventStorageEngine.class with SnapshotCapableEventStorageEngine.decorate(engine, snapshotStore), using
+        // whatever SnapshotStore.class resolves to -- plus a SnapshotStore decorator, simulating e.g. tracing
+        Configuration result = EventSourcingConfigurer.create()
+                                                      .componentRegistry(ComponentRegistry::disableEnhancerScanning)
+                                                      .componentRegistry(cr -> testSubject.enhance(cr))
+                                                      .componentRegistry(cr -> cr.registerDecorator(
+                                                              SnapshotStore.class,
+                                                              0,
+                                                              (config, name, delegate) -> Mockito.spy(delegate)
+                                                      ))
+                                                      .componentRegistry(cr -> cr.registerDecorator(
+                                                              EventStorageEngine.class,
+                                                              SnapshotCapableEventStorageEngine.DECORATION_ORDER,
+                                                              (config, name, engine) -> config
+                                                                      .getOptionalComponent(SnapshotStore.class)
+                                                                      .map(snapshotStore -> SnapshotCapableEventStorageEngine
+                                                                              .decorate(engine, snapshotStore))
+                                                                      .orElse(engine)
+                                                      ))
+                                                      .build();
+
+        // then the engine must still be the bare AxonServerEventStorageEngine, not wrapped in
+        // SnapshotCapableEventStorageEngine -- otherwise the single-round-trip optimization silently reverts to two
+        // round trips, since SnapshotCapableEventStorageEngine#source never delegates a Snapshot-strategy condition
+        assertThat(result.getComponent(EventStorageEngine.class)).isInstanceOf(AxonServerEventStorageEngine.class);
     }
 
     @Test

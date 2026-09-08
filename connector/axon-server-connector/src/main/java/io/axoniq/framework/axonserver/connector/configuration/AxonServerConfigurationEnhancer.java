@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.axonserver.connector.configuration;
 
+import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.api.TagsConfiguration;
@@ -27,6 +28,7 @@ import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngi
 import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngineFactory;
 import io.axoniq.framework.axonserver.connector.event.EventProcessorControlService;
 import io.axoniq.framework.axonserver.connector.query.AxonServerQueryBusConnector;
+import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
 import io.axoniq.framework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
 import io.axoniq.framework.messaging.queryhandling.distributed.PayloadConvertingQueryBusConnector;
@@ -46,15 +48,14 @@ import org.axonframework.common.lifecycle.Phase;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.conversion.MessageConverter;
-import org.jspecify.annotations.Nullable;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
-import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A {@link ConfigurationEnhancer} that is auto-loadable by the
- * {@link ApplicationConfigurer}, setting sensible defaults when using Axon Server.
+ * A {@link ConfigurationEnhancer} that is auto-loadable by the {@link ApplicationConfigurer}, setting sensible defaults
+ * when using Axon Server.
  * <p>
  * Will only register the following components <b>if</b> there is no component registered for the given class yet:
  * <ul>
@@ -65,7 +66,10 @@ import java.util.concurrent.atomic.AtomicReference;
  *     class {@link ManagedChannelCustomizer}</li>
  *     <li>Registers the {@link AxonServerEventStorageEngine} for classes {@link EventStorageEngine} and
  *     {@link SnapshotStore}, sharing the same instance for both so snapshot sourcing resolves the snapshot and the
- *     events that follow it in a single round trip to Axon Server.</li>
+ *     events that follow it in a single round trip to Axon Server. When a {@link EventStorageEngine} is already
+ *     registered by the time this enhancer runs (e.g. when you combine Axon Server for snapshots with a different event
+ *     storage backend) registers the lighter {@link AxonServerSnapshotStore} for class {@link SnapshotStore}
+ *     instead</li>
  *     <li>Registers a {@link AxonServerCommandBusConnector} for class {@link CommandBusConnector}</li>
  *     <li>Registers a {@link AxonServerQueryBusConnector} for class {@link QueryBusConnector}</li>
  *     <li>Registers a {@link EventProcessorControlService} for class {@link EventProcessorControlService}</li>
@@ -101,6 +105,7 @@ public class AxonServerConfigurationEnhancer implements ConfigurationEnhancer {
 
     @Override
     public void enhance(ComponentRegistry registry) {
+        boolean userProvidedEventStorageEngine = registry.hasComponent(EventStorageEngine.class, SearchScope.ALL);
         ComponentBuilder<AxonServerEventStorageEngine> sharedStorageEngineBuilder = eventStorageEngineBuilder();
 
         registry.registerIfNotPresent(AxonServerConfiguration.class,
@@ -111,7 +116,11 @@ public class AxonServerConfigurationEnhancer implements ConfigurationEnhancer {
                                       c -> ManagedChannelCustomizer.identity(),
                                       SearchScope.ALL)
                 .registerIfNotPresent(EventStorageEngine.class, sharedStorageEngineBuilder, SearchScope.ALL)
-                .registerIfNotPresent(SnapshotStore.class, sharedStorageEngineBuilder, SearchScope.ALL)
+                .registerIfNotPresent(SnapshotStore.class,
+                                      userProvidedEventStorageEngine
+                                              ? AxonServerConfigurationEnhancer::buildSnapshotStore
+                                              : sharedStorageEngineBuilder,
+                                      SearchScope.ALL)
                 .registerIfNotPresent(commandBusConnectorDefinition(), SearchScope.ALL)
                 .registerIfNotPresent(queryBusConnectorDefinition(), SearchScope.ALL)
                 .registerDecorator(CommandBusConnector.class,
@@ -147,20 +156,25 @@ public class AxonServerConfigurationEnhancer implements ConfigurationEnhancer {
     }
 
     private static ComponentBuilder<AxonServerEventStorageEngine> eventStorageEngineBuilder() {
-        AtomicReference<@Nullable AxonServerEventStorageEngine> instance = new AtomicReference<>();
-        return config -> {
-            AxonServerEventStorageEngine result = instance.updateAndGet(
-                    e -> {
-                        if (e != null) {
-                            return e;
-                        } else {
-                            String defaultContext = config.getComponent(AxonServerConfiguration.class).getContext();
-                            return AxonServerEventStorageEngineFactory.constructForContext(defaultContext, config);
-                        }
-                    }
-            );
-            return Objects.requireNonNull(result, "AxonServerEventStorageEngine must not be null");
-        };
+        // An AtomicReference would seem to suffice, but its contract isn't optimal for what this builder does.
+        // There's a none-zero chance that an updateAndGet call would be invoked several times under contention.
+        // As we open a connection, the contention isn't unlikely to happen.
+        // AtomicReference use would thus potentially accidentally open a ghost connection we'd never be able to close cleanly.
+        // Hence, ConcurrentHashMap#computeIfAbsent is used as it does guarantee the mapping function runs at most once per key.
+        ConcurrentHashMap<String, AxonServerEventStorageEngine> instance = new ConcurrentHashMap<>();
+        return config -> instance.computeIfAbsent("shared", ignored -> buildEventStorageEngine(config));
+    }
+
+    private static AxonServerEventStorageEngine buildEventStorageEngine(Configuration config) {
+        String defaultContext = config.getComponent(AxonServerConfiguration.class).getContext();
+        return AxonServerEventStorageEngineFactory.constructForContext(defaultContext, config);
+    }
+
+    private static AxonServerSnapshotStore buildSnapshotStore(Configuration config) {
+        String defaultContext = config.getComponent(AxonServerConfiguration.class).getContext();
+        AxonServerConnection connection = config.getComponent(AxonServerConnectionManager.class)
+                                                .getConnection(defaultContext);
+        return new AxonServerSnapshotStore(connection, config.getComponent(EventConverter.class));
     }
 
     private static ComponentDefinition<CommandBusConnector> commandBusConnectorDefinition() {
