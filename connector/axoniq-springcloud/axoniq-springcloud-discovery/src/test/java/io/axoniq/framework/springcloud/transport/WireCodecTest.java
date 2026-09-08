@@ -41,38 +41,26 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class WireCodecTest {
 
     @Nested
-    class CarryingAPayload {
+    class CarryingSerializedDetails {
 
         @Test
         void carriesBytesAsTheyAre() {
             // given
-            byte[] payload = "{\"id\":\"course-1\"}".getBytes(StandardCharsets.UTF_8);
+            byte[] details = "{\"id\":\"course-1\"}".getBytes(StandardCharsets.UTF_8);
 
             // when
-            String encoded = WireCodec.encode(WireCodec.payloadAsBytes(payload, byte[].class, "Decorator"));
+            String encoded = WireCodec.encode(details);
 
             // then
-            assertThat(WireCodec.decode(encoded)).isEqualTo(payload);
+            assertThat(WireCodec.decode(encoded)).isEqualTo(details);
         }
 
         @Test
-        void carriesNothingForAMessageWithoutAPayload() {
-            // when
-            byte[] bytes = WireCodec.payloadAsBytes(null, Void.class, "Decorator");
-
-            // then an absent payload travels as an absent field rather than as an empty string
-            assertThat(bytes).isEmpty();
-            assertThat(WireCodec.encode(bytes)).isNull();
+        void carriesNothingForAFailureWithoutDetails() {
+            // then absent details travel as an absent field rather than as an empty string
+            assertThat(WireCodec.encode(null)).isNull();
+            assertThat(WireCodec.encode(new byte[0])).isNull();
             assertThat(WireCodec.decode(null)).isNull();
-        }
-
-        @Test
-        void refusesAPayloadThatWasNeverConverted() {
-            // when / then the failure names both the type it got and the decorator that should have converted it
-            assertThatThrownBy(() -> WireCodec.payloadAsBytes("not bytes", String.class, "SomeDecorator"))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("java.lang.String")
-                    .hasMessageContaining("SomeDecorator");
         }
     }
 

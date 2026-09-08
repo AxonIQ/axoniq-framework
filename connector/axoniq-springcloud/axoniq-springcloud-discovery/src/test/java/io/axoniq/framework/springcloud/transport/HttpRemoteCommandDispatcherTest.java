@@ -21,6 +21,7 @@ package io.axoniq.framework.springcloud.transport;
 
 import io.axoniq.framework.springcloud.routing.Member;
 import io.axoniq.framework.springcloud.util.StubClientHttpRequestFactory;
+import org.axonframework.conversion.ConversionException;
 import org.axonframework.messaging.commandhandling.CommandDispatchException;
 import org.axonframework.messaging.commandhandling.CommandExecutionException;
 import org.axonframework.messaging.commandhandling.CommandMessage;
@@ -35,9 +36,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.client.RestClient;
 
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
@@ -57,7 +56,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class HttpRemoteCommandDispatcherTest {
 
     private static final MessageType COMMAND_TYPE = new MessageType("university.CreateCourse", "1.0.0");
-    private static final byte[] PAYLOAD = "{\"name\":\"Axon 5\"}".getBytes(StandardCharsets.UTF_8);
+    private static final String PAYLOAD = "{\"name\":\"Axon 5\"}";
+    /** The payload as it appears inside the JSON body carrying it. */
+    private static final String PAYLOAD_IN_JSON = PAYLOAD.replace("\"", "\\\"");
     private static final Member REMOTE_MEMBER =
             new Member("UNIVERSITY[http://node-b:8080]", URI.create("http://node-b:8080"), false);
 
@@ -74,6 +75,11 @@ class HttpRemoteCommandDispatcherTest {
                                                      SpringCloudCommandController.DEFAULT_COMMAND_ENDPOINT,
                                                      directExecutor,
                                                      null);
+    }
+
+    /** A payload no converter is attached to, standing in for one a decorator should have converted. */
+    private record CreateCourse(String name) {
+
     }
 
     private static CommandMessage command() {
@@ -113,6 +119,7 @@ class HttpRemoteCommandDispatcherTest {
             String body = requestFactory.lastRequest().getBodyAsString();
             assertThat(body).contains("\"identifier\":\"command-1\"")
                             .contains("\"type\":\"university.CreateCourse#1.0.0\"")
+                            .contains("\"payload\":\"" + PAYLOAD_IN_JSON + "\"")
                             .contains("\"routingKey\":\"course-1\"")
                             .contains("\"priority\":5");
         }
@@ -133,10 +140,10 @@ class HttpRemoteCommandDispatcherTest {
         @Test
         void completesWithTheResultTheMemberReturned() {
             // given
-            String payload = Base64.getEncoder().encodeToString(PAYLOAD);
             requestFactory.respondingWith(
                     "{\"identifier\":\"reply-1\",\"requestIdentifier\":\"command-1\","
-                            + "\"type\":\"university.CourseId#1.0.0\",\"payload\":\"" + payload + "\"}", null);
+                            + "\"type\":\"university.CourseId#1.0.0\",\"payload\":\"" + PAYLOAD_IN_JSON + "\"}",
+                    null);
 
             // when
             CommandResultMessage result = testSubject.dispatch(REMOTE_MEMBER, command()).join();
@@ -144,7 +151,7 @@ class HttpRemoteCommandDispatcherTest {
             // then
             assertThat(result).isNotNull();
             assertThat(result.type()).isEqualTo(new MessageType("university.CourseId", "1.0.0"));
-            assertThat((byte[]) result.payload()).isEqualTo(PAYLOAD);
+            assertThat(result.payload()).isEqualTo(PAYLOAD);
         }
     }
 
@@ -280,13 +287,13 @@ class HttpRemoteCommandDispatcherTest {
     class Validation {
 
         @Test
-        void failsWhenThePayloadIsNotBytes() {
+        void failsWhenThePayloadWasNeverConverted() {
             // given — a connector not wrapped in a PayloadConvertingCommandBusConnector would produce this
-            CommandMessage unconverted = new GenericCommandMessage(COMMAND_TYPE, "not bytes");
+            CommandMessage unconverted = new GenericCommandMessage(COMMAND_TYPE, new CreateCourse("Axon 5"));
 
             // when / then
             assertThatThrownBy(() -> testSubject.dispatch(REMOTE_MEMBER, unconverted).join())
-                    .hasCauseInstanceOf(IllegalArgumentException.class);
+                    .hasCauseInstanceOf(ConversionException.class);
             assertThat(requestFactory.requests()).isEmpty();
         }
 

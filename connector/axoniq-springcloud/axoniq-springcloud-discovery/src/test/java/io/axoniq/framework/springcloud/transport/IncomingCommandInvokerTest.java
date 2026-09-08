@@ -28,7 +28,6 @@ import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
 import org.junit.jupiter.api.*;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -45,7 +44,7 @@ class IncomingCommandInvokerTest {
 
     private static final MessageType COMMAND_TYPE = new MessageType("university.CreateCourse", "2.1.0");
     private static final MessageType RESULT_TYPE = new MessageType("university.CourseId", "1.0.0");
-    private static final byte[] PAYLOAD = "{\"name\":\"Axon 5\"}".getBytes(StandardCharsets.UTF_8);
+    private static final String PAYLOAD = "{\"name\":\"Axon 5\"}";
 
     private RecordingCommandHandler handler;
     private IncomingCommandInvoker testSubject;

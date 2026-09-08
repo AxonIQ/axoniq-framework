@@ -75,7 +75,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *     subscription on their next discovery heartbeat regardless.</li>
  * </ul>
  * This connector is wired by {@link SpringCloudConfigurationEnhancer}, wrapped in a
- * {@code PayloadConvertingCommandBusConnector} that converts payloads to {@code byte[]} on the way out. It is not
+ * {@code PayloadConvertingCommandBusConnector} that converts payloads to {@code String} on the way out. It is not
  * meant to be constructed directly by application code.
  *
  * @author Allard Buijze

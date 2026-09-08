@@ -34,14 +34,13 @@ import java.util.Objects;
  * The routing key travels along even though the receiving member has already been selected, because a handler may read
  * it, and the priority travels along because the receiving member's own priority executor orders work by it.
  * <p>
- * The payload arrives here already converted to {@code byte[]} by the
- * {@code PayloadConvertingCommandBusConnector} wrapped around the connector, and is carried Base64-encoded so it
- * survives JSON.
+ * The payload arrives here already converted to a {@code String} by the
+ * {@code PayloadConvertingCommandBusConnector} wrapped around the connector, and is carried as text.
  *
  * @param identifier the {@link CommandMessage#identifier() identifier} of the command
  * @param type       the {@link MessageType#toString() string form} of the command's {@link CommandMessage#type()
  *                   type}, carrying both qualified name and version
- * @param payload    the Base64-encoded {@code byte[]} payload of the command, or {@code null} when it has none
+ * @param payload    the payload of the command as text, or {@code null} when it has none
  * @param metadata   the {@link CommandMessage#metadata() metadata} of the command
  * @param routingKey the {@link CommandMessage#routingKey() routing key} of the command, or {@code null} when it has
  *                   none

@@ -20,6 +20,7 @@
 package io.axoniq.framework.springcloud.transport;
 
 import org.axonframework.common.AxonNonTransientException;
+import org.axonframework.conversion.ConversionException;
 import org.axonframework.messaging.commandhandling.CommandExecutionException;
 import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
@@ -48,7 +49,12 @@ class CommandConverterTest {
 
     private static final MessageType COMMAND_TYPE = new MessageType("university.CreateCourse", "2.1.0");
     private static final MessageType RESULT_TYPE = new MessageType("university.CourseId", "1.0.0");
-    private static final byte[] PAYLOAD = "{\"name\":\"Axon 5\"}".getBytes(StandardCharsets.UTF_8);
+    private static final String PAYLOAD = "{\"name\":\"Axon 5\"}";
+
+    /** A payload no converter is attached to, standing in for one a decorator should have converted. */
+    private record CreateCourse(String name) {
+
+    }
 
     private static CommandMessage command() {
         return new GenericCommandMessage(
@@ -87,7 +93,7 @@ class CommandConverterTest {
             // then
             assertThat(roundTripped.identifier()).isEqualTo(original.identifier());
             assertThat(roundTripped.type()).isEqualTo(original.type());
-            assertThat((byte[]) roundTripped.payload()).isEqualTo(PAYLOAD);
+            assertThat(roundTripped.payload()).isEqualTo(PAYLOAD);
             assertThat(roundTripped.metadata()).isEqualTo(original.metadata());
             assertThat(roundTripped.routingKey()).contains("course-42");
             assertThat(roundTripped.priority()).hasValue(7);
@@ -111,16 +117,14 @@ class CommandConverterTest {
         }
 
         @Test
-        void rejectsAPayloadThatIsNotBytes() {
+        void rejectsAPayloadThatWasNeverConverted() {
             // given — a connector not wrapped in a PayloadConvertingCommandBusConnector would produce this
-            CommandMessage unconverted = new GenericCommandMessage(COMMAND_TYPE, "not bytes");
+            CommandMessage unconverted = new GenericCommandMessage(COMMAND_TYPE, new CreateCourse("Axon 5"));
 
             // when / then
             assertThatThrownBy(() -> CommandConverter.convertCommandMessage(unconverted))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("byte[]")
-                    .hasMessageContaining("java.lang.String")
-                    .hasMessageContaining("PayloadConvertingCommandBusConnector");
+                    .isInstanceOf(ConversionException.class)
+                    .hasMessageContaining("java.lang.String");
         }
     }
 
@@ -143,7 +147,7 @@ class CommandConverterTest {
             assertThat(roundTripped).isNotNull();
             assertThat(roundTripped.identifier()).isEqualTo("result-1");
             assertThat(roundTripped.type()).isEqualTo(RESULT_TYPE);
-            assertThat((byte[]) roundTripped.payload()).isEqualTo(PAYLOAD);
+            assertThat(roundTripped.payload()).isEqualTo(PAYLOAD);
             assertThat(roundTripped.metadata()).containsEntry("trace", "abc");
         }
 

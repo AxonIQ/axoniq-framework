@@ -116,7 +116,7 @@ public class SpringCloudConfigurationEnhancer implements ConfigurationEnhancer {
         return (config, name, delegate) -> new PayloadConvertingCommandBusConnector(
                 delegate,
                 config.getComponent(MessageConverter.class),
-                byte[].class
+                String.class
         );
     }
 

@@ -37,9 +37,9 @@ import java.util.Map;
 /**
  * The encoding members share when writing messages to each other, whatever kind of message they are.
  * <p>
- * Messages of different kinds travel over endpoints of their own, with shapes of their own, but a payload is
- * Base64-encoded and a failure is described the same way in all of them. Keeping that here means those shapes cannot
- * drift apart into encodings that no longer read each other.
+ * Messages of different kinds travel over endpoints of their own, with shapes of their own, but metadata is copied
+ * and a failure is described the same way in all of them. Keeping that here means those shapes cannot drift apart
+ * into encodings that no longer read each other.
  *
  * @author Allard Buijze
  * @since 5.4.0
@@ -53,28 +53,6 @@ final class WireCodec {
 
     private WireCodec() {
         // Utility class, not meant to be instantiated.
-    }
-
-    /**
-     * Returns the given {@code payload} as the bytes to write, rejecting a payload that was never converted.
-     *
-     * @param payload     the payload to write, or {@code null} when the message carries none
-     * @param payloadType the type of the payload, named in the failure when it is not {@code byte[]}
-     * @param decorator   the name of the decorator that should have converted the payload, named in the failure
-     * @return the bytes to write for the given {@code payload}
-     * @throws IllegalArgumentException when the given {@code payload} is not a {@code byte[]}
-     */
-    static byte[] payloadAsBytes(@Nullable Object payload, Class<?> payloadType, String decorator) {
-        if (payload == null) {
-            return new byte[0];
-        }
-        if (payload instanceof byte[] bytes) {
-            return bytes;
-        }
-        throw new IllegalArgumentException(
-                ("The payload must be of type byte[] to travel over the Spring Cloud connector, but was [%s]. "
-                        + "Ensure the connector is wrapped in a %s.").formatted(payloadType.getName(), decorator)
-        );
     }
 
     /**
