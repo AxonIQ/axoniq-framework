@@ -45,9 +45,9 @@ import static io.axoniq.framework.axonserver.connector.api.AxonServerConfigurati
  * @since 5.0.0
  */
 @Testcontainers
-public class DistributedQueryBusInterceptorTest extends AbstractQueryInterceptorTestSuite {
+public class DistributedQueryBusInterceptorIT extends AbstractQueryInterceptorTestSuite {
 
-    protected static final Logger logger = LoggerFactory.getLogger(DistributedQueryBusInterceptorTest.class);
+    protected static final Logger logger = LoggerFactory.getLogger(DistributedQueryBusInterceptorIT.class);
 
     private static final AxonServerContainer container = new AxonServerContainer(
             "docker.axoniq.io/axoniq/axonserver:2025.2.0")

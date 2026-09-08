@@ -60,7 +60,7 @@ import static org.awaitility.Awaitility.await;
  * capture sees the handler's own method-level span and every operator downstream -- whatever thread it runs on --
  * observes it as the current span.
  */
-class ReactorContextPropagationTracingIntegrationTest {
+class ReactorContextPropagationTracingIT {
 
     private static final String METHOD_SPAN = "ReactiveProjection.on(String)";
 

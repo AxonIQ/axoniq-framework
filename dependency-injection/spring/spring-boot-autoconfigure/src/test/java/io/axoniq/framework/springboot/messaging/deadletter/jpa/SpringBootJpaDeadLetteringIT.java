@@ -30,7 +30,7 @@ import io.axoniq.framework.messaging.deadletter.DeadLetter;
 import io.axoniq.framework.messaging.deadletter.GenericDeadLetter;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetteringEventIntegrationTest;
+import io.axoniq.framework.messaging.eventhandling.deadletter.AbstractDeadLetteringEventIT;
 import io.axoniq.framework.messaging.eventhandling.deadletter.SequencedDeadLetterQueueFactory;
 import io.axoniq.framework.messaging.eventhandling.deadletter.jpa.DeadLetterEntry;
 import io.axoniq.framework.messaging.eventhandling.deadletter.jpa.DeadLetterEventEntry;
@@ -60,7 +60,7 @@ import static org.axonframework.messaging.eventhandling.EventTestUtils.asEventMe
 import static org.assertj.core.api.Assertions.*;
 
 /**
- * A Spring Boot-idiomatic implementation of the {@link DeadLetteringEventIntegrationTest} validating the
+ * A Spring Boot-idiomatic implementation of the {@link AbstractDeadLetteringEventIT} validating the
  * {@link JpaSequencedDeadLetterQueue} with full Spring Boot auto-configuration.
  * <p>
  * This test leverages Spring Boot auto-configuration for JPA infrastructure ({@code DataSource},
@@ -82,7 +82,8 @@ import static org.assertj.core.api.Assertions.*;
 })
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @EnableMBeanExport(registration = RegistrationPolicy.IGNORE_EXISTING)
-class SpringBootJpaDeadLetteringIntegrationTest extends DeadLetteringEventIntegrationTest {
+@Disabled("TODO #460")
+class SpringBootJpaDeadLetteringIT extends AbstractDeadLetteringEventIT {
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;

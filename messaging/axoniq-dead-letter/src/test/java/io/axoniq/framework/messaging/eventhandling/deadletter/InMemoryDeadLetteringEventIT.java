@@ -30,7 +30,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
  * @author Mateusz Nowak
  * @since 5.0.0
  */
-class InMemoryDeadLetteringEventIntegrationTest extends DeadLetteringEventIntegrationTest {
+class InMemoryDeadLetteringEventIT extends AbstractDeadLetteringEventIT {
 
     @Override
     protected SequencedDeadLetterQueue<EventMessage> buildDeadLetterQueue() {

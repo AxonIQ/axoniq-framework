@@ -34,7 +34,7 @@ import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetteringEventIntegrationTest;
+import io.axoniq.framework.messaging.eventhandling.deadletter.AbstractDeadLetteringEventIT;
 import org.axonframework.messaging.eventhandling.processing.EventProcessor;
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.jupiter.api.*;
@@ -54,12 +54,12 @@ import static org.axonframework.messaging.eventhandling.EventTestUtils.asEventMe
 import static org.assertj.core.api.Assertions.*;
 
 /**
- * An implementation of the {@link DeadLetteringEventIntegrationTest} validating the
+ * An implementation of the {@link AbstractDeadLetteringEventIT} validating the
  * {@link JdbcSequencedDeadLetterQueue} with an {@link EventProcessor} and {@code DeadLetteringEventHandlingComponent}.
  *
  * @author Steven van Beelen
  */
-class JdbcDeadLetteringEventIntegrationTest extends DeadLetteringEventIntegrationTest {
+class JdbcDeadLetteringEventIT extends AbstractDeadLetteringEventIT {
 
     private DataSource dataSource;
     private JdbcTransactionalExecutorProvider executorProvider;
@@ -95,7 +95,7 @@ class JdbcDeadLetteringEventIntegrationTest extends DeadLetteringEventIntegratio
 
     private static DataSource dataSource() {
         var dataSource = new JDBCDataSource();
-        dataSource.setUrl("jdbc:hsqldb:mem:" + JdbcDeadLetteringEventIntegrationTest.class.getSimpleName());
+        dataSource.setUrl("jdbc:hsqldb:mem:" + JdbcDeadLetteringEventIT.class.getSimpleName());
         dataSource.setUser("sa");
         dataSource.setPassword("");
         return dataSource;

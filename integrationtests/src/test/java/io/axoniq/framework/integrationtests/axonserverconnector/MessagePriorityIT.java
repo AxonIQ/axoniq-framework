@@ -70,7 +70,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Steven van Beelen
  */
 @Testcontainers
-class MessagePriorityIntegrationTest {
+class MessagePriorityIT {
 
     @Container
     private static final AxonServerContainer axonServer = new AxonServerContainer()
@@ -80,7 +80,7 @@ class MessagePriorityIntegrationTest {
     private static final int PRIORITY = 42;
     private static final int REGULAR = 0;
 
-    private static final Logger logger = LoggerFactory.getLogger(MessagePriorityIntegrationTest.class);
+    private static final Logger logger = LoggerFactory.getLogger(MessagePriorityIT.class);
 
     private AxonServerConnectionManager connectionManager;
     private DistributedCommandBus commandBus;

@@ -61,12 +61,12 @@ import static org.awaitility.Awaitility.await;
 
 @Disabled("TODO #63")
 @Testcontainers
-class QueryThreadingIntegrationTest {
+class QueryThreadingIT {
 
     private static final MessageType QUERY_TYPE_A = new MessageType("query-a");
     private static final MessageType QUERY_TYPE_B = new MessageType("query-b");
 
-    private static final Logger log = LoggerFactory.getLogger(QueryThreadingIntegrationTest.class);
+    private static final Logger log = LoggerFactory.getLogger(QueryThreadingIT.class);
 
     private static final String HOSTNAME = "localhost";
     private static final CountDownLatch secondaryQueryBlock = new CountDownLatch(1);
