@@ -25,27 +25,21 @@
         <groupId>io.axoniq.framework</groupId>
         <artifactId>axoniq-framework-parent</artifactId>
         <version>${revision}</version>
-        <relativePath>../build/parent/pom.xml</relativePath>
+        <relativePath>../../build/parent/pom.xml</relativePath>
     </parent>
 
-    <artifactId>axoniq-integrationtests</artifactId>
+    <artifactId>axoniq-integrationtests-multitenancy</artifactId>
     <packaging>pom</packaging>
 
-    <name>Axoniq Framework - Integration Tests</name>
+    <name>Axoniq Framework - Integration Tests - Multi-Tenancy</name>
     <description>
-        Aggregator for the integration test suites that run during the build of Axoniq Framework.
-        Split into modules scoped by production dependency, so a change to one area (e.g.
-        multi-tenancy) doesn't invalidate the build cache for unrelated suites (e.g. tracing).
-        Does not contain any production code.
+        Aggregator for multi-tenancy integration tests. Split so that a change to
+        axoniq-data-protection doesn't invalidate the build cache for the core multi-tenancy
+        suite, and vice versa.
     </description>
 
     <modules>
-        <module>support</module>
-        <module>connector</module>
-        <module>conformance</module>
-        <module>tracing</module>
-        <module>dead-letter</module>
-        <module>multitenancy</module>
-        <module>workflow</module>
+        <module>core</module>
+        <module>data-protection</module>
     </modules>
 </project>
