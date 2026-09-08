@@ -29,7 +29,7 @@
     <name>Axoniq Framework - Root</name>
     <description>
         Axoniq Framework builds upon Axon Framework providing features and enhancements to improve an application's
-        production "readyness," specifically for message-driven and event-sourced applications.
+        production "readyness", specifically for message-driven and event-sourced applications.
     </description>
 
     <properties>
@@ -54,6 +54,7 @@
         </sonar.coverage.jacoco.xmlReportPaths>
 
 
+        <kotlin.version>2.4.10</kotlin.version>
         <!-- Build / Plugin -->
         <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
         <eclipse.transformer-maven-plugin.version>1.0.0</eclipse.transformer-maven-plugin.version>
@@ -94,6 +95,8 @@
         <module>testing/axoniq-testcontainer</module>
 
         <module>tracing/axoniq-tracing-micrometer</module>
+        <module>workflow</module>
+
         <module>docs/_samples</module>
     </modules>
 
@@ -171,8 +174,9 @@
                                         <exclude>org.springframework.boot</exclude>
                                     </excludes>
                                     <includes>
-                                        <!-- allow any spring dependency with test scope -->
+                                        <!-- allow any spring/spring-boot dependency with test scope -->
                                         <include>org.springframework:*:*:*:test</include>
+                                        <include>org.springframework.boot:*:*:*:test</include>
                                     </includes>
                                 </bannedDependencies>
                             </rules>

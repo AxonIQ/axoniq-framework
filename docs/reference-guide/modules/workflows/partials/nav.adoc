@@ -1,0 +1,12 @@
+* xref:workflows:index.adoc[[.advanced-framework]#Workflows#]
+** Primitive Steps
+*** xref:workflows:execute-steps.adoc[]
+*** xref:workflows:waiting-for-events.adoc[]
+*** xref:workflows:understanding-steps.adoc[]
+** xref:workflows:workflow-lifecycle.adoc[]
+** xref:workflows:step-orchestration.adoc[]
+** xref:workflows:common-patterns.adoc[]
+** xref:workflows:payload-and-state.adoc[]
+** xref:workflows:configuration.adoc[]
+** xref:workflows:testing-workflows.adoc[]
+** xref:workflows:versioning.adoc[Versioning]

@@ -664,6 +664,35 @@
                         </dependency>
                     </dependencies>
                 </plugin>
+                <plugin>
+                    <!-- KAPT is optional and has to be configured in modules using it -->
+                    <groupId>org.jetbrains.kotlin</groupId>
+                    <artifactId>kotlin-maven-plugin</artifactId>
+                    <version>${kotlin.version}</version>
+                    <extensions>true</extensions>
+
+                    <configuration>
+                        <jvmTarget>${java.version}</jvmTarget>
+                        <compilerPlugins>
+                            <plugin>no-arg</plugin>
+                            <plugin>all-open</plugin>
+                            <plugin>spring</plugin>
+                        </compilerPlugins>
+                    </configuration>
+
+                    <dependencies>
+                        <dependency>
+                            <groupId>org.jetbrains.kotlin</groupId>
+                            <artifactId>kotlin-maven-allopen</artifactId>
+                            <version>${kotlin.version}</version>
+                        </dependency>
+                        <dependency>
+                            <groupId>org.jetbrains.kotlin</groupId>
+                            <artifactId>kotlin-maven-noarg</artifactId>
+                            <version>${kotlin.version}</version>
+                        </dependency>
+                    </dependencies>
+                </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
@@ -703,18 +732,6 @@
                         <log4j.version>${log4j.version}</log4j.version>
                         <test.forkNumber>$${surefire.forkNumber}</test.forkNumber>
                     </systemPropertyVariables>
-                    <includes>
-                        <include>**/*Test.java</include>
-                        <include>**/*Tests.java</include>
-                        <include>**/*Test_*.java</include>
-                        <include>**/*Tests_*.java</include>
-                    </includes>
-                    <excludes>
-                        <exclude>**/*IntegrationTest.java</exclude>
-                        <exclude>**/*IntegrationTests.java</exclude>
-                        <exclude>**/*IntegrationTest_*.java</exclude>
-                        <exclude>**/*IntegrationTests_*.java</exclude>
-                    </excludes>
                 </configuration>
             </plugin>
             <!-- package -->
@@ -836,22 +853,6 @@
                                     <systemPropertyVariables>
                                         <test.forkNumber>${surefire.forkNumber}</test.forkNumber>
                                     </systemPropertyVariables>
-                                    <includes>
-                                        <include>**/*IntegrationTest.java</include>
-                                        <include>**/*IntegrationTests.java</include>
-                                        <include>**/*IntegrationTest_*.java</include>
-                                        <include>**/*IntegrationTests_*.java</include>
-                                        <!-- these are the defaults -->
-                                        <include>**/IT*.java</include>
-                                        <include>**/*IT.java</include>
-                                        <include>**/*ITCase.java</include>
-                                    </includes>
-                                    <excludes>
-                                        <exclude>**/*Test.java</exclude>
-                                        <exclude>**/*Tests.java</exclude>
-                                        <exclude>**/*Test_*.java</exclude>
-                                        <exclude>**/*Tests_*.java</exclude>
-                                    </excludes>
                                 </configuration>
                             </execution>
 
