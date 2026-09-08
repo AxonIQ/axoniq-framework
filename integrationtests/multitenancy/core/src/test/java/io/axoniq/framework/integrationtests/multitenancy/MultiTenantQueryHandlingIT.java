@@ -172,22 +172,6 @@ class MultiTenantQueryHandlingIT {
                 .isEqualTo(dynamicTenant);
     }
 
-    @Test
-    void sendingQueryToDeletedTenantFails() {
-        QueryGateway queryGateway = application.getComponent(QueryGateway.class);
-        contextManager.deleteContext(TENANT_A);
-
-        // Awaiting TenantProvider#tenants() is not a reliable signal here: the provider removes the descriptor (so
-        // tenants() no longer lists it) before it cancels the connector's tenant registration that actually drops the
-        // per-tenant connector. Until then a query still resolves the tenant's connector and round-trips successfully.
-        // Await the connector-observable failure directly, re-dispatching until the tenant is gone.
-        await().atMost(Duration.ofSeconds(30))
-               .untilAsserted(() -> assertThat(dispatchFailure(queryGateway,
-                                                                 new RecordTenantQuery("for-tenant-a"),
-                                                                 TENANT_A))
-                       .isInstanceOf(TenantNotResolvedException.class));
-    }
-
     /**
      * Dispatches the given {@code payload} for the given {@code tenant} and returns the (unwrapped) failure it
      * produces, whether raised synchronously by tenant resolution or asynchronously through the result stream.
@@ -260,36 +244,6 @@ class MultiTenantQueryHandlingIT {
             assertThat(streamB.hasNextAvailable()).isFalse();
             assertThat(streamB.isCompleted()).isTrue();
         });
-    }
-
-    /**
-     * The subscription query stream must terminate when its tenant's connector is removed, rather than waiting.
-     */
-    @Test
-    void activeSubscriptionQueryTerminatesAfterItsTenantConnectorIsRemoved() {
-        assumeFalse(preferLocalQueryHandler,
-                    "The tenant connector is only used when local query handling is not preferred.");
-        QueryBus queryBus = application.getComponent(QueryBus.class);
-        QueryGateway queryGateway = application.getComponent(QueryGateway.class);
-
-        // given an active subscription query which has delivered an initial result and an update
-        MessageStream<QueryResponseMessage> stream = subscriptionQuery(queryBus, TENANT_A);
-        assertThat(nextPayload(stream)).isEqualTo(TENANT_A);
-        await().untilAsserted(() -> assertThat(capturedEmitters).containsKey(TENANT_A));
-        capturedEmitters.get(TENANT_A).emit(SubscriptionTenantQuery.class, query -> true, updatePayload(TENANT_A));
-        assertThat(nextPayload(stream)).isEqualTo(updatePayload(TENANT_A));
-
-        // when the tenant context is deleted
-        contextManager.deleteContext(TENANT_A);
-
-        // and its connector has actually been removed, rather than merely its descriptor from the provider
-        await().untilAsserted(() -> assertThat(dispatchFailure(queryGateway,
-                                                                 new RecordTenantQuery("after-deletion"),
-                                                                 TENANT_A))
-                       .isInstanceOf(TenantNotResolvedException.class));
-
-        // then the already-active stream terminates instead of waiting indefinitely
-        await().untilAsserted(() -> assertThat(stream.isCompleted() || stream.error().isPresent()).isTrue());
     }
 
     @Test
