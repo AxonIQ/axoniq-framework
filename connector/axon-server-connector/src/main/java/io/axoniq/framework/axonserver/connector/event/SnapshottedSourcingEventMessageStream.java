@@ -171,7 +171,7 @@ class SnapshottedSourcingEventMessageStream implements MessageStream<EventMessag
     @Override
     public boolean isCompleted() {
         tryAdvance();
-        return stream.isClosed() && ready.isEmpty() && pendingSnapshot == null;
+        return stream.isClosed() && ready.isEmpty();
     }
 
     @Override
