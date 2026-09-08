@@ -5,15 +5,31 @@
 
 Tenant sequencing lets an application order message handling within one tenant without making every tenant wait for the same sequence.
 
-The multi-tenancy module registers a `TenantSequencingPolicy` component backed by the same tenant routing rules as the rest of the module.
+The multi-tenancy module provides a `TenantSequencingPolicy` backed by the same tenant routing rules as the rest of the module.
 It first uses the tenant carried by the processing context.
 When the context carries no tenant, it falls back to the configured `TenantResolver` and checks the result against the known tenants.
 Messages resolving to the same tenant use the same sequence identifier.
 Messages resolving to different tenants can be handled independently.
-
-Use the registered `TenantSequencingPolicy` component wherever the component you configure accepts a `SequencingPolicy`.
-
 When no known tenant can be resolved, the policy returns no sequence identifier.
 That keeps unlabelled messages from accidentally sharing one global tenant sequence.
 
 For a single sequence across every tenant, use the framework's `SequentialPolicy` instead.
+
+== Configuration
+
+=== Tenant Command Sequencing
+
+Consider the following snippets when configuring a (custom) `SequencingPolicy`:
+
+// TODO include code example similar to the referenced section
+
+For details on configuring a custom command sequencing policy see the xref:tuning:command-processing.adoc#command-sequencing[Command sequencing chapter] in the tuning section.
+
+=== Tenant Event Sequencing
+
+Consider the following snippets when configuring a (custom) `SequencingPolicy`:
+
+// TODO include code example similar to the referenced section
+
+For details on configuring a custom event sequencing policy see the
+xref:events:event-processors/streaming.adoc#sequential_processing[sequential processing chapter] in the streaming event processors section.
