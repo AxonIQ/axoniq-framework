@@ -262,6 +262,36 @@ class AxonServerEventStorageEngineTest {
         }
 
         @Test
+        @SuppressWarnings("unchecked")
+        void sourceWithUnboundedSnapshotStrategyFallsBackToPlainSourcingWhenAxonServerDoesNotSupportSnapshotting() {
+            // given the snapshotted-source RPC failing with UNIMPLEMENTED, as an older Axon Server would report
+            ResultStream<SnapshottedSourceEventsResponse> snapshottedStream = mock(ResultStream.class);
+            when(snapshottedStream.getError())
+                    .thenReturn(java.util.Optional.of(Status.UNIMPLEMENTED.asRuntimeException()));
+            when(dcbEventChannel.source(any(SnapshottedSourceRequest.class))).thenReturn(snapshottedStream);
+
+            when(sourcingStream.nextIfAvailable())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null);
+            when(sourcingStream.peek())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null);
+
+            SourcingCondition condition = SourcingCondition.conditionFor(
+                    new SourcingStrategy.Snapshot(qualifiedName, identifier, null),
+                    EventCriteria.havingTags("AGGREGATE_TYPE", identifier)
+            );
+
+            // when / then falls back to plain sourcing from the very beginning, through the non-snapshotted RPC
+            StepVerifier.create(FluxUtils.of(testSubject.source(condition, null)))
+                        .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
+                        .verifyComplete();
+
+            verify(snapshottedStream).close();
+            ArgumentCaptor<SourceEventsRequest> captor = ArgumentCaptor.forClass(SourceEventsRequest.class);
+            verify(dcbEventChannel).source(captor.capture());
+            assertThat(captor.getValue().getFromSequence()).isEqualTo(GlobalIndexPosition.toIndex(Position.START));
+        }
+
+        @Test
         void sourceWithBoundedSnapshotStrategyFallsBackToLoadingSeparately() {
             // given no snapshot exists, simulated the way AxonServerSnapshotStore.load() recognises "not found"
             when(snapshotChannel.getLastSnapshot(any()))

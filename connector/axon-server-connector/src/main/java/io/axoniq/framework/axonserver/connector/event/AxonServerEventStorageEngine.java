@@ -32,7 +32,9 @@ import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsResponse;
 import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import org.axonframework.common.ExceptionUtils;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejectedException;
@@ -68,6 +70,7 @@ import java.lang.invoke.MethodHandles;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -172,7 +175,56 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
         SnapshottedSourceRequest sourcingRequest =
                 ConditionConverter.convertSnapshottedSourcingCondition(condition, snapshotKey);
         ResultStream<SnapshottedSourceEventsResponse> sourcingStream = eventChannel().source(sourcingRequest);
-        return new SnapshottedSourcingEventMessageStream(sourcingStream, converter);
+        return DelayedMessageStream.create(awaitSnapshottedSourceOrFallBack(sourcingStream, condition));
+    }
+
+    /**
+     * Awaits the first signal (an item, an error, or completion) from the given {@code sourcingStream}, before deciding
+     * what to hand back to the caller, to not break if Axon Server doesn't support source-with-snapshot.
+     * <p>
+     * The {@code SnapshottedDcbEventStore/Source} RPC this stream is backed by only exists on Axon Server versions
+     * supporting DCB snapshotting. Against an older Axon Server,
+     * {@link DcbEventChannel#source(SnapshottedSourceRequest)} still returns a {@code ResultStream} immediately. The
+     * {@code UNIMPLEMENTED} failure only arrives later, asynchronously, as an error on that stream. When that happens,
+     * the given {@code sourcingStream} is closed and this method falls back to plain, non-snapshotted sourcing from
+     * {@link Position#START}.
+     * <p>
+     * TODO - Ideally this is covered by having a "supported handshake" call between Axon Framework and Axon Server,
+     * as documented in https://github.com/AxonIQ/axoniq-framework/issues/100.
+     *
+     * @param sourcingStream the {@code ResultStream} to await the first signal of
+     * @param condition      the {@code SourcingCondition} to fall back to plain sourcing with, if needed
+     * @return a {@code CompletableFuture} resolving to the {@code MessageStream} to use for this sourcing operation
+     */
+    private CompletableFuture<MessageStream<EventMessage>> awaitSnapshottedSourceOrFallBack(
+            ResultStream<SnapshottedSourceEventsResponse> sourcingStream,
+            SourcingCondition condition
+    ) {
+        CompletableFuture<MessageStream<EventMessage>> result = new CompletableFuture<>();
+        Runnable checkAvailability = () -> {
+            if (result.isDone()) {
+                return;
+            }
+            Optional<Throwable> error = sourcingStream.getError();
+            if (error.isPresent() && isUnimplemented(error.get())) {
+                logger.warn("Axon Server does not support sourcing with snapshots. "
+                                    + "Falling back to full reconstruction. "
+                                    + "Upgrade Axon Server to make use of this optimization.");
+                sourcingStream.close();
+                result.complete(sourceEvents(SourcingCondition.conditionFor(Position.START, condition.criteria())));
+            } else if (error.isPresent() || sourcingStream.peek() != null || sourcingStream.isClosed()) {
+                result.complete(new SnapshottedSourcingEventMessageStream(sourcingStream, converter));
+            }
+        };
+        sourcingStream.onAvailable(checkAvailability);
+        checkAvailability.run();
+        return result;
+    }
+
+    private static boolean isUnimplemented(Throwable error) {
+        Throwable unwrapped = FutureUtils.unwrap(error);
+        return unwrapped instanceof StatusRuntimeException sre
+                && sre.getStatus().getCode() == Status.Code.UNIMPLEMENTED;
     }
 
     private MessageStream<EventMessage> sourceWithBoundedSnapshot(SourcingCondition condition,
