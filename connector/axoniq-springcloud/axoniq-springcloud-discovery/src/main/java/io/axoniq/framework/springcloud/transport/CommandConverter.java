@@ -40,7 +40,6 @@ import org.jspecify.annotations.Nullable;
 import java.util.List;
 import java.util.UUID;
 
-import static io.axoniq.framework.springcloud.transport.WireCodec.copyOf;
 import static io.axoniq.framework.springcloud.transport.WireCodec.decode;
 import static io.axoniq.framework.springcloud.transport.WireCodec.descriptionsOf;
 import static io.axoniq.framework.springcloud.transport.WireCodec.encode;
@@ -83,7 +82,7 @@ final class CommandConverter {
                 command.identifier(),
                 command.type().toString(),
                 command.payloadAs(String.class),
-                copyOf(command.metadata()),
+                command.metadata(),
                 command.routingKey().orElse(null),
                 command.priority().isPresent() ? command.priority().getAsInt() : null
         );
@@ -103,7 +102,7 @@ final class CommandConverter {
                         request.identifier(),
                         MessageType.fromString(request.type()),
                         request.payload(),
-                        copyOf(request.metadata())
+                        request.metadata()
                 ),
                 request.routingKey(),
                 request.priority()
@@ -128,7 +127,7 @@ final class CommandConverter {
                                            requestIdentifier,
                                            resultMessage.type().toString(),
                                            resultMessage.payloadAs(String.class),
-                                           copyOf(resultMessage.metadata()));
+                                           resultMessage.metadata());
     }
 
     /**
@@ -184,7 +183,7 @@ final class CommandConverter {
                 reply.identifier(),
                 MessageType.fromString(type),
                 reply.payload(),
-                copyOf(reply.metadata())
+                reply.metadata()
         )).withConverter(converter);
     }
 

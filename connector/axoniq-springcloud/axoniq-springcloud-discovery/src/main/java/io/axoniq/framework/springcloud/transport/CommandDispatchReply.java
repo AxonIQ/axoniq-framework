@@ -20,6 +20,7 @@
 package io.axoniq.framework.springcloud.transport;
 
 import org.axonframework.messaging.commandhandling.CommandResultMessage;
+import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.MessageType;
 import org.jspecify.annotations.Nullable;
 
@@ -84,8 +85,9 @@ public record CommandDispatchReply(
     public CommandDispatchReply {
         Objects.requireNonNull(identifier, "The reply identifier must not be null.");
         Objects.requireNonNull(requestIdentifier, "The request identifier must not be null.");
-        // WireCodec rather than Map.copyOf: metadata permits null values, which Map.copyOf rejects.
-        metadata = WireCodec.copyOf(metadata);
+        // Metadata is immutable and permits the null values metadata allows, and is what a Message already
+        // carries: no copy of our own, and none at all on the way out.
+        metadata = Metadata.from(metadata);
         errorDetails = errorDetails == null ? List.of() : List.copyOf(errorDetails);
     }
 

@@ -27,8 +27,6 @@ import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -61,39 +59,6 @@ class WireCodecTest {
             assertThat(WireCodec.encode(null)).isNull();
             assertThat(WireCodec.encode(new byte[0])).isNull();
             assertThat(WireCodec.decode(null)).isNull();
-        }
-    }
-
-    @Nested
-    class CopyingMetadata {
-
-        @Test
-        void keepsAnEntryWithoutAValue() {
-            // given metadata permits null values, which Map.copyOf rejects
-            Map<String, String> metadata = new HashMap<>();
-            metadata.put("tenant", null);
-
-            // when / then
-            assertThat(WireCodec.copyOf(metadata)).containsEntry("tenant", null);
-        }
-
-        @Test
-        void treatsAbsentMetadataAsEmpty() {
-            assertThat(WireCodec.copyOf(null)).isEmpty();
-        }
-
-        @Test
-        void doesNotShareTheCopyWithTheOriginal() {
-            // given
-            Map<String, String> metadata = new HashMap<>();
-            metadata.put("tenant", "acme");
-            Map<String, String> copy = WireCodec.copyOf(metadata);
-
-            // when
-            metadata.put("tenant", "other");
-
-            // then
-            assertThat(copy).containsEntry("tenant", "acme");
         }
     }
 
