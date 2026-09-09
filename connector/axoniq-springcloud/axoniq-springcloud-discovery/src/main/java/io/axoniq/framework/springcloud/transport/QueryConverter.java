@@ -104,7 +104,7 @@ final class QueryConverter {
                 query.identifier(),
                 query.type().toString(),
                 query.payloadAs(String.class),
-                copyOf(query.metadata()),
+                query.metadata(),
                 query.priority().isPresent() ? query.priority().getAsInt() : null
         );
     }
@@ -123,7 +123,7 @@ final class QueryConverter {
                         request.identifier(),
                         MessageType.fromString(request.type()),
                         request.payload(),
-                        copyOf(request.metadata())
+                        request.metadata()
                 ),
                 request.priority()
         ).withConverter(converter);
@@ -142,7 +142,7 @@ final class QueryConverter {
                 query.identifier(),
                 query.type().toString(),
                 query.payloadAs(String.class),
-                copyOf(query.metadata()),
+                query.metadata(),
                 query.priority().isPresent() ? query.priority().getAsInt() : null,
                 updateBufferSize
         );
@@ -164,7 +164,7 @@ final class QueryConverter {
                         request.identifier(),
                         MessageType.fromString(request.type()),
                         request.payload(),
-                        copyOf(request.metadata())
+                        request.metadata()
                 ),
                 request.priority()
         ).withConverter(converter);
@@ -184,7 +184,7 @@ final class QueryConverter {
                 requestIdentifier,
                 response.type().toString(),
                 response.payloadAs(String.class),
-                copyOf(response.metadata())
+                response.metadata()
         );
     }
 
@@ -202,7 +202,7 @@ final class QueryConverter {
                 response.identifier(),
                 MessageType.fromString(response.type()),
                 response.payload(),
-                copyOf(response.metadata())
+                response.metadata()
         )).withConverter(converter);
     }
 

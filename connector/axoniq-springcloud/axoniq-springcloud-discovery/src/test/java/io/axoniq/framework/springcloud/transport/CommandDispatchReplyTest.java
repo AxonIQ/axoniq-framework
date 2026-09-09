@@ -21,6 +21,7 @@ package io.axoniq.framework.springcloud.transport;
 
 import org.junit.jupiter.api.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -33,6 +34,46 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Allard Buijze
  */
 class CommandDispatchReplyTest {
+
+    @Nested
+    class CarryingMetadata {
+
+        @Test
+        void keepsAnEntryWithoutAValue() {
+            // given metadata permits null values, which Map.copyOf rejects
+            Map<String, String> metadata = new HashMap<>();
+            metadata.put("tenant", null);
+
+            // when
+            CommandDispatchReply reply = CommandDispatchReply.result("reply-1", "command-1", null, null, metadata);
+
+            // then
+            assertThat(reply.metadata()).containsEntry("tenant", null);
+        }
+
+        @Test
+        void doesNotFollowChangesToTheMapItWasGiven() {
+            // given
+            Map<String, String> metadata = new HashMap<>();
+            metadata.put("tenant", "acme");
+            CommandDispatchReply reply = CommandDispatchReply.result("reply-1", "command-1", null, null, metadata);
+
+            // when
+            metadata.put("tenant", "other");
+
+            // then
+            assertThat(reply.metadata()).containsEntry("tenant", "acme");
+        }
+
+        @Test
+        void readsAReplyThatOmitsMetadataAltogether() {
+            // when
+            CommandDispatchReply reply = CommandDispatchReply.result("reply-1", "command-1", null, null, null);
+
+            // then
+            assertThat(reply.metadata()).isEmpty();
+        }
+    }
 
     @Nested
     class ReportingAFailure {

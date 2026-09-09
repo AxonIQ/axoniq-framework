@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.springcloud.transport;
 
+import org.axonframework.messaging.core.Metadata;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
@@ -54,7 +55,8 @@ public record QueryDispatchRequest(
     public QueryDispatchRequest {
         Objects.requireNonNull(identifier, "The query identifier must not be null.");
         Objects.requireNonNull(type, "The query type must not be null.");
-        // WireCodec rather than Map.copyOf: metadata permits null values, which Map.copyOf rejects.
-        metadata = WireCodec.copyOf(metadata);
+        // Metadata is immutable and permits the null values metadata allows, and is what a Message already
+        // carries: no copy of our own, and none at all on the way out.
+        metadata = Metadata.from(metadata);
     }
 }
