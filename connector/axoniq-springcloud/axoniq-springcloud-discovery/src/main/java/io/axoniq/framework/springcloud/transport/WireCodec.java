@@ -30,15 +30,13 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Base64;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * The encoding members share when writing messages to each other, whatever kind of message they are.
+ * The encoding members share when writing a failure to each other, whatever kind of message it answers.
  * <p>
- * Commands and queries travel over different endpoints with different shapes, but metadata is copied and a failure is
- * described the same way in both. Keeping that here means the two directions cannot drift apart into encodings that
+ * Commands and queries travel over different endpoints with different shapes, but a failure is described the same
+ * way in both. Keeping that here means the two directions cannot drift apart into encodings that
  * no longer read each other.
  *
  * @author Allard Buijze
@@ -73,19 +71,6 @@ final class WireCodec {
      */
     static byte @Nullable [] decode(@Nullable String encoded) {
         return encoded == null ? null : Base64.getDecoder().decode(encoded);
-    }
-
-    /**
-     * Copies the given {@code metadata} into a map that tolerates the null values metadata permits.
-     *
-     * @param metadata the metadata to copy, or {@code null} when the message carried none
-     * @return a copy of the given {@code metadata}
-     */
-    static Map<String, @Nullable String> copyOf(@Nullable Map<String, @Nullable String> metadata) {
-        // Metadata permits null values, which Map.copyOf rejects, so the copy is made the long way around.
-        return metadata == null
-                ? Map.of()
-                : Collections.unmodifiableMap(new LinkedHashMap<>(metadata));
     }
 
     /**
