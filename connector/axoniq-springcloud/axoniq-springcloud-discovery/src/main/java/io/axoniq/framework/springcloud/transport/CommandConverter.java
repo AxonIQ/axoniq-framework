@@ -173,7 +173,7 @@ final class CommandConverter {
      */
     public static @Nullable CommandResultMessage convertReply(CommandDispatchReply reply,
                                                               @Nullable Converter converter) {
-        if (reply.isError()) {
+        if (reply.hasError()) {
             throw convertError(reply, converter);
         }
         String type = reply.type();

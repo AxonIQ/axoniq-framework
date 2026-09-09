@@ -87,7 +87,7 @@ class CommandDispatchReplyTest {
             );
 
             // when / then
-            assertThat(reply.isError()).isTrue();
+            assertThat(reply.hasError()).isTrue();
         }
 
         @Test
@@ -98,7 +98,7 @@ class CommandDispatchReplyTest {
             );
 
             // when / then
-            assertThat(reply.isError()).isFalse();
+            assertThat(reply.hasError()).isFalse();
         }
 
         @Test
@@ -107,7 +107,7 @@ class CommandDispatchReplyTest {
             CommandDispatchReply reply = CommandDispatchReply.noResult("reply-1", "command-1");
 
             // when / then
-            assertThat(reply.isError()).isFalse();
+            assertThat(reply.hasError()).isFalse();
         }
     }
 }
