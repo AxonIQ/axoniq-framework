@@ -97,7 +97,7 @@ class IncomingCommandInvokerTest {
             CommandDispatchReply reply = testSubject.handle(request()).join();
 
             // then
-            assertThat(reply.isError()).isFalse();
+            assertThat(reply.hasError()).isFalse();
             assertThat(reply.requestIdentifier()).isEqualTo("command-1");
             assertThat(CommandConverter.convertReply(reply, null)).isNotNull();
         }
@@ -108,7 +108,7 @@ class IncomingCommandInvokerTest {
             CommandDispatchReply reply = testSubject.handle(request()).join();
 
             // then
-            assertThat(reply.isError()).isFalse();
+            assertThat(reply.hasError()).isFalse();
             assertThat(reply.type()).isNull();
         }
 
@@ -177,7 +177,7 @@ class IncomingCommandInvokerTest {
             CommandDispatchReply reply = testSubject.handle(request()).join();
 
             // then
-            assertThat(reply.isError()).isFalse();
+            assertThat(reply.hasError()).isFalse();
             assertThat(handler.handled()).hasSize(1);
         }
     }
