@@ -157,7 +157,7 @@ class CommandConverterTest {
 
             // then
             assertThat(reply.requestIdentifier()).isEqualTo("command-1");
-            assertThat(reply.isError()).isFalse();
+            assertThat(reply.hasError()).isFalse();
         }
 
         @Test
@@ -167,7 +167,7 @@ class CommandConverterTest {
 
             // then — absent result and absent failure must be distinguishable
             assertThat(reply.type()).isNull();
-            assertThat(reply.isError()).isFalse();
+            assertThat(reply.hasError()).isFalse();
             assertThat(CommandConverter.convertReply(reply, null)).isNull();
         }
 
@@ -281,7 +281,7 @@ class CommandConverterTest {
             );
 
             // when / then — the error code is what marks a reply as a failure, so this reads as no result at all
-            assertThat(reply.isError()).isFalse();
+            assertThat(reply.hasError()).isFalse();
             assertThat(CommandConverter.convertReply(reply, null)).isNull();
         }
 

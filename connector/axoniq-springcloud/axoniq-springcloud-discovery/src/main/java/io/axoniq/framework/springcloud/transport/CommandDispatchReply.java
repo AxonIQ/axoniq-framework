@@ -151,10 +151,13 @@ public record CommandDispatchReply(
 
     /**
      * Indicates whether this reply reports a failure.
+     * <p>
+     * Deliberately not named {@code isError}: this is derived from {@link #errorCode()} rather than a field of the
+     * wire format, and a bean-style name would have a serialization library write it as one.
      *
      * @return {@code true} when handling the command failed, {@code false} when it succeeded
      */
-    public boolean isError() {
+    public boolean hasError() {
         return errorCode != null;
     }
 }
