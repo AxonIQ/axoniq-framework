@@ -263,13 +263,61 @@ class AxonServerEventStorageEngineTest {
 
         @Test
         @SuppressWarnings("unchecked")
-        void sourceWithUnboundedSnapshotStrategyFallsBackToPlainSourcingWhenAxonServerDoesNotSupportSnapshotting() {
-            // given the snapshotted-source RPC failing with UNIMPLEMENTED, as an older Axon Server would report
+        void sourceWithUnboundedSnapshotStrategyFallsBackToLoadingSeparatelyWhenAxonServerDoesNotSupportSnapshotting() {
+            // given the single-round-trip snapshotted-source RPC failing with UNIMPLEMENTED, as an older Axon
+            // Server would report, but the separate snapshot-store RPC still finding a snapshot
             ResultStream<SnapshottedSourceEventsResponse> snapshottedStream = mock(ResultStream.class);
             when(snapshottedStream.getError())
                     .thenReturn(java.util.Optional.of(Status.UNIMPLEMENTED.asRuntimeException()));
             when(dcbEventChannel.source(any(SnapshottedSourceRequest.class))).thenReturn(snapshottedStream);
 
+            io.axoniq.axonserver.grpc.event.dcb.Snapshot storedSnapshot =
+                    io.axoniq.axonserver.grpc.event.dcb.Snapshot.newBuilder()
+                                                                .setName(qualifiedName.fullName())
+                                                                .setVersion("0.0.1")
+                                                                .setTimestamp(Instant.now().toEpochMilli())
+                                                                .putMetadata("__AxonFramework__:Position-Type", "GIP")
+                                                                .build();
+            when(snapshotChannel.getLastSnapshot(any())).thenReturn(CompletableFuture.completedFuture(
+                    GetLastSnapshotResponse.newBuilder().setSnapshot(storedSnapshot).setSequence(50L).build()
+            ));
+            when(sourcingStream.nextIfAvailable())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(50L).build(), null);
+            when(sourcingStream.peek())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(50L).build(), null);
+
+            SourcingCondition condition = SourcingCondition.conditionFor(
+                    new SourcingStrategy.Snapshot(qualifiedName, identifier, null),
+                    EventCriteria.havingTags("AGGREGATE_TYPE", identifier)
+            );
+
+            // when / then the snapshot is still prepended, fetched through the separate load() RPC, followed by
+            // events sourced from its position -- snapshots are not disabled just because the single-round-trip
+            // RPC is unsupported
+            StepVerifier.create(FluxUtils.of(testSubject.source(condition, null)))
+                        .assertNext(entry -> assertThat(entry.message()).isInstanceOf(SnapshotEventMessage.class))
+                        .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
+                        .verifyComplete();
+
+            verify(snapshottedStream).close();
+            verify(snapshotChannel).getLastSnapshot(any());
+            ArgumentCaptor<SourceEventsRequest> captor = ArgumentCaptor.forClass(SourceEventsRequest.class);
+            verify(dcbEventChannel).source(captor.capture());
+            assertThat(captor.getValue().getFromSequence()).isEqualTo(50L);
+        }
+
+        @Test
+        @SuppressWarnings("unchecked")
+        void sourceWithUnboundedSnapshotStrategyFallsBackToFullReconstructionWhenNeitherAxonServerNorASnapshotAreAvailable() {
+            // given the single-round-trip snapshotted-source RPC failing with UNIMPLEMENTED, and the separate
+            // snapshot-store RPC finding no snapshot either
+            ResultStream<SnapshottedSourceEventsResponse> snapshottedStream = mock(ResultStream.class);
+            when(snapshottedStream.getError())
+                    .thenReturn(java.util.Optional.of(Status.UNIMPLEMENTED.asRuntimeException()));
+            when(dcbEventChannel.source(any(SnapshottedSourceRequest.class))).thenReturn(snapshottedStream);
+
+            when(snapshotChannel.getLastSnapshot(any()))
+                    .thenReturn(CompletableFuture.failedFuture(Status.NOT_FOUND.asRuntimeException()));
             when(sourcingStream.nextIfAvailable())
                     .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null);
             when(sourcingStream.peek())
@@ -280,7 +328,7 @@ class AxonServerEventStorageEngineTest {
                     EventCriteria.havingTags("AGGREGATE_TYPE", identifier)
             );
 
-            // when / then falls back to plain sourcing from the very beginning, through the non-snapshotted RPC
+            // when / then only now, with no snapshot available through either RPC, falls back to full reconstruction
             StepVerifier.create(FluxUtils.of(testSubject.source(condition, null)))
                         .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
                         .verifyComplete();
