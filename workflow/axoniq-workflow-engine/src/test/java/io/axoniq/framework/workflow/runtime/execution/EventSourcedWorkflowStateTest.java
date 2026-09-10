@@ -20,6 +20,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import org.jspecify.annotations.Nullable;
 
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepIndeterminateException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowExecutionException;
@@ -154,6 +155,26 @@ class EventSourcedWorkflowStateTest {
         assertThat(state.containsStep(stepName)).isTrue();
         WorkflowStep step = state.getStep(stepName);
         assertThat(step.status()).isEqualTo(StepStatus.CANCELLED);
+    }
+
+    @Test
+    void evolveStepFailedWithIndeterminateCauseKeepsType() {
+        // given - a FAILED record written for a step that was in-flight at a crash and not re-run
+        String stepName = "doWork";
+        WorkflowError error = WorkflowError.from(new StepIndeterminateException(stepName));
+        Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.FAILED);
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(metadata);
+        when(eventMessage.timestamp()).thenReturn(Instant.now());
+        when(eventMessage.payloadAs(WorkflowError.class)).thenReturn(error);
+
+        // when
+        state.evolve(eventMessage, processingContext);
+
+        // then - the rebuilt error is catchable by its documented type
+        WorkflowStep step = state.getStep(stepName);
+        assertThat(step.status()).isEqualTo(StepStatus.FAILED);
+        assertThat(step.error()).isInstanceOf(StepIndeterminateException.class);
     }
 
     @Test
