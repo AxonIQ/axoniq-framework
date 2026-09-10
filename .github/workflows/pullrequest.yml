@@ -70,7 +70,7 @@ jobs:
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
           -Dparallel=classes -DthreadCount=1 -DforkCount=2 2>&1 | tee build.log
         env:
-          AXONIQ_LICENSE: ${{ github.workspace }}/integrationtests/src/test/resources/axon-server-test.license
+          AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
 
       - name: Build with Coverage reports
         if: matrix.sonar-enabled
@@ -80,7 +80,7 @@ jobs:
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
           -Dparallel=classes -DthreadCount=1 -DforkCount=2 2>&1 | tee build.log
         env:
-          AXONIQ_LICENSE: ${{ github.workspace }}/integrationtests/src/test/resources/axon-server-test.license
+          AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
 
       - name: Generate build status report
         if: always()
