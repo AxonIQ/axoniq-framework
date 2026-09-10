@@ -51,7 +51,6 @@ public interface WorkflowInstances extends WorkflowInstanceOperator {
     /**
      * Represents a collection of at most one workflow instance.
      *
-     * @since 0.3.0
      */
     interface Single extends WorkflowInstances {
 
