@@ -25,6 +25,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.CancelWorkflow
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecuteStepDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.FailWorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PayloadStepDefinition;
+import io.axoniq.framework.workflow.runtime.api.execution.context.PublishStepDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.VersionStepDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WaitForStepDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
@@ -148,6 +149,32 @@ public interface WorkflowDSL {
      * this {@code changeId}; {@code false} if it stays on the legacy branch.
      */
     boolean migrateVersion(VersionStepDefinition stepDefinition);
+
+    /**
+     * Publishes a business event as a durable workflow step from a DSL step definition.
+     * <p>
+     * This method bridges {@link PublishStepDefinition} to the runtime publish primitive. Exactly one event is
+     * appended: the definition's event enriched with workflow metadata, acting as both the business event and the
+     * replay-safe checkpoint of the step. The returned {@link WorkflowStepResult} represents the durable completion
+     * handle for the publish step.
+     * </p>
+     *
+     * @param stepDefinition author-facing publish step definition containing step metadata and the event to publish
+     * @return durable asynchronous result handle for the publish step
+     */
+    WorkflowStepResult publish(PublishStepDefinition stepDefinition);
+
+    /**
+     * Publishes a business event from a DSL step definition and blocks until the step is recorded.
+     * <p>
+     * This is the blocking counterpart of {@link #publish(PublishStepDefinition)}. The method waits for the returned
+     * {@link WorkflowStepResult} to complete and propagates any failure from the underlying step.
+     * </p>
+     *
+     * @param stepDefinition author-facing publish step definition containing step metadata and the event to publish
+     * @throws RuntimeException any exception captured by the durable step result
+     */
+    void awaitPublish(PublishStepDefinition stepDefinition);
 
     /**
      * Terminates the workflow with failure from a DSL step definition.

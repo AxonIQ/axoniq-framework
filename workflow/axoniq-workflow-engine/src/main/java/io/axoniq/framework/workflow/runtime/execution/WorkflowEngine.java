@@ -157,7 +157,7 @@ public class WorkflowEngine implements
         checkpointingSupport.getAndSetTriggerFrom(context);
 
         var segment = Segment.fromContext(context).orElse(null);
-        if (MetadataUtils.hasWorkflowId().test(event.metadata())) {
+        if (MetadataUtils.routedByWorkflowId().test(event.metadata())) {
             var workflowId = MetadataUtils.getWorkflowId(event.metadata());
             // Instance partitioning: a segment only processes instances it owns.
             if (!WorkflowSegmentOwnership.ownedBy(segment, workflowId)) {
@@ -178,7 +178,9 @@ public class WorkflowEngine implements
             }
             executionOpt.get().onEvent(event, context);
         } else {
-            // handle starting of new processes
+            // handle starting of new processes. Events published by a workflow through the publish primitive take
+            // this branch as well: they may start or wake other instances, and the publishing instance is one of the
+            // owned executions below, so delivering it there records the published step and unblocks the publisher.
             checkAndCreateNewInstance(event, context);
             // route external events to workflows waiting for them. Business events without a unique start candidate
             // are broadcast to every segment (sequenced by SequencingPolicy.BROADCAST); the ownership filter keeps

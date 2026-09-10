@@ -374,4 +374,23 @@ class EventSourcedWorkflowStateTest {
         when(eventMessage.payloadAs(Object.class)).thenReturn(Map.of());
         return eventMessage;
     }
+
+    @Test
+    void ignoresStepEventsCarryingAnotherWorkflowsId() {
+        // given: a step published by another instance, broadcast to every owned instance
+        Metadata metadata = MetadataUtils.create("another-workflow", "notifyApproved", StepStatus.COMPLETED)
+                                         .and(MetadataUtils.METADATA_KEY_STEP_PRIMITIVE,
+                                              MetadataUtils.STEP_PRIMITIVE_PUBLISH);
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(metadata);
+        when(eventMessage.timestamp()).thenReturn(Instant.now());
+        when(eventMessage.payloadAs(Object.class)).thenReturn("payload");
+
+        // when
+        state.evolve(eventMessage, processingContext);
+
+        // then: it is a business event for this instance, never one of its steps
+        assertThat(state.containsStep("notifyApproved")).isFalse();
+        assertThat(state.workflowStepNames()).isEmpty();
+    }
 }

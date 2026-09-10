@@ -93,6 +93,11 @@ public class MetadataUtils {
      */
     public static final String STEP_PRIMITIVE_WAIT_FOR_EVENT = "WAIT_FOR_EVENT";
 
+    /**
+     * Marker value identifying a step as a publish primitive: a business event that is also the completed step.
+     */
+    public static final String STEP_PRIMITIVE_PUBLISH = "PUBLISH";
+
     private MetadataUtils() {
         // avoid
     }
@@ -322,5 +327,26 @@ public class MetadataUtils {
      */
     public static Predicate<Metadata> hasWorkflowId() {
         return m -> m.containsKey(METADATA_KEY_WORKFLOW_ID);
+    }
+
+    /**
+     * Checks whether the metadata marks a publish step.
+     *
+     * @param metadata metadata to inspect
+     * @return {@code true} iff the metadata carries a {@code stepPrimitive} key with value {@code PUBLISH}.
+     */
+    public static boolean isPublishStep(Metadata metadata) {
+        return STEP_PRIMITIVE_PUBLISH.equals(metadata.getOrDefault(METADATA_KEY_STEP_PRIMITIVE, null));
+    }
+
+    /**
+     * Predicate that matches metadata of events routed to the owning workflow instance only: engine events carrying a
+     * workflow id, except published business events, which are routed like any other business event so other
+     * workflows can start on or be woken by them.
+     *
+     * @return predicate on metadata
+     */
+    public static Predicate<Metadata> routedByWorkflowId() {
+        return m -> hasWorkflowId().test(m) && !isPublishStep(m);
     }
 }

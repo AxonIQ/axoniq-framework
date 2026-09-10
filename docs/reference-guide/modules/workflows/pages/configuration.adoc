@@ -249,7 +249,7 @@ The engine attaches the following metadata to every workflow and step event:
 |The step's lifecycle phase: `STARTED`, `COMPLETED`, `FAILED`, `TIMED_OUT`, or `CANCELLED` (step events only).
 
 |`stepPrimitive`
-|Internal step classification used by the engine, for example `WAIT_FOR_EVENT` on `waitForEvent` step events.
+|Internal step classification used by the engine: `WAIT_FOR_EVENT` on `waitForEvent` step events, `PUBLISH` on events published with `publish` / `awaitPublish`.
 
 |`workflowStatus`
 |The workflow status: `STARTED`, `COMPLETED`, `FAILED`, `TIMED_OUT`, or `CANCELLED` (workflow events only).
@@ -269,7 +269,7 @@ Engine-published workflow events are also written with event-store tags.
 |Tag |Description
 
 |`workflowId=<id>`
-|Added to every engine-published event that carries `workflowId` metadata.
+|Added to every engine-published event that carries `workflowId` metadata, including business events published with `publish` / `awaitPublish` (their own tags are kept).
 
 |`workflowEvent=lifecycle`
 |Added to workflow lifecycle events.

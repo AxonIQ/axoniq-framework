@@ -65,6 +65,11 @@ import java.util.stream.Collectors;
      * <ul>
      *   <li>Engine-emitted events (carrying {@code workflowId} metadata) are sequenced by that id, the key
      *   {@link WorkflowSegmentOwnership} decides ownership on.</li>
+     *   <li>Events published by a workflow through the publish primitive carry {@code workflowId} metadata too, but
+     *   are business events for every other instance: they may start or wake instances resident in any segment, and
+     *   the publisher itself must observe them to complete its step. They are always sequenced by
+     *   {@link SequencingPolicy#BROADCAST}; candidate routing would deliver them to one segment only and leave a
+     *   publisher on another segment waiting forever.</li>
      *   <li>Business events are sequenced by the start-candidate workflow id when exactly one registered definition
      *   would start from the event, so new instances are created on the segment that owns them.</li>
      *   <li>All other events (no or multiple start candidates) may need to wake waiting instances resident in any
@@ -82,8 +87,11 @@ import java.util.stream.Collectors;
     public Optional<Object> sequenceIdentifierFor(EventMessage eventMessage,
                                                   ProcessingContext processingContext) {
         var metadata = eventMessage.metadata();
-        if (MetadataUtils.hasWorkflowId().test(metadata)) {
+        if (MetadataUtils.routedByWorkflowId().test(metadata)) {
             return Optional.of(MetadataUtils.getWorkflowId(metadata));
+        }
+        if (MetadataUtils.isPublishStep(metadata)) {
+            return Optional.of(SequencingPolicy.BROADCAST);
         }
         var candidates = newInstanceCandidateIds(eventMessage, processingContext);
         return candidates.size() == 1

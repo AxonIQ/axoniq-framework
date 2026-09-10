@@ -34,6 +34,7 @@ import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadR
 import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer
 import org.axonframework.messaging.core.MessageTypeResolver
 import org.axonframework.messaging.core.QualifiedName
+import org.axonframework.messaging.eventhandling.EventMessage
 import org.axonframework.messaging.eventhandling.conversion.EventConverter
 import java.util.function.Predicate
 import kotlin.reflect.KClass
@@ -427,6 +428,66 @@ class Kontext(
      */
     fun awaitModifyPayload(stepDefinition: PayloadStepDefinition) =
         workflowKontext.awaitModifyPayload(stepDefinition)
+
+    /**
+     * Publishes a business event as a durable workflow step and returns a handle to await later.
+     *
+     * Exactly one event is appended: [event] enriched with workflow metadata. Its type, payload, identifier and
+     * timestamp are published as-is, so the event other handlers and workflows receive is the event you publish.
+     * The workflow payload is not modified. On replay nothing is published again.
+     *
+     * @param stepName logical name of the publish step
+     * @param event event to publish
+     * @return handle for the publish step
+     */
+    fun publish(stepName: String, event: EventMessage): WorkflowStepResult =
+        workflowKontext.publish(stepName, event)
+
+    /**
+     * Publishes a business event given as [payload]. The message type is resolved through the configured
+     * [MessageTypeResolver]; an [EventMessage] passed as [payload] is published as-is.
+     *
+     * @param stepName logical name of the publish step
+     * @param payload event payload, or an [EventMessage]
+     * @return handle for the publish step
+     */
+    fun publish(stepName: String, payload: Any): WorkflowStepResult =
+        workflowKontext.publish(stepName, payload)
+
+    /**
+     * Publishes a business event as a durable workflow step and blocks until the step is recorded.
+     *
+     * @param stepName logical name of the publish step
+     * @param event event to publish
+     */
+    fun awaitPublish(stepName: String, event: EventMessage) =
+        workflowKontext.awaitPublish(stepName, event)
+
+    /**
+     * Publishes a business event given as [payload] and blocks until the step is recorded.
+     *
+     * @param stepName logical name of the publish step
+     * @param payload event payload, or an [EventMessage]
+     */
+    fun awaitPublish(stepName: String, payload: Any) =
+        workflowKontext.awaitPublish(stepName, payload)
+
+    /**
+     * Starts a publish step using a fully configured step definition.
+     *
+     * @param stepDefinition publish step definition to schedule
+     * @return handle for the publish step
+     */
+    fun publish(stepDefinition: PublishStepDefinition): WorkflowStepResult =
+        workflowKontext.publish(stepDefinition)
+
+    /**
+     * Publishes a business event from a fully configured step definition and blocks until the step is recorded.
+     *
+     * @param stepDefinition publish step definition to schedule
+     */
+    fun awaitPublish(stepDefinition: PublishStepDefinition) =
+        workflowKontext.awaitPublish(stepDefinition)
 
     /**
      * Migrates this workflow to [newVersion] for [changeId] and returns whether the new branch is

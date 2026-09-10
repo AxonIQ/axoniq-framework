@@ -275,8 +275,14 @@ public class EventSourcedWorkflowState implements WorkflowState {
             logger.debug("Ignoring event {} for terminal workflow {}", eventMessage.type(), workflowId);
             return this;
         }
-        Object eventPayload = eventMessage.payloadAs(Object.class);
         var metadata = eventMessage.metadata();
+        // Events published by another instance through the publish primitive are broadcast to every owned instance
+        // and carry that instance's step metadata. They are business events here, never this instance's steps.
+        if (MetadataUtils.hasWorkflowId().test(metadata)
+                && !workflowId.equals(MetadataUtils.getWorkflowId(metadata))) {
+            return this;
+        }
+        Object eventPayload = eventMessage.payloadAs(Object.class);
         MetadataUtils.getWorkflowDefinitionId(metadata)
                      .ifPresent(definitionId -> this.workflowDefinition = definitionId);
         // Migration events arrive as regular COMPLETED step events that additionally carry the

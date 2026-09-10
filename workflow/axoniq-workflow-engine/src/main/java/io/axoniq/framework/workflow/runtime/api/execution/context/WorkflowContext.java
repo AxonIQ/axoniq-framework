@@ -40,6 +40,7 @@ public interface WorkflowContext extends
         WorkflowLifecycleControl,
         PayloadPrimitive,
         VersionPrimitive,
+        PublishPrimitive,
         AllMatchCombinator,
         NoneMatchCombinator,
         AnyMatchCombinator,
