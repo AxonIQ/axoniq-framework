@@ -23,9 +23,8 @@
 
     <parent>
         <groupId>io.axoniq.framework</groupId>
-        <artifactId>axoniq-framework-parent</artifactId>
+        <artifactId>axoniq-integrationtests-multitenancy</artifactId>
         <version>${revision}</version>
-        <relativePath>../../../build/parent/pom.xml</relativePath>
     </parent>
 
     <artifactId>axoniq-integrationtests-multitenancy-core</artifactId>
