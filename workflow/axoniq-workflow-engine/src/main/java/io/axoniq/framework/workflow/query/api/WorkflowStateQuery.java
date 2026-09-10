@@ -36,7 +36,7 @@ import java.util.Objects;
  * {@linkplain #criteria() criteria} in its own storage model.
  *
  * @author Simon Zambrovski
- * @since 0.3.0
+ * @since 5.4.0
  */
 public final class WorkflowStateQuery {
 
