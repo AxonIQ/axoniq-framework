@@ -19,7 +19,7 @@
 /**
  * Workflow Manager API (outside-in) responsible for manipulating workflow instances.
  *
- * @since 0.1.0
+ * @since 5.4.0
  */
 @NullMarked
 package io.axoniq.framework.workflow.runtime.api.manager;
