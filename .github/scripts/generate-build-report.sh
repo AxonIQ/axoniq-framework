@@ -147,6 +147,13 @@ clean_message() {
     | sed -E 's/[[:space:]]+/ /g; s/^(; )+//; s/(; )+$//'
 }
 
+# A fully-qualified test id (package.Class.method) has no spaces, so a browser has nowhere to
+# wrap it and the table stretches to fit. Insert zero-width spaces (invisible, but a valid break
+# point) after each "." and at camelCase boundaries so it wraps without changing what's displayed.
+add_break_opportunities() {
+  sed -E 's/\./.\&#8203;/g; s/([a-z0-9])([A-Z])/\1\&#8203;\2/g'
+}
+
 # Maven prints "12.345 s", "01:00 min", or (in principle) "H:MM:SS h" depending on duration.
 # Normalize all of them to a plain MM:SS (minutes can exceed 59; this is a summary, not a
 # stopwatch, so sub-second precision on fast cached modules is not preserved).
@@ -213,7 +220,7 @@ fi
       if [ -n "$moduleDir" ]; then
         failureLine=$(first_failure "$moduleDir")
         if [ -n "$failureLine" ]; then
-          testId=$(printf '%s' "$failureLine" | cut -f1)
+          testId=$(printf '%s' "$failureLine" | cut -f1 | add_break_opportunities)
           rawMsg=$(printf '%s' "$failureLine" | cut -f2-)
           shortMsg=$(printf '%s' "$rawMsg" | clean_message)
           if [ ${#shortMsg} -gt 300 ]; then
