@@ -90,6 +90,22 @@ public final class ControllableEventStorageEngine implements EventStorageEngine 
     private volatile StepStatus duplicateStepStatus;
     private volatile EventMessage lastVanishedEvent;
     private final AtomicInteger foreignAppends = new AtomicInteger();
+    // A commit that never answers (the store hangs): the append future is never completed, the transaction rolled
+    // back, so nothing is durable and the caller's FutureResolver is what decides when to give up.
+    private final AtomicBoolean stallNextCommit = new AtomicBoolean(false);
+    @Nullable
+    private volatile String stallStepName;
+    @Nullable
+    private volatile StepStatus stallStepStatus;
+    private final AtomicInteger stalledCommits = new AtomicInteger();
+    // A commit that fails outright (the store throws): the append future completes exceptionally with a plain
+    // runtime exception that is neither a DCB rejection nor a timeout.
+    private final AtomicBoolean failNextCommit = new AtomicBoolean(false);
+    @Nullable
+    private volatile String failStepName;
+    @Nullable
+    private volatile StepStatus failStepStatus;
+    private final AtomicInteger failedCommits = new AtomicInteger();
     private final AtomicBoolean fenceNextCommit = new AtomicBoolean(false);
     @Nullable
     private volatile String fenceStepName;
@@ -174,6 +190,70 @@ public final class ControllableEventStorageEngine implements EventStorageEngine 
      * Arms the next {@code commit()} to vanish: it runs but does not append to the durable log. Single-shot — it
      * disarms itself after one commit (whether or not that commit carried workflow events).
      */
+    /**
+     * Arms a stall: the next commit carrying a step event of {@code stepName} with {@code status} rolls back and
+     * returns a future that never completes. The store has hung; only the caller's resolution timeout ends the wait.
+     * Single-shot, volatile (a crash rebuilds the store and drops the arm).
+     *
+     * @param stepName step whose event the stalled commit must carry.
+     * @param status   status of that step event.
+     */
+    public void armStallCommitFor(String stepName, StepStatus status) {
+        stallStepName = stepName;
+        stallStepStatus = status;
+        stallNextCommit.set(true);
+    }
+
+    /**
+     * Whether a stall is still armed; {@code false} once a commit consumed it.
+     *
+     * @return {@code true} while armed.
+     */
+    public boolean isStallArmed() {
+        return stallNextCommit.get();
+    }
+
+    /**
+     * Commits that were stalled so far.
+     *
+     * @return the count.
+     */
+    public int stalledCommits() {
+        return stalledCommits.get();
+    }
+
+    /**
+     * Arms a failure: the next commit carrying a step event of {@code stepName} with {@code status} rolls back and
+     * completes exceptionally with an {@link IllegalStateException}, neither a DCB rejection nor a timeout. Single-shot,
+     * volatile.
+     *
+     * @param stepName step whose event the failed commit must carry.
+     * @param status   status of that step event.
+     */
+    public void armFailCommitFor(String stepName, StepStatus status) {
+        failStepName = stepName;
+        failStepStatus = status;
+        failNextCommit.set(true);
+    }
+
+    /**
+     * Whether a failure is still armed; {@code false} once a commit consumed it.
+     *
+     * @return {@code true} while armed.
+     */
+    public boolean isFailArmed() {
+        return failNextCommit.get();
+    }
+
+    /**
+     * Commits that were failed so far.
+     *
+     * @return the count.
+     */
+    public int failedCommits() {
+        return failedCommits.get();
+    }
+
     public void armVanishNextCommit() {
         vanishStepName = null;
         vanishStepStatus = null;
@@ -458,6 +538,20 @@ public final class ControllableEventStorageEngine implements EventStorageEngine 
                       .reduce((first, second) -> second)
                       .ifPresent(e -> lastVanishedEvent = e);
                 return CompletableFuture.completedFuture(null);
+            }
+            if (stallNextCommit.get() && matchesTarget(stallStepName, stallStepStatus)) {
+                stallNextCommit.set(false);
+                stalledCommits.incrementAndGet();
+                // The store hangs: nothing durable, and the caller never hears back.
+                delegateTransaction.rollback();
+                return new CompletableFuture<>();
+            }
+            if (failNextCommit.get() && matchesTarget(failStepName, failStepStatus)) {
+                failNextCommit.set(false);
+                failedCommits.incrementAndGet();
+                delegateTransaction.rollback();
+                return CompletableFuture.failedFuture(
+                        new IllegalStateException("Simulated event store failure on commit"));
             }
             if (fenceNextCommit.get() && matchesTarget(fenceStepName, fenceStepStatus)) {
                 // A peer wins the race in the window between the condition check that created this transaction and

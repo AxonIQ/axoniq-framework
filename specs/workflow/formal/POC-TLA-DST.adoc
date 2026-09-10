@@ -1950,8 +1950,28 @@ cost a round-trip.
 | `DstFuzzTest` | seeds 0–299 green (171.6 s, exit 0); seeds 300–449 green on the fixed workload (85.9 s, exit 0) | `ALL_FAULTS`, 21 instances; `dst.seeds` read back from the surefire property dump, the harness echoes no count
 | `DstChaosFuzzTest` | seeds 0–59 green (36.7 s, exit 0); seeds 60–99 green on the fixed workload (23.9 s, exit 0) | `CHAOS_FAULTS`, 26 instances
 | `DstSwarmFuzzTest` | swarm seeds 0–39 green (23.6 s, exit 0) | shape varied per seed
+| Store faults on the publish append (`PublishAppendFailureTest`, 3 arms) | 3/3 green | new store arms `armStallCommitFor` (commit never answers) and `armFailCommitFor` (commit completes exceptionally). Stall: resolution timeout logged, runtime stopped for recovery, 0 records, restart publishes once. Fail: 0 records, restart publishes once; pre-restart reaction recorded below as candidate F-41. Contrast on `modifyPayload`: identical.
+| `DstBuggifyFuzzTest`, 60 seeds, p=0.25 on `engine.live-switch` and `execution.append-task` | green (35.4 s, exit 0) | no new fire point added; the existing `execution.append-task` point sits on the publish path
 | Canary (recipe F), two mutations | both caught | (1) foreign-instance guard deleted from `evolve`: all 7 `Inv29PublishPrimitiveTest` arms red, and 6 of 10 `DstSmokeTest` arms red through `CombinatorConsistency` (foreign steps poison other instances' state, the blast radius the guard exists for); `FencedPublishTest` stays green (a fence leaves no event to misroute). (2) `!containsStep` gate deleted from `PublishDelegate`: `crashAfterPublishCommitted` red with `[AtMostOnceRecording] step 'pubreq-k1/publishRequest' recorded a terminal outcome 2 times` — the F-7 class, exactly; the vanish probe and the smoke stay green (no crash lands between a publish commit and the publisher's terminal in those seeds), which is why the deterministic pin exists. Both mutations reverted; `git diff` on the engine clean.
 |===
+
+=== Candidate finding F-41 — a failed engine append abandons the instance until the next restart (engine-wide)
+
+**Class:** lost recovery / non-terminal wedge. **Severity:** medium (self-heals on restart, silent until then).
+**How found:** reproduced by test (`PublishAppendFailureScenario.appendFails` and `.modifyPayloadAppendFails`), pinned
+as a characterisation — it passes on the code as written and would pass on a fix that stops the runtime for recovery
+instead, so it does **not** meet the filing bar; recorded here, not filed.
+
+When the store completes an engine append exceptionally with a plain runtime exception (neither a DCB rejection nor a
+timeout), `FutureResolver.resolve` rethrows it out of the delegate, the body throws, `handleWorkflowException` reaches
+its `default` branch and only logs `Error occurred in workflow`, and `finishWorkflow` drops the execution from the live
+set. Nothing durable records that anything went wrong: no terminal status, no `stoppedForRecovery`, no `ERROR` naming
+the recovery action. The instance is restored on the next restart or segment claim (its durable status is still
+STARTED) and completes then — 0 records before, exactly 1 after, for publish and `modifyPayload` alike. The timeout
+path next to it behaves as designed: `logPublicationResolutionTimeout` + `stopRuntimeForRecovery`, execution kept in
+the live set, an alertable log line. **Candidate fix:** route any non-fence append failure through the same
+stop-for-recovery path as the timeout, so operators get the same alert and the instance is not silently parked.
+Publish-neutral: it inherits the behaviour, it does not cause it.
 
 === Harness lessons (class (b), not engine)
 
