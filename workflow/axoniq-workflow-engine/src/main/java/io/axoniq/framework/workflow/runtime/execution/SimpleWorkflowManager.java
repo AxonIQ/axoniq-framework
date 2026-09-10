@@ -47,7 +47,7 @@ import java.util.stream.Stream;
  * Workflow Manager backed by the workflow history projection and live cancellation coordinators.
  *
  * @author Simon Zambrovski
- * @since 0.3.0
+ * @since 5.4.0
  */
 @Internal
 public class SimpleWorkflowManager implements WorkflowManager {
