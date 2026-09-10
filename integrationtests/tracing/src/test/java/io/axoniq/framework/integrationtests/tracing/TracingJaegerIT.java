@@ -20,7 +20,6 @@
 package io.axoniq.framework.integrationtests.tracing;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
-import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.tracing.micrometer.MicrometerSpanFactory;
 import io.micrometer.tracing.Tracer;
 import io.micrometer.tracing.otel.bridge.OtelCurrentTraceContext;
@@ -138,8 +137,6 @@ class TracingJaegerIT {
                                      .autodetectedCommandHandlingComponent(c -> new GreetHandler())
                                      .build();
         configuration = MessagingConfigurer.create()
-                                           // Not a multi-tenancy test. See MultiTenancyUtils#disable.
-                                           .componentRegistry(MultiTenancyUtils::disable)
                                            .componentRegistry(registry -> registry
                                                    .disableEnhancer(AxonServerConfigurationEnhancer.class)
                                                    .registerComponent(SpanFactory.class, c -> spanFactory))

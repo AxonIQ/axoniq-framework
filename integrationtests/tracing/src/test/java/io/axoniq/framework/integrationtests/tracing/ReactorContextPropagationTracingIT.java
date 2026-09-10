@@ -20,7 +20,6 @@
 package io.axoniq.framework.integrationtests.tracing;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
-import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.micrometer.context.ContextRegistry;
 import io.micrometer.tracing.Tracer;
 import io.opentelemetry.sdk.testing.exporter.InMemorySpanExporter;
@@ -122,8 +121,6 @@ class ReactorContextPropagationTracingIT {
     private AxonConfiguration startApplication(AsyncInMemoryStreamableEventSource eventSource,
                                                ReactiveProjection projection) {
         return MessagingConfigurer.create()
-                                  // Not a multi-tenancy test. See MultiTenancyUtils#disable.
-                                  .componentRegistry(MultiTenancyUtils::disable)
                                   .componentRegistry(registry -> registry
                                           // Stay local: no Axon Server connector.
                                           .disableEnhancer(AxonServerConfigurationEnhancer.class)

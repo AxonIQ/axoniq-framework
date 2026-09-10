@@ -20,7 +20,6 @@
 package io.axoniq.framework.integrationtests.tracing;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
-import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.tracing.micrometer.MicrometerSpanFactory;
 import io.axoniq.framework.tracing.micrometer.MicrometerTracingConfigurationEnhancer;
 import io.micrometer.context.ContextSnapshotFactory;
@@ -169,8 +168,6 @@ class MicrometerTracingEndToEndIT {
                                    .autodetectedQueryHandlingComponent(c -> new FindRoomHandler())
                                    .build();
         return MessagingConfigurer.create()
-                                  // Not a multi-tenancy test. See MultiTenancyUtils#disable.
-                                  .componentRegistry(MultiTenancyUtils::disable)
                                   .componentRegistry(registry -> registry
                                           .disableEnhancer(AxonServerConfigurationEnhancer.class)
                                           .registerComponent(Tracer.class, c -> tracer)

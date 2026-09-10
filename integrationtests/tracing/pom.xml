@@ -55,6 +55,11 @@
         </dependency>
         <dependency>
             <groupId>org.axonframework</groupId>
+            <artifactId>axon-eventsourcing</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.axonframework</groupId>
             <artifactId>axon-integrationtests</artifactId>
             <type>test-jar</type>
             <scope>test</scope>
@@ -81,21 +86,7 @@
         </dependency>
         <dependency>
             <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-multi-tenancy</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-distributed-messaging</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <!-- axoniq-multi-tenancy's ConfigurationEnhancer is ServiceLoader-discovered and touches
-             dead-letter's SPI while being scanned, even when the test itself never uses it. -->
-        <dependency>
-            <groupId>io.axoniq.framework</groupId>
-            <artifactId>axoniq-dead-letter</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
