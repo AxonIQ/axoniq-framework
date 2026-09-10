@@ -104,7 +104,7 @@ public record WorkflowError(String type,
      */
     public RuntimeException toThrowable() {
         RuntimeException reconstructedCause = cause != null ? cause.toThrowable() : null;
-        if (StepIndeterminateException.class.getName().equals(type)) {
+        if (isType(StepIndeterminateException.class)) {
             return new StepIndeterminateException(message, reconstructedCause);
         }
         return new WorkflowExecutionException(type, message, reconstructedCause);
