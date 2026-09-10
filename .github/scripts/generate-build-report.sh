@@ -23,7 +23,8 @@ PLAIN_LOG=$(mktemp)
 NAME_MAP=$(mktemp)
 DIR_MAP=$(mktemp)
 RAW_ROWS=$(mktemp)
-trap 'rm -f "$PLAIN_LOG" "$NAME_MAP" "$DIR_MAP" "$RAW_ROWS"' EXIT
+TOTAL_TIME_FILE=$(mktemp)
+trap 'rm -f "$PLAIN_LOG" "$NAME_MAP" "$DIR_MAP" "$RAW_ROWS" "$TOTAL_TIME_FILE"' EXIT
 sed -E 's/\x1b\[[0-9;]*m//g' "$LOG_FILE" > "$PLAIN_LOG"
 
 : > "$NAME_MAP"
@@ -48,7 +49,7 @@ sort -u -o "$NAME_MAP" "$NAME_MAP"
 sort -u -o "$DIR_MAP" "$DIR_MAP"
 
 # Emit raw tab-separated rows: artifact, cache, status, time (no failure detail yet).
-awk -F'\t' '
+awk -F'\t' -v totaltimefile="$TOTAL_TIME_FILE" '
 NR == FNR { nameToArtifact[$1] = $2; next }
 
 /^\[INFO\] Attempting to restore project / {
@@ -61,6 +62,13 @@ NR == FNR { nameToArtifact[$1] = $2; next }
 }
 /^\[INFO\] Found cached build, restoring / { cacheStatus[currentArtifact] = "hit"; next }
 /^\[INFO\] Local build was not found by checksum / { cacheStatus[currentArtifact] = "miss"; next }
+
+/^\[INFO\] Total time:/ {
+    line = $0
+    sub(/^\[INFO\] Total time:[[:space:]]*/, "", line)
+    print line > totaltimefile
+    next
+}
 
 /^\[INFO\] Reactor Summary/ { inSummary = 1; summaryCount = 0; next }
 inSummary && /^\[INFO\] (BUILD SUCCESS|BUILD FAILURE)/ { inSummary = 0; next }
@@ -139,6 +147,32 @@ clean_message() {
     | sed -E 's/[[:space:]]+/ /g; s/^(; )+//; s/(; )+$//'
 }
 
+# Maven prints "12.345 s", "01:00 min", or (in principle) "H:MM:SS h" depending on duration.
+# Normalize all of them to a plain MM:SS (minutes can exceed 59; this is a summary, not a
+# stopwatch, so sub-second precision on fast cached modules is not preserved).
+normalize_time() {
+  local raw="$1"
+  if [ "$raw" = "-" ] || [ -z "$raw" ]; then
+    echo "-"
+    return
+  fi
+  local value="${raw% *}" unit="${raw##* }" totalSeconds hh mm ss
+  case "$unit" in
+    ms) totalSeconds=$(awk -v v="$value" 'BEGIN { printf "%d", (v / 1000) + 0.5 }') ;;
+    s)  totalSeconds=$(awk -v v="$value" 'BEGIN { printf "%d", v + 0.5 }') ;;
+    min)
+      mm="${value%%:*}"; ss="${value##*:}"
+      totalSeconds=$(( 10#$mm * 60 + 10#$ss ))
+      ;;
+    h)
+      IFS=: read -r hh mm ss <<< "$value"
+      totalSeconds=$(( 10#$hh * 3600 + 10#$mm * 60 + 10#$ss ))
+      ;;
+    *) totalSeconds=0 ;;
+  esac
+  printf '%02d:%02d' $((totalSeconds / 60)) $((totalSeconds % 60))
+}
+
 total=$(wc -l < "$RAW_ROWS")
 cachedCount=$(awk -F'\t' '$2 == "cached"' "$RAW_ROWS" | wc -l)
 builtCount=$(awk -F'\t' '$2 == "built"' "$RAW_ROWS" | wc -l)
@@ -146,12 +180,15 @@ successCount=$(awk -F'\t' '$3 == "SUCCESS"' "$RAW_ROWS" | wc -l)
 failureCount=$(awk -F'\t' '$3 == "FAILURE"' "$RAW_ROWS" | wc -l)
 skippedCount=$(awk -F'\t' '$3 == "SKIPPED"' "$RAW_ROWS" | wc -l)
 
+totalTimeRaw=$(cat "$TOTAL_TIME_FILE" 2>/dev/null || true)
+totalTime=$(normalize_time "${totalTimeRaw:--}")
+
 if [ "$total" -eq 0 ]; then
   summary="#### ${LABEL} - **UNKNOWN** - no per-module data found; the build likely did not complete (e.g. timed out or was cancelled) -- check the build step's own log"
 elif [ "$failureCount" -gt 0 ]; then
-  summary="#### ${LABEL} - **FAILURE** - ${successCount} succeeded, ${failureCount} failed, ${skippedCount} skipped (${cachedCount} cached, ${builtCount} built)"
+  summary="#### ${LABEL} - **FAILURE** - ${successCount} succeeded, ${failureCount} failed, ${skippedCount} skipped (${cachedCount} cached, ${builtCount} built) in ${totalTime}"
 else
-  summary="#### ${LABEL} - **SUCCESS** - ${total} modules (${cachedCount} cached, ${builtCount} built)"
+  summary="#### ${LABEL} - **SUCCESS** - ${total} modules (${cachedCount} cached, ${builtCount} built) in ${totalTime}"
 fi
 
 {
@@ -161,10 +198,16 @@ fi
   echo "<summary>Per-module details</summary>"
   echo
   echo "<table>"
-  echo "<thead><tr><th>Module</th><th>Cache</th><th>Status</th><th>Time</th></tr></thead>"
+  echo "<thead><tr><th>Module</th><th>Cache</th><th>Time</th></tr></thead>"
   echo "<tbody>"
   while IFS=$'\t' read -r artifact cache status time; do
-    printf '<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n' "$artifact" "$cache" "$status" "$time"
+    case "$status" in
+      SUCCESS) mark="&#9989;" ;;   # white_check_mark
+      FAILURE) mark="&#10060;" ;;  # cross_mark
+      *) mark="&#9888;&#65039;" ;; # warning (SKIPPED, or anything unexpected)
+    esac
+    displayTime=$(normalize_time "$time")
+    printf '<tr><td>%s %s</td><td>%s</td><td>%s</td></tr>\n' "$mark" "$artifact" "$cache" "$displayTime"
     if [ "$status" = "FAILURE" ]; then
       moduleDir=$(awk -F'\t' -v a="$artifact" '$1 == a { print $2; exit }' "$DIR_MAP")
       if [ -n "$moduleDir" ]; then
@@ -176,7 +219,7 @@ fi
           if [ ${#shortMsg} -gt 300 ]; then
             shortMsg="${shortMsg:0:297}..."
           fi
-          printf '<tr><td colspan="4"><code>%s</code> - %s</td></tr>\n' "$testId" "$shortMsg"
+          printf '<tr><td colspan="3"><code>%s</code> - %s</td></tr>\n' "$testId" "$shortMsg"
         fi
       fi
     fi
