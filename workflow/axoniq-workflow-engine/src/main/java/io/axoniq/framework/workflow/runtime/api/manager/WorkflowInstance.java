@@ -26,7 +26,7 @@ import java.util.concurrent.CompletableFuture;
  * Represents a workflow instance.
  *
  * @author Simon Zambrovski
- * @since 0.3.0
+ * @since 5.4.0
  */
 public interface WorkflowInstance extends WorkflowInstanceOperator {
 
