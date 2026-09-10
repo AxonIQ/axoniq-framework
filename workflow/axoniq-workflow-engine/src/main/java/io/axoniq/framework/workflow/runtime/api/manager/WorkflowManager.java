@@ -24,7 +24,7 @@ import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
  * Main component, providing the workflow manager API.
  *
  * @author Simon Zambrovski
- * @since 0.3.0
+ * @since 5.4.0
  */
 public interface WorkflowManager {
 
