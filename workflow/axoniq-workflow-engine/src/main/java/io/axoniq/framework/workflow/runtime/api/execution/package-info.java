@@ -19,7 +19,7 @@
 /**
  * Workflow execution api.
  *
- * @since 0.1.0
+ * @since 5.4.0
  */
 @NullMarked
 package io.axoniq.framework.workflow.runtime.api.execution;
