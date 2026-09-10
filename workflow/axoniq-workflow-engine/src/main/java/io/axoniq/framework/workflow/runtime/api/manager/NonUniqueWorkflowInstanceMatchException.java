@@ -22,7 +22,7 @@ package io.axoniq.framework.workflow.runtime.api.manager;
  * Indicates that a query expected to identify one workflow instance matched more than one instance.
  *
  * @author Simon Zambrovski
- * @since 0.3.0
+ * @since 5.4.0
  */
 public class NonUniqueWorkflowInstanceMatchException extends RuntimeException {
 
