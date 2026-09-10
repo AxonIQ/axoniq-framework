@@ -23,6 +23,7 @@ import io.axoniq.framework.integrationtests.multitenancy.TenantBankFixture.Balan
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.lifecycle.Phase;
+import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastructure;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
 
@@ -49,7 +50,7 @@ class ShutdownLatencyIT {
     private final String tenantA = runId + "-a";
     private final String tenantB = runId + "-b";
 
-    private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
+    private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
 
     private final Map<String, BalanceStore> stores = new ConcurrentHashMap<>();
     private AxonConfiguration application;

@@ -29,7 +29,7 @@ import org.axonframework.integrationtests.testsuite.infrastructure.TestInfrastru
  */
 public class ImmutableBuilderEntityModelAdministrationAxonServerIT extends ImmutableBuilderEntityModelAdministrationIT {
 
-    private static final TestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.singleTenant();
+    private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
 
     @Override
     protected TestInfrastructure testInfrastructure() {

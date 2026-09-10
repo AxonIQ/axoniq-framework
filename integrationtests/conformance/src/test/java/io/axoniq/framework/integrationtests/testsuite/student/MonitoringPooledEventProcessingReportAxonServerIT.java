@@ -30,7 +30,7 @@ import org.axonframework.integrationtests.testsuite.student.MonitoringPooledEven
 public class MonitoringPooledEventProcessingReportAxonServerIT
         extends MonitoringPooledEventProcessingReportIT {
 
-    private static final TestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.singleTenant();
+    private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
 
     @Override
     protected TestInfrastructure testInfrastructure() {

@@ -20,7 +20,6 @@
 package io.axoniq.framework.integrationtests.multitenancy;
 
 import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
-import io.axoniq.framework.messaging.multitenancy.api.MetadataBasedTenantResolver;
 import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
@@ -42,7 +41,7 @@ import static org.awaitility.Awaitility.await;
 @Timeout(60)
 class AxonServerTenantProviderIT {
 
-    private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
+    private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
 
     private AxonServerTestInfrastructure.ContextManager contextManager;
 
