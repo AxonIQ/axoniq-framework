@@ -121,7 +121,6 @@ public interface WorkflowState extends DescribableComponent {
      * Returns the recorded version migrations by change identifier.
      *
      * @return immutable map of recorded version migrations
-     * @since 5.4.0
      */
     Map<String, String> versionMigrations();
 
