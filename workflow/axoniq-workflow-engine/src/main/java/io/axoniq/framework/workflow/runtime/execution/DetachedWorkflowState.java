@@ -37,7 +37,7 @@ import java.util.Objects;
  * Detached structural copy of a workflow state returned by the workflow manager.
  *
  * @author Simon Zambrovski
- * @since 0.3.0
+ * @since 5.4.0
  */
 final class DetachedWorkflowState implements WorkflowState {
 
