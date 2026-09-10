@@ -357,6 +357,41 @@ class AxonServerEventStorageEngineTest {
 
         @Test
         @SuppressWarnings("unchecked")
+        void sourceWithUnboundedSnapshotStrategySkipsTheSingleRoundTripRpcAfterItWasFoundUnimplementedOnce() {
+            // given the snapshotted-source RPC failing with UNIMPLEMENTED
+            ResultStream<SnapshottedSourceEventsResponse> snapshottedStream = mock(ResultStream.class);
+            when(snapshottedStream.getError())
+                    .thenReturn(java.util.Optional.of(Status.UNIMPLEMENTED.asRuntimeException()));
+            when(dcbEventChannel.source(any(SnapshottedSourceRequest.class))).thenReturn(snapshottedStream);
+
+            when(snapshotChannel.getLastSnapshot(any()))
+                    .thenReturn(CompletableFuture.failedFuture(Status.NOT_FOUND.asRuntimeException()));
+            when(sourcingStream.nextIfAvailable())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null);
+            when(sourcingStream.peek())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null);
+
+            SourcingCondition condition = SourcingCondition.conditionFor(
+                    new SourcingStrategy.Snapshot(qualifiedName, identifier, null),
+                    EventCriteria.havingTags("AGGREGATE_TYPE", identifier)
+            );
+
+            // when sourcing once discovers the RPC is unsupported and falls back
+            StepVerifier.create(FluxUtils.of(testSubject.source(condition, null)))
+                        .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
+                        .verifyComplete();
+            verify(dcbEventChannel, times(1)).source(any(SnapshottedSourceRequest.class));
+
+            // when sourcing again
+            testSubject.source(condition, null);
+
+            // then the single-round-trip RPC is not attempted a second time -- the engine remembered it's unsupported
+            verify(dcbEventChannel, times(1)).source(any(SnapshottedSourceRequest.class));
+            verify(dcbEventChannel, times(2)).source(any(SourceEventsRequest.class));
+        }
+
+        @Test
+        @SuppressWarnings("unchecked")
         void sourceWithUnboundedSnapshotStrategyFallsBackToFullReconstructionWhenNeitherAxonServerNorASnapshotAreAvailable() {
             // given the single-round-trip snapshotted-source RPC failing with UNIMPLEMENTED, and the separate
             // snapshot-store RPC finding no snapshot either

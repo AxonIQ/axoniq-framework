@@ -95,6 +95,8 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
     private final TaggedEventConverter converter;
     private final AxonServerSnapshotStore snapshotStore;
 
+    private final AtomicBoolean snapshottedSourceSupported = new AtomicBoolean(true);
+
     /**
      * Constructs an {@code AxonServerEventStorageEngine} with the given {@code connection} and {@code converter}, using
      * {@link EventTypeResolver#DEFAULT} to resolve {@link org.axonframework.messaging.core.MessageType MessageTypes}
@@ -171,6 +173,10 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
     private MessageStream<EventMessage> sourceWithSnapshot(SourcingCondition condition,
                                                            SourcingStrategy.Snapshot snapshotStrategy,
                                                            @Nullable ProcessingContext context) {
+        if (!snapshottedSourceSupported.get()) {
+            return sourceWithBoundedSnapshot(condition, snapshotStrategy, context);
+        }
+
         ByteString snapshotKey = snapshotStore.snapshotKey(
                 snapshotStrategy.qualifiedName(), snapshotStrategy.identifier()
         );
@@ -225,9 +231,11 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
                 return;
             }
             if (unimplemented) {
-                logger.warn("Axon Server does not support sourcing with snapshots in a single round trip. "
-                                    + "Falling back to loading the snapshot separately. "
-                                    + "Upgrade Axon Server to make use of this optimization.");
+                if (snapshottedSourceSupported.compareAndSet(true, false)) {
+                    logger.warn("Axon Server does not support sourcing with snapshots in a single round trip. "
+                                        + "Falling back to loading the snapshot separately. "
+                                        + "Upgrade Axon Server to make use of this optimization.");
+                }
                 sourcingStream.close();
                 result.complete(sourceWithBoundedSnapshot(condition, snapshotStrategy, context));
             } else {
