@@ -48,9 +48,8 @@ With persistent streams each tenant has its own server-side position, so a reset
 
 **Sequencing no longer stops at the tenant boundary.**
 Two tenants that happen to use the same identifier, the same course id for instance, land in the same sequence and start waiting on each other.
-There is no built-in per-tenant sequencing policy, so write one when sequencing has to stay inside a tenant.
-The tenant is available where you need it, since the processor hands your policy a `ProcessingContext` carrying the tenant the event was streamed from.
-Read it with `TenantDescriptor.fromContext` and fold the tenant identifier into the sequence identifier you return.
+Axoniq Framework provides `TenantSequencingPolicy` for cases where sequencing has to stay inside a tenant, but you choose explicitly where to apply it.
+See xref:multi-tenancy:tenant-sequencing.adoc[Tenant sequencing] for command and event configuration examples.
 
 **Tenant-aware dead-letter queues are not supported yet.**
 Nothing yet replaces the extension's `MultiTenantDeadLetterProcessor#forTenant`, so a dead letter is not routed per tenant for the time being.
