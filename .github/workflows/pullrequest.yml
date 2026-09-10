@@ -64,7 +64,7 @@ jobs:
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
           -Dparallel=classes -DthreadCount=1 -DforkCount=2
         env:
-          AXONIQ_LICENSE: ${{ github.workspace }}/integrationtests/src/test/resources/axon-server-test.license
+          AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
 
       - name: Build with Coverage reports
         if: matrix.sonar-enabled
@@ -73,7 +73,7 @@ jobs:
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
           -Dparallel=classes -DthreadCount=1 -DforkCount=2
         env:
-          AXONIQ_LICENSE: ${{ github.workspace }}/integrationtests/src/test/resources/axon-server-test.license
+          AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
 
       - name: Sonar Analysis
         if: false # ${{ success() && matrix.sonar-enabled && github.event.pull_request.head.repo.full_name == github.repository }} | disabled for the time being
