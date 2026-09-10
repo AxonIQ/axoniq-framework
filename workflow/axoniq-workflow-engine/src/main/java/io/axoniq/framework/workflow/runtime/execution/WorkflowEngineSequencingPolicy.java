@@ -63,8 +63,8 @@ import java.util.stream.Collectors;
      * Determines the identifier by which the given event must be sequenced so that the streaming processor delivers it
      * to the segment owning the affected workflow instance. There are three routing cases:
      * <ul>
-     *   <li>Engine-emitted events (carrying {@code workflowId} metadata) are sequenced by the id's
-     *   {@linkplain WorkflowSegmentOwnership#segmentKey(String) segment key}.</li>
+     *   <li>Engine-emitted events (carrying {@code workflowId} metadata) are sequenced by that id, the key
+     *   {@link WorkflowSegmentOwnership} decides ownership on.</li>
      *   <li>Business events are sequenced by the start-candidate workflow id when exactly one registered definition
      *   would start from the event, so new instances are created on the segment that owns them.</li>
      *   <li>All other events (no or multiple start candidates) may need to wake waiting instances resident in any
@@ -83,11 +83,11 @@ import java.util.stream.Collectors;
                                                   ProcessingContext processingContext) {
         var metadata = eventMessage.metadata();
         if (MetadataUtils.hasWorkflowId().test(metadata)) {
-            return Optional.of(WorkflowSegmentOwnership.segmentKey(MetadataUtils.getWorkflowId(metadata)));
+            return Optional.of(MetadataUtils.getWorkflowId(metadata));
         }
         var candidates = newInstanceCandidateIds(eventMessage, processingContext);
         return candidates.size() == 1
-                ? Optional.of(WorkflowSegmentOwnership.segmentKey(candidates.iterator().next()))
+                ? Optional.of(candidates.iterator().next())
                 : Optional.of(SequencingPolicy.BROADCAST);
     }
 
