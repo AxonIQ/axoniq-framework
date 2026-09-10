@@ -73,18 +73,6 @@ public class TaggedEventConverter implements DescribableComponent {
     }
 
     /**
-     * Returns the {@link EventConverter} this {@code TaggedEventConverter} wraps.
-     * <p>
-     * Exposed so callers needing to convert something other than a full {@link EventMessage} or {@link TaggedEvent} can
-     * reuse the same {@code EventConverter} instance instead of holding a second reference to it.
-     *
-     * @return the {@code EventConverter} this {@code TaggedEventConverter} wraps
-     */
-    public EventConverter converter() {
-        return converter;
-    }
-
-    /**
      * Convert the given {@code taggedEvent} to a {@link TaggedEvent}.
      * <p>
      * Used to map Axon Framework events to Axon Server events while appending.
