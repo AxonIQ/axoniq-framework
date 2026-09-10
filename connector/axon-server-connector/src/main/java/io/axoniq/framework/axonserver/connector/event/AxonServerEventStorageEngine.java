@@ -73,6 +73,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -211,23 +212,30 @@ public class AxonServerEventStorageEngine implements EventStorageEngine, Snapsho
             @Nullable ProcessingContext context
     ) {
         CompletableFuture<MessageStream<EventMessage>> result = new CompletableFuture<>();
-        Runnable checkAvailability = () -> {
-            if (result.isDone()) {
+        // Guards against the onAvailable callback and the inline check below racing and both acting on the outcome.
+        AtomicBoolean decided = new AtomicBoolean();
+        Runnable sourceWithOrWithoutSnapshotDecider = () -> {
+            if (decided.get()) {
                 return;
             }
             Optional<Throwable> error = sourcingStream.getError();
-            if (error.isPresent() && isUnimplemented(error.get())) {
+            boolean unimplemented = error.isPresent() && isUnimplemented(error.get());
+            boolean readyToDecide = error.isPresent() || sourcingStream.peek() != null || sourcingStream.isClosed();
+            if (!readyToDecide || !decided.compareAndSet(false, true)) {
+                return;
+            }
+            if (unimplemented) {
                 logger.warn("Axon Server does not support sourcing with snapshots in a single round trip. "
                                     + "Falling back to loading the snapshot separately. "
                                     + "Upgrade Axon Server to make use of this optimization.");
                 sourcingStream.close();
                 result.complete(sourceWithBoundedSnapshot(condition, snapshotStrategy, context));
-            } else if (error.isPresent() || sourcingStream.peek() != null || sourcingStream.isClosed()) {
+            } else {
                 result.complete(new SnapshottedSourcingEventMessageStream(sourcingStream, converter));
             }
         };
-        sourcingStream.onAvailable(checkAvailability);
-        checkAvailability.run();
+        sourcingStream.onAvailable(sourceWithOrWithoutSnapshotDecider);
+        sourceWithOrWithoutSnapshotDecider.run();
         return result;
     }
 

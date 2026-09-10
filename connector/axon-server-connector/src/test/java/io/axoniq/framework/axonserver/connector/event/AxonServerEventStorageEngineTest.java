@@ -52,6 +52,7 @@ import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
 import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.messaging.core.FluxUtils;
+import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -69,6 +70,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -304,6 +306,53 @@ class AxonServerEventStorageEngineTest {
             ArgumentCaptor<SourceEventsRequest> captor = ArgumentCaptor.forClass(SourceEventsRequest.class);
             verify(dcbEventChannel).source(captor.capture());
             assertThat(captor.getValue().getFromSequence()).isEqualTo(50L);
+        }
+
+        @Test
+        @SuppressWarnings("unchecked")
+        void sourceWithUnboundedSnapshotStrategyOnlyFallsBackOnceWhenTheAvailabilityCallbackRacesTheInlineCheck()
+                throws InterruptedException {
+            // given the onAvailable callback firing on its own thread, concurrently with the inline availability
+            // check the engine performs right after registering it -- both invocations see the same UNIMPLEMENTED
+            // error and could otherwise both trigger the fallback
+            ResultStream<SnapshottedSourceEventsResponse> snapshottedStream = mock(ResultStream.class);
+            when(snapshottedStream.getError())
+                    .thenReturn(java.util.Optional.of(Status.UNIMPLEMENTED.asRuntimeException()));
+            // The inline checkAvailability.run() the engine performs right after registering the callback already
+            // runs synchronously on this thread, so only the callback thread below needs to be awaited.
+            CountDownLatch callbackThreadDone = new CountDownLatch(1);
+            doAnswer(invocation -> {
+                Runnable callback = invocation.getArgument(0);
+                new Thread(() -> {
+                    callback.run();
+                    callbackThreadDone.countDown();
+                }).start();
+                return null;
+            }).when(snapshottedStream).onAvailable(any());
+            when(dcbEventChannel.source(any(SnapshottedSourceRequest.class))).thenReturn(snapshottedStream);
+
+            when(snapshotChannel.getLastSnapshot(any()))
+                    .thenReturn(CompletableFuture.failedFuture(Status.NOT_FOUND.asRuntimeException()));
+            when(sourcingStream.nextIfAvailable())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null);
+            when(sourcingStream.peek())
+                    .thenReturn(SourceEventsResponse.newBuilder().setConsistencyMarker(0L).build(), null);
+
+            SourcingCondition condition = SourcingCondition.conditionFor(
+                    new SourcingStrategy.Snapshot(qualifiedName, identifier, null),
+                    EventCriteria.havingTags("AGGREGATE_TYPE", identifier)
+            );
+
+            // when
+            MessageStream<EventMessage> stream = testSubject.source(condition, null);
+            callbackThreadDone.await(2, TimeUnit.SECONDS);
+            StepVerifier.create(FluxUtils.of(stream))
+                        .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
+                        .verifyComplete();
+
+            // then despite both the inline check and the callback thread having run, the fallback only fired once
+            verify(snapshottedStream, times(1)).close();
+            verify(snapshotChannel, times(1)).getLastSnapshot(any());
         }
 
         @Test
