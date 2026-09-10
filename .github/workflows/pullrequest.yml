@@ -63,6 +63,8 @@ jobs:
           ./mvnw -B -U -ntp -Dstyle.color=always -fae -Possrh -Pintegration-test -Djacoco.skip=true clean verify \
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
           -Dparallel=classes -DthreadCount=1 -DforkCount=2
+        env:
+          AXONIQ_LICENSE: ${{ github.workspace }}/integrationtests/src/test/resources/axon-server-test.license
 
       - name: Build with Coverage reports
         if: matrix.sonar-enabled
@@ -70,6 +72,8 @@ jobs:
           ./mvnw -B -U -ntp -Dstyle.color=always -fae -Possrh -Dcoverage clean verify \
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
           -Dparallel=classes -DthreadCount=1 -DforkCount=2
+        env:
+          AXONIQ_LICENSE: ${{ github.workspace }}/integrationtests/src/test/resources/axon-server-test.license
 
       - name: Sonar Analysis
         if: false # ${{ success() && matrix.sonar-enabled && github.event.pull_request.head.repo.full_name == github.repository }} | disabled for the time being
