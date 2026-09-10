@@ -1,0 +1,98 @@
+= Publishing Events
+:navtitle: Publishing Events
+
+A workflow often needs to tell the rest of the system that something happened—an order was approved, a payment was released, a task is ready for an agent.
+The `publish` / `awaitPublish` pair appends that business event as a durable workflow step.
+
+[NOTE]
+====
+`BaseWorkflowContext.publish(...)` is the canonical non-blocking primitive and returns a `WorkflowStepResult`.
+`BaseWorkflowContext.awaitPublish(...)` blocks until the step is recorded and returns `void`, like `EventAppender.append(...)` in Axon Framework.
+====
+
+== The `awaitPublish` method
+
+After the approval decision, we publish an `OrderApproved` event so a shipment workflow and the read model can react:
+
+[source,java]
+----
+ctx.awaitPublish("notifyApproved",                                  // <1>
+        new OrderApproved(orderId, approvedBy));                    // <2>
+----
+
+<.> The step name.
+It is the durable identifier of the step, exactly as for every other primitive.
+<.> The event to publish.
+A plain payload has its `MessageType` resolved through the configured `MessageTypeResolver`.
+You can pass an `EventMessage` instead when you need to set the type or metadata yourself.
+
+Kotlin:
+
+[source,kotlin]
+----
+awaitPublish("notifyApproved", OrderApproved(orderId, approvedBy))
+----
+
+== One event, two roles
+
+`publish` appends exactly one event: the event you pass, enriched with workflow metadata.
+
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="awaitPublish">
+1 started ApprovalStarted {"orderId": "order-1"}
+2 completed OrderApproved {"orderId": "order-1", "approvedBy": "alice"}
+3 completed ApprovalCompleted {}
+  </div>
+</div>
+++++
+
+The `OrderApproved` event keeps its own type, payload, identifier and timestamp.
+The engine only adds metadata: `workflowId`, `stepName`, `stepType=COMPLETED` and `stepPrimitive=PUBLISH`.
+Those keys override metadata of the same name on the event you pass.
+
+That single event plays both roles:
+
+* For consumers it is the business event.
+Entities, projections and other workflows receive the event you published, with an additional `workflowId` tag.
+* For the workflow it is the completed step.
+On replay the step is found in the workflow state and the event is not published again.
+
+The workflow payload is not modified by `publish`.
+Use xref:payload-and-state.adoc[`setPayload`] when the published data should also become part of the workflow state.
+
+== Workflow-to-workflow communication
+
+A published event is routed like any business event.
+Another workflow can start on it or wait for it with xref:waiting-for-events.adoc[`awaitEvent`].
+
+[source,java]
+----
+// Approval workflow
+ctx.awaitPublish("notifyApproved", new OrderApproved(orderId, approvedBy));
+
+// Shipment workflow, started on OrderApproved
+@Workflow(startOnEventClass = OrderApproved.class, idProperty = "orderId", ...)
+public void execute(SimpleWorkflowContext ctx) { ... }
+----
+
+[IMPORTANT]
+====
+A workflow started by a published event derives its own instance id from that event.
+An id equal to an existing instance is rejected as a duplicate.
+When two workflows are keyed by the same property, give them distinct id prefixes through their `WorkflowIdProvider`.
+====
+
+== Non-blocking form
+
+`publish` returns a `WorkflowStepResult` you can await later or combine with other steps:
+
+[source,java]
+----
+var notified = ctx.publish("notifyApproved", new OrderApproved(orderId, approvedBy));
+var reserved = ctx.execute("reserveStock", Map.of(), (pc, p) -> inventory.reserve(p));
+ctx.allMatch(WorkflowStepResult::success, notified, reserved).await();
+----
+
+Each `publish` call is its own ordered append.
+Two calls produce two events and two steps.

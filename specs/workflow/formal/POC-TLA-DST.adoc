@@ -1899,6 +1899,89 @@ new in Axoniq Framework 5.3.0 and unproven, so a defect that looks like engine m
   label is a single observed run or a small repeat count, and a single non-reproducing failure is recorded as
   non-deterministic rather than dismissed.
 
+== P6 — Publish primitive campaign: `WorkflowContext#publish` (issue #415, ADR-019)
+
+Subject: the publish primitive backported from `feature/415/publish-primitive` onto `poc/tla_dst` as
+`poc/tla_dst-415-publish`. One `ctx.awaitPublish(stepName, event)` appends exactly one event that is both the business
+event and the publisher's COMPLETED step; the engine broadcasts it (an exception to ADR-014's owner-only routing of
+`workflowId`-carrying events), ignores its step metadata in every other instance's state (the foreign-instance guard),
+and gates the append on `!containsStep` so a re-run never appends it twice. The campaign asked four questions the issue
+names: publish then await, await then publish, a plain Axon handler as consumer, and workflow-to-workflow(s).
+
+**No engine finding.** Every arm passed on the code as written. Three harness lessons are recorded below because each
+cost a round-trip.
+
+=== What was added
+
+* **Invariants** INV-29 `NoForeignStepRecorded` and INV-30 `PublisherObservesOwnPublish`, worded identically in
+  `INVARIANTS.md`, `PublishRouting.tla` and `Invariants.assert*`, and always-on in the fuzz loop.
+* **TLA+** `PublishRouting.tla` (standalone, `-deadlock`): publisher on `s0`, the instance the event starts on `s1`, two
+  running waiters — one on a third segment `s2`, one on the publisher's own `s0`; toggles `BROADCAST_PUBLISH`, `FOREIGN_ID_GUARD`, `CONTAINS_STEP_GATE`. `MC_publish.cfg` holds all six
+  invariants at 204 distinct states; the four mutation cfgs each break exactly the invariant they name, so no green here
+  is vacuous. `LateWaitNeverWakes` pins the documented semantics that a wait registered after the event passed is not
+  woken (wait conditions are evaluated at live delivery only) — a characterisation, not a defect.
+* **Workload** `PublishChainWorkflow`: a requester that registers its wait on the reply, publishes the request, awaits
+  the reply; a responder and an observer both *started by* the published request (1:N fan-out); the responder publishes
+  the reply that wakes the requester. Folded into `SimulationWorld#defaultRegistrations()` (+3 instances: smoke 16→19,
+  fuzz 18→21, chaos 23→26; caps 80→100 / 160→200 / 240→300). A scenario-only waiter body pins the wait-ordering probes.
+* **Scenarios** `PublishChainScenario` (happy path, then crash + replay: identical records, starts and step lists),
+  `PublishWaitOrderScenario` (wait-before woken once; wait-after not woken), `PublishFanOutWakeScenario`
+  (running-to-running, 1:N: three live instances parked on `awaitEvent` for one order id and a fourth on another id;
+  a fifth running workflow publishes the request — each of the three woken exactly once, the fourth untouched, none
+  registers the publisher's step, all stable across a crash), `PublishCrashScenario` (crash after the
+  event is durable → no re-publish; vanished commit + crash → the publisher stays parked, recovery publishes once — the
+  effect of a publish *is* its record, so the F-0 effect/record divergence class does not exist for this primitive),
+  `FencedPublishScenario` (stale writer fenced: nothing published, nobody started, nothing terminal),
+  `PublishToEventHandlerScenario` (a plain `SimpleEventHandlingComponent` on its own pooled processor receives each
+  published event once, with the business payload and the publisher's `workflowId`). Pinned by
+  `Inv29PublishPrimitiveTest` and `FencedPublishTest`.
+* **Harness seam** `SimulationWorld.withExtraRegistrations(seed, registrations, Consumer<ComponentRegistry>)` /
+  `EngineInstance(..., extraRegistrations)`: the first way to register a non-workflow Axon consumer next to the engine,
+  applied again to every recovered engine. Production untouched.
+
+=== Runs
+
+[cols="2,1,3"]
+|===
+| Tier | Result | Notes
+| TLC `MC_publish` + 4 mutation cfgs | No error / 4 × VIOLATED as designed | 204 distinct states on the as-is model (two waiters)
+| Deterministic pins (`Inv29PublishPrimitiveTest` 8, `FencedPublishTest` 1) | 9/9 green | seeds 3, 5, 7, 11, 17, 19, 23, 29, 31
+| Per-PR gate (`./mvnw -pl workflow/axoniq-workflow-simulation test`) | 277/277 green, exit 0 (before the workload fix); 277/277 green, exit 0 (after) | smoke seeds 1, 2, 3, 42 at 19 instances incl. same-seed reproducibility; 35 regression seeds at 21 instances
+| `DstFuzzTest` | seeds 0–299 green (171.6 s, exit 0); seeds 300–449 green on the fixed workload (85.9 s, exit 0) | `ALL_FAULTS`, 21 instances; `dst.seeds` read back from the surefire property dump, the harness echoes no count
+| `DstChaosFuzzTest` | seeds 0–59 green (36.7 s, exit 0); seeds 60–99 green on the fixed workload (23.9 s, exit 0) | `CHAOS_FAULTS`, 26 instances
+| `DstSwarmFuzzTest` | swarm seeds 0–39 green (23.6 s, exit 0) | shape varied per seed
+| Canary (recipe F), two mutations | both caught | (1) foreign-instance guard deleted from `evolve`: all 7 `Inv29PublishPrimitiveTest` arms red, and 6 of 10 `DstSmokeTest` arms red through `CombinatorConsistency` (foreign steps poison other instances' state, the blast radius the guard exists for); `FencedPublishTest` stays green (a fence leaves no event to misroute). (2) `!containsStep` gate deleted from `PublishDelegate`: `crashAfterPublishCommitted` red with `[AtMostOnceRecording] step 'pubreq-k1/publishRequest' recorded a terminal outcome 2 times` — the F-7 class, exactly; the vanish probe and the smoke stay green (no crash lands between a publish commit and the publisher's terminal in those seeds), which is why the deterministic pin exists. Both mutations reverted; `git diff` on the engine clean.
+|===
+
+=== Harness lessons (class (b), not engine)
+
+1. **`QualifiedName(Class)` is package + simple name**, so a nested record `SimulationEvents.PublishRequestEvent` is
+   named `…workflow.PublishRequestEvent`, not `…SimulationEvents$PublishRequestEvent`. The first type assertion used
+   `Class#getName()` and was wrong; the pin now compares against `new QualifiedName(Class)`.
+2. **`EventProcessorModule…customized(…)` must be followed by `.build()`.** `registerModule` accepts the unbuilt module
+   and registers nothing; the processor silently never exists. A probe that published a plain event outside any
+   workflow and asked the module's configuration whether it had ever been built was what separated "publish is broken"
+   from "the consumer was never wired". The workflow enhancer calls `.build()`; the scenario now does too.
+3. **A second pooled processor needs its source and token store set explicitly** (`eventSource`, `tokenStore`,
+   `unitOfWorkFactory`), the same three the workflow enhancer wires. The defaults are `null`.
+4. **A harness workflow body must follow the documented failure recipe** (catch `StepFailedException`, decide,
+   `ctx.fail`). The first chain bodies did not, and `crashAfterPublishCommitted` went red once in nine runs: the crash
+   had caught the responder's and observer's `execute` steps in flight, recovery recorded both steps FAILED with
+   `StepIndeterminateException` (the F-0 at-most-once design: an in-flight step is never re-run), the bodies threw, and
+   the engine — by design, INV-16 "no auto-fail on uncaught" — left both instances non-terminal and not live. A wedge
+   in the workload, not in the engine; `OrderWorkflow` has had the catch all along. Fixed in `PublishChainWorkflow`;
+   the scenario now records `responderFailed` and reports the log and live set on timeout. Eight consecutive runs
+   green afterwards; the gate and a second fuzz/chaos batch re-run on the fixed workload (table above).
+
+=== What this campaign could not cover
+
+Cross-segment delivery of a published event. The harness runs one segment, so the publisher, the started instances and
+the waiter all live on it and BROADCAST versus candidate routing are indistinguishable at runtime. That half is carried
+by `PublishRouting.tla` (`MC_publish_candidate.cfg` shows the publisher hang, `MC_publish_candidate_wake.cfg` the lost
+wake) and by the engine's two-segment routing unit test on `main` (`NewInstanceCandidateRoutingTest`). Recorded in
+`FOLLOW-UPS.md` Track B with the vehicle it needs. Also out of scope, tracked as issue #482: correlation data on every
+engine event, published ones included, comes from the start-event context rather than the last handled event.
+
 == Phases 1–6 — status
 
 [cols="1,3,1"]

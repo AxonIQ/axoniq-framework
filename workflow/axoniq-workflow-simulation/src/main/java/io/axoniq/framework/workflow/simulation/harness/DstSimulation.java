@@ -43,6 +43,7 @@ import io.axoniq.framework.workflow.simulation.workflow.MigratingOrderWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.LoopingPollWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.OrderWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.PayloadOrderWorkflow;
+import io.axoniq.framework.workflow.simulation.workflow.PublishChainWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.ReducerWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.SagaOrderWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.VersionedOrderWorkflow;
@@ -59,6 +60,9 @@ import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.OrderPl
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.PayloadOrderRequestedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.PaymentConfirmedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.PollSignalEvent;
+import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.PublishChainRequestedEvent;
+import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.PublishReplyEvent;
+import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.PublishRequestEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.ReducerRequestedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.RenewalDecidedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.RollingDeployOrderEvent;
@@ -214,6 +218,19 @@ public final class DstSimulation {
     private static final String DEPLOY_WORKFLOW_ID = "deploy-" + DEPLOY_ORDER_ID;
     private static final String LOOP_ORDER_ID = "p4";
     private static final String LOOP_WORKFLOW_ID = "loopc-" + LOOP_ORDER_ID;
+    // INV-29 (NoForeignStepRecorded) + INV-30 (PublisherObservesOwnPublish): the simulator also starts ONE
+    // PublishChainWorkflow requester (registered with its responder and observer as three definitions in the shared
+    // engine — see SimulationWorld#defaultRegistrations). The requester registers its wait on the reply, publishes the
+    // request through ctx.awaitPublish (one durable event that is both the business event and its COMPLETED step), and
+    // that single published event STARTS the responder and the observer (1:N fan-out) and, once the responder has
+    // published its reply the same way, wakes the requester. The published events ride the crash/restart/reorder faults
+    // — exactly where a re-published event (a second record), a publisher not observing its own event (a hang), or a
+    // started/woken instance registering the publisher's step as its own would show. The requester's wake (the reply)
+    // is re-delivered at-least-once through the batch and the horizon like every other awaited event.
+    private static final String PUBLISH_ORDER_ID = "q0";
+    private static final String PUBLISH_REQUESTER_WORKFLOW_ID = PublishChainWorkflow.REQUESTER_ID_PREFIX + PUBLISH_ORDER_ID;
+    private static final String PUBLISH_RESPONDER_WORKFLOW_ID = PublishChainWorkflow.RESPONDER_ID_PREFIX + PUBLISH_ORDER_ID;
+    private static final String PUBLISH_OBSERVER_WORKFLOW_ID = PublishChainWorkflow.OBSERVER_ID_PREFIX + PUBLISH_ORDER_ID;
 
     private final SimulationConfig config;
     private final Map<FaultKind, Fault> faults = new EnumMap<>(FaultKind.class);
@@ -332,6 +349,9 @@ public final class DstSimulation {
             world.engine().publish(new SubscriptionStartedEvent(SUBSCRIPTION_ORDER_ID));
             world.engine().publish(new RollingDeployOrderEvent(DEPLOY_ORDER_ID));
             world.engine().publish(new LoopCounterPollRequestedEvent(LOOP_ORDER_ID));
+            // INV-29/INV-30: start the publish chain's requester. Its published request starts the responder and the
+            // observer; the responder's published reply wakes the requester.
+            world.engine().publish(new PublishChainRequestedEvent(PUBLISH_ORDER_ID));
             settle(world, "all workflows started", context, deadline);
 
             Map<String, List<String>> previousPerWorkflow = Map.of();
@@ -426,6 +446,12 @@ public final class DstSimulation {
                     if (!isTerminalInLog(world.committedLog(), LOOP_WORKFLOW_ID)) {
                         world.engine().publish(new PollSignalEvent(LOOP_ORDER_ID));
                     }
+                    // INV-29/INV-30: the requester's awaited reply. Normally the responder publishes it; a plain
+                    // re-delivery here is the same at-least-once rescue every other waiter gets (a duplicate reply
+                    // must not complete the wait twice — INV-15).
+                    if (!isTerminalInLog(world.committedLog(), PUBLISH_REQUESTER_WORKFLOW_ID)) {
+                        world.engine().publish(new PublishReplyEvent(PUBLISH_ORDER_ID));
+                    }
                     settle(world, "horizon round " + round + " repeat " + repeat, context, deadline);
                 }
                 context.record("HORIZON round " + round + ": re-delivered confirmations to non-terminal orders");
@@ -516,6 +542,14 @@ public final class DstSimulation {
         if (!isTerminalInLog(world.committedLog(), LOOP_WORKFLOW_ID)) {
             pending.add(new PendingEvent(new PollSignalEvent(LOOP_ORDER_ID),
                                          0, "PollSignal(" + LOOP_ORDER_ID + ")"));
+        }
+        // INV-29/INV-30: the requester's awaited reply rides the same reorder/delay/duplicate batch once the request
+        // has been published (before that the wait is registered but the chain has not asked for a reply yet; the
+        // responder's own published reply is the primary delivery, this is the at-least-once rescue).
+        if (hasStepInLog(world.committedLog(), PUBLISH_REQUESTER_WORKFLOW_ID, PublishChainWorkflow.STEP_PUBLISH_REQUEST)
+                && !isTerminalInLog(world.committedLog(), PUBLISH_REQUESTER_WORKFLOW_ID)) {
+            pending.add(new PendingEvent(new PublishReplyEvent(PUBLISH_ORDER_ID),
+                                         0, "PublishReply(" + PUBLISH_ORDER_ID + ")"));
         }
     }
 
@@ -652,6 +686,20 @@ public final class DstSimulation {
             // enforced jointly with the per-instance prefix-stability check below (INV-4) — each customized name lives
             // on the instance's committed subsequence, which only ever grows, and a replayed present step emits nothing.
             Invariants.assertEventNameCustomizationSound(committedLog, CUSTOM_NAMED_ID_PREFIX, Set.of());
+            // INV-29: a published event is broadcast to every owned instance and carries the publisher's step metadata;
+            // no other instance's reconstructed state may hold the publisher's step. INV-30: each publisher records its
+            // published event exactly once, under the business event's own type with the PUBLISH marker, and a terminal
+            // publisher's state holds the step. Both read the engine's own history read-model per workflowId.
+            var stepNamesByWorkflowId = stepNamesByWorkflowId(world);
+            Invariants.assertNoForeignStepRecorded(stepNamesByWorkflowId);
+            Invariants.assertPublisherObservesOwnPublish(committedLog, PublishChainWorkflow.REQUESTER_ID_PREFIX,
+                                                         PublishChainWorkflow.STEP_PUBLISH_REQUEST,
+                                                         world.engine().messageTypeOf(new PublishRequestEvent(PUBLISH_ORDER_ID)).qualifiedName(),
+                                                         stepNamesByWorkflowId);
+            Invariants.assertPublisherObservesOwnPublish(committedLog, PublishChainWorkflow.RESPONDER_ID_PREFIX,
+                                                         PublishChainWorkflow.STEP_PUBLISH_REPLY,
+                                                         world.engine().messageTypeOf(new PublishReplyEvent(PUBLISH_ORDER_ID)).qualifiedName(),
+                                                         stepNamesByWorkflowId);
             // INV-4 (intra-run): each instance's committed subsequence only ever grows — a previously committed
             // prefix is never rewritten or lost across a step (the cross-instance interleaving of the single global
             // log is the F-2 surface and is not asserted here; per-instance order is what replay determinism means).
@@ -1117,6 +1165,14 @@ public final class DstSimulation {
         if (!isTerminalInLog(world.committedLog(), CUSTOM_NAMED_WORKFLOW_ID)) {
             nonTerminal.add(CUSTOM_NAMED_WORKFLOW_ID);
         }
+        // INV-29/INV-30: the whole publish chain must terminate — the requester, and the responder and observer its
+        // published request starts. A chain member that never appears is as much a liveness break as one that stalls.
+        for (String publishWorkflowId : List.of(PUBLISH_REQUESTER_WORKFLOW_ID, PUBLISH_RESPONDER_WORKFLOW_ID,
+                                                PUBLISH_OBSERVER_WORKFLOW_ID)) {
+            if (!isTerminalInLog(world.committedLog(), publishWorkflowId)) {
+                nonTerminal.add(publishWorkflowId);
+            }
+        }
         return nonTerminal;
     }
 
@@ -1329,6 +1385,17 @@ public final class DstSimulation {
      * @param committedLog the committed workflow event log.
      * @return ordered per-workflow event subsequences.
      */
+    /**
+     * The engine's own reconstructed step names per {@code workflowId}, read from the workflow-history read-model.
+     */
+    private static Map<String, List<String>> stepNamesByWorkflowId(SimulationWorld world) {
+        var byWorkflow = new java.util.TreeMap<String, List<String>>();
+        for (var history : world.engine().historyRepository().findAll()) {
+            byWorkflow.put(history.workflowId(), List.copyOf(history.state().workflowStepNames()));
+        }
+        return byWorkflow;
+    }
+
         private static Map<String, List<String>> perWorkflowEvents(List<EventMessage> committedLog) {
         var byWorkflow = new java.util.TreeMap<String, List<String>>();
         for (EventMessage event : committedLog) {

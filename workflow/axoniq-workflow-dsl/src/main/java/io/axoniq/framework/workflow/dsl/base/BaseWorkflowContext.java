@@ -31,6 +31,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.FailWorkflowDe
 import io.axoniq.framework.workflow.runtime.api.execution.context.PayloadMapping;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PayloadStepDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveMetadata;
+import io.axoniq.framework.workflow.runtime.api.execution.context.PublishStepDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Timing;
 import io.axoniq.framework.workflow.runtime.api.execution.context.VersionStepDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WaitForStepDefinition;
@@ -48,8 +49,11 @@ import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadRe
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageTypeResolver;
+import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
 
 import java.time.Duration;
 import java.util.Map;
@@ -62,7 +66,7 @@ import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCus
  * Base Java DSL entry point for defining workflow steps.
  * <p>
  * This context exposes the core primitives used by workflow authors: executing external work, waiting for events,
- * mutating workflow payload, sleeping, failing, and cancelling. Non-blocking methods return a
+ * mutating workflow payload, publishing events, sleeping, failing, and cancelling. Non-blocking methods return a
  * {@link WorkflowStepResult} that can be awaited later, while methods prefixed with {@code await} block until the step
  * completes or fails.
  *
@@ -447,6 +451,66 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
             PayloadModification modification
     ) {
         awaitModifyPayload(stepName, modification, UnaryOperator.identity());
+    }
+
+    /**
+     * Publishes a business event as a durable workflow step and returns a handle to await later.
+     * <p>
+     * Exactly one event is appended: the given {@code event} enriched with workflow metadata ({@code workflowId},
+     * {@code stepName}, {@code stepType}, {@code stepPrimitive}). Its type, payload, identifier and timestamp are
+     * published as-is, so the event other handlers and workflows receive is the event you publish. The workflow
+     * payload is not modified. On replay the step is found in the workflow state and nothing is published again.
+     *
+     * @param stepName logical name of the publish step
+     * @param event    event to publish
+     * @return handle for the publish step
+     */
+    public WorkflowStepResult publish(String stepName, EventMessage event) {
+        return super.publish(new PublishStepDefinition(new PrimitiveMetadata(stepName, defaults()), event));
+    }
+
+    /**
+     * Publishes a business event given as payload. The {@link org.axonframework.messaging.core.MessageType} is resolved
+     * through the configured {@link MessageTypeResolver}, as {@code EventAppender#append(Object)} does. An
+     * {@link EventMessage} passed as {@code payload} is published as-is.
+     *
+     * @param stepName logical name of the publish step
+     * @param payload  event payload, or an {@link EventMessage}
+     * @return handle for the publish step
+     * @see #publish(String, EventMessage)
+     */
+    public WorkflowStepResult publish(String stepName, Object payload) {
+        return publish(stepName, asEventMessage(payload));
+    }
+
+    /**
+     * Publishes a business event as a durable workflow step and blocks until the step is recorded.
+     *
+     * @param stepName logical name of the publish step
+     * @param event    event to publish
+     * @see #publish(String, EventMessage)
+     */
+    public void awaitPublish(String stepName, EventMessage event) {
+        super.awaitPublish(new PublishStepDefinition(new PrimitiveMetadata(stepName, defaults()), event));
+    }
+
+    /**
+     * Publishes a business event given as payload and blocks until the step is recorded.
+     *
+     * @param stepName logical name of the publish step
+     * @param payload  event payload, or an {@link EventMessage}
+     * @see #publish(String, Object)
+     */
+    public void awaitPublish(String stepName, Object payload) {
+        awaitPublish(stepName, asEventMessage(payload));
+    }
+
+    private EventMessage asEventMessage(Object payload) {
+        if (payload instanceof EventMessage eventMessage) {
+            return eventMessage;
+        }
+        var type = processingContext().component(MessageTypeResolver.class).resolveOrThrow(payload);
+        return new GenericEventMessage(type, payload, Metadata.emptyInstance());
     }
 
     /**

@@ -262,17 +262,14 @@ ctx.awaitExecute("sendReminder",
 This is durable—if the application restarts during the sleep, the engine recalculates the remaining delay and resumes correctly.
 
 [#_sub_workflows]
-== Sub-workflows [.badge]#coming soon#
+== Sub-workflows
 
-[NOTE]
-====
-First-class sub-workflow support with built-in lifecycle management is **coming soon**.
-====
+Workflows talk to each other through published events.
+A parent publishes an event with xref:publishing-events.adoc[`awaitPublish`]; a child workflow starts on it.
+The child publishes its completion event the same way; the parent matches it with `awaitEvent` on a shared correlation ID (for example, `orderId`).
 
-In the meantime, the engine's event-sourced nature makes it straightforward to implement sub-workflows yourself.
-The trick: inside an `awaitExecute` action, publish a dedicated event that the engine routes through normal processing, which triggers the child workflow.
-
-The same approach works in reverse: the child publishes a dedicated completion event in a final step, and the parent matches it with `payloadProperty` on a shared correlation ID (for example, `orderId`).
+Each `awaitPublish` appends exactly one event: the business event itself, recorded as the publisher's completed step.
+Other workflows, entities and projections receive the event you published.
 
 [source,java]
 .Parent workflow—launches a child and waits for it to finish
@@ -284,44 +281,36 @@ public void execute(SimpleWorkflowContext ctx) {
 
     // ... do some work ...
 
-    var childWorkflowId = "payment-" + ctx.workflowId();
+    var orderId = (String) ctx.workflowPayload().get("orderId");
+    var amount = ((Number) ctx.workflowPayload().get("amount")).doubleValue();
 
-    // Launch the child workflow by publishing a dedicated event via EventSink.
-    ctx.awaitExecute("startPaymentProcess",                                // <1>
-            payload("childWorkflowId", childWorkflowId,
-                    "orderId", ctx.workflowId(),
-                    "amount", ctx.workflowPayload().get("amount")).getValues(),
-            (pc, p) -> {                                                   // <2>
-                var trigger = new StartPaymentProcess(childWorkflowId,
-                        (String) p.get("orderId"),
-                        ((Number) p.get("amount")).doubleValue());
-                eventSink.publish(null, new GenericEventMessage(
-                        messageTypeResolver.resolveOrThrow(trigger), trigger));
-                return Map.of();
-            });
+    // Launch the child workflow by publishing a dedicated event.
+    ctx.awaitPublish("startPaymentProcess",                              // <1>
+            new StartPaymentProcess("payment-" + orderId, orderId, amount));
 
     // ... do other work in parallel while child runs ...
 
     // Wait for the child's explicit completion event (matched by orderId in payload)
-    ctx.awaitEvent("awaitPaymentProcess",                                // <3>
+    ctx.awaitEvent("awaitPaymentProcess",                                // <2>
             PaymentProcessCompleted.class,
-            associate(payloadProperty("orderId"),                           // <4>
-                      equalsTo(ctx.workflowId())),
+            associate(payloadProperty("orderId"),                           // <3>
+                      equalsTo(orderId)),
             step -> step.timeout(Duration.ofMinutes(30)));
 
-    logger.info("Child workflow completed for order {}", ctx.workflowId());
+    logger.info("Child workflow completed for order {}", orderId);
 }
 ----
-<.> The step name `startPaymentProcess` produces a durable `io.myapp.StartPaymentProcessStarted` event in the parent's stream for auditability.
-<.> Inside the action, a dedicated `StartPaymentProcess` event is published via `EventSink` with `null` `ProcessingContext`—no workflow metadata attached, so it triggers the child workflow.
+<.> The step name `startPaymentProcess` is the durable identifier of the publish step.
+The published `StartPaymentProcess` event is the step's record: one event, carrying the parent's workflow metadata, that also starts the child.
 <.> The parent waits for `PaymentProcessCompleted`—a dedicated event the child publishes explicitly (not an auto-generated lifecycle event).
-<.> `payloadProperty("orderId")` matches on a field in the event payload. This works across workflow boundaries because the event carries no workflow metadata.
+<.> `payloadProperty("orderId")` matches on a field in the event payload.
+A published event is routed like any business event, so it reaches a waiting workflow on any segment.
 
 [source,java]
-.Child workflow—triggered by the dedicated event, signals completion explicitly
+.Child workflow—started by the published event, signals completion the same way
 ----
 @Workflow(idProperty = "childWorkflowId",
-          startOnEventName = "io.myapp.StartPaymentProcess",              // <1>
+          startOnEventClass = StartPaymentProcess.class,                 // <1>
           workflowNamespace = "io.myapp.payments")
 public void execute(SimpleWorkflowContext ctx) {
 
@@ -333,49 +322,47 @@ public void execute(SimpleWorkflowContext ctx) {
             ctx.workflowPayload(),
             PaymentService::charge);
 
-    // Signal the parent explicitly via EventSink
-    ctx.awaitExecute("notifyParent", ctx.workflowPayload(),               // <2>
-            (pc, p) -> {
-                var done = new PaymentProcessCompleted(
-                        (String) p.get("orderId"),
-                        (String) p.get("childWorkflowId"));
-                eventSink.publish(null, new GenericEventMessage(
-                        messageTypeResolver.resolveOrThrow(done), done));
-                return Map.of();
-            });
+    // Signal the parent explicitly
+    ctx.awaitPublish("notifyParent",                                     // <2>
+            new PaymentProcessCompleted(
+                    (String) ctx.workflowPayload().get("orderId"),
+                    (String) ctx.workflowPayload().get("childWorkflowId")));
 }
 ----
-<.> The child workflow starts when the `StartPaymentProcess` event (published without workflow metadata) is processed. The `childWorkflowId` from the payload becomes this workflow's instance ID.
-<.> A final `notifyParent` step publishes `PaymentProcessCompleted` via `EventSink` with `null` `ProcessingContext`—no workflow metadata, so it reaches the parent's `awaitEvent`.
+<.> The child starts when the `StartPaymentProcess` event the parent published is processed.
+The `childWorkflowId` from the payload becomes this workflow's instance ID; it must differ from the parent's ID, because a start whose ID already exists is rejected.
+<.> The final `notifyParent` step publishes `PaymentProcessCompleted`, which wakes the parent's `awaitEvent`.
 
 The event store shows the handoff:
 
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="Parent — OrderFulfillmentWorkflow (123)">
-1 started StartPaymentProcessStarted {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
-2 external StartPaymentProcess {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
-3 completed StartPaymentProcessCompleted
-4 started AwaitPaymentProcessStarted {"startTime": "2026-03-26T10:00:01Z"}
-12 external PaymentProcessCompleted {"orderId": 123, "childWorkflowId": "payment-123"}
-13 completed AwaitPaymentProcessCompleted
-14 completed OrderFulfillmentWorkflow#ExecuteCompleted
+1 completed StartPaymentProcess {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
+2 started AwaitPaymentProcessStarted {"startTime": "2026-03-26T10:00:01Z"}
+9 external PaymentProcessCompleted {"orderId": 123, "childWorkflowId": "payment-123"}
+10 completed AwaitPaymentProcessCompleted
+11 completed OrderFulfillmentWorkflow#ExecuteCompleted
   </div>
   <div class="et-src" data-title="Child — PaymentProcessWorkflow (payment-123)">
-2 external StartPaymentProcess {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
-5 started PaymentProcessWorkflow#ExecuteStarted
-6 started ValidatePaymentStarted {"orderId": 123, "amount": 99.95}
-7 completed ValidatePaymentCompleted
-8 started ChargeCustomerStarted {"orderId": 123, "amount": 99.95}
-9 completed ChargeCustomerCompleted
-10 started NotifyParentStarted {"orderId": 123, "childWorkflowId": "payment-123"}
-11 completed NotifyParentCompleted
-12 completed PaymentProcessWorkflow#ExecuteCompleted
+1 external StartPaymentProcess {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
+3 started PaymentProcessWorkflow#ExecuteStarted
+4 started ValidatePaymentStarted {"orderId": 123, "amount": 99.95}
+5 completed ValidatePaymentCompleted
+6 started ChargeCustomerStarted {"orderId": 123, "amount": 99.95}
+7 completed ChargeCustomerCompleted
+9 completed PaymentProcessCompleted {"orderId": 123, "childWorkflowId": "payment-123"}
   </div>
 </div>
 ++++
 
-The parent's `startPaymentProcess` action publishes `StartPaymentProcess`, which triggers the child workflow.
+The parent's `startPaymentProcess` step is the `StartPaymentProcess` event itself: one record in the parent's stream, and the trigger of the child.
 The parent suspends at `AwaitPaymentProcessStarted`.
-The child runs its steps and, in its final `notifyParent` step, publishes `PaymentProcessCompleted`.
-The engine routes this event to the parent, where it matches the `awaitEvent` on `payloadProperty("orderId")`.
+The child runs its steps and its final `notifyParent` step is the `PaymentProcessCompleted` event.
+The engine routes that event to the parent, where it matches the `awaitEvent` on `payloadProperty("orderId")`.
+
+[NOTE]
+====
+Several running workflows can wait for the same published event.
+One `awaitPublish` wakes every waiting instance whose association matches, and starts every workflow definition that lists the event as its start event.
+====

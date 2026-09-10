@@ -24,6 +24,7 @@ import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.time.Duration;
 import java.util.Map;
@@ -95,6 +96,17 @@ public class PrimitiveCommands {
             EventNameCustomizer eventNameCustomizer
     ) {
         return new SimpleVersionCommand(stepName, newVersion, eventNameCustomizer);
+    }
+
+    /**
+     * Factory method to create a {@link SimplePublishCommand}.
+     *
+     * @param stepName logical step name recorded with the published event.
+     * @param event    event to publish.
+     * @return command object.
+     */
+    public static SimplePublishCommand publish(String stepName, EventMessage event) {
+        return new SimplePublishCommand(stepName, event);
     }
 
     /**
@@ -262,6 +274,16 @@ public class PrimitiveCommands {
             String newVersion,
             EventNameCustomizer eventNameCustomizer
     ) implements VersionPrimitive.VersionCommand {
+    }
+
+    /**
+     * Default publish command implementation.
+     */
+    @Internal
+    public record SimplePublishCommand(
+            String stepName,
+            EventMessage event
+    ) implements PublishPrimitive.PublishCommand {
     }
 
     /**

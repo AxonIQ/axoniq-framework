@@ -93,10 +93,10 @@ class DstChaosFuzzTest {
             // PayloadOrderWorkflow (INV-13) + 1 CombinatorWorkflow (INV-14) + 2 CorrelatedWaitWorkflow (INV-15) + 1
             // ReducerWorkflow (INV-19) + 1 VersioningEdgesWorkflow (INV-20) + 1 CustomNamedWorkflow (INV-22) + the 4
             // P-series production-realism singletons (saga[retry-comp] + subscription + rollingDeploy[spawns at v2] +
-            // counterLoop) = 23 instances the chaos config drives via SimulationWorld#defaultRegistrations().
+            // counterLoop + publish chain) = 26 instances the chaos config drives via SimulationWorld#defaultRegistrations().
             assertThat(Invariants.workflowIdsIn(result.committedLog()))
-                    .as("chaos seed %d drives the full mixed workload (23 instances)", seed)
-                    .hasSize(23);
+                    .as("chaos seed %d drives the full mixed workload (26 instances)", seed)
+                    .hasSize(26);
             if (result.observedF0Duplicate()) {
                 f0Count++;
             }

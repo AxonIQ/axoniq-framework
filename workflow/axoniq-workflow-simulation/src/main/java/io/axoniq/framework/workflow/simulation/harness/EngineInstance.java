@@ -55,6 +55,7 @@ import io.axoniq.framework.workflow.simulation.workflow.MigratingOrderWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.OnRetryFires;
 import io.axoniq.framework.workflow.simulation.workflow.OrderWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.PayloadOrderWorkflow;
+import io.axoniq.framework.workflow.simulation.workflow.PublishChainWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.ReducerWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.RetryTimingWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.RetryResumeWorkflow;
@@ -85,6 +86,9 @@ import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.LoopReu
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.MigrateRequestedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.OrderPlacedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.PayloadOrderRequestedEvent;
+import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.PublishWaiterStartedEvent;
+import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.PublishRequestEvent;
+import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.PublishChainRequestedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.ReducerNullEdgeRequestedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.ReducerRequestedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.ReducerThrowingModifierRequestedEvent;
@@ -107,6 +111,7 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -273,6 +278,39 @@ public final class EngineInstance implements AutoCloseable {
                           SeededWorkflowIdGenerator idGenerator,
                           List<WorkflowRegistration> registrations,
                           java.util.concurrent.@org.jspecify.annotations.Nullable ExecutorService bodyExecutorOverride) {
+        this(eventStorageEngine, tokenStore, historyRepository, scheduler, clock, idGenerator, registrations,
+             bodyExecutorOverride, null);
+    }
+
+    /**
+     * Creates an engine instance with an optional hook into the component registry, on top of the seams the
+     * {@code bodyExecutorOverride} constructor wires.
+     * <p>
+     * The hook is the harness's only way to register a <em>plain</em> Axon Framework consumer next to the workflow
+     * engine (an {@code EventProcessorModule} with an {@code EventHandlingComponent}), which is what proves that an
+     * event a workflow publishes through {@code ctx.awaitPublish} reaches regular event handlers. Production is
+     * untouched: the hook is applied to the same {@code WorkflowConfigurer} an application would use.
+     *
+     * @param eventStorageEngine   controllable store shared across crashes.
+     * @param tokenStore           durable token store.
+     * @param historyRepository    shared history read-model.
+     * @param scheduler            virtual-time scheduler.
+     * @param clock                mutable clock.
+     * @param idGenerator          seeded id generator.
+     * @param registrations        one or more workflow definitions to register into the single module.
+     * @param bodyExecutorOverride optional body {@code ExecutorService}; {@code null} keeps the default.
+     * @param extraRegistrations   optional additional component registrations, applied after the harness's own;
+     *                             {@code null} registers nothing extra (every existing path).
+     */
+    public EngineInstance(ControllableEventStorageEngine eventStorageEngine,
+                          DurableTokenStore tokenStore,
+                          MutableWorkflowHistoryRepository historyRepository,
+                          WorkflowScheduler scheduler,
+                          MutableClock clock,
+                          SeededWorkflowIdGenerator idGenerator,
+                          List<WorkflowRegistration> registrations,
+                          java.util.concurrent.@org.jspecify.annotations.Nullable ExecutorService bodyExecutorOverride,
+                          java.util.function.@org.jspecify.annotations.Nullable Consumer<ComponentRegistry> extraRegistrations) {
         if (registrations.isEmpty()) {
             throw new IllegalArgumentException("At least one workflow registration is required");
         }
@@ -298,6 +336,9 @@ public final class EngineInstance implements AutoCloseable {
                 cr.registerComponent(java.util.concurrent.ExecutorService.class,
                                      WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR,
                                      cfg -> bodyExecutorOverride);
+            }
+            if (extraRegistrations != null) {
+                extraRegistrations.accept(cr);
             }
         });
 
@@ -954,6 +995,42 @@ public final class EngineInstance implements AutoCloseable {
         return new WorkflowRegistration(ReducerWorkflow.WORKFLOW_NAME + "ThrowingModifier",
                                         ReducerThrowingModifierRequestedEvent.class, "reducer-",
                                         workflow::throwingModifier);
+    }
+
+    /**
+     * The INV-29/INV-30 registrations: the {@link PublishChainWorkflow} request/reply chain as three definitions in the
+     * shared engine — the requester (driven by {@code PublishChainRequestedEvent}, ids {@code pubreq-}), and the
+     * responder ({@code pubresp-}) and observer ({@code pubobs-}) both <em>started by the requester's published</em>
+     * {@code PublishRequestEvent}. Folded into the fuzz set so a published event's single durable record, its routing
+     * to the publisher's own state, its fan-out start of two workflows and its wake of a pre-registered wait all ride
+     * the crash/restart/reorder faults.
+     *
+     * @param effects counting side-effect registry the bodies record into.
+     * @return the three chain registrations, requester first.
+     */
+    public static List<WorkflowRegistration> publishChainWorkflow(CountingEffects effects) {
+        var workflow = new PublishChainWorkflow(effects);
+        return List.of(
+                new WorkflowRegistration(PublishChainWorkflow.REQUESTER_WORKFLOW_NAME, PublishChainRequestedEvent.class,
+                                         PublishChainWorkflow.REQUESTER_ID_PREFIX, workflow::executeRequester),
+                new WorkflowRegistration(PublishChainWorkflow.RESPONDER_WORKFLOW_NAME, PublishRequestEvent.class,
+                                         PublishChainWorkflow.RESPONDER_ID_PREFIX, workflow::executeResponder),
+                new WorkflowRegistration(PublishChainWorkflow.OBSERVER_WORKFLOW_NAME, PublishRequestEvent.class,
+                                         PublishChainWorkflow.OBSERVER_ID_PREFIX, workflow::executeObserver));
+    }
+
+    /**
+     * The scenario-only {@link PublishChainWorkflow} waiter: driven by {@code PublishWaiterStartedEvent}, ids
+     * {@code pwait-}, it waits for the published {@code PublishRequestEvent} of the same order id. Scenario-only because
+     * whether it is woken depends on registering its wait before or after the publish, which the scenario controls.
+     *
+     * @param effects counting side-effect registry the body records into.
+     * @return the waiter registration.
+     */
+    public static WorkflowRegistration publishWaiterWorkflow(CountingEffects effects) {
+        var workflow = new PublishChainWorkflow(effects);
+        return new WorkflowRegistration(PublishChainWorkflow.WAITER_WORKFLOW_NAME, PublishWaiterStartedEvent.class,
+                                        PublishChainWorkflow.WAITER_ID_PREFIX, workflow::executeWaiter);
     }
 
     /**

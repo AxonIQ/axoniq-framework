@@ -30,6 +30,8 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 
 import java.time.Clock;
 import java.time.Duration;
+import org.axonframework.common.configuration.ComponentRegistry;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -65,6 +67,9 @@ public final class SimulationWorld implements AutoCloseable {
 
     private ManualWorkflowScheduler scheduler;
     private EngineInstance engine;
+    // Optional extra component registrations applied to every engine this world builds (initial and recovered), the
+    // seam a scenario uses to add a plain Axon event handler next to the workflow engine. Null = nothing extra.
+    private final java.util.function.@org.jspecify.annotations.Nullable Consumer<ComponentRegistry> extraRegistrations;
 
     // Optional body-executor override (null = the engine's default virtual-thread executor, every existing path). Only
     // the INV-23 (EngineSelfProtection) nested-primitive deadlock probe sets this to a SameThreadExecutorService to
@@ -206,6 +211,32 @@ public final class SimulationWorld implements AutoCloseable {
                            @org.jspecify.annotations.Nullable List<EngineInstance.WorkflowRegistration> registrations,
                            java.util.concurrent.@org.jspecify.annotations.Nullable ExecutorService bodyExecutorOverride,
                            boolean alignedEventClock) {
+        this(idSeed, registrations, bodyExecutorOverride, alignedEventClock, null);
+    }
+
+    /**
+     * Creates a world whose engines additionally apply {@code extraRegistrations} to their component registry — the
+     * seam for registering a plain Axon Framework event handler (an {@code EventProcessorModule}) next to the workflow
+     * engine, applied again to every recovered engine so the consumer survives a crash like the engine does.
+     *
+     * @param idSeed             seed for the deterministic workflow id generator.
+     * @param registrations      the workflow definitions to register (at least one).
+     * @param extraRegistrations additional component registrations.
+     * @return the world.
+     */
+    public static SimulationWorld withExtraRegistrations(
+            long idSeed,
+            List<EngineInstance.WorkflowRegistration> registrations,
+            java.util.function.Consumer<ComponentRegistry> extraRegistrations) {
+        return new SimulationWorld(idSeed, registrations, null, false, extraRegistrations);
+    }
+
+    private SimulationWorld(long idSeed,
+                            @org.jspecify.annotations.Nullable List<EngineInstance.WorkflowRegistration> registrations,
+                            java.util.concurrent.@org.jspecify.annotations.Nullable ExecutorService bodyExecutorOverride,
+                            boolean alignedEventClock,
+                            java.util.function.@org.jspecify.annotations.Nullable Consumer<ComponentRegistry> extraRegistrations) {
+        this.extraRegistrations = extraRegistrations;
         this.epoch = Instant.EPOCH;
         this.clock = new MutableClock(epoch);
         this.bodyExecutorOverride = bodyExecutorOverride;
@@ -269,6 +300,12 @@ public final class SimulationWorld implements AutoCloseable {
      * {@link io.axoniq.framework.workflow.simulation.workflow.RollingDeployWorkflow} v1+v2 sibling registry (fresh spawn at v2
      * through the {@code migrateVersion} gate), and the
      * {@link io.axoniq.framework.workflow.simulation.workflow.LoopingPollWorkflow} counter-names retry loop.
+     * <p>
+     * The {@link io.axoniq.framework.workflow.simulation.workflow.PublishChainWorkflow} request/reply chain (three
+     * definitions, three instances) rides them too, exercising INV-29 ({@code NoForeignStepRecorded}) and INV-30
+     * ({@code PublisherObservesOwnPublish}): a published event is one durable record under its own type, it is the
+     * publisher's completed step and nobody else's, it starts the responder and the observer exactly once, and it wakes
+     * the requester's pre-registered wait.
      */
     private List<EngineInstance.WorkflowRegistration> defaultRegistrations() {
         var all = new ArrayList<EngineInstance.WorkflowRegistration>();
@@ -285,12 +322,13 @@ public final class SimulationWorld implements AutoCloseable {
         all.add(EngineInstance.subscriptionRenewalWorkflow(effects));
         all.addAll(EngineInstance.rollingDeployWorkflowV1V2(effects));
         all.add(EngineInstance.loopingPollCounterNamesWorkflow(effects));
+        all.addAll(EngineInstance.publishChainWorkflow(effects));
         return all;
     }
 
     private EngineInstance newEngine() {
         return new EngineInstance(eventStore, tokenStore, historyRepository, scheduler, clock, idGenerator,
-                                  registrations, bodyExecutorOverride);
+                                  registrations, bodyExecutorOverride, extraRegistrations);
     }
 
     /**

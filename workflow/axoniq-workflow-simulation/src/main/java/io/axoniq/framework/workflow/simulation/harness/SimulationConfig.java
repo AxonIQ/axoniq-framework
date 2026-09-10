@@ -121,13 +121,14 @@ public record SimulationConfig(
     public static SimulationConfig smoke(long seed) {
         // 60s deadline: a healthy smoke seed settles in a couple of seconds, so this only ever fires on a genuine
         // hang/liveness regression; the JUnit @Timeout backstops sit above it (see DstSmokeTest).
-        // The smoke world drives 16 instances (3 OrderWorkflow + 13 singletons: versioned + migrating + payload +
+        // The smoke world drives 19 instances (3 OrderWorkflow + 16 singletons: versioned + migrating + payload +
         // combinator + 2 correlated + reducer + versioningEdges[INV-20] + customNamed[INV-22] + the four P-series
         // production-realism singletons: saga[retry-comp, happy] + subscription + rollingDeploy[v1+v2, spawns at v2] +
-        // counterLoop). maxSteps bumped 24->60->80 as the singleton set grew: it is the SECONDARY anti-hang guard
+        // counterLoop + the publish chain's requester, responder and observer [INV-29/INV-30]). maxSteps bumped
+        // 24->60->80->100 as the singleton set grew: it is the SECONDARY anti-hang guard
         // (the wall-clock deadline is primary) and a stale cap becomes a load-sensitive spurious HARNESS-ABORT.
         // A healthy seed still finishes well under the cap; a genuine spin/stall is still caught by the deadline.
-        return new SimulationConfig(seed, 3, 80, 0.5, REPRODUCIBLE_FAULTS, Duration.ofSeconds(60));
+        return new SimulationConfig(seed, 3, 100, 0.5, REPRODUCIBLE_FAULTS, Duration.ofSeconds(60));
     }
 
     /**
@@ -139,12 +140,12 @@ public record SimulationConfig(
      */
     public static SimulationConfig fuzz(long seed) {
         // A heavier run (more instances/steps/faults) gets a larger deadline, but still bounded so a single bad seed in
-        // the nightly sweep aborts fast with its diagnostic instead of stalling the whole job. Drives 18 instances
-        // (5 OrderWorkflow + the 13 singletons incl. the four P-series production-realism workloads). maxSteps bumped
-        // 60->120->160 as the singleton set grew (secondary anti-hang cap; a stale cap becomes a load-sensitive
+        // the nightly sweep aborts fast with its diagnostic instead of stalling the whole job. Drives 21 instances
+        // (5 OrderWorkflow + the 16 singletons incl. the four P-series production-realism workloads and the publish
+        // chain). maxSteps bumped 60->120->160->200 as the singleton set grew (secondary anti-hang cap; a stale cap becomes a load-sensitive
         // spurious HARNESS-ABORT — RegressionSeedsTest also runs this config); healthy seeds finish well under it,
         // and a genuine spin is still caught by the wall-clock deadline.
-        return new SimulationConfig(seed, 5, 160, 0.7, ALL_FAULTS, Duration.ofSeconds(60));
+        return new SimulationConfig(seed, 5, 200, 0.7, ALL_FAULTS, Duration.ofSeconds(60));
     }
 
     /**
@@ -164,10 +165,11 @@ public record SimulationConfig(
      * @return a chaos-sized configuration.
      */
     public static SimulationConfig chaos(long seed) {
-        // Drives 23 instances (10 OrderWorkflow + the 13 singletons incl. the four P-series production-realism
-        // workloads). maxSteps bumped 90->180->240 for the same workload-grew reason as smoke/fuzz (secondary
+        // Drives 26 instances (10 OrderWorkflow + the 16 singletons incl. the four P-series production-realism
+        // workloads and the publish chain). maxSteps bumped 90->180->240->300 for the same workload-grew reason as
+        // smoke/fuzz (secondary
         // anti-hang cap; the 240s wall-clock deadline is the primary hang guard).
-        return new SimulationConfig(seed, 10, 240, 0.85, CHAOS_FAULTS, Duration.ofSeconds(240));
+        return new SimulationConfig(seed, 10, 300, 0.85, CHAOS_FAULTS, Duration.ofSeconds(240));
     }
 
     /**

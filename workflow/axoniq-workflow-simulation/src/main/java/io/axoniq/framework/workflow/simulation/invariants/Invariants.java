@@ -29,7 +29,9 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.simulation.workflow.CombinatorWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.CorrelatedWaitWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.CustomNamedWorkflow;
+import io.axoniq.framework.workflow.simulation.workflow.PublishChainWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.StatusHookFires;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.ArrayList;
@@ -2966,5 +2968,130 @@ public final class Invariants {
                 ? MetadataUtils.getStepName(metadata)
                 : "<workflow>";
         return workflowId + ":" + stepName + ":" + status;
+    }
+
+    /**
+     * INV-29 ({@code NoForeignStepRecorded}): <em>An instance evolved from a published event never registers the
+     * publisher's step as its own.</em>
+     * <p>
+     * A published event (ADR-019) carries the publisher's step metadata ({@code workflowId}, {@code stepName},
+     * {@code stepType=COMPLETED}, {@code stepPrimitive=PUBLISH}) and is broadcast to every instance the engine owns —
+     * the instances it starts, the instances whose wait it matches, and every other live instance. Each of them evolves
+     * its state from it. The engine's state projection must treat the event as a business event for every instance but
+     * the publisher: a publish step name showing up in the step list of any other instance is the break. Asserted on
+     * the engine's own reconstructed state per {@code workflowId} (the history read-model's
+     * {@code state().workflowStepNames()}), never on the log — the log holds the event exactly once, under the
+     * publisher's id, whatever the projection did with it.
+     * <p>
+     * The publish step names are unique across the chain's bodies ({@link PublishChainWorkflow}), so the check needs no
+     * knowledge of who published what: a {@code publishRequest} step belongs to a requester ({@code pubreq-}) and a
+     * {@code publishReply} step belongs to a responder ({@code pubresp-}); anywhere else it is foreign.
+     *
+     * @param stepNamesByWorkflowId the engine's reconstructed step names per {@code workflowId}.
+     */
+    public static void assertNoForeignStepRecorded(Map<String, List<String>> stepNamesByWorkflowId) {
+        Map<String, String> publishStepOwnerPrefix = Map.of(
+                PublishChainWorkflow.STEP_PUBLISH_REQUEST, PublishChainWorkflow.REQUESTER_ID_PREFIX,
+                PublishChainWorkflow.STEP_PUBLISH_REPLY, PublishChainWorkflow.RESPONDER_ID_PREFIX);
+        for (var entry : stepNamesByWorkflowId.entrySet()) {
+            String workflowId = entry.getKey();
+            for (var publishStep : publishStepOwnerPrefix.entrySet()) {
+                if (entry.getValue().contains(publishStep.getKey())
+                        && !workflowId.startsWith(publishStep.getValue())) {
+                    throw new InvariantViolation(
+                            "NoForeignStepRecorded",
+                            "An instance evolved from a published event never registers the publisher\'s step as its "
+                                    + "own: instance " + workflowId + " holds step \'" + publishStep.getKey()
+                                    + "\', which only a " + publishStep.getValue()
+                                    + "* instance publishes. Steps: " + entry.getValue());
+                }
+            }
+        }
+    }
+
+    /**
+     * INV-30 ({@code PublisherObservesOwnPublish}): <em>Once the publisher's segment has processed the published event,
+     * the publisher's state holds the step — exactly one durable record, under the event's own type.</em>
+     * <p>
+     * Three facets, all per publisher {@code workflowId} (instances whose id starts with {@code publisherIdPrefix}):
+     * <ul>
+     *   <li><strong>one record</strong>: the publish step has at most one COMPLETED record in the committed log
+     *       (distinct event identifiers, so a duplicated commit of the same event is not a second publish), and a
+     *       publisher whose state holds the step has exactly one;</li>
+     *   <li><strong>the event is the event</strong>: that record's {@link QualifiedName} is the business event's own
+     *       type ({@code expectedEventType}), never an engine-derived step name, and it carries the
+     *       {@code stepPrimitive=PUBLISH} marker;</li>
+     *   <li><strong>the publisher sees it</strong>: a publisher whose committed log holds the record and which is
+     *       terminal has the step in its reconstructed state — the broadcast reached its own segment (under a single
+     *       segment, the engine delivered the event back to its own execution). A non-terminal publisher is not
+     *       decided: its state may lawfully lag the log.</li>
+     * </ul>
+     *
+     * @param committedLog          the committed workflow event log (oldest first).
+     * @param publisherIdPrefix     id prefix of the publishing workflow's instances.
+     * @param publishStepName       the publish step name of that workflow.
+     * @param expectedEventType     the qualified name of the published business event.
+     * @param stepNamesByWorkflowId the engine's reconstructed step names per {@code workflowId}.
+     */
+    public static void assertPublisherObservesOwnPublish(List<EventMessage> committedLog,
+                                                         String publisherIdPrefix,
+                                                         String publishStepName,
+                                                         QualifiedName expectedEventType,
+                                                         Map<String, List<String>> stepNamesByWorkflowId) {
+        var recordsByPublisher = new LinkedHashMap<String, Set<String>>();
+        var terminalPublishers = new HashSet<String>();
+        for (EventMessage event : committedLog) {
+            String workflowId = MetadataUtils.getWorkflowId(event.metadata());
+            if (!workflowId.startsWith(publisherIdPrefix)) {
+                continue;
+            }
+            recordsByPublisher.computeIfAbsent(workflowId, k -> new HashSet<>());
+            if (MetadataUtils.getWorkflowStatus(event.metadata()).map(WorkflowStatus::isTerminal).orElse(false)) {
+                terminalPublishers.add(workflowId);
+            }
+            var status = MetadataUtils.getStepStatus(event.metadata());
+            if (status.isPresent() && status.get() == StepStatus.COMPLETED
+                    && publishStepName.equals(MetadataUtils.getStepName(event.metadata()))) {
+                recordsByPublisher.get(workflowId).add(event.identifier());
+                if (!expectedEventType.equals(event.type().qualifiedName())) {
+                    throw new InvariantViolation(
+                            "PublisherObservesOwnPublish",
+                            "The published event is the event: publisher " + workflowId + " recorded step \'"
+                                    + publishStepName + "\' under type " + event.type().qualifiedName()
+                                    + " instead of the business event\'s own type " + expectedEventType);
+                }
+                if (!MetadataUtils.isPublishStep(event.metadata())) {
+                    throw new InvariantViolation(
+                            "PublisherObservesOwnPublish",
+                            "The published event of " + workflowId + " must carry the stepPrimitive=PUBLISH marker "
+                                    + "(without it the engine routes it to the publisher\'s segment only). Metadata: "
+                                    + event.metadata());
+                }
+            }
+        }
+        for (var entry : recordsByPublisher.entrySet()) {
+            String workflowId = entry.getKey();
+            int records = entry.getValue().size();
+            if (records > 1) {
+                throw new InvariantViolation(
+                        "PublisherObservesOwnPublish",
+                        "Exactly one durable record per publish: publisher " + workflowId + " committed " + records
+                                + " distinct \'" + publishStepName + "\' events");
+            }
+            var steps = stepNamesByWorkflowId.getOrDefault(workflowId, List.of());
+            if (terminalPublishers.contains(workflowId) && records == 1 && !steps.contains(publishStepName)) {
+                throw new InvariantViolation(
+                        "PublisherObservesOwnPublish",
+                        "Once the publisher\'s segment has processed the published event, the publisher\'s state holds "
+                                + "the step: terminal publisher " + workflowId + " committed \'" + publishStepName
+                                + "\' but its reconstructed state lacks it. Steps: " + steps);
+            }
+            if (steps.contains(publishStepName) && records == 0) {
+                throw new InvariantViolation(
+                        "PublisherObservesOwnPublish",
+                        "Publisher " + workflowId + " holds step \'" + publishStepName
+                                + "\' in its state without a durable record of the published event");
+            }
+        }
     }
 }

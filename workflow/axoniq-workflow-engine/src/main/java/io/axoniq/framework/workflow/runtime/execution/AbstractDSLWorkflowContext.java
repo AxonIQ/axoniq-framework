@@ -29,6 +29,8 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.FailWorkflowDe
 import io.axoniq.framework.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PayloadStepDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
+import io.axoniq.framework.workflow.runtime.api.execution.context.PublishPrimitive;
+import io.axoniq.framework.workflow.runtime.api.execution.context.PublishStepDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.VersionPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.VersionStepDefinition;
@@ -190,6 +192,24 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     @Override
     public WorkflowStepResult version(VersionPrimitive.VersionCommand command) {
         return delegate.version(command);
+    }
+
+    @Override
+    public WorkflowStepResult publish(PublishPrimitive.PublishCommand command) {
+        return delegate.publish(command);
+    }
+
+    @Override
+    public WorkflowStepResult publish(PublishStepDefinition stepDefinition) {
+        return this.publish(PrimitiveCommands.publish(
+                stepDefinition.primitiveMetadata().stepName(),
+                stepDefinition.event()
+        ));
+    }
+
+    @Override
+    public void awaitPublish(PublishStepDefinition stepDefinition) {
+        awaitStepCompletion(this.publish(stepDefinition));
     }
 
     @Override

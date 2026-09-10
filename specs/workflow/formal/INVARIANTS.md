@@ -1907,6 +1907,64 @@ duplicated the *effect* while the *record* stayed ≤1, which is exactly why the
 
 ---
 
+### INV-29: A published event is nobody else's step
+- **Name:** `NoForeignStepRecorded`
+- **Kind:** Safety
+- **Plain English:** An instance evolved from a published event never registers the publisher's step as its own. A
+  `ctx.publish` / `ctx.awaitPublish` appends exactly one event: the caller's business event enriched with the publisher's
+  step metadata (`workflowId`, `stepName`, `stepType=COMPLETED`, `stepPrimitive=PUBLISH`, ADR-019). Because it is a
+  business event for everyone else it is **broadcast** to every instance the engine owns — the instances it starts, the
+  instances whose `waitForEvent` it matches, and every other live instance — and each of them evolves its state from it.
+  The state projection must treat the event as a business event for every instance but the publisher: the publisher's
+  step name appearing in any other instance's step list is the break (it would also poison that instance's replay-skip
+  gate and drift guard, since both key on step names).
+- **Formal-ish:** for every instance `w` and every committed event `e` with `stepPrimitive(e) = PUBLISH` and
+  `workflowId(e) ≠ w`: `stepName(e) ∉ steps(state(w))`. Asserted on the engine's own reconstructed state per
+  `workflowId` (the workflow-history read-model's `state().workflowStepNames()`), never on the log — the log holds the
+  event exactly once, under the publisher's id, whatever the projection did with it.
+- **Engine mapping:** `EventSourcedWorkflowState.evolve` returns early for step metadata whose `workflowId` is not its
+  own (the foreign-instance guard added with ADR-019); `WorkflowEngine.handle` delivers a published event to every owned
+  execution (`MetadataUtils.routedByWorkflowId` excludes `PUBLISH` events from the owner-only path);
+  `PublishDelegate.publish` builds the metadata. Step names of the harness chain are unique per body
+  (`PublishChainWorkflow`), so ownership of a publish step is decidable from its name alone.
+- **Currently holds?** Yes. Mutation-checked: `MC_publish_noguard.cfg` (guard off) violates it in TLC; the DST assertion
+  reads the same state the guard protects.
+- **Checked by:** TLA+ `PublishRouting.tla` operator `NoForeignStepRecorded` (`MC_publish.cfg` holds,
+  `MC_publish_noguard.cfg` violated); DST `Invariants.assertNoForeignStepRecorded` — always-on in the fuzz loop on the
+  publish chain (`pubreq-`/`pubresp-`/`pubobs-`), and in `PublishChainScenario`, `PublishWaitOrderScenario`,
+  `PublishCrashScenario` (`Inv29PublishPrimitiveTest`).
+
+### INV-30: The publisher observes its own publish
+- **Name:** `PublisherObservesOwnPublish`
+- **Kind:** Safety
+- **Plain English:** Once the publisher's segment has processed the published event, the publisher's state holds the
+  step — exactly one durable record, under the event's own type. Three facets: **(a)** the publish step has at most one
+  COMPLETED record in the committed log (distinct event identifiers, so a duplicated commit of one event is not a second
+  publish), and a publisher whose state holds the step has exactly one — the replay-skip gate `!containsStep` in
+  `PublishDelegate` is what keeps a post-crash re-run from appending the event again (the F-7 lesson applied at birth);
+  **(b)** that record is the business event itself — its `QualifiedName` is the caller's `MessageType`, never an
+  engine-derived step name — and it carries the `stepPrimitive=PUBLISH` marker the routing keys on; **(c)** a terminal
+  publisher whose log holds the record has the step in its reconstructed state: the event came back to the publisher's
+  own execution. Under candidate routing (the event sequenced to the started instance's segment only) a publisher on
+  another segment would never see it and wait forever; the engine sequences `PUBLISH` events as `BROADCAST` instead.
+  A non-terminal publisher is not decided — its state may lawfully lag the log.
+- **Formal-ish:** for every publisher `p` and publish step `s`: `|{id(e) : e ∈ log(p) ∧ stepName(e)=s ∧
+  stepType(e)=COMPLETED}| ≤ 1`, every such `e` has `type(e) = businessType(s)` and `stepPrimitive(e)=PUBLISH`, and
+  `terminal(p) ∧ |…| = 1 ⇒ s ∈ steps(state(p))`.
+- **Engine mapping:** `PublishDelegate.publish` (gate, metadata merge, `awaitStateChange(stepStatus(s, COMPLETED))`);
+  `WorkflowEngineSequencingPolicy.sequenceIdentifierFor` (`isPublishStep → BROADCAST`, before candidate routing);
+  `WorkflowEngine.handle` (the publisher is one of the owned executions the business-event branch delivers to);
+  `EventSourcedWorkflowState.evolve` registers the COMPLETED step from the metadata.
+- **Currently holds?** Yes. Mutation-checked: `MC_publish_candidate.cfg` (candidate routing) and `MC_publish_nogate.cfg`
+  (gate off) each violate their facet in TLC. Cross-segment delivery itself is **not DST-reachable** (the harness has
+  one segment); it is carried by the model and by the engine's two-segment routing unit test on `main`
+  (`NewInstanceCandidateRoutingTest`).
+- **Checked by:** TLA+ `PublishRouting.tla` operators `PublisherObservesOwnPublish`, `AtMostOnceRecording`,
+  `WakeExactlyOnce`, `SpawnAtMostOnce`, `LateWaitNeverWakes`; DST `Invariants.assertPublisherObservesOwnPublish` —
+  always-on in the fuzz loop for both publishers of the chain, and in `PublishChainScenario`, `PublishCrashScenario`
+  (crash after commit; vanished commit + crash), `FencedPublishScenario` (stale-writer fence), and
+  `PublishToEventHandlerScenario` (a plain Axon `EventHandlingComponent` receives the published event once).
+
 ## Cross-reference contract
 
 This is the bridge Phase 5 verifies and locks: each `MachineName` appears verbatim as the named TLA+
@@ -1957,3 +2015,5 @@ carries the weaker label *confirmed on real infrastructure*. Closing the gap mea
 | INV-26 | `NoWorkWhileReplaying` | Safety | Yes (**F-28 + F-33 FIXED together**); **residual:** cross-node migration still starts restored bodies at head, blocked upstream on **FW-2** | **F-28** (engine-wide `liveMode`/`currentTrackingToken`) and **F-33** (claim-time restore ignored live mode) — both FIXED, and **must not be split**: fixing F-33 alone while live mode stays engine-wide is a liveness regression; **FW-2** (upstream — claim callbacks omit the token, so the claim-time gate must infer lag rather than read the position) | `sharding/WfShard.tla` — `NoWorkWhileReplaying` + the liveness twin `MigratedInstanceMakesProgress`; `cfg_live_asis` vs `cfg_live_fixed`/`cfg_live_fixed3`, and the decisive arm `cfg_live_trap` → **temporal properties violated, State 17 stuttering, 9,154 distinct states** (the hang the originally-planned fix would have shipped) | **none** — see INV-24's scope note | `WorkflowEngineSegmentLiveModeScopeTest` · `noWorkflowBodyRunsOnASegmentThatHasNotReachedTheStartupLatestToken` + `aRestoredExecutionIsSeededWithTheTokenOfItsOwnSegment` (the lagging segment's token is asserted demonstrably not to cover the boundary, so the arm cannot pass vacuously); `WorkflowEngineClaimDuringReplayTest` · `reclaimingASegmentThatIsStillReplayingDoesNotRunTheRestoredBodyAtHeadState` |
 | INV-27 | `TokenNeverPassesUnappliedEvent` | Safety | Yes (**F-26 + F-35 + F-36 FIXED**); does **not** cover F-34b (no wait was ever durably published, so there is no barrier to hold) nor the framework's missing forward clamp (**FW-4**) | **F-26 — FIXED** (one `CheckpointTrigger` and one coalesced pending token served N segments → one segment's request advanced another's stored token past events it never handled: silent event loss on restart); **F-35 — FIXED** (engine shutdown shared a lifecycle phase with the processor, so clearing the repository could win the race against the coordinator drain — a wake lost on every graceful restart); **F-36 — FIXED** (a materialized-but-not-started execution dropped events without evaluating wait conditions **and** reported no pending checkpoint work — two halves, neither fix works alone); **FW-4** (upstream — an over-high request is stored verbatim instead of clamped to `lastConsumedToken`, which is what gave F-26 its blast radius) | `sharding/Holdback.tla` — `TokenNeverPassesUnappliedEvent`, `NoSilentDrop`, `WakeSurvivesHandover`, `NoDuplicateCompletion`; `C1_baseline`, `C2_*`/`C2_short_claim_asworks` **VIOLATED** vs `C3_short_claim_fixed`/`C3b_short_claim_fullfix`/`C3c_holdbackfix_only`, `C4_shutdown_clears_first` **VIOLATED** vs `C4b_shutdown_race_with_fixes` (with `C6_liveness`/`C7_liveness_shutdownrace`), `C5_partial_drain`, `C8_two_instances_one_segment`; `M1_no_holdback`/`M2_single_round_barrier`/`M3_restore_ignores_completion` are the mutation arms proving the green sides non-vacuous | **none** — see INV-24's scope note | `WorkflowEngineCrossSegmentCheckpointTest` · `asyncCheckpointOfOneSegmentLeavesTheStoredTokenOfAnotherSegmentAtItsOwnPosition` (parameterized over fully-deferred and auto checkpointing so the mode cannot be blamed; one real framework `CheckpointingProgressStrategy` per segment, assertion read back from a real token store) + `aCheckpointRequestReachesOnlyTheTriggerOfItsOwnSegment` + `releasingOneSegmentKeepsTheOtherSegmentsCheckpointing`; `WorkflowConfigurationDefaultsTest` · `workflowEngineShutsDownAfterTheEventProcessorHasDrained`; `WorkflowEngineReplayTest` for F-36's queued-match half; real-infra `DurableWaitAcrossRebalanceIT` (5 kill runs + 3 graceful runs × 3 rounds + 1 control, ~1000 instance-level observations, **zero losses**) |
 | INV-28 | `SpawnExactlyOnce` | Safety | Yes — the campaign's strongest **precise negative**, no finding | — (double starts trace to ownership, not routing: INV-25/F-27 fixed, S-9 open. Untested adjacent hazard: **S-10**, `#` is silently load-bearing in the segment key, so a `workflowIdProvider` returning `order#123` collapses every order onto one segment) | `sharding/WfShard.tla` — `SpawnExactlyOnce` + `WakeExactlyOnce`, with `NoDoubleStart` and `AtMostOneCompletion`; both hold with **all four modelled defects enabled** at 3 segments / 3 instances / **1,722,131 distinct states, depth 31** (`cfg_asis3_spawn`, `cfg_asis3_wake`, `cfg_fixed3`), and both fail within **8 steps** once the `shouldHandle`/`shouldSpawn` guards are deleted (`cfg_mut`, `cfg_mut_wake`) — so the green is not vacuous | **none** — see INV-24's scope note | **real infrastructure, not seeds:** `DuplicateStartEventsIT` (8 duplicate starts + 8 duplicate resumes committed, effect once, on **both** the hash-routed and the broadcast path); `TimerAcrossHandoverIT` (timers **RESUME** at the original deadline across a handover — a 60 000 ms timeout fired at `msFromArmed=60110` on the node that *took* the segment, retry backoff at `msFromFirstAttempt=30018`; deadlines come from the durable step timestamp); `IdleClusterSparseTrafficIT` (claim renewal is **not** event-driven — `maxClaimAgeMs=6014` against a 10 s timeout across a 120 s idle gap, owners unchanged, and placement after idleness still routes by hash rather than to the warm node); `CrossSegmentSpawnIT`; `SustainedLoadHandoverIT` |
+| INV-29 | `NoForeignStepRecorded` | Safety | Yes — works as expected (mutation-checked) | — | `PublishRouting.tla` — `NoForeignStepRecorded`; `MC_publish.cfg` **No error** (204 distinct states), `MC_publish_noguard.cfg` **VIOLATED** (guard deleted) | `Invariants.assertNoForeignStepRecorded` — always-on in `DstSimulation` on the publish chain; `PublishChainScenario`, `PublishWaitOrderScenario`, `PublishFanOutWakeScenario`, `PublishCrashScenario` | `Inv29PublishPrimitiveTest` (seeds 3, 5, 7, 11, 17, 19, 23, 31), smoke/fuzz/chaos via the chain in `defaultRegistrations()` |
+| INV-30 | `PublisherObservesOwnPublish` | Safety | Yes — works as expected (mutation-checked); cross-segment delivery carried by TLA+ + the engine's routing unit test, not DST | — | `PublishRouting.tla` — `PublisherObservesOwnPublish` + `AtMostOnceRecording` + `WakeExactlyOnce` + `SpawnAtMostOnce` + `LateWaitNeverWakes`; `MC_publish.cfg` **No error**, `MC_publish_candidate.cfg` / `MC_publish_candidate_wake.cfg` **VIOLATED** (candidate routing), `MC_publish_nogate.cfg` **VIOLATED** (gate deleted) | `Invariants.assertPublisherObservesOwnPublish` — always-on in `DstSimulation` for both publishers; `PublishChainScenario`, `PublishCrashScenario`, `FencedPublishScenario`, `PublishToEventHandlerScenario` | `Inv29PublishPrimitiveTest`, `FencedPublishTest` (seed 29) |

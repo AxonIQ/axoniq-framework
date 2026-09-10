@@ -67,7 +67,7 @@ class DstSmokeTest {
         // 1 ReducerWorkflow (INV-19) + the 1 VersioningEdgesWorkflow (INV-20) + the 1 CustomNamedWorkflow (INV-22)
         // instances the harness also drives, plus the 4 P-series production-realism singletons (saga[retry-comp] +
         // subscription + rollingDeploy[spawns at v2] + counterLoop) = 16.
-        assertThat(Invariants.workflowIdsIn(result.committedLog())).hasSize(16);
+        assertThat(Invariants.workflowIdsIn(result.committedLog())).hasSize(19);
     }
 
     @ParameterizedTest(name = "seed {0}: same seed twice yields identical per-instance committed log")
@@ -95,8 +95,8 @@ class DstSmokeTest {
         // 3 OrderWorkflow + 1 VersionedOrderWorkflow (INV-11) + 1 MigratingOrderWorkflow (INV-12) + 1 PayloadOrderWorkflow
         // (INV-13) + 1 CombinatorWorkflow (INV-14) + 2 CorrelatedWaitWorkflow (INV-15) + 1 ReducerWorkflow (INV-19) + 1
         // VersioningEdgesWorkflow (INV-20) + 1 CustomNamedWorkflow (INV-22) + 4 P-series production-realism singletons
-        // (saga[retry-comp] + subscription + rollingDeploy[spawns at v2] + counterLoop) = 16 instances per seed.
-        assertThat(totalWorkflows).isEqualTo(SMOKE_SEEDS.length * 16);
+        // (saga[retry-comp] + subscription + rollingDeploy[spawns at v2] + counterLoop + publish chain) = 19 instances per seed.
+        assertThat(totalWorkflows).isEqualTo(SMOKE_SEEDS.length * 19);
     }
 
     @Test

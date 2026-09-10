@@ -154,7 +154,7 @@ class RegressionSeedsTest {
                             + " CorrelatedWaitWorkflow (INV-15) + 1 ReducerWorkflow (INV-19) + 1 VersioningEdgesWorkflow"
                             + " (INV-20) + 1 CustomNamedWorkflow (INV-22) + 4 P-series production-realism singletons"
                             + " (saga[retry-comp] + subscription + rollingDeploy[v2] + counterLoop) instances", seed)
-                .hasSize(18);
+                .hasSize(21);
     }
 
     @Test

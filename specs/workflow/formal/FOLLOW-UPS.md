@@ -125,6 +125,13 @@ Each fix flips its acceptance test from "gap present" to "gap closed". Two cheap
 - **Real Axon Server DCB event store** (Testcontainers) — everything ran on `InMemoryEventStorageEngine`; the
   F-0/F-1 fixes hinge on the real store's **append-condition / optimistic concurrency**, never exercised. Re-run
   the crash/split-brain scenarios on the `examples/bike-rental` Testcontainers + Axon Server path.
+- **Cross-segment publish delivery (ADR-019)** — a published event must reach the publisher's own segment, the
+  segment of every instance it starts and the segment of every waiter, which is why the engine sequences `PUBLISH`
+  events as `BROADCAST`. The harness runs one segment, so DST proves the single-segment half only; the multi-segment
+  half is carried by `PublishRouting.tla` (`MC_publish_candidate*.cfg` show the hang and the lost wake candidate
+  routing would cause) and by the engine's two-segment routing unit test on `main` (`NewInstanceCandidateRoutingTest`).
+  Vehicle for a real pin: the explicit `initialSegmentCount` harness capability named in `COVERAGE-MATRIX.md` §8, or
+  the multi-JVM rig.
 - **Real multi-node split-brain** (F-1) — DST fakes it with two engines over a shared in-mem store.
 - **Kotlin via `@Workflow` annotation + Spring Boot auto-config** — F-4 especially should be re-checked through
   the real `@WorkflowStatusChangedHandler` annotation + id-property discovery (we registered programmatically).

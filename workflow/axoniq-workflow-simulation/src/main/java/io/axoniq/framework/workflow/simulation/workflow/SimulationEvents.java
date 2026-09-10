@@ -680,4 +680,40 @@ public final class SimulationEvents {
     public record BackoffCancelRequestedEvent(String orderId, String mode) {
 
     }
+
+    /**
+     * Starts a {@link PublishChainWorkflow} requester instance.
+     *
+     * @param orderId the order id; the requester's instance id is {@code pubreq-<orderId>}.
+     */
+    public record PublishChainRequestedEvent(String orderId) {
+    }
+
+    /**
+     * The business event a requester publishes through {@code ctx.awaitPublish} (its {@code publishRequest} step). It
+     * starts the responder and the observer, and wakes a waiter registered before it was published.
+     *
+     * @param orderId the order id shared by the whole chain.
+     */
+    public record PublishRequestEvent(String orderId) {
+    }
+
+    /**
+     * The business event a responder publishes through {@code ctx.awaitPublish} (its {@code publishReply} step). It
+     * wakes the requester's {@code awaitReply} wait.
+     *
+     * @param orderId the order id shared by the whole chain.
+     */
+    public record PublishReplyEvent(String orderId) {
+    }
+
+    /**
+     * Starts a {@link PublishChainWorkflow} waiter instance.
+     *
+     * @param orderId        the waiter's own id; its instance id is {@code pwait-<orderId>}.
+     * @param awaitedOrderId the order id of the {@link PublishRequestEvent} the waiter waits for. Several waiters with
+     *                       distinct {@code orderId}s may await the same published event (1:N wake).
+     */
+    public record PublishWaiterStartedEvent(String orderId, String awaitedOrderId) {
+    }
 }
