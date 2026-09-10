@@ -127,11 +127,16 @@ first_failure() {
   done
 }
 
-unescape_xml() {
-  sed -e 's/&#13;//g' -e 's/&#10;/; /g' -e 's/&quot;/"/g' -e "s/&apos;/'/g" \
-      -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&amp;/\&/g' \
+# Collapses a possibly multi-line XML attribute value onto one line. &lt;/&gt;/&amp;/&quot;/&apos;
+# are deliberately left encoded: this text is going into raw HTML, where they're both already
+# valid and necessary to keep a literal "<" in a message from being read as a tag.
+clean_message() {
+  # Only "; " (the exact join separator introduced above) is stripped at the ends -- a bare
+  # trailing semicolon is left alone, since a message that legitimately ends in an HTML entity
+  # like "&gt;" must not be truncated to "&gt".
+  sed -e 's/&#13;//g' -e 's/&#10;/; /g' \
     | tr '\n' ' ' \
-    | sed -E 's/[[:space:]]+/ /g; s/^[[:space:];]+//; s/[[:space:];]+$//; s/;( ;)+/;/g'
+    | sed -E 's/[[:space:]]+/ /g; s/^(; )+//; s/(; )+$//'
 }
 
 total=$(wc -l < "$RAW_ROWS")
@@ -155,10 +160,11 @@ fi
   echo "<details>"
   echo "<summary>Per-module details</summary>"
   echo
-  echo "| Module | Cache | Status | Time | Details |"
-  echo "|---|---|---|---|---|"
+  echo "<table>"
+  echo "<thead><tr><th>Module</th><th>Cache</th><th>Status</th><th>Time</th></tr></thead>"
+  echo "<tbody>"
   while IFS=$'\t' read -r artifact cache status time; do
-    details="-"
+    printf '<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n' "$artifact" "$cache" "$status" "$time"
     if [ "$status" = "FAILURE" ]; then
       moduleDir=$(awk -F'\t' -v a="$artifact" '$1 == a { print $2; exit }' "$DIR_MAP")
       if [ -n "$moduleDir" ]; then
@@ -166,18 +172,17 @@ fi
         if [ -n "$failureLine" ]; then
           testId=$(printf '%s' "$failureLine" | cut -f1)
           rawMsg=$(printf '%s' "$failureLine" | cut -f2-)
-          shortMsg=$(printf '%s' "$rawMsg" | unescape_xml)
-          if [ ${#shortMsg} -gt 120 ]; then
-            shortMsg="${shortMsg:0:117}..."
+          shortMsg=$(printf '%s' "$rawMsg" | clean_message)
+          if [ ${#shortMsg} -gt 300 ]; then
+            shortMsg="${shortMsg:0:297}..."
           fi
-          testId=${testId//|/\|}
-          shortMsg=${shortMsg//|/\|}
-          details="\`${testId}\` - ${shortMsg}"
+          printf '<tr><td colspan="4"><code>%s</code> - %s</td></tr>\n' "$testId" "$shortMsg"
         fi
       fi
     fi
-    printf '| %s | %s | %s | %s | %s |\n' "$artifact" "$cache" "$status" "$time" "$details"
   done < "$RAW_ROWS"
+  echo "</tbody>"
+  echo "</table>"
   echo
   echo "</details>"
 } > "$OUT_FILE"
