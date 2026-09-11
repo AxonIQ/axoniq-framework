@@ -20,6 +20,9 @@ package io.axoniq.framework.workflow.runtime.api.manager;
 
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+
 /**
  * Main component, providing the workflow manager API.
  *
@@ -32,8 +35,9 @@ public interface WorkflowManager {
      * Finds the single workflow instance matching a query.
      * <p>
      * The returned result evaluates the query when {@link WorkflowInstances.Single#singleState()} is invoked. That
-     * operation completes with {@code null} when no instance matches and exceptionally with
-     * {@link NonUniqueWorkflowInstanceMatchException} when more than one instance matches.
+     * operation completes with {@code null} when no instance matches. When more than one instance matches, calling
+     * {@link CompletableFuture#join()} throws a {@link CompletionException} whose cause is a
+     * {@link NonUniqueWorkflowInstanceMatchException}.
      *
      * @param query criteria used to select the workflow instance
      * @return lazy result for the single matching workflow instance

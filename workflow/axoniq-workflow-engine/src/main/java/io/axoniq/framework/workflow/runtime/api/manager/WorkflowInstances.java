@@ -23,6 +23,7 @@ import org.jspecify.annotations.Nullable;
 import org.reactivestreams.Publisher;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /**
  * Represents a collection of workflow instances.
@@ -50,15 +51,16 @@ public interface WorkflowInstances extends WorkflowInstanceOperator {
     CompletableFuture<Integer> size();
 
     /**
-     * Represents a collection of at most one workflow instance.
-     *
+     * Represents a collection of at most one workflow instances.
      */
     interface Single extends WorkflowInstances {
 
         /**
          * Resolves the detached state of the single workflow instance in this collection.
          *
-         * @return a future completing with the detached state, or {@code null} when no instance matches
+         * @return a future completing with the detached state, or {@code null} when no instance matches. If more than
+         * one instance matches, {@link CompletableFuture#join()} throws a
+         * {@link CompletionException} whose cause is a {@link NonUniqueWorkflowInstanceMatchException}.
          */
         CompletableFuture<@Nullable WorkflowState> singleState();
     }

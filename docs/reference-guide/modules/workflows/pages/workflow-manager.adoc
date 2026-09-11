@@ -30,8 +30,9 @@ workflowManager.findOne(WorkflowStateQuery.byWorkflowId(orderId))
                });
 ----
 
-No matching instance completes with `null`. A query that matches more than one instance completes
-exceptionally with `NonUniqueWorkflowInstanceMatchException`. Use a workflow ID whenever the caller already knows it.
+No matching instance completes with `null`. For a query matching more than one instance, calling `join()` throws a
+`CompletionException` whose cause is `NonUniqueWorkflowInstanceMatchException`. Use a workflow ID whenever the caller
+already knows it.
 
 The result of `findOne` is a `WorkflowInstances.Single`, which is also a zero-or-one `WorkflowInstances` collection.
 Use `singleState()` for direct zero-or-one state resolution. `instances()` and `size()` remain available when code handles single

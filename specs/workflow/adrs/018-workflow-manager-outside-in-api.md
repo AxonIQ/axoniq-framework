@@ -55,9 +55,9 @@ cancellation operations for its live matches.
 containers are copied and immutable. Payload values and values embedded in a step remain application values, so the
 manager does not attempt a generic deep copy.
 
-`findOne(...).singleState()` completes with `null` when no instance matches and exceptionally with
-`NonUniqueWorkflowInstanceMatchException` when more than one state matches. `findMany` represents zero or more
-matches, and its publisher emits only resolved instances.
+`findOne(...).singleState()` completes with `null` when no instance matches. When more than one state matches,
+`join()` throws a `CompletionException` whose cause is `NonUniqueWorkflowInstanceMatchException`. `findMany` represents
+zero or more matches, and its publisher emits only resolved instances.
 
 ### Declarative state targeting
 
