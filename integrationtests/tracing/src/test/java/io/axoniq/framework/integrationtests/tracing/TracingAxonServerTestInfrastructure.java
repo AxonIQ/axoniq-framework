@@ -45,7 +45,7 @@ import java.util.List;
  */
 final class TracingAxonServerTestInfrastructure implements TestInfrastructure {
 
-    private final AxonServerTestInfrastructure delegate = AxonServerTestInfrastructure.singleTenant();
+    private final AxonServerTestInfrastructure delegate = new AxonServerTestInfrastructure();
     private final MicrometerTracingTestSetup tracing = MicrometerTracingTestSetup.create();
     private final SpanFactory spanFactory;
 

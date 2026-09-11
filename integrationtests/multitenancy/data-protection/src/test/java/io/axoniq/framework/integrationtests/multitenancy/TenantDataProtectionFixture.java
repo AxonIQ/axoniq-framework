@@ -72,7 +72,7 @@ final class TenantDataProtectionFixture {
     static final String CUSTOMER_ID = "customer-1";
 
     private static final QualifiedName CUSTOMER_SNAPSHOT = new QualifiedName("test", "CustomerSnapshot");
-    private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
+    private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
 
     private final Map<String, RecordingInMemoryCryptoEngine> cryptoEngines = new ConcurrentHashMap<>();
     private final Map<String, FieldEncryptingConverter> tenantConverters = new ConcurrentHashMap<>();

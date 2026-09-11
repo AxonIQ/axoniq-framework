@@ -19,7 +19,7 @@
 
 package io.axoniq.framework.integrationtests.student;
 
-import io.axoniq.framework.integrationtests.testsuite.infrastructure.SingleTenantInMemoryTestInfrastructure;
+import io.axoniq.framework.integrationtests.testsuite.infrastructure.InMemoryTestInfrastructure;
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
@@ -68,7 +68,7 @@ class DeadLetterQueueMultipleComponentsIT extends AbstractStudentIT {
 
     @Override
     protected TestInfrastructure testInfrastructure() {
-        return new SingleTenantInMemoryTestInfrastructure();
+        return new InMemoryTestInfrastructure();
     }
 
     @BeforeEach
