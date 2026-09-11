@@ -158,8 +158,10 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
      * Performs the final checkpoint for the segment being released: asks each participant to drain toward
      * {@code lastConsumedToken} through {@link Checkpointing#onSegmentReleased(Segment, TrackingToken)}, then
      * {@link #reconcile(Map) reconciles} their reported positions to a single agreed token and persists that within the
-     * given {@code context} (if it advances). When reconciliation cannot be reached, no final token is stored, so the
-     * claim can still be released and the uncovered tail is simply reprocessed on the next claim.
+     * given {@code context} (if it advances). Only when reconciliation cannot be reached (a lagging participant fails to
+     * cover the agreed position) does it fall back to persisting the
+     * {@link TrackingTokenUtils#lowerBound(java.util.Collection) lowerBound} of the reported tokens, so the claim can still be
+     * released and the uncovered tail is simply reprocessed on the next claim.
      */
     @Override
     public CompletableFuture<Void> onSegmentReleased(ProcessingContext processingContext) {
@@ -173,17 +175,14 @@ public final class CheckpointingProgressStrategy implements SegmentProgressStrat
         return requestEach(participant -> participant.onSegmentReleased(segment, upTo)
                                                      .thenApply(this::resolveLatest))
                 .thenCompose(reported -> reconcile(reported).exceptionally(error -> {
-                    // The claim must still be released: token implementations may not be able to combine the reported
-                    // positions (for example, when a ReplayToken has no current position). Do not guess a safe lower
-                    // bound, as combining the same tokens can fail or leave a participant ahead of it.
+                    // The claim must still be released: if the components cannot be reconciled, fall back to the
+                    // lowest reported safe token (which may cause idempotent reprocessing of the gap on the next claim).
                     logger.warn("Could not reconcile the release checkpoint for {} across components; "
-                                        + "leaving the stored token unchanged.",
+                                        + "storing the lowest reported safe token.",
                                 segment, error);
-                    return null;
+                    return TrackingTokenUtils.lowerBound(reported.values());
                 }))
-                .thenCompose(agreed -> agreed == null
-                        ? emptyCompletedFuture()
-                        : context.persistProgress(agreed, processingContext))
+                .thenCompose(agreed -> context.persistProgress(agreed, processingContext))
                 // The claim must be released regardless of whether a final token could be stored: if a component's
                 // release future failed (so no safe token could even be determined) or the store itself failed, leave
                 // the stored token where it is and let the uncovered tail be reprocessed from there on the next claim.

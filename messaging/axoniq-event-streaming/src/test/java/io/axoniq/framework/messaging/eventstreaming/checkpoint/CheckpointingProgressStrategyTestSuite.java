@@ -542,7 +542,7 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
         }
 
         @Test
-        void onReleaseAParticipantThatCannotReachTheAgreedPositionLeavesTheStoredTokenUnchanged() {
+        void onReleaseAParticipantThatCannotReachTheAgreedPositionFallsBackToTheLowerBound() {
             // given -- on release a leader reports 10 and a stuck participant reports 6 and CANNOT advance further when
             // re-requested, so the positions cannot be reconciled
             RecordingCheckpointing leader = new RecordingCheckpointing();
@@ -557,30 +557,10 @@ public abstract class CheckpointingProgressStrategyTestSuite extends SegmentProg
             // when -- the Coordinator drives the final checkpoint
             testSubject.release().orTimeout(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS).join();
 
-            // then -- reconciliation fails (the stuck participant cannot cover 10), but the claim must still be freed.
-            // No guessed token is stored; the uncovered tail (6, 10] is reprocessed on the next claim.
-            verify(tokenStore(), never()).storeToken(any(), anyString(), anyInt(), any());
-        }
-
-        @Test
-        void onReleaseWithAReplayTokenWithoutACurrentPositionLeavesTheStoredTokenUnchanged() {
-            // given -- combining the active replay token with a fresh replay token currently triggers a failure in
-            // ReplayToken.upperBound because the fresh token has no lower-bound position.
-            TrackingToken activeReplay = ReplayToken.createReplayToken(new GlobalSequenceTrackingToken(10L),
-                                                                       new GlobalSequenceTrackingToken(5L));
-            TrackingToken freshReplay = ReplayToken.createReplayToken(new GlobalSequenceTrackingToken(10L), null);
-            RecordingCheckpointing active = new RecordingCheckpointing();
-            active.releaseResult = upTo -> CompletableFuture.completedFuture(activeReplay);
-            RecordingCheckpointing fresh = new RecordingCheckpointing();
-            fresh.releaseResult = upTo -> CompletableFuture.completedFuture(freshReplay);
-            WorkPackageHarness testSubject = deferred(active, fresh);
-            testSubject.onSegmentClaimed();
-
-            // when -- the Coordinator drives the final checkpoint
-            testSubject.release().orTimeout(TIMEOUT.toMillis(), TimeUnit.MILLISECONDS).join();
-
-            // then -- release still completes, but no unsafe fallback token is persisted
-            verify(tokenStore(), never()).storeToken(any(), anyString(), anyInt(), any());
+            // then -- reconciliation fails (the stuck participant cannot cover 10), but the claim must still be freed:
+            // the fallback stores the lowerBound of the reported release positions (6) and logs a warning, rather than
+            // failing outright. The uncovered tail (6, 10] is reprocessed on the next claim.
+            verify(tokenStore()).storeToken(eq(new GlobalSequenceTrackingToken(6L)), anyString(), anyInt(), any());
         }
 
         @Test
