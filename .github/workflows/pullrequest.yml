@@ -69,6 +69,8 @@ jobs:
           ./mvnw -B -U -ntp -Dstyle.color=always -fae -Possrh -Pintegration-test -Djacoco.skip=true clean verify \
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
           -Dparallel=classes -DthreadCount=1 -DforkCount=2 2>&1 | tee build.log
+        env:
+          AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
 
       - name: Build with Coverage reports
         if: matrix.sonar-enabled
@@ -77,6 +79,8 @@ jobs:
           ./mvnw -B -U -ntp -Dstyle.color=always -fae -Possrh -Dcoverage clean verify \
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
           -Dparallel=classes -DthreadCount=1 -DforkCount=2 2>&1 | tee build.log
+        env:
+          AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
 
       - name: Generate build status report
         if: always()
