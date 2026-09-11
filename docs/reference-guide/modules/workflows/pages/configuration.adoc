@@ -200,7 +200,7 @@ The `.customized(...)` lambda receives the Axon `Configuration` and a `WorkflowC
                 .workflowBaseName("OrderFulfillment"))
         .workflowIdProvider(fromPayloadAttribute(c, "orderId"))
         .registerWorkflowStatusChangeListener(WorkflowStatus.COMPLETED,
-                (status, context) -> {
+                (status, context, event, processingContext) -> {
                     logger.info("Workflow {} completed", context.workflowId());
                 })
 )
