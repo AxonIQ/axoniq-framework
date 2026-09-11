@@ -18,16 +18,15 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
-import io.axoniq.framework.workflow.dsl.api.StepStatus;
-import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
-import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
-import io.axoniq.framework.workflow.dsl.api.WorkflowState;
-import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
-import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
+import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
+import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
+import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.VersionedType;
@@ -40,7 +39,6 @@ import org.junit.jupiter.api.*;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 import java.util.function.Function;
 
 import static io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands.cancelStep;
@@ -53,33 +51,30 @@ import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.eq;
 
 /**
+ * Test class validating the {@link WorkflowLifecycleControlDelegate} cancel flow.
+ *
  * @author Stefan Dragisic
  */
 class WorkflowLifecycleControlDelegateCancelTest {
 
-    private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowContext workflowContext;
     private WorkflowExecution workflowExecution;
     private EventSink eventSink;
     private ProcessingContext processingContext;
-    private UnitOfWorkFactory unitOfWorkFactory;
-    private Executor executor;
     private EventNameCustomizer eventNameCustomizer;
     private RunningSteps runningSteps;
     private WorkflowTerminalTransition terminalTransition;
-    private WorkflowLifecycleControlDelegate delegate;
+
+    private WorkflowLifecycleControlDelegate testSubject;
 
     @SuppressWarnings("unchecked")
     @BeforeEach
     void setUp() {
-
-        workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowContext = mock(WorkflowContext.class);
         workflowExecution = mock(WorkflowExecution.class);
         eventSink = mock(EventSink.class);
         processingContext = mock(ProcessingContext.class);
-        unitOfWorkFactory = mock(UnitOfWorkFactory.class);
-        executor = Runnable::run;
+        UnitOfWorkFactory unitOfWorkFactory = mock(UnitOfWorkFactory.class);
         runningSteps = new RunningSteps();
         terminalTransition = mock(WorkflowTerminalTransition.class);
         doAnswer(invocation -> {
@@ -96,17 +91,17 @@ class WorkflowLifecycleControlDelegateCancelTest {
                     return action.apply(processingContext);
                 });
         when(workflowExecution.state()).thenReturn(workflowState(Map.of()));
-        when(workflowExecutionOperations.processingContext()).thenReturn(processingContext);
+        when(workflowContext.processingContext()).thenReturn(processingContext);
         when(workflowExecution.workflowName()).thenReturn("test-workflow");
-        when(workflowExecutionOperations.workflowId()).thenReturn("wf-1");
-        when(workflowExecutionOperations.workflowPayload()).thenReturn(Map.of());
+        when(workflowContext.workflowId()).thenReturn("wf-1");
+        when(workflowContext.workflowPayload()).thenReturn(Map.of());
         when(workflowExecution.appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         eventNameCustomizer = defaults();
 
-        delegate = new WorkflowLifecycleControlDelegate(
-                workflowExecutionOperations,
+        testSubject = new WorkflowLifecycleControlDelegate(
+                workflowContext,
                 workflowExecution,
                 runningSteps,
                 new ReachedSteps(),
@@ -116,8 +111,9 @@ class WorkflowLifecycleControlDelegateCancelTest {
 
     @Test
     void cancelWorkflowInterruptsRunningStepsWithoutPerStepEvent() {
-        assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer)))
-                .isInstanceOf(WorkflowCancelledException.class);
+        assertThatThrownBy(
+                () -> testSubject.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer))
+        ).isInstanceOf(WorkflowCancelledException.class);
 
         // Whole-workflow cancel interrupts running steps + discards the queue; no per-step cancellation is published.
         verify(terminalTransition).transition(any(Runnable.class));
@@ -127,23 +123,25 @@ class WorkflowLifecycleControlDelegateCancelTest {
     void cancelWorkflowWithCauseInterruptsRunningSteps() {
         var cause = new RuntimeException("user requested cancellation");
 
-        assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(cause, eventNameCustomizer)))
-                .isInstanceOf(WorkflowCancelledException.class);
+        assertThatThrownBy(
+                () -> testSubject.cancelWorkflow(cancelWorkflow(cause, eventNameCustomizer))
+        ).isInstanceOf(WorkflowCancelledException.class);
 
         verify(terminalTransition).transition(any(Runnable.class));
     }
 
     @Test
     void cancelWorkflowPublishesCancelledWorkflowEvent() {
-        assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer)))
-                .isInstanceOf(WorkflowCancelledException.class);
+        assertThatThrownBy(
+                () -> testSubject.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer))
+        ).isInstanceOf(WorkflowCancelledException.class);
 
         verify(workflowExecution).appendWorkflowEvent(any(EventMessage.class), eq(processingContext));
     }
 
     @Test
     void cancelWorkflowWithNullCauseThrowsWorkflowCancelledExceptionWithMessage() {
-        assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer)))
+        assertThatThrownBy(() -> testSubject.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class)
                 .hasMessage("Workflow cancelled");
     }
@@ -152,7 +150,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
     void cancelWorkflowWithCauseThrowsWorkflowCancelledExceptionWithCause() {
         var cause = new RuntimeException("user requested cancellation");
 
-        assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(cause, eventNameCustomizer)))
+        assertThatThrownBy(() -> testSubject.cancelWorkflow(cancelWorkflow(cause, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class)
                 .hasCause(cause);
     }
@@ -161,42 +159,43 @@ class WorkflowLifecycleControlDelegateCancelTest {
     void cancelWorkflowExecutesStepsInOrder() {
         var order = inOrder(terminalTransition, workflowExecution);
 
-        assertThatThrownBy(() -> delegate.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer)))
+        assertThatThrownBy(() -> testSubject.cancelWorkflow(cancelWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
         order.verify(terminalTransition).transition(any(Runnable.class));
         order.verify(workflowExecution).appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class));
     }
 
-    @SuppressWarnings("unchecked")
     @Test
-    void cancelWorkflowInvokesCancelledStatusChangeListener() throws InterruptedException {
-        var listener = mock(WorkflowStatusChangeListener.class);
+    void cancelWorkflowInvokesCancelledStatusChangeListener() {
+        WorkflowStatusChangeListener listener = mock(WorkflowStatusChangeListener.class);
         EventSourcedWorkflowState state = workflowState(Map.of(WorkflowStatus.CANCELLED, listener));
         when(workflowExecution.state()).thenReturn(state);
 
-        assertThatThrownBy(() -> delegate.cancelWorkflow(
+        assertThatThrownBy(() -> testSubject.cancelWorkflow(
                 cancelWorkflow(null, eventNameCustomizer)))
                 .isInstanceOf(WorkflowCancelledException.class);
 
-        state.evolve(EventMessageUtils.cancelledWorkflow(workflowExecutionOperations,
-                                                         "test-workflow",
-                                                         null,
-                                                         state.workflowDefinitionId(),
-                                                         eventNameCustomizer), processingContext);
+        state.evolve(
+                EventMessageUtils.cancelledWorkflow(
+                        workflowContext, "test-workflow", null, state.workflowDefinitionId(), eventNameCustomizer
+                ),
+                processingContext
+        );
 
-        verify(listener).onWorkflowStatus(eq(WorkflowStatus.CANCELLED), eq(workflowContext));
+        verify(listener).onWorkflowStatus(
+                eq(WorkflowStatus.CANCELLED), eq(workflowContext), any(EventMessage.class), eq(processingContext)
+        );
     }
 
+    @SuppressWarnings("DataFlowIssue")
     @Test
     void cancelStepCompletesFutureAndAwaitsTerminalWithoutDirectPublish() throws InterruptedException {
         // Single-step cancel does NOT author <step>:CANCELLED itself and never touches the event sink: it completes the
         // step's registered future exceptionally, then awaits the durable terminal record that the owning executor's
         // completion handler publishes through its guarded path.
         var state = mock(WorkflowState.class);
-        var step = new WorkflowStep(
-                "step-a", StepStatus.STARTED,
-                null, null, java.time.Instant.now(), null);
+        var step = new WorkflowStep("step-a", StepStatus.STARTED, null, null, java.time.Instant.now(), null);
         when(state.containsStep("step-a")).thenReturn(true);
         when(state.getStep("step-a")).thenReturn(step);
         when(workflowExecution.state()).thenReturn(state);
@@ -209,7 +208,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
             return null;
         }).when(workflowExecution).awaitStateChange(any());
 
-        boolean result = delegate.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
+        boolean result = testSubject.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
 
         assertThat(result).isTrue();
         assertThat(runningFuture).isCompletedExceptionally();
@@ -217,6 +216,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
         verify(eventSink, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
     }
 
+    @SuppressWarnings("DataFlowIssue")
     @Test
     void cancelStepAnswersFalseWhenTheDriverIsInterruptedBeforeTheTerminalRecord() throws InterruptedException {
         // A rejected append (another writer owns the instance) or a shutdown interrupts the driver while it awaits
@@ -229,7 +229,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
         runningSteps.register("step-a", new CompletableFuture<>());
         doThrow(new InterruptedException("driver interrupted")).when(workflowExecution).awaitStateChange(any());
 
-        boolean result = delegate.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
+        boolean result = testSubject.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
 
         assertThat(result).isFalse();
         assertThat(Thread.interrupted()).as("the interrupt flag is restored for the caller").isTrue();
@@ -244,7 +244,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
         when(workflowExecution.state()).thenReturn(state);
         runningSteps.register("step-a", new CompletableFuture<>());
 
-        boolean result = delegate.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
+        boolean result = testSubject.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
 
         assertThat(result).isFalse();
     }
@@ -253,29 +253,26 @@ class WorkflowLifecycleControlDelegateCancelTest {
     void cancelStepReturnsFalseWhenNoRunningFuture() {
         // Non-terminal step but nothing running to complete: no cancellation is driven and nothing is published.
         var state = mock(WorkflowState.class);
-        var step = new WorkflowStep(
-                "step-a", StepStatus.STARTED,
-                null, null, java.time.Instant.now(), null);
+        var step = new WorkflowStep("step-a", StepStatus.STARTED, null, null, java.time.Instant.now(), null);
         when(state.containsStep("step-a")).thenReturn(true);
         when(state.getStep("step-a")).thenReturn(step);
         when(workflowExecution.state()).thenReturn(state);
-        boolean result = delegate.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
+        boolean result = testSubject.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
 
         assertThat(result).isFalse();
         verify(eventSink, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
     }
 
+    @SuppressWarnings("DataFlowIssue")
     @Test
     void cancelStepReturnsFalseWhenStepAlreadyTerminal() {
         var state = mock(WorkflowState.class);
-        var step = new WorkflowStep(
-                "step-a", StepStatus.COMPLETED,
-                null, null, java.time.Instant.now(), null);
+        var step = new WorkflowStep("step-a", StepStatus.COMPLETED, null, null, java.time.Instant.now(), null);
         when(state.containsStep("step-a")).thenReturn(true);
         when(state.getStep("step-a")).thenReturn(step);
         when(workflowExecution.state()).thenReturn(state);
 
-        boolean result = delegate.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
+        boolean result = testSubject.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
 
         assertThat(result).isFalse();
         verify(eventSink, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
