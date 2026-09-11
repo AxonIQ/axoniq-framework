@@ -32,6 +32,8 @@ import io.axoniq.framework.workflow.runtime.association.ValueComparisonOperatorR
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.util.WorkflowReflectionUtils;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.StringUtils;
@@ -173,7 +175,7 @@ public class AutoDetectionUtils {
                                     new WorkflowStatusChangeListener() {
                                         @Override
                                         public <X extends WorkflowContext> void onWorkflowStatus(
-                                                WorkflowStatus state, X context) {
+                                                WorkflowStatus state, X context, EventMessage message, ProcessingContext ctx) {
                                             Method method = mwa.method();
                                             Class<?>[] parameterTypes = method.getParameterTypes();
                                             Object[] args = new Object[parameterTypes.length];

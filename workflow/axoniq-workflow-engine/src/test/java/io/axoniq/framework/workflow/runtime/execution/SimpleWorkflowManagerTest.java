@@ -19,18 +19,21 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.manager.NonUniqueWorkflowInstanceMatchException;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstance;
-import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.EmptyApplicationContext;
-import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.*;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
@@ -44,9 +47,7 @@ import java.util.concurrent.CompletionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class SimpleWorkflowManagerTest {
 
@@ -174,7 +175,9 @@ class SimpleWorkflowManagerTest {
         var detachedState = manager.findOne(WorkflowStateQuery.all().workflowId("order-42"))
                                    .singleState()
                                    .join();
-        projectedState.setStatus(WorkflowStatus.COMPLETED, null, false);
+        var event = eventMessage("payload");
+
+        projectedState.setStatus(WorkflowStatus.COMPLETED, null, false, event, StubProcessingContext.forMessage(event));
 
         assertThat(detachedState.workflowStatus()).isEqualTo(WorkflowStatus.NONE);
         assertThat(projectedState.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
@@ -183,9 +186,19 @@ class SimpleWorkflowManagerTest {
     @Test
     void prefersTheMatchingLiveStateOverHistoryForTheSameWorkflowId() {
         var historicalState = state("order-42", "PaymentWorkflow");
-        historicalState.setStatus(WorkflowStatus.COMPLETED, null, false);
+        var historicalEvent = eventMessage("historical-payload");
+        historicalState.setStatus(WorkflowStatus.COMPLETED,
+                                  null,
+                                  false,
+                                  historicalEvent,
+                                  StubProcessingContext.forMessage(historicalEvent));
         var liveState = state("order-42", "PaymentWorkflow");
-        liveState.setStatus(WorkflowStatus.STARTED, null, false);
+        var liveEvent = eventMessage("live-payload");
+        liveState.setStatus(WorkflowStatus.STARTED,
+                            null,
+                            false,
+                            liveEvent,
+                            StubProcessingContext.forMessage(liveEvent));
         WorkflowExecution execution = mock(WorkflowExecution.class);
         when(execution.state()).thenReturn(liveState);
         var executions = new InMemoryWorkflowExecutionRepository();
@@ -350,5 +363,9 @@ class SimpleWorkflowManagerTest {
                 Map.of("orderId", workflowId),
                 VersionedType.of(workflowName, "1.0")
         );
+    }
+
+    private static GenericEventMessage eventMessage(String payload) {
+        return new GenericEventMessage(MessageType.fromString("my.workflow.Event#1.0.0"), payload);
     }
 }

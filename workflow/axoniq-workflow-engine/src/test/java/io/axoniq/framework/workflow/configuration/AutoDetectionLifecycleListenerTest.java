@@ -29,6 +29,9 @@ import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowTimedOutHandl
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
@@ -55,9 +58,13 @@ class AutoDetectionLifecycleListenerTest {
 
         assertThat(listeners).containsKey(WorkflowStatus.COMPLETED);
         var successListeners = listeners.get(WorkflowStatus.COMPLETED);
+        var event = eventMessage("payload");
 
         TestWorkflowContext context = mock(TestWorkflowContext.class);
-        successListeners.onWorkflowStatus(WorkflowStatus.COMPLETED, context);
+        successListeners.onWorkflowStatus(WorkflowStatus.COMPLETED,
+                                          context,
+                                          event,
+                                          StubProcessingContext.forMessage(event));
 
         assertThat(workflow.invoked).containsExactly("onSuccessNoName");
     }
@@ -70,9 +77,13 @@ class AutoDetectionLifecycleListenerTest {
 
         assertThat(listeners).containsKey(WorkflowStatus.COMPLETED);
         var successListeners = listeners.get(WorkflowStatus.COMPLETED);
+        var event = eventMessage("payload");
 
         TestWorkflowContext context = mock(TestWorkflowContext.class);
-        successListeners.onWorkflowStatus(WorkflowStatus.COMPLETED, context);
+        successListeners.onWorkflowStatus(WorkflowStatus.COMPLETED,
+                                          context,
+                                          event,
+                                          StubProcessingContext.forMessage(event));
 
         assertThat(workflow.invoked).containsExactly("onSuccess1");
     }
@@ -85,9 +96,13 @@ class AutoDetectionLifecycleListenerTest {
 
         assertThat(listeners).containsKey(WorkflowStatus.COMPLETED);
         var successListeners = listeners.get(WorkflowStatus.COMPLETED);
+        var event = eventMessage("payload");
 
         TestWorkflowContext context = mock(TestWorkflowContext.class);
-        successListeners.onWorkflowStatus(WorkflowStatus.COMPLETED, context);
+        successListeners.onWorkflowStatus(WorkflowStatus.COMPLETED,
+                                          context,
+                                          event,
+                                          StubProcessingContext.forMessage(event));
 
         assertThat(workflow.invoked).isEmpty();
     }
@@ -97,13 +112,26 @@ class AutoDetectionLifecycleListenerTest {
         var workflow = new WorkflowWithAllListeners();
         Map<WorkflowStatus, WorkflowStatusChangeListener> listeners =
                 AutoDetectionUtils.statusChangeListeners(workflow, TestWorkflowContext.class, "workflowName");
+        var event = eventMessage("payload");
 
         TestWorkflowContext context = mock(TestWorkflowContext.class);
 
-        listeners.get(WorkflowStatus.COMPLETED).onWorkflowStatus(WorkflowStatus.COMPLETED, context);
-        listeners.get(WorkflowStatus.FAILED).onWorkflowStatus(WorkflowStatus.FAILED, context);
-        listeners.get(WorkflowStatus.CANCELLED).onWorkflowStatus(WorkflowStatus.CANCELLED, context);
-        listeners.get(WorkflowStatus.TIMED_OUT).onWorkflowStatus(WorkflowStatus.TIMED_OUT, context);
+        listeners.get(WorkflowStatus.COMPLETED).onWorkflowStatus(WorkflowStatus.COMPLETED,
+                                                                 context,
+                                                                 event,
+                                                                 StubProcessingContext.forMessage(event));
+        listeners.get(WorkflowStatus.FAILED).onWorkflowStatus(WorkflowStatus.FAILED,
+                                                              context,
+                                                              event,
+                                                              StubProcessingContext.forMessage(event));
+        listeners.get(WorkflowStatus.CANCELLED).onWorkflowStatus(WorkflowStatus.CANCELLED,
+                                                                 context,
+                                                                 event,
+                                                                 StubProcessingContext.forMessage(event));
+        listeners.get(WorkflowStatus.TIMED_OUT).onWorkflowStatus(WorkflowStatus.TIMED_OUT,
+                                                                 context,
+                                                                 event,
+                                                                 StubProcessingContext.forMessage(event));
 
         assertThat(workflow.invoked).containsExactlyInAnyOrder("onSuccess", "onFailure", "onCancellation", "onTimeout");
     }
@@ -116,9 +144,13 @@ class AutoDetectionLifecycleListenerTest {
 
         assertThat(listeners).containsKey(WorkflowStatus.STARTED);
         var successListeners = listeners.get(WorkflowStatus.STARTED);
+        var event = eventMessage("payload");
 
         TestWorkflowContext context = mock(TestWorkflowContext.class);
-        successListeners.onWorkflowStatus(WorkflowStatus.STARTED, context);
+        successListeners.onWorkflowStatus(WorkflowStatus.STARTED,
+                                          context,
+                                          event,
+                                          StubProcessingContext.forMessage(event));
 
         assertThat(workflow.invoked).containsExactly("onStarted");
     }
@@ -131,9 +163,13 @@ class AutoDetectionLifecycleListenerTest {
 
         assertThat(listeners).containsKey(WorkflowStatus.STARTED);
         var successListeners = listeners.get(WorkflowStatus.STARTED);
+        var event = eventMessage("payload");
 
         TestWorkflowContext context = mock(TestWorkflowContext.class);
-        successListeners.onWorkflowStatus(WorkflowStatus.STARTED, context);
+        successListeners.onWorkflowStatus(WorkflowStatus.STARTED,
+                                          context,
+                                          event,
+                                          StubProcessingContext.forMessage(event));
 
         assertThat(workflow.invoked).containsExactly("onStart");
     }
@@ -146,10 +182,14 @@ class AutoDetectionLifecycleListenerTest {
 
         assertThat(listeners).containsKey(WorkflowStatus.COMPLETED);
         var successListeners = listeners.get(WorkflowStatus.COMPLETED);
+        var event = eventMessage("payload");
 
         SpecializedWorkflowContext context = mock(SpecializedWorkflowContext.class);
         // This should not throw IllegalArgumentException: argument type mismatch
-        successListeners.onWorkflowStatus(WorkflowStatus.COMPLETED, context);
+        successListeners.onWorkflowStatus(WorkflowStatus.COMPLETED,
+                                          context,
+                                          event,
+                                          StubProcessingContext.forMessage(event));
 
         assertThat(workflow.invoked).containsExactly("onSuccessSpecialized");
     }
@@ -253,5 +293,9 @@ class AutoDetectionLifecycleListenerTest {
         public void onStart(WorkflowStatus status, TestWorkflowContext context) {
             invoked.add("onStart");
         }
+    }
+
+    private static GenericEventMessage eventMessage(String payload) {
+        return new GenericEventMessage(MessageType.fromString("my.workflow.Event#1.0.0"), payload);
     }
 }

@@ -22,6 +22,8 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContex
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -75,9 +77,16 @@ public class CompositeWorkflowStatusChangeListener implements WorkflowStatusChan
     }
 
     @Override
-    public void onWorkflowStatus(WorkflowStatus workflowStatus, WorkflowContext workflowContext) {
-        if (this.workflowStatus == workflowStatus) {
-            this.listeners.forEach(l -> l.onWorkflowStatus(workflowStatus, workflowContext));
+    public void onWorkflowStatus(
+            WorkflowStatus status,
+            WorkflowContext workflowContext,
+            EventMessage event,
+            ProcessingContext processingContext
+    ) {
+        if (this.workflowStatus != status) {
+            return;
         }
+
+        this.listeners.forEach(l -> l.onWorkflowStatus(status, workflowContext, event, processingContext));
     }
 }
