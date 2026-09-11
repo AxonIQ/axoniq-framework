@@ -21,7 +21,7 @@ the result asynchronously, then read the detached `WorkflowState` value from the
 
 [source,java]
 ----
-workflowManager.findOne(WorkflowStateQuery.all().workflowId(orderId))
+workflowManager.findOne(WorkflowStateQuery.byWorkflowId(orderId))
                .single()
                .thenAccept(instance -> {
                    if (instance != null) {
@@ -43,18 +43,18 @@ continues to change. Application objects stored in payload values are not generi
 == Find several instances
 
 Use the same query type for one or many instances. The query is composed from named state restrictions and combines
-them with logical AND.
+them with logical AND. A workflow-definition restriction uses `VersionedType`, which identifies the workflow
+definition by qualified name and version; it is distinct from the `MessageType` of a lifecycle event envelope.
 
 [source,java]
 ----
 var paymentWorkflows = workflowManager.findMany(
-        WorkflowStateQuery.all()
-                          .workflowDefinitionId(VersionedType.of("PaymentWorkflow", "1.0"))
+        WorkflowStateQuery.byWorkflowDefinitionId(VersionedType.of("PaymentWorkflow", "1.0"))
                           .workflowStatus(WorkflowStatus.STARTED)
 );
 
 CompletableFuture<Integer> count = paymentWorkflows.size();
-Flow.Publisher<WorkflowInstance> instances = paymentWorkflows.instances();
+Publisher<WorkflowInstance> instances = paymentWorkflows.instances();
 ----
 
 `instances()` follows the Reactive Streams demand protocol. Each emitted `WorkflowInstance` is a lazy handle, so call
@@ -69,7 +69,7 @@ cannot receive a cancellation request. Use the manager for a request made by an 
 
 [source,java]
 ----
-var order = workflowManager.findOne(WorkflowStateQuery.all().workflowId(orderId));
+var order = workflowManager.findOne(WorkflowStateQuery.byWorkflowId(orderId));
 
 order.single().thenAccept(instance -> {
     if (instance != null) {

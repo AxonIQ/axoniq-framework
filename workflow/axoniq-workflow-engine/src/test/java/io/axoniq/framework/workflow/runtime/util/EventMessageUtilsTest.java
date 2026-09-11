@@ -21,6 +21,7 @@ package io.axoniq.framework.workflow.runtime.util;
 import org.jspecify.annotations.Nullable;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
@@ -71,7 +72,7 @@ class EventMessageUtilsTest {
 
         when(context.workflowId()).thenReturn(workflowId);
         when(context.workflowPayload()).thenReturn(payload);
-        when(context.workflowVersion()).thenReturn(org.axonframework.messaging.core.MessageType.DEFAULT_VERSION);
+        when(context.workflowVersion()).thenReturn(Version.DEFAULT_VERSION);
         ProcessingContext processingContext = mock(ProcessingContext.class);
         when(context.processingContext()).thenReturn(processingContext);
         when(processingContext.component(EventConverter.class)).thenReturn(mock(EventConverter.class));
@@ -393,7 +394,7 @@ class EventMessageUtilsTest {
     }
 
     @Test
-    void startedWorkflowDefaultsMessageTypeVersionWhenContextVersionIsBlank() {
+    void startedWorkflowDefaultsEventVersionWhenContextVersionIsBlank() {
         when(context.workflowVersion()).thenReturn(" ");
 
         EventMessage message = EventMessageUtils.startedWorkflow(context,
@@ -401,7 +402,7 @@ class EventMessageUtilsTest {
                                                                  workflowDefinitionId,
                                                                  customizer);
 
-        assertThat(message.type().version()).isEqualTo(org.axonframework.messaging.core.MessageType.DEFAULT_VERSION);
+        assertThat(message.type().version()).isEqualTo(Version.DEFAULT_VERSION);
     }
 
     @Test

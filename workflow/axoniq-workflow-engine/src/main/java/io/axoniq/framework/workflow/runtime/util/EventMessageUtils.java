@@ -19,13 +19,13 @@
 package io.axoniq.framework.workflow.runtime.util;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
@@ -33,6 +33,7 @@ import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.Map;
@@ -56,11 +57,11 @@ public class EventMessageUtils {
 
     /**
      * Reads the workflow's current definition version from {@code context}, falling back to
-     * {@link MessageType#DEFAULT_VERSION} when the context returns null (e.g. unit-test mocks with no stub).
+     * {@link Version#DEFAULT_VERSION} when the context returns null (e.g. unit-test mocks with no stub).
      */
     private static String versionOf(WorkflowContext context) {
         var v = context.workflowVersion();
-        return (v == null || v.isBlank()) ? MessageType.DEFAULT_VERSION : v;
+        return (v == null || v.isBlank()) ? Version.DEFAULT_VERSION : v;
     }
 
     private static EventMessage eventMessage(WorkflowContext context,
@@ -126,10 +127,11 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow has failed.
      *
-     * @param context      workflow context.
-     * @param workflowName name of the workflow.
-     * @param exception    exception that caused the failure.
-     * @param customizer   event name customizer.
+     * @param context              workflow context
+     * @param workflowName         name of the workflow
+     * @param exception            exception that caused the failure
+     * @param workflowDefinitionId workflow definition identity
+     * @param customizer           event name customizer
      * @return event message.
      */
     public static EventMessage failedWorkflow(WorkflowContext context,
@@ -148,10 +150,11 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow has timed out.
      *
-     * @param context      workflow context.
-     * @param workflowName name of the workflow.
-     * @param time         time when the timeout occurred.
-     * @param customizer   event name customizer.
+     * @param context              workflow context
+     * @param workflowName         name of the workflow
+     * @param time                 time when the timeout occurred
+     * @param workflowDefinitionId workflow definition identity
+     * @param customizer           event name customizer
      * @return event message.
      */
     public static EventMessage timeoutWorkflow(WorkflowContext context,
@@ -170,9 +173,10 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow has been cancelled.
      *
-     * @param context      workflow context.
-     * @param workflowName name of the workflow.
-     * @param customizer   event name customizer.
+     * @param context      workflow context
+     * @param workflowName name of the workflow
+     * @param workflowDefinitionId workflow definition identity
+     * @param customizer   event name customizer
      * @return event message.
      */
     public static EventMessage cancelledWorkflow(WorkflowContext context,
@@ -244,8 +248,10 @@ public class EventMessageUtils {
      * @param stepName                 name of the step.
      * @param result                   result of the step.
      * @param resultPayloadReducerName name of the result payload reducer, or {@code null} if no reducer is used, see
-     *                                 {@link io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer},
-     *                                 {@link io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer},
+     *                                 {@link
+     *                                 io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer},
+     *                                 {@link
+     *                                 io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer},
      *                                 {@link
      *                                 io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer}
      * @param customizer               event name customizer.

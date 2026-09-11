@@ -25,7 +25,7 @@ namespace.
 
 `@Workflow(workflowVersion = "1.0.0")` (and the programmatic
 `WorkflowCustomization.workflowVersion(...)` equivalent) declares a semver string validated by
-`Version` at registration time. Default is `MessageType.DEFAULT_VERSION`
+`Version` at registration time. Default is `Version.DEFAULT_VERSION`
 (`"0.0.1"`), so existing definitions need no source change.
 
 ### 2. Event versioning via AF5 `MessageType.version()`

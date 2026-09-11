@@ -27,8 +27,8 @@ import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -47,7 +47,7 @@ class WorkflowEventTagResolverTest {
 
     private final WorkflowEventTagResolver resolver = new WorkflowEventTagResolver();
     private final EventNameCustomizer customizer = new TestEventNameCustomizer();
-    private final MessageType workflowDefinitionId = new MessageType(new QualifiedName("OrderWorkflow"), "0.0.1");
+    private final VersionedType workflowDefinitionId = VersionedType.of(new QualifiedName("OrderWorkflow"), "0.0.1");
     private WorkflowContext context;
 
     @BeforeEach

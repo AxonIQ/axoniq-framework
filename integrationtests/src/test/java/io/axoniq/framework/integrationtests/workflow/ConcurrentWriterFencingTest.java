@@ -26,6 +26,7 @@ import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver;
@@ -42,6 +43,7 @@ import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageE
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
@@ -75,8 +77,8 @@ import static org.awaitility.Awaitility.await;
  */
 class ConcurrentWriterFencingTest {
 
-    private static final MessageType WORKFLOW_DEFINITION_ID =
-            new MessageType(new QualifiedName("FencedWorkflow"), MessageType.DEFAULT_VERSION);
+    private static final VersionedType WORKFLOW_DEFINITION_ID =
+            VersionedType.of(new QualifiedName("FencedWorkflow"), Version.DEFAULT_VERSION);
 
     private final EventStorageEngine eventStorageEngine = new InMemoryEventStorageEngine();
     private final JacksonConverter eventConverter = new JacksonConverter();

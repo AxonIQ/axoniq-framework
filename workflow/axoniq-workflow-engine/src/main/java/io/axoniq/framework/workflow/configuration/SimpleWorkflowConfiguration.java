@@ -19,6 +19,7 @@
 package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
@@ -29,7 +30,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatus
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.DSLAdoptingExecutionFactory;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.MessageType;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -63,7 +63,7 @@ record SimpleWorkflowConfiguration<C extends WorkflowContext>(
 
     SimpleWorkflowConfiguration {
         if (workflowVersion == null || workflowVersion.isBlank()) {
-            workflowVersion = MessageType.DEFAULT_VERSION;
+            workflowVersion = Version.DEFAULT_VERSION;
         }
         var filtered = new HashMap<WorkflowStatus, WorkflowStatusChangeListener>();
         workflowStatusChangeListeners.forEach((status, listener) -> {

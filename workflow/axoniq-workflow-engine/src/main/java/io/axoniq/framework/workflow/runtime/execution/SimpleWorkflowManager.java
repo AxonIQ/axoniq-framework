@@ -29,6 +29,8 @@ import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstances;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import org.axonframework.common.annotation.Internal;
 import org.jspecify.annotations.Nullable;
+import org.reactivestreams.FlowAdapters;
+import org.reactivestreams.Publisher;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -137,11 +139,11 @@ public class SimpleWorkflowManager implements WorkflowManager {
         }
 
         @Override
-        public Flow.Publisher<WorkflowInstance> instances() {
+        public Publisher<WorkflowInstance> instances() {
             return subscriber -> {
                 @SuppressWarnings("resource")
                 var publisher = new SubmissionPublisher<WorkflowInstance>(executor, Flow.defaultBufferSize());
-                publisher.subscribe(subscriber);
+                publisher.subscribe(FlowAdapters.toFlowSubscriber(subscriber));
                 single().whenComplete((instance, error) -> {
                     if (error != null) {
                         publisher.closeExceptionally(error);
@@ -220,11 +222,11 @@ public class SimpleWorkflowManager implements WorkflowManager {
         }
 
         @Override
-        public Flow.Publisher<WorkflowInstance> instances() {
+        public Publisher<WorkflowInstance> instances() {
             return subscriber -> {
                 @SuppressWarnings("resource")
                 var publisher = new SubmissionPublisher<WorkflowInstance>(executor, Flow.defaultBufferSize());
-                publisher.subscribe(subscriber);
+                publisher.subscribe(FlowAdapters.toFlowSubscriber(subscriber));
                 matching(query).whenComplete((states, error) -> {
                     if (error != null) {
                         publisher.closeExceptionally(error);

@@ -28,7 +28,6 @@ import io.axoniq.framework.workflow.runtime.execution.MessageWorkflowIdProvider;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.Configuration;
-import org.axonframework.messaging.core.MessageType;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -49,7 +48,7 @@ public class WorkflowCustomization {
     private final Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> workflowStatusListeners;
     protected EventNameCustomizer eventNameCustomizer;
     protected WorkflowIdProvider workflowIdProvider;
-    private String workflowVersion = MessageType.DEFAULT_VERSION;
+    private String workflowVersion = Version.DEFAULT_VERSION;
 
     /**
      * Create default module configuration.
@@ -108,7 +107,7 @@ public class WorkflowCustomization {
 
     /**
      * Sets the workflow definition version (semver string, e.g. {@code "0.0.2"}). Optional — defaults to
-     * {@link MessageType#DEFAULT_VERSION} ({@code "0.0.1"}).
+     * {@link Version#DEFAULT_VERSION} ({@code "0.0.1"}).
      *
      * @param workflowVersion the version to use for this workflow definition.
      * @return module configuration instance.

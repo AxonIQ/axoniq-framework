@@ -407,7 +407,7 @@ An external caller can request the same single-step cancellation through `Workfl
 
 [source,java]
 ----
-workflowManager.findOne(WorkflowStateQuery.all().workflowId(orderId))
+workflowManager.findOne(WorkflowStateQuery.byWorkflowId(orderId))
                .single()
                .thenAccept(instance -> {
                    if (instance != null) {

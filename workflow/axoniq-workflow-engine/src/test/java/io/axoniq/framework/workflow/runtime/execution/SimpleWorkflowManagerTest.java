@@ -20,19 +20,23 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
-import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
-import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.manager.NonUniqueWorkflowInstanceMatchException;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstance;
-import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.VersionedType;
 import org.junit.jupiter.api.*;
+import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.Flow;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -49,9 +53,8 @@ class SimpleWorkflowManagerTest {
         );
         var manager = manager(history);
 
-        var instance = manager.findOne(WorkflowStateQuery.all()
-                                                            .workflowDefinitionId(new MessageType("PaymentWorkflow",
-                                                                                                  "1.0")))
+        var instance = manager.findOne(WorkflowStateQuery.byWorkflowDefinitionId(
+                                              VersionedType.of("PaymentWorkflow", "1.0")))
                               .single()
                               .join();
         assertThat(instance).isNotNull();
@@ -69,10 +72,9 @@ class SimpleWorkflowManagerTest {
         );
         var manager = manager(history);
 
-        assertThatThrownBy(() -> manager.findOne(WorkflowStateQuery.all()
-                                                                   .workflowDefinitionId(
-                                                                           new MessageType("PaymentWorkflow", "1.0")
-                                                                   ))
+        assertThatThrownBy(() -> manager.findOne(WorkflowStateQuery.byWorkflowDefinitionId(
+                                                                   VersionedType.of("PaymentWorkflow", "1.0")
+                                                           ))
                                         .single()
                                         .join())
                 .isInstanceOf(CompletionException.class)
@@ -88,8 +90,8 @@ class SimpleWorkflowManagerTest {
         );
         var manager = manager(history);
 
-        var count = manager.findMany(WorkflowStateQuery.all()
-                                                       .workflowDefinitionId(new MessageType("PaymentWorkflow", "1.0")))
+        var count = manager.findMany(WorkflowStateQuery.byWorkflowDefinitionId(
+                                           VersionedType.of("PaymentWorkflow", "1.0")))
                            .size()
                            .join();
 
@@ -185,38 +187,38 @@ class SimpleWorkflowManagerTest {
     }
 
     private static WorkflowHistoryRepository history(WorkflowHistory... histories) {
-        var entries = java.util.List.of(histories);
+        var entries = List.of(histories);
         return new WorkflowHistoryRepository() {
             @Override
-            public java.util.concurrent.CompletableFuture<java.util.List<WorkflowHistory>> findAll(
+            public CompletableFuture<List<WorkflowHistory>> findAll(
                     WorkflowStateQuery query
             ) {
-                return java.util.concurrent.CompletableFuture.completedFuture(entries.stream()
-                                                                                     .filter(history -> WorkflowStateQueryMatcher.matches(
-                                                                                             query, history.state()
-                                                                                     ))
-                                                                                     .toList());
+                return CompletableFuture.completedFuture(entries.stream()
+                                                                 .filter(history -> WorkflowStateQueryMatcher.matches(
+                                                                         query, history.state()
+                                                                 ))
+                                                                 .toList());
             }
 
             @Override
-            public java.util.concurrent.CompletableFuture<Optional<WorkflowHistory>> findById(String workflowId) {
+            public CompletableFuture<Optional<WorkflowHistory>> findById(String workflowId) {
                 for (WorkflowHistory history : entries) {
                     if (history.workflowId().equals(workflowId)) {
-                        return java.util.concurrent.CompletableFuture.completedFuture(Optional.of(history));
+                        return CompletableFuture.completedFuture(Optional.of(history));
                     }
                 }
-                return java.util.concurrent.CompletableFuture.completedFuture(Optional.empty());
+                return CompletableFuture.completedFuture(Optional.empty());
             }
         };
     }
 
-    private static java.util.concurrent.CompletableFuture<WorkflowInstance> first(
-            Flow.Publisher<WorkflowInstance> publisher
+    private static CompletableFuture<WorkflowInstance> first(
+            Publisher<WorkflowInstance> publisher
     ) {
-        var result = new java.util.concurrent.CompletableFuture<WorkflowInstance>();
-        publisher.subscribe(new Flow.Subscriber<>() {
+        var result = new CompletableFuture<WorkflowInstance>();
+        publisher.subscribe(new Subscriber<>() {
             @Override
-            public void onSubscribe(Flow.Subscription subscription) {
+            public void onSubscribe(Subscription subscription) {
                 subscription.request(1);
             }
 
@@ -244,7 +246,7 @@ class SimpleWorkflowManagerTest {
         return new EventSourcedWorkflowState(
                 workflowId,
                 Map.of("orderId", workflowId),
-                new MessageType(workflowName, "1.0")
+                VersionedType.of(workflowName, "1.0")
         );
     }
 }

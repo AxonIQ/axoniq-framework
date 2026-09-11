@@ -208,7 +208,7 @@ workflow. It targets a live workflow by a `WorkflowStateQuery` and returns a `Co
 
 [source,java]
 ----
-workflowManager.findOne(WorkflowStateQuery.all().workflowId(orderId))
+workflowManager.findOne(WorkflowStateQuery.byWorkflowId(orderId))
                .single()
                .thenAccept(instance -> {
                    if (instance != null) {

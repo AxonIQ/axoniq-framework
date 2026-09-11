@@ -22,6 +22,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.workflow.runtime.association.Associations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import org.axonframework.common.infra.ComponentDescriptor;
@@ -80,7 +81,7 @@ class EventWaitConditionsTest {
 
         EventMessage message = mock(EventMessage.class);
         ProcessingContext pc = mock(ProcessingContext.class);
-        when(message.type()).thenReturn(new MessageType(qName, MessageType.DEFAULT_VERSION));
+        when(message.type()).thenReturn(new MessageType(qName, Version.DEFAULT_VERSION));
 
         AtomicReference<EventMessage> appliedMessage = new AtomicReference<>();
         eventWaitConditions.evaluateAndApply(message, pc, awaited -> appliedMessage.set(awaited.eventMessage()));
@@ -100,7 +101,7 @@ class EventWaitConditionsTest {
         EventMessage message = mock(EventMessage.class);
         ProcessingContext pc = mock(ProcessingContext.class);
 
-        when(message.type()).thenReturn(new MessageType(qName, MessageType.DEFAULT_VERSION));
+        when(message.type()).thenReturn(new MessageType(qName, Version.DEFAULT_VERSION));
 
         AtomicReference<EventMessage> appliedMessage = new AtomicReference<>();
         eventWaitConditions.evaluateAndApply(message, pc, awaited -> appliedMessage.set(awaited.eventMessage()));

@@ -26,14 +26,24 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Predicate;
+
+import static org.axonframework.common.BuilderUtils.assertNonEmpty;
 
 /**
  * Immutable value-based criteria for selecting workflow states.
  * <p>
- * Each restriction is combined with the existing restrictions using logical AND. The same query can be supplied to
- * workflow-management finders and workflow-state repositories. This class intentionally does not accept
- * {@link java.util.function.Predicate predicates} or other executable filters. Each repository interprets the
- * {@linkplain #criteria() criteria} in its own storage model.
+ * Start with the {@code by...} factory for the first restriction, then add restrictions using the instance methods.
+ * Each restriction is combined with the existing restrictions using logical AND. For example:
+ * <pre>{@code
+ * WorkflowStateQuery query = WorkflowStateQuery.byWorkflowId(orderId)
+ *                                            .workflowStatus(WorkflowStatus.STARTED)
+ *                                            .stepStatus("reserve-funds", StepStatus.COMPLETED);
+ * }</pre>
+ * Use {@link #all()} only for an unrestricted search. Queries contain data only; they intentionally do not accept
+ * {@link Predicate predicates} or other executable filters. The same query can be supplied to
+ * workflow-management finders and workflow-state repositories, which interpret the {@linkplain #criteria() criteria}
+ * in their own storage model.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
@@ -53,6 +63,89 @@ public final class WorkflowStateQuery {
      */
     public static WorkflowStateQuery all() {
         return new WorkflowStateQuery(List.of());
+    }
+
+    /**
+     * Creates a query restricted to a workflow identifier.
+     *
+     * @param workflowId workflow identifier to match
+     * @return a query with the workflow identifier restriction
+     */
+    public static WorkflowStateQuery byWorkflowId(String workflowId) {
+        return all().workflowId(workflowId);
+    }
+
+    /**
+     * Creates a query restricted to a workflow definition identity.
+     *
+     * @param workflowDefinitionId workflow definition identity to match
+     * @return a query with the workflow definition identity restriction
+     */
+    public static WorkflowStateQuery byWorkflowDefinitionId(VersionedType workflowDefinitionId) {
+        return all().workflowDefinitionId(workflowDefinitionId);
+    }
+
+    /**
+     * Creates a query restricted to a workflow status.
+     *
+     * @param workflowStatus workflow status to match
+     * @return a query with the workflow status restriction
+     */
+    public static WorkflowStateQuery byWorkflowStatus(WorkflowStatus workflowStatus) {
+        return all().workflowStatus(workflowStatus);
+    }
+
+    /**
+     * Creates a query restricted to workflows containing a step.
+     *
+     * @param stepName step name that must exist
+     * @return a query with the step existence restriction
+     */
+    public static WorkflowStateQuery byStep(String stepName) {
+        return all().step(stepName);
+    }
+
+    /**
+     * Creates a query restricted to a status of a named step.
+     *
+     * @param stepName step name to inspect
+     * @param stepStatus step status to match
+     * @return a query with the step status restriction
+     */
+    public static WorkflowStateQuery byStepStatus(String stepName, StepStatus stepStatus) {
+        return all().stepStatus(stepName, stepStatus);
+    }
+
+    /**
+     * Creates a query restricted to an exact payload value.
+     *
+     * @param key payload entry name to inspect
+     * @param value payload value to match, which may be {@code null}
+     * @return a query with the payload value restriction
+     */
+    public static WorkflowStateQuery byPayloadValue(String key, @Nullable Object value) {
+        return all().payloadValue(key, value);
+    }
+
+    /**
+     * Creates a query restricted to an effective version recorded for a change identifier.
+     *
+     * @param changeId change identifier to inspect
+     * @param version effective version to match
+     * @return a query with the effective-version restriction
+     */
+    public static WorkflowStateQuery byVersion(String changeId, String version) {
+        return all().version(changeId, version);
+    }
+
+    /**
+     * Creates a query restricted to workflows with a recorded version migration.
+     *
+     * @param changeId change identifier that must have a recorded migration
+     * @return a query with the version-migration restriction
+     */
+    public static WorkflowStateQuery byVersionMigration(String changeId) {
+        return all().versionMigration(changeId);
     }
 
     /**
@@ -153,8 +246,12 @@ public final class WorkflowStateQuery {
         return new WorkflowStateQuery(appendedCriteria);
     }
 
-    private static <T> T requireValue(@Nullable T value, String name) {
+    private static <T> T requireNonNull(@Nullable T value, String name) {
         return Objects.requireNonNull(value, name + " must not be null");
+    }
+
+    private static void requireNonEmpty(String value, String name) {
+        assertNonEmpty(value, name + " must not be null or empty");
     }
 
     /**
@@ -173,7 +270,7 @@ public final class WorkflowStateQuery {
     public record WorkflowIdCriterion(String workflowId) implements Criterion {
 
         public WorkflowIdCriterion {
-            requireValue(workflowId, "workflowId");
+            requireNonEmpty(workflowId, "workflowId");
         }
     }
 
@@ -185,7 +282,7 @@ public final class WorkflowStateQuery {
     public record WorkflowDefinitionIdCriterion(VersionedType workflowDefinitionId) implements Criterion {
 
         public WorkflowDefinitionIdCriterion {
-            requireValue(workflowDefinitionId, "workflowDefinitionId");
+            requireNonNull(workflowDefinitionId, "workflowDefinitionId");
         }
     }
 
@@ -197,7 +294,7 @@ public final class WorkflowStateQuery {
     public record WorkflowStatusCriterion(WorkflowStatus workflowStatus) implements Criterion {
 
         public WorkflowStatusCriterion {
-            requireValue(workflowStatus, "workflowStatus");
+            requireNonNull(workflowStatus, "workflowStatus");
         }
     }
 
@@ -209,7 +306,7 @@ public final class WorkflowStateQuery {
     public record StepCriterion(String stepName) implements Criterion {
 
         public StepCriterion {
-            requireValue(stepName, "stepName");
+            requireNonEmpty(stepName, "stepName");
         }
     }
 
@@ -222,8 +319,8 @@ public final class WorkflowStateQuery {
     public record StepStatusCriterion(String stepName, StepStatus stepStatus) implements Criterion {
 
         public StepStatusCriterion {
-            requireValue(stepName, "stepName");
-            requireValue(stepStatus, "stepStatus");
+            requireNonEmpty(stepName, "stepName");
+            requireNonNull(stepStatus, "stepStatus");
         }
     }
 
@@ -236,7 +333,7 @@ public final class WorkflowStateQuery {
     public record PayloadValueCriterion(String key, @Nullable Object value) implements Criterion {
 
         public PayloadValueCriterion {
-            requireValue(key, "key");
+            requireNonEmpty(key, "key");
         }
     }
 
@@ -249,8 +346,8 @@ public final class WorkflowStateQuery {
     public record VersionCriterion(String changeId, String version) implements Criterion {
 
         public VersionCriterion {
-            requireValue(changeId, "changeId");
-            requireValue(version, "version");
+            requireNonEmpty(changeId, "changeId");
+            requireNonEmpty(version, "version");
         }
     }
 
@@ -262,7 +359,7 @@ public final class WorkflowStateQuery {
     public record VersionMigrationCriterion(String changeId) implements Criterion {
 
         public VersionMigrationCriterion {
-            requireValue(changeId, "changeId");
+            requireNonEmpty(changeId, "changeId");
         }
     }
 

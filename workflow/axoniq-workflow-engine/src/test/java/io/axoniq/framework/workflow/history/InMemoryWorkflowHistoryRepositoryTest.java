@@ -22,8 +22,8 @@ import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class InMemoryWorkflowHistoryRepositoryTest {
 
-    private static final MessageType DEFINITION_ID = new MessageType(new QualifiedName("HistoryWorkflow"), "0.0.1");
+    private static final VersionedType DEFINITION_ID = VersionedType.of(new QualifiedName("HistoryWorkflow"), "0.0.1");
 
     private InMemoryWorkflowHistoryRepository repository;
 
@@ -79,7 +79,7 @@ class InMemoryWorkflowHistoryRepositoryTest {
         WorkflowHistory payment = new WorkflowHistory("wf-1",
                                                        new EventSourcedWorkflowState("wf-1", DEFINITION_ID));
         WorkflowHistory shipping = new WorkflowHistory(
-                "wf-2", new EventSourcedWorkflowState("wf-2", new MessageType("ShippingWorkflow", "0.0.1"))
+                "wf-2", new EventSourcedWorkflowState("wf-2", VersionedType.of("ShippingWorkflow", "0.0.1"))
         );
         repository.save(payment);
         repository.save(shipping);

@@ -30,7 +30,7 @@ collection cancellation operations remain available where uniform collection han
 
 ```java
 interface WorkflowInstances {
-    Flow.Publisher<WorkflowInstance> instances();
+    Publisher<WorkflowInstance> instances();
     CompletableFuture<Integer> size();
 
     interface Single extends WorkflowInstances {
@@ -40,7 +40,7 @@ interface WorkflowInstances {
 ```
 
 Finders synchronously create lazy handles. Every state-reading or state-changing action on a handle is asynchronous,
-returning a `CompletableFuture` or a `Flow.Publisher`. This makes the API two-stage asynchronous without requiring a
+returning a `CompletableFuture` or a Reactive Streams `Publisher`. This makes the API two-stage asynchronous without requiring a
 future merely to obtain a handle.
 
 `WorkflowInstances.Single.single()` resolves the zero-or-one result of `findOne` and completes with `null` when no
@@ -64,7 +64,8 @@ matches, and its publisher emits only resolved instances.
 
 `WorkflowStateQuery` is the shared value-based criteria language in the neutral
 `io.axoniq.framework.workflow.query.api` package. It targets state values, not a storage implementation or a live workflow
-instance. Restrictions compose with logical AND. The initial vocabulary covers workflow ID, workflow definition ID,
+instance. Restrictions compose with logical AND. Workflow definition identity is represented by `VersionedType` rather
+than an event-envelope `MessageType`. The initial vocabulary covers workflow ID, workflow definition ID,
 workflow status, step existence and status, payload values, and version information.
 
 The query contains data only. It does not accept `Predicate`, callbacks, or arbitrary filtering code, and it does not

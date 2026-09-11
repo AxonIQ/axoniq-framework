@@ -19,9 +19,9 @@
 package io.axoniq.framework.workflow.runtime.api.manager;
 
 import org.jspecify.annotations.Nullable;
+import org.reactivestreams.Publisher;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Flow;
 
 /**
  * Represents a collection of workflow instances.
@@ -39,7 +39,7 @@ public interface WorkflowInstances extends WorkflowInstanceOperator {
      *
      * @return publisher delivering the workflow instances in this batch
      */
-    Flow.Publisher<WorkflowInstance> instances();
+    Publisher<WorkflowInstance> instances();
 
     /**
      * Returns the number of workflow instances in this collection.

@@ -18,9 +18,9 @@
  */
 package io.axoniq.framework.workflow.runtime.api.annotation;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
-import org.axonframework.messaging.core.MessageType;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -107,9 +107,9 @@ public @interface Workflow {
      * Workflow definition version (semver, e.g. {@code "0.0.2"}). New instances start on the highest
      * registered version; in-flight instances replay on the version they were started under.
      * <p>
-     * Defaults to {@link MessageType#DEFAULT_VERSION} ({@code "0.0.1"}).
+     * Defaults to {@link Version#DEFAULT_VERSION} ({@code "0.0.1"}).
      *
      * @return workflow definition version.
      */
-    String workflowVersion() default MessageType.DEFAULT_VERSION;
+    String workflowVersion() default Version.DEFAULT_VERSION;
 }
