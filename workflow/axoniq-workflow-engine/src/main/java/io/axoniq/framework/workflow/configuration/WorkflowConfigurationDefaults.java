@@ -173,6 +173,7 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         registerWorkflowEngine(componentRegistry);
         registerWorkflowHistoryProjector(componentRegistry);
         registerWorkflowStateParameterResolverFactory(componentRegistry);
+        registerWorkflowMethodParameterResolverFactory(componentRegistry);
         registerCheckpointingSupport(componentRegistry);
     }
 
@@ -350,6 +351,12 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
         ParameterResolverFactoryUtils.registerToComponentRegistry(
                 componentRegistry,
                 WorkflowStateParameterResolverFactory::new);
+    }
+
+    void registerWorkflowMethodParameterResolverFactory(ComponentRegistry componentRegistry) {
+        ParameterResolverFactoryUtils.registerToComponentRegistry(
+                componentRegistry,
+                cfg -> new WorkflowMethodParameterResolverFactory());
     }
 
     void registerCheckpointingSupport(ComponentRegistry componentRegistry) {

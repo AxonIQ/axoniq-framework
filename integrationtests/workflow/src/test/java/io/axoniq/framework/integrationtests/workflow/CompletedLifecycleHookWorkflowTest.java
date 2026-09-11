@@ -20,13 +20,15 @@ package io.axoniq.framework.integrationtests.workflow;
 
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
-import io.axoniq.framework.workflow.dsl.api.EventConditions;
-import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
-import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.framework.workflow.annotation.Workflow;
+import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -41,6 +43,7 @@ import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCus
 import static io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider.fromPayloadAttribute;
 import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Regression test for issue #218: on the happy completion path the COMPLETED lifecycle hook must fire.
@@ -71,11 +74,13 @@ class CompletedLifecycleHookWorkflowTest extends AbstractWorkflowIntegrationTest
     @Override
     protected Function<DetectionPhase<SimpleWorkflowContext>, FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         // A minimal workflow that completes on the happy path (two synchronous steps, no event waits).
-        var workflow = new VersionedWorkflow();
+        VersionedWorkflow workflow = new VersionedWorkflow();
         WorkflowStatusChangeListener completedListener = new WorkflowStatusChangeListener() {
             @Override
-            public <C extends WorkflowContext> void onWorkflowStatus(WorkflowStatus workflowStatus, C workflowContext) {
-                observedStatus.set(workflowStatus);
+            public <C extends WorkflowContext> void onWorkflowStatus(
+                    WorkflowStatus status, C context, EventMessage event, ProcessingContext processingContext
+            ) {
+                observedStatus.set(status);
                 completedHookInvocations.incrementAndGet();
             }
         };
