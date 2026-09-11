@@ -338,15 +338,4 @@ public class MetadataUtils {
     public static boolean isPublishStep(Metadata metadata) {
         return STEP_PRIMITIVE_PUBLISH.equals(metadata.getOrDefault(METADATA_KEY_STEP_PRIMITIVE, null));
     }
-
-    /**
-     * Predicate that matches metadata of events routed to the owning workflow instance only: engine events carrying a
-     * workflow id, except published business events, which are routed like any other business event so other
-     * workflows can start on or be woken by them.
-     *
-     * @return predicate on metadata
-     */
-    public static Predicate<Metadata> routedByWorkflowId() {
-        return m -> hasWorkflowId().test(m) && !isPublishStep(m);
-    }
 }

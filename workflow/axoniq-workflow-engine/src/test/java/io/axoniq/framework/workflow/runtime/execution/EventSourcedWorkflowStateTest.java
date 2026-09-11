@@ -377,7 +377,8 @@ class EventSourcedWorkflowStateTest {
 
     @Test
     void ignoresStepEventsCarryingAnotherWorkflowsId() {
-        // given: a step published by another instance, broadcast to every owned instance
+        // given: a step published by another instance. SimpleWorkflowExecution.onEvent already keeps such an event away
+        // from this state; this is the safety net for a routing mistake that lets one through
         Metadata metadata = MetadataUtils.create("another-workflow", "notifyApproved", StepStatus.COMPLETED)
                                          .and(MetadataUtils.METADATA_KEY_STEP_PRIMITIVE,
                                               MetadataUtils.STEP_PRIMITIVE_PUBLISH);

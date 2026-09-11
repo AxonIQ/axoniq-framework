@@ -284,27 +284,30 @@ public void execute(SimpleWorkflowContext ctx) {
     var orderId = (String) ctx.workflowPayload().get("orderId");
     var amount = ((Number) ctx.workflowPayload().get("amount")).doubleValue();
 
+    // Register the wait for the child's completion BEFORE launching the child.
+    var completed = ctx.waitForEvent("awaitPaymentProcess",              // <1>
+            PaymentProcessCompleted.class,
+            associate(payloadProperty("orderId"), equalsTo(orderId)),       // <2>
+            step -> step.timeout(Duration.ofMinutes(30)));
+
     // Launch the child workflow by publishing a dedicated event.
-    ctx.awaitPublish("startPaymentProcess",                              // <1>
+    ctx.awaitPublish("startPaymentProcess",                              // <3>
             new StartPaymentProcess("payment-" + orderId, orderId, amount));
 
     // ... do other work in parallel while child runs ...
 
-    // Wait for the child's explicit completion event (matched by orderId in payload)
-    ctx.awaitEvent("awaitPaymentProcess",                                // <2>
-            PaymentProcessCompleted.class,
-            associate(payloadProperty("orderId"),                           // <3>
-                      equalsTo(orderId)),
-            step -> step.timeout(Duration.ofMinutes(30)));
-
+    completed.await();                                                    // <4>
     logger.info("Child workflow completed for order {}", orderId);
 }
 ----
-<.> The step name `startPaymentProcess` is the durable identifier of the publish step.
-The published `StartPaymentProcess` event is the step's record: one event, carrying the parent's workflow metadata, that also starts the child.
-<.> The parent waits for `PaymentProcessCompleted`—a dedicated event the child publishes explicitly (not an auto-generated lifecycle event).
+<.> The non-blocking `waitForEvent` registers the wait first.
+A wait registered after the child's reply has already passed is never woken, so registering it before the publish removes the race between parent and child.
 <.> `payloadProperty("orderId")` matches on a field in the event payload.
 A published event is routed like any business event, so it reaches a waiting workflow on any segment.
+<.> The step name `startPaymentProcess` is the durable identifier of the publish step.
+The published `StartPaymentProcess` event is the step's record: one event, carrying the parent's workflow metadata, that also starts the child.
+<.> Block on the handle when the parent needs the result.
+`ctx.allMatch(...)` works too when several children are in flight.
 
 [source,java]
 .Child workflow—started by the published event, signals completion the same way
@@ -338,14 +341,14 @@ The event store shows the handoff:
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="Parent — OrderFulfillmentWorkflow (123)">
-1 completed StartPaymentProcess {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
-2 started AwaitPaymentProcessStarted {"startTime": "2026-03-26T10:00:01Z"}
+1 started AwaitPaymentProcessStarted {"startTime": "2026-03-26T10:00:01Z"}
+2 completed StartPaymentProcess {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
 9 external PaymentProcessCompleted {"orderId": 123, "childWorkflowId": "payment-123"}
 10 completed AwaitPaymentProcessCompleted
 11 completed OrderFulfillmentWorkflow#ExecuteCompleted
   </div>
   <div class="et-src" data-title="Child — PaymentProcessWorkflow (payment-123)">
-1 external StartPaymentProcess {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
+2 external StartPaymentProcess {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
 3 started PaymentProcessWorkflow#ExecuteStarted
 4 started ValidatePaymentStarted {"orderId": 123, "amount": 99.95}
 5 completed ValidatePaymentCompleted
@@ -356,8 +359,7 @@ The event store shows the handoff:
 </div>
 ++++
 
-The parent's `startPaymentProcess` step is the `StartPaymentProcess` event itself: one record in the parent's stream, and the trigger of the child.
-The parent suspends at `AwaitPaymentProcessStarted`.
+The parent registers its wait (`AwaitPaymentProcessStarted`) and then publishes: its `startPaymentProcess` step is the `StartPaymentProcess` event itself, one record in the parent's stream and the trigger of the child.
 The child runs its steps and its final `notifyParent` step is the `PaymentProcessCompleted` event.
 The engine routes that event to the parent, where it matches the `awaitEvent` on `payloadProperty("orderId")`.
 

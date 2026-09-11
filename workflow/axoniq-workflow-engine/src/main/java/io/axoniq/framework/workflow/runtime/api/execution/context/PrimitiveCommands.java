@@ -267,6 +267,10 @@ public class PrimitiveCommands {
 
     /**
      * Default version command implementation.
+     *
+     * @param stepName            logical step name (the developer-chosen change id)
+     * @param newVersion          new workflow version to record (semver string)
+     * @param eventNameCustomizer event name customizer
      */
     @Internal
     public record SimpleVersionCommand(
@@ -278,6 +282,9 @@ public class PrimitiveCommands {
 
     /**
      * Default publish command implementation.
+     *
+     * @param stepName logical step name recorded with the published event
+     * @param event    event to publish
      */
     @Internal
     public record SimplePublishCommand(

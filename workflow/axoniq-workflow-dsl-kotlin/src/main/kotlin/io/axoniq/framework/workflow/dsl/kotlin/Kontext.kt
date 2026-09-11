@@ -33,8 +33,10 @@ import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer
 import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer
 import org.axonframework.messaging.core.MessageTypeResolver
+import org.axonframework.messaging.core.Metadata
 import org.axonframework.messaging.core.QualifiedName
 import org.axonframework.messaging.eventhandling.EventMessage
+import org.axonframework.messaging.eventhandling.GenericEventMessage
 import org.axonframework.messaging.eventhandling.conversion.EventConverter
 import java.util.function.Predicate
 import kotlin.reflect.KClass
@@ -441,18 +443,19 @@ class Kontext(
      * @return handle for the publish step
      */
     fun publish(stepName: String, event: EventMessage): WorkflowStepResult =
-        workflowKontext.publish(stepName, event)
+        workflowKontext.publish(stepName, event) { it }
 
     /**
-     * Publishes a business event given as [payload]. The message type is resolved through the configured
-     * [MessageTypeResolver]; an [EventMessage] passed as [payload] is published as-is.
+     * Publishes a business event given as [payload], with optional [metadata]. The message type is resolved through
+     * the configured [MessageTypeResolver]; the engine's workflow metadata keys override entries of the same name.
      *
      * @param stepName logical name of the publish step
-     * @param payload event payload, or an [EventMessage]
+     * @param payload event payload
+     * @param metadata metadata to publish with the event, empty by default
      * @return handle for the publish step
      */
-    fun publish(stepName: String, payload: Any): WorkflowStepResult =
-        workflowKontext.publish(stepName, payload)
+    fun publish(stepName: String, payload: Any, metadata: Metadata = Metadata.emptyInstance()): WorkflowStepResult =
+        publish(stepName, asEventMessage(payload, metadata))
 
     /**
      * Publishes a business event as a durable workflow step and blocks until the step is recorded.
@@ -461,16 +464,24 @@ class Kontext(
      * @param event event to publish
      */
     fun awaitPublish(stepName: String, event: EventMessage) =
-        workflowKontext.awaitPublish(stepName, event)
+        workflowKontext.awaitPublish(stepName, event) { it }
 
     /**
-     * Publishes a business event given as [payload] and blocks until the step is recorded.
+     * Publishes a business event given as [payload], with optional [metadata], and blocks until the step is recorded.
      *
      * @param stepName logical name of the publish step
-     * @param payload event payload, or an [EventMessage]
+     * @param payload event payload
+     * @param metadata metadata to publish with the event, empty by default
      */
-    fun awaitPublish(stepName: String, payload: Any) =
-        workflowKontext.awaitPublish(stepName, payload)
+    fun awaitPublish(stepName: String, payload: Any, metadata: Metadata = Metadata.emptyInstance()) =
+        awaitPublish(stepName, asEventMessage(payload, metadata))
+
+    private fun asEventMessage(payload: Any, metadata: Metadata): EventMessage =
+        GenericEventMessage(
+            processingContext.component(MessageTypeResolver::class.java).resolveOrThrow(payload),
+            payload,
+            metadata
+        )
 
     /**
      * Starts a publish step using a fully configured step definition.

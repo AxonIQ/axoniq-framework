@@ -151,6 +151,19 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     }
 
     @Override
+    public WorkflowStepResult publish(PublishStepDefinition stepDefinition) {
+        return this.publish(PrimitiveCommands.publish(
+                stepDefinition.primitiveMetadata().stepName(),
+                stepDefinition.event()
+        ));
+    }
+
+    @Override
+    public void awaitPublish(PublishStepDefinition stepDefinition) {
+        awaitStepCompletion(this.publish(stepDefinition));
+    }
+
+    @Override
     public boolean migrateVersion(VersionStepDefinition stepDefinition) {
         var stepName = stepDefinition.primitiveMetadata().stepName();
         var newVersion = stepDefinition.newVersion();
@@ -197,19 +210,6 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     @Override
     public WorkflowStepResult publish(PublishPrimitive.PublishCommand command) {
         return delegate.publish(command);
-    }
-
-    @Override
-    public WorkflowStepResult publish(PublishStepDefinition stepDefinition) {
-        return this.publish(PrimitiveCommands.publish(
-                stepDefinition.primitiveMetadata().stepName(),
-                stepDefinition.event()
-        ));
-    }
-
-    @Override
-    public void awaitPublish(PublishStepDefinition stepDefinition) {
-        awaitStepCompletion(this.publish(stepDefinition));
     }
 
     @Override
