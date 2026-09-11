@@ -25,15 +25,33 @@ import io.axoniq.axonserver.connector.impl.ServerAddress;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.conversion.ChainingContentTypeConverter;
+import org.axonframework.eventsourcing.eventstore.AppendCondition;
+import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
+import org.axonframework.eventsourcing.eventstore.GlobalIndexConsistencyMarker;
+import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
+import org.axonframework.eventsourcing.eventstore.SnapshotEventMessage;
+import org.axonframework.eventsourcing.eventstore.SourcingCondition;
+import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.eventstore.StorageEngineTestSuite;
+import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
+import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.messaging.core.FluxUtils;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.axonframework.messaging.eventstreaming.EventCriteria;
+import org.axonframework.messaging.eventstreaming.Tag;
 import org.junit.jupiter.api.*;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import reactor.test.StepVerifier;
 
+import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -50,7 +68,7 @@ class AxonServerEventStorageEngineIT extends StorageEngineTestSuite<AxonServerEv
     @SuppressWarnings("resource")
     @Container
     private static final AxonServerContainer container =
-            new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:2025.2.0")
+            new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:2026.1.0")
                     .withDevMode(true)
                     .withDcbContext(true);
 
@@ -88,8 +106,46 @@ class AxonServerEventStorageEngineIT extends StorageEngineTestSuite<AxonServerEv
 
         Map<String, Object> describedProperties = descriptor.getDescribedProperties();
         assertThat(describedProperties)
-                .hasSize(2)
+                .hasSize(3)
                 .containsKey("connection")
-                .containsKey("converter");
+                .containsKey("converter")
+                .containsKey("snapshotStore");
+    }
+
+    @Test
+    void sourceWithSnapshotStrategyPrependsAStoredSnapshotBeforeSubsequentEvents() {
+        // given a couple of events, then a stored snapshot, then one more event appended afterward
+        QualifiedName snapshotType = new QualifiedName("test-entity");
+        String identifier = UUID.randomUUID().toString();
+        Tag tag = new Tag("TEST", identifier);
+        Set<Tag> tags = Set.of(tag);
+        EventCriteria criteria = EventCriteria.havingTags(tag);
+
+        ConsistencyMarker markerAfterFirstTwoEvents = appendEvents(
+                AppendCondition.none(),
+                taggedEventMessage("event-0", tags),
+                taggedEventMessage("event-1", tags)
+        );
+
+        Snapshot snapshot = new Snapshot(
+                new GlobalIndexPosition(GlobalIndexConsistencyMarker.position(markerAfterFirstTwoEvents) - 1),
+                "0.0.1", "snapshot-payload", Instant.now(), Map.of()
+        );
+        testSubject.store(snapshotType, identifier, snapshot, processingContext())
+                   .orTimeout(5, TimeUnit.SECONDS)
+                   .join();
+
+        appendEvents(AppendCondition.none(), taggedEventMessage("event-2", tags));
+
+        SourcingCondition condition = SourcingCondition.conditionFor(
+                new SourcingStrategy.Snapshot(snapshotType, identifier, null), criteria
+        );
+
+        // when / then the snapshot comes back as the first entry, followed by the event appended after it
+        StepVerifier.create(FluxUtils.of(testSubject.source(condition, processingContext())))
+                    .assertNext(entry -> assertThat(entry.message()).isInstanceOf(SnapshotEventMessage.class))
+                    .assertNext(entry -> assertThat(entry.message()).isNotInstanceOf(TerminalEventMessage.class))
+                    .expectNextMatches(entry -> entry.message() instanceof TerminalEventMessage)
+                    .verifyComplete();
     }
 }

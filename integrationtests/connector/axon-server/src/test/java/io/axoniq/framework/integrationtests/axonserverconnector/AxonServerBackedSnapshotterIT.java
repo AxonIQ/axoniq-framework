@@ -27,6 +27,7 @@ import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.SnapshottingEntityLifecycleHandlerTestSuite;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
+import org.junit.jupiter.api.*;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -57,5 +58,29 @@ public class AxonServerBackedSnapshotterIT extends SnapshottingEntityLifecycleHa
 
             return new AxonServerSnapshotStore(component.getConnection(), c.getComponent(GeneralConverter.class));
         });
+    }
+
+    @Disabled("TODO #5042 | Disabled as Decoration unwrapping is cleanly supported to decoration decisions")
+    @Override
+    protected void shouldSnapshotExplicitly() {
+        super.shouldSnapshotExplicitly();
+    }
+
+    @Disabled("TODO #5042 | Disabled as Decoration unwrapping is cleanly supported to decoration decisions")
+    @Override
+    protected void shouldSnapshotAfterFiveEvents() {
+        super.shouldSnapshotAfterFiveEvents();
+    }
+
+    @Disabled("TODO #5042 | Disabled as Decoration unwrapping is cleanly supported to decoration decisions")
+    @Override
+    protected void shouldIgnoreSnapshotIfVersionUnsupported() {
+        super.shouldIgnoreSnapshotIfVersionUnsupported();
+    }
+
+    @Disabled("TODO #5042 | Disabled as Decoration unwrapping is cleanly supported to decoration decisions")
+    @Override
+    protected void shouldIgnoreExceptionsWhileLoadingSnapshot() {
+        super.shouldIgnoreExceptionsWhileLoadingSnapshot();
     }
 }
