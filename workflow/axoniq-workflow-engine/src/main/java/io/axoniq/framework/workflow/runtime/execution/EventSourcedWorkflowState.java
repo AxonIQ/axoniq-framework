@@ -276,8 +276,9 @@ public class EventSourcedWorkflowState implements WorkflowState {
             return this;
         }
         var metadata = eventMessage.metadata();
-        // Events published by another instance through the publish primitive are broadcast to every owned instance
-        // and carry that instance's step metadata. They are business events here, never this instance's steps.
+        // Safety net. The execution decides what evolves this state (SimpleWorkflowExecution#onEvent skips events
+        // another instance published through the publish primitive); a step of another workflowId reaching this far
+        // is a routing mistake and must not become one of this instance's steps.
         if (MetadataUtils.hasWorkflowId().test(metadata)
                 && !workflowId.equals(MetadataUtils.getWorkflowId(metadata))) {
             return this;

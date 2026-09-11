@@ -43,8 +43,8 @@ public interface PublishPrimitive {
      * Publishes the event carried by the given {@code command} as a durable step and waits until the step is recorded
      * in the workflow state. On replay, or when the step is already recorded, nothing is published.
      *
-     * @param command parameter object carrying the {@code stepName} and the {@link EventMessage} to publish.
-     * @return a {@link WorkflowStepResult} that resolves once the published step is part of the workflow state.
+     * @param command parameter object carrying the {@code stepName} and the {@link EventMessage} to publish
+     * @return a {@link WorkflowStepResult} that resolves once the published step is part of the workflow state
      */
     WorkflowStepResult publish(PublishCommand command);
 
@@ -56,14 +56,14 @@ public interface PublishPrimitive {
         /**
          * Logical step name recorded with the published event. Forms the durable identifier of the step.
          *
-         * @return step name.
+         * @return step name
          */
         String stepName();
 
         /**
          * Event to publish. Its type, payload, identifier and timestamp are published as-is.
          *
-         * @return event message.
+         * @return event message
          */
         EventMessage event();
     }

@@ -32,7 +32,11 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.StepTimedOutExce
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.framework.workflow.runtime.association.Associations;
+import org.axonframework.messaging.core.MessageTypeResolver;
+import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
+import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.time.Duration;
@@ -44,8 +48,8 @@ import java.util.function.UnaryOperator;
  * Convenience Java DSL built on top of {@link BaseWorkflowContext}.
  * <p>
  * This variant keeps the same workflow primitives as the base DSL, but adds shortcuts for common cases such as execute
- * steps without extra input payload, waiting for a typed event, and replacing the workflow payload with a single
- * object.
+ * steps without extra input payload, waiting for a typed event, publishing an event given as payload, and
+ * replacing the workflow payload with a single object.
  *
  * @author Simon Zambrovski
  * @author Stefan Dragisic
@@ -240,6 +244,83 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
                                           .with(Payload.payload(this, value))
                                           .getValues()
         );
+    }
+
+    /**
+     * Publishes a business event as a durable workflow step and returns a handle to await later.
+     *
+     * @param stepName logical name of the publish step
+     * @param event    event to publish
+     * @return handle for the publish step
+     * @see BaseWorkflowContext#publish(String, EventMessage, UnaryOperator)
+     */
+    public WorkflowStepResult publish(String stepName, EventMessage event) {
+        return publish(stepName, event, UnaryOperator.identity());
+    }
+
+    /**
+     * Publishes a business event given as payload. The {@link org.axonframework.messaging.core.MessageType} is resolved
+     * through the configured {@link MessageTypeResolver}, as {@code EventAppender#append(Object)} does.
+     *
+     * @param stepName logical name of the publish step
+     * @param payload  event payload
+     * @return handle for the publish step
+     */
+    public WorkflowStepResult publish(String stepName, Object payload) {
+        return publish(stepName, payload, Metadata.emptyInstance());
+    }
+
+    /**
+     * Publishes a business event given as payload and metadata. The {@link org.axonframework.messaging.core.MessageType}
+     * is resolved through the configured {@link MessageTypeResolver}; the engine's workflow metadata keys override
+     * entries of the same name.
+     *
+     * @param stepName logical name of the publish step
+     * @param payload  event payload
+     * @param metadata metadata to publish with the event
+     * @return handle for the publish step
+     */
+    public WorkflowStepResult publish(String stepName, Object payload, Metadata metadata) {
+        return publish(stepName, asEventMessage(payload, metadata));
+    }
+
+    /**
+     * Publishes a business event as a durable workflow step and blocks until the step is recorded.
+     *
+     * @param stepName logical name of the publish step
+     * @param event    event to publish
+     * @see BaseWorkflowContext#awaitPublish(String, EventMessage, UnaryOperator)
+     */
+    public void awaitPublish(String stepName, EventMessage event) {
+        awaitPublish(stepName, event, UnaryOperator.identity());
+    }
+
+    /**
+     * Publishes a business event given as payload and blocks until the step is recorded.
+     *
+     * @param stepName logical name of the publish step
+     * @param payload  event payload
+     * @see #publish(String, Object)
+     */
+    public void awaitPublish(String stepName, Object payload) {
+        awaitPublish(stepName, payload, Metadata.emptyInstance());
+    }
+
+    /**
+     * Publishes a business event given as payload and metadata and blocks until the step is recorded.
+     *
+     * @param stepName logical name of the publish step
+     * @param payload  event payload
+     * @param metadata metadata to publish with the event
+     * @see #publish(String, Object, Metadata)
+     */
+    public void awaitPublish(String stepName, Object payload, Metadata metadata) {
+        awaitPublish(stepName, asEventMessage(payload, metadata));
+    }
+
+    private EventMessage asEventMessage(Object payload, Metadata metadata) {
+        var type = processingContext().component(MessageTypeResolver.class).resolveOrThrow(payload);
+        return new GenericEventMessage(type, payload, metadata);
     }
 
     /**

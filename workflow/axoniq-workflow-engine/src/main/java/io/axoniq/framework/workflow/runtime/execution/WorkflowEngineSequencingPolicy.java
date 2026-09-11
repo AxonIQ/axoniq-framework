@@ -63,13 +63,13 @@ import java.util.stream.Collectors;
      * Determines the identifier by which the given event must be sequenced so that the streaming processor delivers it
      * to the segment owning the affected workflow instance. There are three routing cases:
      * <ul>
-     *   <li>Engine-emitted events (carrying {@code workflowId} metadata) are sequenced by the id's
+     *   <li>Events published by a workflow through the publish primitive ({@code stepPrimitive=PUBLISH}) carry
+     *   {@code workflowId} metadata, but are business events for every other instance: they may start or wake
+     *   instances resident in any segment, and the publisher itself must observe them to complete its step. They are
+     *   always sequenced by {@link SequencingPolicy#BROADCAST}, decided before any other rule; candidate routing would
+     *   deliver them to one segment only and leave a publisher on another segment waiting forever.</li>
+     *   <li>Every other engine-emitted event (carrying {@code workflowId} metadata) is sequenced by the id's
      *   {@linkplain WorkflowSegmentOwnership#segmentKey(String) segment key}.</li>
-     *   <li>Events published by a workflow through the publish primitive carry {@code workflowId} metadata too, but
-     *   are business events for every other instance: they may start or wake instances resident in any segment, and
-     *   the publisher itself must observe them to complete its step. They are always sequenced by
-     *   {@link SequencingPolicy#BROADCAST}; candidate routing would deliver them to one segment only and leave a
-     *   publisher on another segment waiting forever.</li>
      *   <li>Business events are sequenced by the start-candidate workflow id when exactly one registered definition
      *   would start from the event, so new instances are created on the segment that owns them.</li>
      *   <li>All other events (no or multiple start candidates) may need to wake waiting instances resident in any
@@ -87,11 +87,13 @@ import java.util.stream.Collectors;
     public Optional<Object> sequenceIdentifierFor(EventMessage eventMessage,
                                                   ProcessingContext processingContext) {
         var metadata = eventMessage.metadata();
-        if (MetadataUtils.routedByWorkflowId().test(metadata)) {
-            return Optional.of(WorkflowSegmentOwnership.segmentKey(MetadataUtils.getWorkflowId(metadata)));
-        }
         if (MetadataUtils.isPublishStep(metadata)) {
+            // A published event carries the publisher's workflowId, but it is a business event for every other
+            // instance: decide this first, before the owner-only routing below can claim it.
             return Optional.of(SequencingPolicy.BROADCAST);
+        }
+        if (MetadataUtils.hasWorkflowId().test(metadata)) {
+            return Optional.of(WorkflowSegmentOwnership.segmentKey(MetadataUtils.getWorkflowId(metadata)));
         }
         var candidates = newInstanceCandidateIds(eventMessage, processingContext);
         return candidates.size() == 1

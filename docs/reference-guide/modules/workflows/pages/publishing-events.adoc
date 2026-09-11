@@ -6,8 +6,9 @@ The `publish` / `awaitPublish` pair appends that business event as a durable wor
 
 [NOTE]
 ====
-`BaseWorkflowContext.publish(...)` is the canonical non-blocking primitive and returns a `WorkflowStepResult`.
-`BaseWorkflowContext.awaitPublish(...)` blocks until the step is recorded and returns `void`, like `EventAppender.append(...)` in Axon Framework.
+`BaseWorkflowContext.publish(stepName, eventMessage, customizer)` is the canonical non-blocking primitive and returns a `WorkflowStepResult`.
+`awaitPublish(...)` blocks until the step is recorded and returns `void`, like `EventAppender.append(...)` in Axon Framework.
+`SimpleWorkflowContext` adds the payload and payload-plus-metadata overloads shown below.
 ====
 
 == The `awaitPublish` method
@@ -23,8 +24,8 @@ ctx.awaitPublish("notifyApproved",                                  // <1>
 <.> The step name.
 It is the durable identifier of the step, exactly as for every other primitive.
 <.> The event to publish.
-A plain payload has its `MessageType` resolved through the configured `MessageTypeResolver`.
-You can pass an `EventMessage` instead when you need to set the type or metadata yourself.
+A plain payload has its `MessageType` resolved through the configured `MessageTypeResolver`; add a `Metadata` argument to publish metadata with it.
+You can pass an `EventMessage` instead when you need to set the type yourself.
 
 Kotlin:
 
@@ -75,6 +76,24 @@ ctx.awaitPublish("notifyApproved", new OrderApproved(orderId, approvedBy));
 @Workflow(startOnEventClass = OrderApproved.class, idProperty = "orderId", ...)
 public void execute(SimpleWorkflowContext ctx) { ... }
 ----
+
+When the publisher also waits for a reply, register the wait first with the non-blocking `waitForEvent`, then publish, then block on the handle.
+A wait registered after the reply has already passed is never woken.
+
+[source,java]
+----
+var reply = ctx.waitForEvent("awaitQuote", QuoteReceived.class,
+        associate(payloadProperty("orderId"), equalsTo(orderId)));
+ctx.awaitPublish("requestQuote", new QuoteRequested(orderId));
+reply.await();
+----
+
+== Naming publish steps
+
+The step name is the durable identifier of the publish, not the wire name of the event.
+Consumers see only the event's own type.
+Name the step after the intent, as a verb phrase, unique within the workflow body: `notifyApproved`, `requestQuote`, `announceShipment`.
+Two publishes of the same event type need two step names.
 
 [IMPORTANT]
 ====

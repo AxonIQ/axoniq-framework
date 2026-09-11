@@ -28,8 +28,8 @@ import java.util.Objects;
  * The {@link PrimitiveMetadata#eventNameCustomizer()} is not applied: the published event keeps its own
  * {@link org.axonframework.messaging.core.MessageType}.
  *
- * @param primitiveMetadata metadata of the primitive; only {@link PrimitiveMetadata#stepName()} is used.
- * @param event             event to publish.
+ * @param primitiveMetadata metadata of the primitive; only {@link PrimitiveMetadata#stepName()} is used
+ * @param event             event to publish
  * @author Stefan Dragisic
  * @since 5.4.0
  */
@@ -45,5 +45,35 @@ public record PublishStepDefinition(
     public PublishStepDefinition {
         Objects.requireNonNull(primitiveMetadata, "primitiveMetadata must not be null");
         Objects.requireNonNull(event, "event must not be null");
+    }
+
+    /**
+     * Returns a copy of this definition with the provided primitive metadata.
+     *
+     * @param primitiveMetadata metadata to use
+     * @return copied definition
+     */
+    public PublishStepDefinition primitiveMetadata(PrimitiveMetadata primitiveMetadata) {
+        return new PublishStepDefinition(primitiveMetadata, event);
+    }
+
+    /**
+     * Returns a copy of this definition with the provided step name.
+     *
+     * @param stepName logical step name
+     * @return copied definition
+     */
+    public PublishStepDefinition stepName(String stepName) {
+        return primitiveMetadata(primitiveMetadata.stepName(stepName));
+    }
+
+    /**
+     * Returns a copy of this definition with the provided event.
+     *
+     * @param event event to publish
+     * @return copied definition
+     */
+    public PublishStepDefinition event(EventMessage event) {
+        return new PublishStepDefinition(primitiveMetadata, event);
     }
 }
