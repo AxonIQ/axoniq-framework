@@ -59,8 +59,8 @@ class WorkflowHistoryProjectorTest {
 
         projector.handle(event, context);
 
-        assertThat(repository.findById(workflowId)).isPresent();
-        assertThat(repository.findById(workflowId).get().workflowId()).isEqualTo(workflowId);
+        assertThat(repository.findById(workflowId).join()).isPresent();
+        assertThat(repository.findById(workflowId).join().get().workflowId()).isEqualTo(workflowId);
     }
 
     @Test
@@ -76,7 +76,7 @@ class WorkflowHistoryProjectorTest {
         );
         projector.handle(event1, context);
 
-        WorkflowHistory firstHistory = repository.findById(workflowId).get();
+        WorkflowHistory firstHistory = repository.findById(workflowId).join().get();
 
         // Second event
         EventMessage event2 = new GenericEventMessage(
@@ -86,7 +86,7 @@ class WorkflowHistoryProjectorTest {
         );
         projector.handle(event2, context);
 
-        WorkflowHistory secondHistory = repository.findById(workflowId).get();
+        WorkflowHistory secondHistory = repository.findById(workflowId).join().get();
 
         assertThat(secondHistory).isNotSameAs(firstHistory);
         assertThat(secondHistory.workflowId()).isEqualTo(workflowId);
@@ -101,6 +101,6 @@ class WorkflowHistoryProjectorTest {
 
         projector.handle(event, context);
 
-        assertThat(repository.findAll()).isEmpty();
+        assertThat(repository.findAll().join()).isEmpty();
     }
 }

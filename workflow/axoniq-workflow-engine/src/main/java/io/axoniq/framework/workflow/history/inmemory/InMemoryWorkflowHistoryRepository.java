@@ -26,6 +26,7 @@ import org.axonframework.common.annotation.Internal;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -40,15 +41,17 @@ public class InMemoryWorkflowHistoryRepository implements MutableWorkflowHistory
     private final ConcurrentHashMap<String, WorkflowHistory> workflowHistoryMap = new ConcurrentHashMap<>();
 
     @Override
-    public List<WorkflowHistory> findAll(WorkflowStateQuery query) {
-        return workflowHistoryMap.values().stream()
-                                 .filter(history -> WorkflowStateQueryMatcher.matches(query, history.state()))
-                                 .toList();
+    public CompletableFuture<List<WorkflowHistory>> findAll(WorkflowStateQuery query) {
+        return CompletableFuture.completedFuture(workflowHistoryMap.values().stream()
+                                                                     .filter(history -> WorkflowStateQueryMatcher.matches(
+                                                                             query, history.state()
+                                                                     ))
+                                                                     .toList());
     }
 
     @Override
-    public Optional<WorkflowHistory> findById(String workflowId) {
-        return Optional.ofNullable(workflowHistoryMap.get(workflowId));
+    public CompletableFuture<Optional<WorkflowHistory>> findById(String workflowId) {
+        return CompletableFuture.completedFuture(Optional.ofNullable(workflowHistoryMap.get(workflowId)));
     }
 
     @Override

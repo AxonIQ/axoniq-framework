@@ -24,7 +24,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.VersionedType;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -39,7 +39,7 @@ class WorkflowStateQueryMatcherTest {
     @Test
     void matchesEverySupportedCriterion() {
         WorkflowState state = mock(WorkflowState.class);
-        var definitionId = new MessageType("PaymentWorkflow", "1.0");
+        var definitionId = VersionedType.of("PaymentWorkflow", "1.0");
         when(state.workflowId()).thenReturn("order-42");
         when(state.workflowDefinitionId()).thenReturn(definitionId);
         when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);

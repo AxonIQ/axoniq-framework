@@ -188,20 +188,24 @@ class SimpleWorkflowManagerTest {
         var entries = java.util.List.of(histories);
         return new WorkflowHistoryRepository() {
             @Override
-            public java.util.List<WorkflowHistory> findAll(WorkflowStateQuery query) {
-                return entries.stream()
-                              .filter(history -> WorkflowStateQueryMatcher.matches(query, history.state()))
-                              .toList();
+            public java.util.concurrent.CompletableFuture<java.util.List<WorkflowHistory>> findAll(
+                    WorkflowStateQuery query
+            ) {
+                return java.util.concurrent.CompletableFuture.completedFuture(entries.stream()
+                                                                                     .filter(history -> WorkflowStateQueryMatcher.matches(
+                                                                                             query, history.state()
+                                                                                     ))
+                                                                                     .toList());
             }
 
             @Override
-            public Optional<WorkflowHistory> findById(String workflowId) {
+            public java.util.concurrent.CompletableFuture<Optional<WorkflowHistory>> findById(String workflowId) {
                 for (WorkflowHistory history : entries) {
                     if (history.workflowId().equals(workflowId)) {
-                        return Optional.of(history);
+                        return java.util.concurrent.CompletableFuture.completedFuture(Optional.of(history));
                     }
                 }
-                return Optional.empty();
+                return java.util.concurrent.CompletableFuture.completedFuture(Optional.empty());
             }
         };
     }

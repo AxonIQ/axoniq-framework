@@ -198,7 +198,9 @@ class GivenWhenTest {
                                                  TestClock clock,
                                                  ManualWorkflowScheduler scheduler) {
         var historyRepository = mock(MutableWorkflowHistoryRepository.class);
-        when(historyRepository.findAll()).thenReturn(List.of(new WorkflowHistory("wf-1", state)));
+        when(historyRepository.findAll()).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(
+                List.of(new WorkflowHistory("wf-1", state))
+        ));
         var configuration = mock(AxonConfiguration.class);
         when(configuration.getComponent(WorkflowEngine.class)).thenReturn(mock(WorkflowEngine.class));
         when(configuration.getComponent(DelayedPublisher.class)).thenReturn(mock(DelayedPublisher.class));

@@ -22,7 +22,7 @@ import org.jspecify.annotations.Nullable;
 
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.common.infra.DescribableComponent;
-import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.VersionedType;
 
 import java.util.List;
 import java.util.Map;
@@ -48,11 +48,11 @@ public interface WorkflowState extends DescribableComponent {
     /**
      * Returns the workflow definition identity, including its current definition version.
      * <p>
-     * Use {@link MessageType#version()} to obtain the definition version.
+     * Use {@link VersionedType#version()} to obtain the definition version.
      *
      * @return workflow definition identity
      */
-    MessageType workflowDefinitionId();
+    VersionedType workflowDefinitionId();
 
     /**
      * Retrieves a list of step names in the workflow execution.

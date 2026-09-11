@@ -22,7 +22,7 @@ import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.VersionedType;
 
 import java.util.Objects;
 
@@ -54,8 +54,8 @@ public final class WorkflowStateQueryMatcher {
                 case WorkflowStateQuery.WorkflowIdCriterion(String id) when !id.equals(state.workflowId()) -> {
                     return false;
                 }
-                case WorkflowStateQuery.WorkflowDefinitionIdCriterion(MessageType workflowDefinitionId)
-                        when !workflowDefinitionId.equals(state.workflowDefinitionId()) -> {
+                case WorkflowStateQuery.WorkflowDefinitionIdCriterion(VersionedType workflowDefinitionId)
+                        when !sameType(workflowDefinitionId, state.workflowDefinitionId()) -> {
                     return false;
                 }
                 case WorkflowStateQuery.WorkflowStatusCriterion(var workflowStatus)
@@ -90,5 +90,9 @@ public final class WorkflowStateQueryMatcher {
             }
         }
         return true;
+    }
+
+    private static boolean sameType(VersionedType first, VersionedType second) {
+        return first.qualifiedName().equals(second.qualifiedName()) && first.version().equals(second.version());
     }
 }

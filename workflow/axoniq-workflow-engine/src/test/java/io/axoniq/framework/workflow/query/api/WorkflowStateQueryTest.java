@@ -20,7 +20,7 @@ package io.axoniq.framework.workflow.query.api;
 
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.VersionedType;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,7 +31,7 @@ class WorkflowStateQueryTest {
     void exposesAllExplicitStateValueCriteria() {
         var query = WorkflowStateQuery.all()
                                          .workflowId("order-42")
-                                         .workflowDefinitionId(new MessageType("PaymentWorkflow", "2.0"))
+                                         .workflowDefinitionId(VersionedType.of("PaymentWorkflow", "2.0"))
                                          .workflowStatus(WorkflowStatus.STARTED)
                                          .step("reserve-funds")
                                          .stepStatus("reserve-funds", StepStatus.COMPLETED)
@@ -41,7 +41,7 @@ class WorkflowStateQueryTest {
 
         assertThat(query.criteria()).containsExactly(
                 new WorkflowStateQuery.WorkflowIdCriterion("order-42"),
-                new WorkflowStateQuery.WorkflowDefinitionIdCriterion(new MessageType("PaymentWorkflow", "2.0")),
+                new WorkflowStateQuery.WorkflowDefinitionIdCriterion(VersionedType.of("PaymentWorkflow", "2.0")),
                 new WorkflowStateQuery.WorkflowStatusCriterion(WorkflowStatus.STARTED),
                 new WorkflowStateQuery.StepCriterion("reserve-funds"),
                 new WorkflowStateQuery.StepStatusCriterion("reserve-funds", StepStatus.COMPLETED),

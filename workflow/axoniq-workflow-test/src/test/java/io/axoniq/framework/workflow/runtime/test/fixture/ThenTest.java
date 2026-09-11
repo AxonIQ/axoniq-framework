@@ -243,7 +243,7 @@ class ThenTest {
 
     private WorkflowTestDriver testDriverWith(WorkflowState selectedState, List<WorkflowHistory> histories) {
         var historyRepository = mock(MutableWorkflowHistoryRepository.class);
-        when(historyRepository.findAll()).thenReturn(histories);
+        when(historyRepository.findAll()).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(histories));
 
         var workflowEngine = mock(WorkflowEngine.class);
         when(workflowEngine.workflowExecutions()).thenReturn(Set.of());

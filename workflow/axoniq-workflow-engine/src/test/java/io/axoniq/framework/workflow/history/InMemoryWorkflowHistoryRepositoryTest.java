@@ -50,14 +50,14 @@ class InMemoryWorkflowHistoryRepositoryTest {
 
         repository.save(history);
 
-        Optional<WorkflowHistory> found = repository.findById(workflowId);
+        Optional<WorkflowHistory> found = repository.findById(workflowId).join();
         assertThat(found).isPresent();
         assertThat(found.get()).isEqualTo(history);
     }
 
     @Test
     void shouldReturnEmptyWhenNotFound() {
-        Optional<WorkflowHistory> found = repository.findById("non-existent");
+        Optional<WorkflowHistory> found = repository.findById("non-existent").join();
         assertThat(found).isEmpty();
     }
 
@@ -69,7 +69,7 @@ class InMemoryWorkflowHistoryRepositoryTest {
         repository.save(history1);
         repository.save(history2);
 
-        List<WorkflowHistory> all = repository.findAll();
+        List<WorkflowHistory> all = repository.findAll().join();
         assertThat(all).hasSize(2);
         assertThat(all).containsExactlyInAnyOrder(history1, history2);
     }
@@ -84,18 +84,18 @@ class InMemoryWorkflowHistoryRepositoryTest {
         repository.save(payment);
         repository.save(shipping);
 
-        assertThat(repository.findAll(WorkflowStateQuery.all().workflowDefinitionId(DEFINITION_ID)))
+        assertThat(repository.findAll(WorkflowStateQuery.all().workflowDefinitionId(DEFINITION_ID)).join())
                 .containsExactly(payment);
     }
 
     @Test
     void shouldClearRepository() {
         repository.save(new WorkflowHistory("wf-1", new EventSourcedWorkflowState("wf-1", DEFINITION_ID)));
-        assertThat(repository.findAll()).isNotEmpty();
+        assertThat(repository.findAll().join()).isNotEmpty();
 
         repository.clear();
 
-        assertThat(repository.findAll()).isEmpty();
+        assertThat(repository.findAll().join()).isEmpty();
     }
 
     @Test
@@ -109,9 +109,9 @@ class InMemoryWorkflowHistoryRepositoryTest {
                                                        new EventSourcedWorkflowState(workflowId, DEFINITION_ID));
         repository.save(history2);
 
-        Optional<WorkflowHistory> found = repository.findById(workflowId);
+        Optional<WorkflowHistory> found = repository.findById(workflowId).join();
         assertThat(found).isPresent();
         assertThat(found.get()).isEqualTo(history2);
-        assertThat(repository.findAll()).hasSize(1);
+        assertThat(repository.findAll().join()).hasSize(1);
     }
 }

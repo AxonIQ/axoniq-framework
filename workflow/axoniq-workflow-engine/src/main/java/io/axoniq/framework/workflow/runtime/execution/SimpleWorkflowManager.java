@@ -90,26 +90,27 @@ public class SimpleWorkflowManager implements WorkflowManager {
     }
 
     private CompletableFuture<List<WorkflowState>> matching(WorkflowStateQuery query) {
-        return CompletableFuture.supplyAsync(
-                () -> Stream.concat(
-                                    matchingLive(query).stream(),
-                                    historyRepository.findAll(query).stream().map(WorkflowHistory::state)
-                            )
-                            .collect(Collectors.toMap(WorkflowState::workflowId,
-                                                      Function.identity(),
-                                                      (live, historical) -> live,
-                                                      LinkedHashMap::new))
-                            .values()
-                            .stream()
-                            .toList(),
-                executor
-        );
+        return executionRepository.findAll(query)
+                                  .thenCombine(historyRepository.findAll(query), (liveExecutions, history) ->
+                                          Stream.concat(
+                                                        liveExecutions.stream().map(WorkflowExecution::state),
+                                                        history.stream().map(WorkflowHistory::state)
+                                                )
+                                                .collect(Collectors.toMap(WorkflowState::workflowId,
+                                                                          Function.identity(),
+                                                                          (live, historical) -> live,
+                                                                          LinkedHashMap::new))
+                                                .values()
+                                                .stream()
+                                                .toList()
+                                  );
     }
 
-    private List<WorkflowState> matchingLive(WorkflowStateQuery query) {
-        return executionRepository.findAll(query).stream()
-                                  .map(WorkflowExecution::state)
-                                  .toList();
+    private CompletableFuture<List<WorkflowState>> matchingLive(WorkflowStateQuery query) {
+        return executionRepository.findAll(query)
+                                  .thenApply(executions -> executions.stream()
+                                                                     .map(WorkflowExecution::state)
+                                                                     .toList());
     }
 
     private CompletableFuture<Optional<WorkflowState>> singleMatch(WorkflowStateQuery query) {
@@ -244,7 +245,7 @@ public class SimpleWorkflowManager implements WorkflowManager {
 
         @Override
         public CompletableFuture<Boolean> requestStepCancellation(String stepName, @Nullable Throwable cause) {
-            return CompletableFuture.supplyAsync(() -> matchingLive(query), executor).thenCompose(states -> {
+            return matchingLive(query).thenCompose(states -> {
                 var operations = new ArrayList<CompletableFuture<Boolean>>();
                 for (WorkflowState state : states) {
                     operations.add(cancellation(() -> cancellationService.requestStepCancellation(
@@ -258,7 +259,7 @@ public class SimpleWorkflowManager implements WorkflowManager {
 
         @Override
         public CompletableFuture<Integer> requestCancellationOfAllSteps(@Nullable Throwable cause) {
-            return CompletableFuture.supplyAsync(() -> matchingLive(query), executor).thenCompose(states -> {
+            return matchingLive(query).thenCompose(states -> {
                 var operations = new ArrayList<CompletableFuture<Integer>>();
                 for (WorkflowState state : states) {
                     operations.add(cancellation(() -> cancellationService.requestCancellationOfAllSteps(
@@ -266,19 +267,15 @@ public class SimpleWorkflowManager implements WorkflowManager {
                     )));
                 }
                 return CompletableFuture.allOf(operations.toArray(CompletableFuture[]::new))
-                                        .thenApply(ignored -> {
-                                            int cancelledSteps = 0;
-                                            for (CompletableFuture<Integer> operation : operations) {
-                                                cancelledSteps += operation.join();
-                                            }
-                                            return cancelledSteps;
-                                        });
+                                        .thenApply(ignored -> operations.stream()
+                                                                          .mapToInt(CompletableFuture::resultNow)
+                                                                          .sum());
             });
         }
 
         @Override
         public CompletableFuture<Void> requestWorkflowCancellation(@Nullable Throwable cause) {
-            return CompletableFuture.supplyAsync(() -> matchingLive(query), executor).thenCompose(states -> {
+            return matchingLive(query).thenCompose(states -> {
                 var operations = new ArrayList<CompletableFuture<Void>>();
                 for (WorkflowState state : states) {
                     operations.add(cancellation(() -> cancellationService.requestWorkflowCancellation(

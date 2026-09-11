@@ -137,7 +137,7 @@ class EventSourcedWorkflowStateParameterResolverTest {
         when(history.state()).thenReturn(state);
 
         when(executionRepository.findById(workflowId)).thenReturn(Optional.empty());
-        when(historyRepository.findById(workflowId)).thenReturn(Optional.of(history));
+        when(historyRepository.findById(workflowId)).thenReturn(CompletableFuture.completedFuture(Optional.of(history)));
 
         CompletableFuture<WorkflowState> result = resolver.resolveParameterValue(context);
 
@@ -156,10 +156,9 @@ class EventSourcedWorkflowStateParameterResolverTest {
         setMessageInContext(message);
 
         when(executionRepository.findById(workflowId)).thenReturn(Optional.empty());
-        when(historyRepository.findById(workflowId)).thenReturn(Optional.empty());
+        when(historyRepository.findById(workflowId)).thenReturn(CompletableFuture.completedFuture(Optional.empty()));
 
-        assertThatThrownBy(() -> resolver.resolveParameterValue(context))
-                .isInstanceOf(IllegalStateException.class);
+        assertThat(resolver.resolveParameterValue(context)).isCompletedExceptionally();
 
         verify(configuration).getComponent(WorkflowExecutionRepository.class);
         verify(executionRepository).findById(workflowId);

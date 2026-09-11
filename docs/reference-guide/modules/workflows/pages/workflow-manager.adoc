@@ -49,7 +49,7 @@ them with logical AND.
 ----
 var paymentWorkflows = workflowManager.findMany(
         WorkflowStateQuery.all()
-                          .workflowDefinitionId(new MessageType("PaymentWorkflow", "1.0"))
+                          .workflowDefinitionId(VersionedType.of("PaymentWorkflow", "1.0"))
                           .workflowStatus(WorkflowStatus.STARTED)
 );
 

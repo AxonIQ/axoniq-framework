@@ -30,6 +30,7 @@ import org.axonframework.common.TypeReference;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.DelegatingEventConverter;
@@ -58,7 +59,7 @@ class EventMessageUtilsTest {
 
     private WorkflowContext context;
     private EventNameCustomizer customizer;
-    private MessageType workflowDefinitionId;
+    private VersionedType workflowDefinitionId;
     private final String workflowId = "wf123";
     private final Map<String, @Nullable Object> payload = Map.of("key", "value");
 
@@ -66,7 +67,7 @@ class EventMessageUtilsTest {
     void setUp() {
         context = mock(WorkflowContext.class);
         customizer = mock(EventNameCustomizer.class);
-        workflowDefinitionId = new MessageType(new QualifiedName("myWorkflow"), "0.0.1");
+        workflowDefinitionId = VersionedType.of(new QualifiedName("myWorkflow"), "0.0.1");
 
         when(context.workflowId()).thenReturn(workflowId);
         when(context.workflowPayload()).thenReturn(payload);

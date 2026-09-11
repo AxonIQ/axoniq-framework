@@ -20,7 +20,7 @@ package io.axoniq.framework.workflow.query.api;
 
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.VersionedType;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -71,7 +71,7 @@ public final class WorkflowStateQuery {
      * @param workflowDefinitionId workflow definition identity to match
      * @return query with the workflow definition identity restriction
      */
-    public WorkflowStateQuery workflowDefinitionId(MessageType workflowDefinitionId) {
+    public WorkflowStateQuery workflowDefinitionId(VersionedType workflowDefinitionId) {
         return append(new WorkflowDefinitionIdCriterion(workflowDefinitionId));
     }
 
@@ -182,7 +182,7 @@ public final class WorkflowStateQuery {
      *
      * @param workflowDefinitionId workflow definition identity to match
      */
-    public record WorkflowDefinitionIdCriterion(MessageType workflowDefinitionId) implements Criterion {
+    public record WorkflowDefinitionIdCriterion(VersionedType workflowDefinitionId) implements Criterion {
 
         public WorkflowDefinitionIdCriterion {
             requireValue(workflowDefinitionId, "workflowDefinitionId");

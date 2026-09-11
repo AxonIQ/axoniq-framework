@@ -19,8 +19,10 @@
 package io.axoniq.framework.workflow.history.api;
 
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
+
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Repository to access workflow history entries.
@@ -34,16 +36,16 @@ public interface WorkflowHistoryRepository {
      * Returns all stored workflow history entries matching a state query.
      *
      * @param query state criteria to apply
-     * @return an unmodifiable collection of matching workflow history entries
+     * @return a future completing with an unmodifiable collection of matching workflow history entries
      */
-    List<WorkflowHistory> findAll(WorkflowStateQuery query);
+    CompletableFuture<List<WorkflowHistory>> findAll(WorkflowStateQuery query);
 
     /**
      * Returns all stored workflow history entries.
      *
-     * @return an unmodifiable collection of all workflow history entries
+     * @return a future completing with an unmodifiable collection of all workflow history entries
      */
-    default List<WorkflowHistory> findAll() {
+    default CompletableFuture<List<WorkflowHistory>> findAll() {
         return findAll(WorkflowStateQuery.all());
     }
 
@@ -52,7 +54,8 @@ public interface WorkflowHistoryRepository {
      * Returns workflow history by given workflow id.
      *
      * @param workflowId the id of the workflow to retrieve history for.
-     * @return a workflow history or null, if no history exists for the given workflow id.
+     * @return a future completing with the workflow history, or an empty optional when no history exists for the given
+     * workflow id
      */
-    Optional<WorkflowHistory> findById(String workflowId);
+    CompletableFuture<Optional<WorkflowHistory>> findById(String workflowId);
 }

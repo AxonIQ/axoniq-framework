@@ -39,12 +39,12 @@ event sourcing. It is not the holder of per-workflow state.
 
 ### Workflow definition identity
 
-Workflow lifecycle events carry the current workflow definition reference as an Axon Framework `MessageType` containing:
+Workflow lifecycle events carry the current workflow definition reference as an Axon Framework `VersionedType` containing:
 
 - the workflow definition name
 - the workflow definition version
 
-`EventSourcedWorkflowState` stores this `MessageType` as part of sourced state. Its version advances when a workflow
+`EventSourcedWorkflowState` stores this `VersionedType` as part of sourced state. Its version advances when a workflow
 records a version migration, so it identifies the effective definition reference for the current execution state.
 Startup uses it to resolve the workflow configuration that must recreate the execution.
 
@@ -55,7 +55,7 @@ Workflow startup follows this sequence:
 1. Load `RunningWorkflows` from the workflow store. The default store obtains it from its event-sourced repository.
 2. For each running workflow identifier, load `EventSourcedWorkflowState` from the per-workflow event-sourced
    repository.
-3. Resolve the matching workflow configuration from the sourced workflow definition `MessageType`.
+3. Resolve the matching workflow configuration from the sourced workflow definition `VersionedType`.
 4. Create a fresh workflow context and workflow execution.
 5. Inject the sourced workflow state into that fresh execution and register it in `WorkflowExecutionRepository`.
 6. Execute the restored workflow once before replay catch-up continues.
@@ -100,4 +100,4 @@ streaming processor.
 - Backlog events that arrive during downtime can complete restored waits during catch-up before the engine switches to
   live mode.
 - Startup now fails fast if `RunningWorkflows` references an identifier whose workflow state cannot be sourced or whose
-  workflow definition `MessageType` no longer resolves to a registered workflow definition.
+  workflow definition `VersionedType` no longer resolves to a registered workflow definition.

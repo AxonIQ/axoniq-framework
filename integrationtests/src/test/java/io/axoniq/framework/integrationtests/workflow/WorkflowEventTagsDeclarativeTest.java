@@ -77,8 +77,8 @@ class WorkflowEventTagsDeclarativeTest extends AbstractWorkflowIntegrationTestBa
         delayedPublisher.start();
 
         await().untilAsserted(() -> {
-            assertThat(workflowHistoryRepository.findAll()).hasSize(1);
-            assertThat(workflowHistoryRepository.findAll())
+            assertThat(workflowHistoryRepository.findAll().join()).hasSize(1);
+            assertThat(workflowHistoryRepository.findAll().join())
                     .allMatch(h -> h.state().workflowStatus() == WorkflowStatus.COMPLETED);
             assertThat(workflowEngine.workflowExecutions()).isEmpty();
         });

@@ -26,6 +26,7 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.slf4j.Logger;
@@ -147,7 +148,7 @@ public interface WorkflowConfigurationRegistry<W extends WorkflowConfigurationRe
      * @return matching configuration, or empty if none registered
      */
     default Optional<WorkflowConfiguration<?>> getWorkflowConfiguration(
-            MessageType workflowDefinitionId
+            VersionedType workflowDefinitionId
     ) {
         return findByWorkflowNameAndVersion(
                 workflowDefinitionId.qualifiedName().toString(),

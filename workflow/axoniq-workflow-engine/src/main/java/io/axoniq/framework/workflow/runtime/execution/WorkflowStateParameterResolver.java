@@ -54,19 +54,22 @@ public class WorkflowStateParameterResolver implements ParameterResolver<Workflo
         Message message = requireNonNullElseGet(Message.fromContext(context), GenericMessage::emptyMessage);
         if (MetadataUtils.hasWorkflowId().test(message.metadata())) {
             var workflowId = MetadataUtils.getWorkflowId(message.metadata());
-            var state = configuration
+            var liveState = configuration
                     .getComponent(WorkflowExecutionRepository.class)
                     .findById(workflowId).map(WorkflowExecution::state)
-                    .orElseGet(
-                            () -> configuration
-                                    .getComponent(WorkflowHistoryRepository.class)
-                                    .findById(workflowId).map(WorkflowHistory::state)
-                                    .orElseThrow(
-                                            () -> new IllegalStateException(
-                                                    "Unable to inject workflow state, since no workflow id was found in the message.")
-                                    )
-                    );
-            return CompletableFuture.completedFuture(state);
+                    .orElse(null);
+            if (liveState != null) {
+                return CompletableFuture.completedFuture(liveState);
+            }
+            return configuration
+                    .getComponent(WorkflowHistoryRepository.class)
+                    .findById(workflowId)
+                    .thenApply(history -> history.map(WorkflowHistory::state)
+                                                 .orElseThrow(
+                                                         () -> new IllegalStateException(
+                                                                 "Unable to inject workflow state, since no workflow id was found in the message."
+                                                         )
+                                                 ));
         } else {
             return CompletableFuture.failedFuture(new IllegalStateException(
                     "Unable to inject workflow state, since no workflow id was found in the message."));

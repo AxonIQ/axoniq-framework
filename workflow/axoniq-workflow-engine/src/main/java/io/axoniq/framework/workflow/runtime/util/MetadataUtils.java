@@ -21,9 +21,9 @@ package io.axoniq.framework.workflow.runtime.util;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -144,7 +144,7 @@ public class MetadataUtils {
      */
     public static Metadata create(String workflowId,
                                   WorkflowStatus workflowStatus,
-                                  MessageType workflowDefinitionId) {
+                                  VersionedType workflowDefinitionId) {
         return withWorkflowDefinitionId(create(workflowId, workflowStatus), workflowDefinitionId);
     }
 
@@ -227,7 +227,7 @@ public class MetadataUtils {
      * @param workflowDefinitionId workflow definition id to store
      * @return enriched metadata
      */
-    public static Metadata withWorkflowDefinitionId(Metadata metadata, MessageType workflowDefinitionId) {
+    public static Metadata withWorkflowDefinitionId(Metadata metadata, VersionedType workflowDefinitionId) {
         return metadata.and(METADATA_KEY_WORKFLOW_DEFINITION_NAME, workflowDefinitionId.qualifiedName().toString())
                        .and(METADATA_KEY_WORKFLOW_DEFINITION_VERSION, workflowDefinitionId.version());
     }
@@ -238,12 +238,12 @@ public class MetadataUtils {
      * @param metadata metadata to inspect
      * @return optional workflow definition id
      */
-    public static Optional<MessageType> getWorkflowDefinitionId(Metadata metadata) {
+    public static Optional<VersionedType> getWorkflowDefinitionId(Metadata metadata) {
         if (!metadata.containsKey(METADATA_KEY_WORKFLOW_DEFINITION_NAME)
                 || !metadata.containsKey(METADATA_KEY_WORKFLOW_DEFINITION_VERSION)) {
             return Optional.empty();
         }
-        return Optional.of(new MessageType(
+        return Optional.of(VersionedType.of(
                 new QualifiedName(metadata.get(METADATA_KEY_WORKFLOW_DEFINITION_NAME)),
                 metadata.get(METADATA_KEY_WORKFLOW_DEFINITION_VERSION)
         ));

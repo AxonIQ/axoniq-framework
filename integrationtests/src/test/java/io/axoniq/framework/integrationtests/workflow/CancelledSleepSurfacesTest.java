@@ -84,7 +84,7 @@ class CancelledSleepSurfacesTest extends AbstractWorkflowIntegrationTestBase<Sim
         ).join();
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
-            var history = workflowHistoryRepository.findById("sleep-1");
+            var history = workflowHistoryRepository.findById("sleep-1").join();
             assertThat(history).isPresent();
             var state = history.get().state();
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);

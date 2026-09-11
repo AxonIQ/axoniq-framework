@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -64,11 +65,12 @@ public class InMemoryWorkflowExecutionRepository implements WorkflowExecutionRep
     }
 
     @Override
-    public Set<WorkflowExecution> findAll(WorkflowStateQuery query) {
-        return Set.copyOf(workflowExecutions.values().stream()
-                                           .filter(execution -> WorkflowStateQueryMatcher.matches(query,
-                                                                                                    execution.state()))
-                                           .toList());
+    public CompletableFuture<Set<WorkflowExecution>> findAll(WorkflowStateQuery query) {
+        return CompletableFuture.completedFuture(Set.copyOf(workflowExecutions.values().stream()
+                                                                              .filter(execution -> WorkflowStateQueryMatcher.matches(
+                                                                                      query, execution.state()
+                                                                              ))
+                                                                              .toList()));
     }
 
     @Override

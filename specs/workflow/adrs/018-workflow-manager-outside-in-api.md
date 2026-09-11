@@ -72,11 +72,12 @@ evaluate itself. The same query is passed directly to both repositories:
 
 ```java
 interface WorkflowExecutionRepository {
-    Set<WorkflowExecution> findAll(WorkflowStateQuery query);
+    CompletableFuture<Set<WorkflowExecution>> findAll(WorkflowStateQuery query);
 }
 
 interface WorkflowHistoryRepository {
-    List<WorkflowHistory> findAll(WorkflowStateQuery query);
+    CompletableFuture<List<WorkflowHistory>> findAll(WorkflowStateQuery query);
+    CompletableFuture<Optional<WorkflowHistory>> findById(String workflowId);
 }
 ```
 

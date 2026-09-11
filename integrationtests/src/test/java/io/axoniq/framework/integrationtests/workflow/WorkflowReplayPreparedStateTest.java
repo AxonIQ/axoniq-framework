@@ -394,7 +394,7 @@ class WorkflowReplayPreparedStateTest {
         }
 
         private Optional<io.axoniq.framework.workflow.history.api.WorkflowHistory> history(String workflowId) {
-            return configuration.getComponent(MutableWorkflowHistoryRepository.class).findById(workflowId);
+            return configuration.getComponent(MutableWorkflowHistoryRepository.class).findById(workflowId).join();
         }
 
         @Override

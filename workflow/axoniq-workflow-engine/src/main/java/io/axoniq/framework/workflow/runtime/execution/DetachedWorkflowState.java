@@ -22,7 +22,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.VersionedType;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Collections;
@@ -42,7 +42,7 @@ import java.util.Objects;
 final class DetachedWorkflowState implements WorkflowState {
 
     private final String workflowId;
-    private final MessageType workflowDefinitionId;
+    private final VersionedType workflowDefinitionId;
     private final Map<String, WorkflowStep> steps;
     private final List<String> stepNames;
     private final WorkflowStatus workflowStatus;
@@ -86,7 +86,7 @@ final class DetachedWorkflowState implements WorkflowState {
     }
 
     @Override
-    public MessageType workflowDefinitionId() {
+    public VersionedType workflowDefinitionId() {
         return workflowDefinitionId;
     }
 
