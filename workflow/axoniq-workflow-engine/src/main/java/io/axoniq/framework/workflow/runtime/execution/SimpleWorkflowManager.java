@@ -134,8 +134,8 @@ public class SimpleWorkflowManager implements WorkflowManager {
         }
 
         @Override
-        public CompletableFuture<@Nullable WorkflowInstance> single() {
-            return singleMatch(query).thenApply(state -> state.map(ResolvedWorkflowInstance::new).orElse(null));
+        public CompletableFuture<@Nullable WorkflowState> singleState() {
+            return singleMatch(query).thenApply(state -> state.map(DetachedWorkflowState::new).orElse(null));
         }
 
         @Override
@@ -144,7 +144,7 @@ public class SimpleWorkflowManager implements WorkflowManager {
                 @SuppressWarnings("resource")
                 var publisher = new SubmissionPublisher<WorkflowInstance>(executor, Flow.defaultBufferSize());
                 publisher.subscribe(FlowAdapters.toFlowSubscriber(subscriber));
-                single().whenComplete((instance, error) -> {
+                singleInstance().whenComplete((instance, error) -> {
                     if (error != null) {
                         publisher.closeExceptionally(error);
                     } else {
@@ -164,23 +164,27 @@ public class SimpleWorkflowManager implements WorkflowManager {
 
         @Override
         public CompletableFuture<Boolean> requestStepCancellation(String stepName, @Nullable Throwable cause) {
-            return single().thenCompose(instance -> instance == null
+            return singleInstance().thenCompose(instance -> instance == null
                     ? CompletableFuture.completedFuture(false)
                     : instance.requestStepCancellation(stepName, cause));
         }
 
         @Override
         public CompletableFuture<Integer> requestCancellationOfAllSteps(@Nullable Throwable cause) {
-            return single().thenCompose(instance -> instance == null
+            return singleInstance().thenCompose(instance -> instance == null
                     ? CompletableFuture.completedFuture(0)
                     : instance.requestCancellationOfAllSteps(cause));
         }
 
         @Override
         public CompletableFuture<Void> requestWorkflowCancellation(@Nullable Throwable cause) {
-            return single().thenCompose(instance -> instance == null
+            return singleInstance().thenCompose(instance -> instance == null
                     ? CompletableFuture.completedFuture(null)
                     : instance.requestWorkflowCancellation(cause));
+        }
+
+        private CompletableFuture<@Nullable WorkflowInstance> singleInstance() {
+            return singleMatch(query).thenApply(state -> state.map(ResolvedWorkflowInstance::new).orElse(null));
         }
     }
 

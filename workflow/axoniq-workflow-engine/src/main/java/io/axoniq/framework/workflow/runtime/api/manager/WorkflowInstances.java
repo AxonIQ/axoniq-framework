@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.api.manager;
 
+import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import org.jspecify.annotations.Nullable;
 import org.reactivestreams.Publisher;
 
@@ -55,10 +56,10 @@ public interface WorkflowInstances extends WorkflowInstanceOperator {
     interface Single extends WorkflowInstances {
 
         /**
-         * Resolves the single workflow instance in this collection.
+         * Resolves the detached state of the single workflow instance in this collection.
          *
-         * @return a future completing with the instance, or {@code null} when no instance matches
+         * @return a future completing with the detached state, or {@code null} when no instance matches
          */
-        CompletableFuture<@Nullable WorkflowInstance> single();
+        CompletableFuture<@Nullable WorkflowState> singleState();
     }
 }

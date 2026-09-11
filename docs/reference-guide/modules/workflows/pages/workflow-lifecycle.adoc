@@ -209,12 +209,7 @@ workflow. It targets a live workflow by a `WorkflowStateQuery` and returns a `Co
 [source,java]
 ----
 workflowManager.findOne(WorkflowStateQuery.byWorkflowId(orderId))
-               .single()
-               .thenAccept(instance -> {
-                   if (instance != null) {
-                       instance.requestWorkflowCancellation(null);
-                   }
-               });
+               .requestWorkflowCancellation(null);
 ----
 
 The result has the same workflow-level effect as `ctx.cancel()`: running steps are interrupted and the workflow

@@ -31,8 +31,8 @@ public interface WorkflowManager {
     /**
      * Finds the single workflow instance matching a query.
      * <p>
-     * The returned result evaluates the query when {@link WorkflowInstances.Single#single()} is invoked. That operation
-     * completes with {@code null} when no instance matches and exceptionally with
+     * The returned result evaluates the query when {@link WorkflowInstances.Single#singleState()} is invoked. That
+     * operation completes with {@code null} when no instance matches and exceptionally with
      * {@link NonUniqueWorkflowInstanceMatchException} when more than one instance matches.
      *
      * @param query criteria used to select the workflow instance

@@ -25,7 +25,7 @@ WorkflowInstances findMany(WorkflowStateQuery query);
 ```
 
 `WorkflowInstances.Single` extends `WorkflowInstances`. It is therefore a zero-or-one collection view, not a
-separate result abstraction: `single()` is its convenience operation, while `instances()`, `size()`, and the
+separate result abstraction: `singleState()` is its convenience operation, while `instances()`, `size()`, and the
 collection cancellation operations remain available where uniform collection handling is useful.
 
 ```java
@@ -34,18 +34,17 @@ interface WorkflowInstances {
     CompletableFuture<Integer> size();
 
     interface Single extends WorkflowInstances {
-        CompletableFuture<@Nullable WorkflowInstance> single();
+        CompletableFuture<@Nullable WorkflowState> singleState();
     }
 }
 ```
 
-Finders synchronously create lazy handles. Every state-reading or state-changing action on a handle is asynchronous,
-returning a `CompletableFuture` or a Reactive Streams `Publisher`. This makes the API two-stage asynchronous without requiring a
-future merely to obtain a handle.
+Finders synchronously create lazy handles. `findOne(...).singleState()` resolves the state with one
+`CompletableFuture`; the collection and cancellation operations remain asynchronous as well.
 
-`WorkflowInstances.Single.single()` resolves the zero-or-one result of `findOne` and completes with `null` when no
-instance matches. A resolved `WorkflowInstance` always exists, exposes a non-null detached state read and cancellation
-operations. `WorkflowInstances.Single` also exposes the collection operations, constrained to zero or one instance. A
+`WorkflowInstances.Single.singleState()` resolves the zero-or-one result of `findOne` and completes with `null` when no
+instance matches. It returns a detached state value directly, avoiding a second asynchronous state read.
+`WorkflowInstances.Single` also exposes the collection operations, constrained to zero or one instance. A
 `WorkflowInstances` handle exposes an asynchronous publisher of resolved instances, an asynchronous count, and the same
 cancellation operations for its live matches.
 
@@ -56,7 +55,7 @@ cancellation operations for its live matches.
 containers are copied and immutable. Payload values and values embedded in a step remain application values, so the
 manager does not attempt a generic deep copy.
 
-`findOne(...).single()` completes with `null` when no instance matches and exceptionally with
+`findOne(...).singleState()` completes with `null` when no instance matches and exceptionally with
 `NonUniqueWorkflowInstanceMatchException` when more than one state matches. `findMany` represents zero or more
 matches, and its publisher emits only resolved instances.
 

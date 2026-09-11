@@ -408,12 +408,7 @@ An external caller can request the same single-step cancellation through `Workfl
 [source,java]
 ----
 workflowManager.findOne(WorkflowStateQuery.byWorkflowId(orderId))
-               .single()
-               .thenAccept(instance -> {
-                   if (instance != null) {
-                       instance.requestStepCancellation("awaitApproval", null);
-                   }
-               });
+               .requestStepCancellation("awaitApproval", null);
 ----
 
 The returned `CompletableFuture<Boolean>` is `true` when the terminal cancellation was recorded. See

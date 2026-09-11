@@ -17,15 +17,15 @@ WorkflowManager workflowManager = configuration.getComponent(WorkflowManager.cla
 == Find an instance and read its state
 
 Build a `WorkflowStateQuery` with explicit state restrictions. The finder returns a lazy result immediately. Resolve
-the result asynchronously, then read the detached `WorkflowState` value from the resolved instance.
+the detached `WorkflowState` asynchronously.
 
 [source,java]
 ----
 workflowManager.findOne(WorkflowStateQuery.byWorkflowId(orderId))
-               .single()
-               .thenAccept(instance -> {
-                   if (instance != null) {
-                       instance.state().thenAccept(state -> use(state));
+               .singleState()
+               .thenAccept(state -> {
+                   if (state != null) {
+                       use(state);
                    }
                });
 ----
@@ -34,7 +34,7 @@ No matching instance completes with `null`. A query that matches more than one i
 exceptionally with `NonUniqueWorkflowInstanceMatchException`. Use a workflow ID whenever the caller already knows it.
 
 The result of `findOne` is a `WorkflowInstances.Single`, which is also a zero-or-one `WorkflowInstances` collection.
-Use `single()` for direct zero-or-one resolution. `instances()` and `size()` remain available when code handles single
+Use `singleState()` for direct zero-or-one state resolution. `instances()` and `size()` remain available when code handles single
 and multiple searches uniformly; for a single result, `size()` completes with zero or one.
 
 The detached state has copied structural state such as its payload map and steps. It is safe to retain while the live workflow
@@ -71,18 +71,14 @@ cannot receive a cancellation request. Use the manager for a request made by an 
 ----
 var order = workflowManager.findOne(WorkflowStateQuery.byWorkflowId(orderId));
 
-order.single().thenAccept(instance -> {
-    if (instance != null) {
-        // Cancel one running step. The future is true only when a terminal step cancellation was recorded.
-        CompletableFuture<Boolean> stepCancelled = instance.requestStepCancellation("awaitApproval", null);
+// Cancel one running step. The future is true only when a terminal step cancellation was recorded.
+CompletableFuture<Boolean> stepCancelled = order.requestStepCancellation("awaitApproval", null);
 
-        // Cancel all currently running steps but leave the workflow active.
-        CompletableFuture<Integer> cancelledSteps = instance.requestCancellationOfAllSteps(null);
+// Cancel all currently running steps but leave the workflow active.
+CompletableFuture<Integer> cancelledSteps = order.requestCancellationOfAllSteps(null);
 
-        // Cancel the workflow. The future completes after its cancellation event is durable and its body is woken.
-        CompletableFuture<Void> workflowCancelled = instance.requestWorkflowCancellation(null);
-    }
-});
+// Cancel the workflow. The future completes after its cancellation event is durable and its body is woken.
+CompletableFuture<Void> workflowCancelled = order.requestWorkflowCancellation(null);
 ----
 
 Requesting cancellation of a single step records that step as cancelled and lets the workflow observe a

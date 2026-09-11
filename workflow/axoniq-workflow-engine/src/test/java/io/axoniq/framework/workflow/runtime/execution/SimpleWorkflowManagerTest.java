@@ -41,6 +41,7 @@ import java.util.concurrent.CompletionException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SimpleWorkflowManagerTest {
@@ -53,12 +54,11 @@ class SimpleWorkflowManagerTest {
         );
         var manager = manager(history);
 
-        var instance = manager.findOne(WorkflowStateQuery.byWorkflowDefinitionId(
-                                              VersionedType.of("PaymentWorkflow", "1.0")))
-                              .single()
-                              .join();
-        assertThat(instance).isNotNull();
-        var state = instance.state().join();
+        var state = manager.findOne(WorkflowStateQuery.byWorkflowDefinitionId(
+                                           VersionedType.of("PaymentWorkflow", "1.0")))
+                           .singleState()
+                           .join();
+        assertThat(state).isNotNull();
 
         assertThat(state.workflowId()).isEqualTo("order-42");
         assertThat(state.payload()).containsEntry("orderId", "order-42");
@@ -75,7 +75,7 @@ class SimpleWorkflowManagerTest {
         assertThatThrownBy(() -> manager.findOne(WorkflowStateQuery.byWorkflowDefinitionId(
                                                                    VersionedType.of("PaymentWorkflow", "1.0")
                                                            ))
-                                        .single()
+                                        .singleState()
                                         .join())
                 .isInstanceOf(CompletionException.class)
                 .hasCauseInstanceOf(NonUniqueWorkflowInstanceMatchException.class);
@@ -103,11 +103,62 @@ class SimpleWorkflowManagerTest {
         var history = history(new WorkflowHistory("order-42", state("order-42", "PaymentWorkflow")));
         var manager = manager(history);
 
-        var instance = manager.findOne(WorkflowStateQuery.all().workflowId("order-42")).single().join();
+        var instance = manager.findOne(WorkflowStateQuery.all().workflowId("order-42"));
 
         assertThat(instance.requestStepCancellation("step", null).join()).isFalse();
         assertThat(instance.requestCancellationOfAllSteps(null).join()).isZero();
         assertThat(instance.requestWorkflowCancellation(null).join()).isNull();
+    }
+
+    @Test
+    void forwardsCancellationRequestsForALiveSingleInstance() {
+        var executions = new InMemoryWorkflowExecutionRepository();
+        var execution = execution("order-42", "PaymentWorkflow");
+        executions.save("order-42", () -> execution);
+        var cancellations = new WorkflowCancellationService();
+        var cancellation = mock(WorkflowCancellation.class);
+        cancellations.register("order-42", cancellation);
+        when(cancellation.requestStepCancellation("reserve-funds", null))
+                .thenReturn(CompletableFuture.completedFuture(true));
+        when(cancellation.requestCancellationOfAllSteps(null)).thenReturn(CompletableFuture.completedFuture(2));
+        when(cancellation.requestWorkflowCancellation(null)).thenReturn(CompletableFuture.completedFuture(null));
+        var manager = manager(history(), executions, cancellations);
+
+        var instance = manager.findOne(WorkflowStateQuery.byWorkflowId("order-42"));
+
+        assertThat(instance.requestStepCancellation("reserve-funds", null).join()).isTrue();
+        assertThat(instance.requestCancellationOfAllSteps(null).join()).isEqualTo(2);
+        assertThat(instance.requestWorkflowCancellation(null)).isCompleted();
+        verify(cancellation).requestStepCancellation("reserve-funds", null);
+        verify(cancellation).requestCancellationOfAllSteps(null);
+        verify(cancellation).requestWorkflowCancellation(null);
+    }
+
+    @Test
+    void aggregatesCancellationRequestsForEveryMatchingLiveInstance() {
+        var executions = new InMemoryWorkflowExecutionRepository();
+        executions.save("order-42", () -> execution("order-42", "PaymentWorkflow"));
+        executions.save("order-43", () -> execution("order-43", "PaymentWorkflow"));
+        var cancellations = new WorkflowCancellationService();
+        var firstCancellation = cancellation(false, 2);
+        var secondCancellation = cancellation(true, 3);
+        cancellations.register("order-42", firstCancellation);
+        cancellations.register("order-43", secondCancellation);
+        var manager = manager(history(), executions, cancellations);
+
+        var instances = manager.findMany(WorkflowStateQuery.byWorkflowDefinitionId(
+                VersionedType.of("PaymentWorkflow", "1.0")
+        ));
+
+        assertThat(instances.requestStepCancellation("reserve-funds", null).join()).isTrue();
+        assertThat(instances.requestCancellationOfAllSteps(null).join()).isEqualTo(5);
+        assertThat(instances.requestWorkflowCancellation(null)).isCompleted();
+        verify(firstCancellation).requestStepCancellation("reserve-funds", null);
+        verify(secondCancellation).requestStepCancellation("reserve-funds", null);
+        verify(firstCancellation).requestCancellationOfAllSteps(null);
+        verify(secondCancellation).requestCancellationOfAllSteps(null);
+        verify(firstCancellation).requestWorkflowCancellation(null);
+        verify(secondCancellation).requestWorkflowCancellation(null);
     }
 
     @Test
@@ -117,10 +168,8 @@ class SimpleWorkflowManagerTest {
         var manager = manager(history);
 
         var detachedState = manager.findOne(WorkflowStateQuery.all().workflowId("order-42"))
-                              .single()
-                              .join()
-                              .state()
-                              .join();
+                                   .singleState()
+                                   .join();
         projectedState.setStatus(WorkflowStatus.COMPLETED, null, false);
 
         assertThat(detachedState.workflowStatus()).isEqualTo(WorkflowStatus.NONE);
@@ -140,10 +189,8 @@ class SimpleWorkflowManagerTest {
         var manager = manager(history(new WorkflowHistory("order-42", historicalState)), executions);
 
         var detachedState = manager.findOne(WorkflowStateQuery.all().workflowId("order-42"))
-                              .single()
-                              .join()
-                              .state()
-                              .join();
+                                   .singleState()
+                                   .join();
 
         assertThat(detachedState.workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
     }
@@ -152,15 +199,16 @@ class SimpleWorkflowManagerTest {
     void resolvesNoMatchingSingleInstanceAsNull() {
         var manager = manager(history());
 
-        assertThat(manager.findOne(WorkflowStateQuery.all().workflowId("unknown")).single().join()).isNull();
+        assertThat(manager.findOne(WorkflowStateQuery.all().workflowId("unknown")).singleState().join()).isNull();
     }
 
     @Test
-    void exposesTheSingleResultAsAZeroOrOneInstanceCollection() {
+    void exposesTheSingleStateAndZeroOrOneInstanceCollection() {
         var manager = manager(history(new WorkflowHistory("order-42", state("order-42", "PaymentWorkflow"))));
 
         var result = manager.findOne(WorkflowStateQuery.all().workflowId("order-42"));
 
+        assertThat(result.singleState().join().workflowId()).isEqualTo("order-42");
         assertThat(result.size().join()).isOne();
         assertThat(first(result.instances()).join().state().join().workflowId()).isEqualTo("order-42");
     }
@@ -180,10 +228,32 @@ class SimpleWorkflowManagerTest {
 
     private static SimpleWorkflowManager manager(WorkflowHistoryRepository history,
                                                  WorkflowExecutionRepository executions) {
+        return manager(history, executions, new WorkflowCancellationService());
+    }
+
+    private static SimpleWorkflowManager manager(WorkflowHistoryRepository history,
+                                                 WorkflowExecutionRepository executions,
+                                                 WorkflowCancellationService cancellations) {
         return new SimpleWorkflowManager(history,
                                          executions,
-                                         new WorkflowCancellationService(),
+                                         cancellations,
                                          Runnable::run);
+    }
+
+    private static WorkflowExecution execution(String workflowId, String workflowName) {
+        var execution = mock(WorkflowExecution.class);
+        when(execution.state()).thenReturn(state(workflowId, workflowName));
+        return execution;
+    }
+
+    private static WorkflowCancellation cancellation(boolean stepCancellationResult, int cancelledSteps) {
+        var cancellation = mock(WorkflowCancellation.class);
+        when(cancellation.requestStepCancellation("reserve-funds", null))
+                .thenReturn(CompletableFuture.completedFuture(stepCancellationResult));
+        when(cancellation.requestCancellationOfAllSteps(null))
+                .thenReturn(CompletableFuture.completedFuture(cancelledSteps));
+        when(cancellation.requestWorkflowCancellation(null)).thenReturn(CompletableFuture.completedFuture(null));
+        return cancellation;
     }
 
     private static WorkflowHistoryRepository history(WorkflowHistory... histories) {
