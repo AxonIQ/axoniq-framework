@@ -80,7 +80,7 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 @ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
 class MultiTenantQueryHandlingIT {
 
-    private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
+    private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
     private static final String TENANT_A = "tenant-A";
     private static final String TENANT_B = "tenant-B";
 

@@ -93,13 +93,20 @@ public record WorkflowError(String type,
     }
 
     /**
-     * Rebuilds a stackless {@link WorkflowExecutionException} chain from this compact representation. The returned
-     * exception carries the original exception class FQN and message; its cause (if any) is similarly reconstructed.
+     * Rebuilds an exception chain from this compact representation.
+     * <p>
+     * Exceptions thrown by a step body are rebuilt as a stackless {@link WorkflowExecutionException} carrying the
+     * original exception class FQN and message. The engine-raised {@link StepIndeterminateException} is rebuilt as its
+     * own type, so a workflow body can catch it after replay exactly as during the run that recorded it. The cause (if
+     * any) is reconstructed the same way.
      *
      * @return reconstructed exception.
      */
-    public WorkflowExecutionException toThrowable() {
-        WorkflowExecutionException reconstructedCause = cause != null ? cause.toThrowable() : null;
+    public RuntimeException toThrowable() {
+        RuntimeException reconstructedCause = cause != null ? cause.toThrowable() : null;
+        if (isType(StepIndeterminateException.class)) {
+            return new StepIndeterminateException(message, reconstructedCause);
+        }
         return new WorkflowExecutionException(type, message, reconstructedCause);
     }
 }

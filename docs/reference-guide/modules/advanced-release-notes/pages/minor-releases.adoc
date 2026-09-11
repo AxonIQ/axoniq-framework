@@ -6,6 +6,42 @@ Any patch release made for an Axon project is tailored towards resolving bugs. T
 [#release_5_3]
 == Release 5.3
 
+=== Release 5.3.2
+
+==== Enhancements
+
+- Add Maven build cache extension to skip unchanged reactor modules (link:https://github.com/AxonIQ/axoniq-framework/pull/398[PR #398], by @hjohn)
+- Add tags to AppendEventsTransactionRejectedException (link:https://github.com/AxonIQ/axoniq-framework/pull/390[PR #390], by @hjohn)
+- [Multi-Tenancy]: avoid real Axon Server client connections in tests (link:https://github.com/AxonIQ/axoniq-framework/pull/380[PR #380], by @jangalinski)
+- Track in-flight queries asynchronously during connector shutdown (link:https://github.com/AxonIQ/axoniq-framework/issues/337[#337], link:https://github.com/AxonIQ/axoniq-framework/pull/377[PR #377], by @jangalinski)
+
+==== Bug fixes
+
+- Fix memory leak in AxonServerCommandBusConnector (link:https://github.com/AxonIQ/axoniq-framework/issues/476[#476], link:https://github.com/AxonIQ/axoniq-framework/pull/478[PR #478], by @hatzlj)
+- Process entire batch in `PersistentStreamConnection` regardless of closed `PersistentStreamSegment` (link:https://github.com/AxonIQ/axoniq-framework/pull/394[PR #394], by @smcvb)
+- Ensure `DistributedQueryBus` adheres to `ProcessingContext` lifecycle for subscription query operations (link:https://github.com/AxonIQ/axoniq-framework/issues/317[#317], link:https://github.com/AxonIQ/axoniq-framework/pull/393[PR #393], by @smcvb)
+- fix(connector): subscribe a command or query name exactly once (link:https://github.com/AxonIQ/axoniq-framework/pull/391[PR #391], by @abuijze)
+- Multi-tenant `QueryBus` closes subscription query streams upon tenant removal (link:https://github.com/AxonIQ/axoniq-framework/pull/388[PR #388], by @smcvb)
+- Don't assume autocommit is `false` (link:https://github.com/AxonIQ/axoniq-framework/pull/384[PR #384], by @hjohn)
+- Active subscription query of a deleted tenant hangs silently forever - already fixed (link:https://github.com/AxonIQ/axoniq-framework/issues/318[#318], link:https://github.com/AxonIQ/axoniq-framework/pull/376[PR #376], by @jangalinski)
+- Use repeatable read isolation for query with 2 statements (link:https://github.com/AxonIQ/axoniq-framework/pull/373[PR #373], by @hjohn)
+
+==== Documentation
+
+- Update Framework Comparison table (link:https://github.com/AxonIQ/axoniq-framework/pull/371[PR #371], by @smcvb)
+- Add 5.3.1 release notes (link:https://github.com/AxonIQ/axoniq-framework/pull/370[PR #370], by @smcvb)
+- Document dead-letter queue capacity and overflow impact (link:https://github.com/AxonIQ/axoniq-framework/pull/368[PR #368], by @abuijze)
+
+==== Contributors
+
+A heartfelt thank you to all contributors who worked on this section:
+
+- link:https://github.com/abuijze[@abuijze]
+- link:https://github.com/hatzlj[@hatzlj]
+- link:https://github.com/hjohn[@hjohn]
+- link:https://github.com/jangalinski[@jangalinski]
+- link:https://github.com/smcvb[@smcvb]
+
 === Release 5.3.1
 
 ==== Features

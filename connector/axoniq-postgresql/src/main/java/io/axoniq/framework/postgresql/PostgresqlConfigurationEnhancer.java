@@ -28,13 +28,13 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.sql.DataSource;
 
 /**
  * A {@link ConfigurationEnhancer} that is auto-loadable by the {@link ApplicationConfigurer}, setting the
- * {@link PostgresqlEventStorageEngine} as the {@link EventStorageEngine} to use when no other is present.
- * The engine is also made available as a {@link SnapshotStore}.
+ * {@link PostgresqlEventStorageEngine} as the {@link EventStorageEngine} to use when no other is present. The engine is
+ * also made available as a {@link SnapshotStore}.
  * <p>
  * The {@link #ENHANCER_ORDER} is set such that this {@code ConfigurationEnhancer} will follow after the
  * {@code AxonServerConfigurationEnhancer}, thus giving precedence over to the Axon Server {@code EventStorageEngine}.
@@ -56,15 +56,26 @@ public class PostgresqlConfigurationEnhancer implements ConfigurationEnhancer {
             return;
         }
 
-        AtomicReference<PostgresqlEventStorageEngine> instance = new AtomicReference<>();
-        ComponentBuilder<PostgresqlEventStorageEngine> shared = configuration ->
-                instance.updateAndGet(e -> e != null ? e : new PostgresqlEventStorageEngine(
-                        configuration.getComponent(DataSource.class),
-                        configuration.getComponent(EventConverter.class)
-                ));
+        ComponentBuilder<PostgresqlEventStorageEngine> shared = eventStorageEngineBuilder();
 
         registry.registerIfNotPresent(EventStorageEngine.class, shared, SearchScope.ALL);
         registry.registerIfNotPresent(SnapshotStore.class, shared, SearchScope.ALL);
+    }
+
+    private static ComponentBuilder<PostgresqlEventStorageEngine> eventStorageEngineBuilder() {
+        // An AtomicReference would seem to suffice, but its contract isn't optimal for what this builder does.
+        // There's a none-zero chance that an updateAndGet call would be invoked several times under contention.
+        // As we open a connection, the contention isn't unlikely to happen.
+        // AtomicReference use would thus potentially accidentally open a ghost connection we'd never be able to close cleanly.
+        // Hence, ConcurrentHashMap#computeIfAbsent is used as it does guarantee the mapping function runs at most once per key.
+        ConcurrentHashMap<String, PostgresqlEventStorageEngine> instance = new ConcurrentHashMap<>();
+        return config -> instance.computeIfAbsent(
+                "shared",
+                ignored -> new PostgresqlEventStorageEngine(
+                        config.getComponent(DataSource.class),
+                        config.getComponent(EventConverter.class)
+                )
+        );
     }
 
     @Override

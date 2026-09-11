@@ -33,6 +33,7 @@ import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryB
 import io.axoniq.framework.springboot.util.GrpcServerStub;
 import io.axoniq.framework.springboot.util.TcpUtils;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -174,10 +175,12 @@ class AxonServerAutoConfigurationTest {
             assertThat(context).hasBean(AxonServerConnectionManager.class.getName());
             assertThat(context).hasSingleBean(ManagedChannelCustomizer.class);
             assertThat(context).hasBean(ManagedChannelCustomizer.class.getName());
-            assertThat(context).hasSingleBean(EventStorageEngine.class);
             assertThat(context).hasBean(EventStorageEngine.class.getName());
-            assertThat(context).getBean(EventStorageEngine.class).extracting("delegate")
-                               .isInstanceOf(AxonServerEventStorageEngine.class);
+            // AxonServerEventStorageEngine is also the SnapshotStore, so the same bean is exposed under both types.
+            // hasSingleBean(EventStorageEngine.class) would (correctly) count 2, hence asserting identity instead.
+            assertThat(context.getBean(EventStorageEngine.class.getName(), EventStorageEngine.class))
+                    .isInstanceOf(AxonServerEventStorageEngine.class)
+                    .isSameAs(context.getBean(SnapshotStore.class.getName(), SnapshotStore.class));
             assertThat(context).hasSingleBean(PayloadConvertingCommandBusConnector.class);
             assertThat(context).hasBean(CommandBusConnector.class.getName());
         });

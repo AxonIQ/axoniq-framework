@@ -19,8 +19,8 @@
 
 package io.axoniq.framework.integrationtests.multitenancy;
 
-import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.framework.integrationtests.testsuite.infrastructure.AxonServerTestInfrastructure;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
@@ -30,12 +30,10 @@ import org.axonframework.common.TypeReference;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.conversion.Converter;
 import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
-import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.axonframework.messaging.commandhandling.gateway.CommandGateway;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.extension.*;
 
 import java.time.Duration;
 import java.util.Map;
@@ -56,7 +54,7 @@ class MultiTenantAggregateBasedEventStorageIT {
 
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(5);
 
-    private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
+    private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
     private static final String ACCOUNT_ID = "shared-account";
 
     private final Map<String, TenantBankFixture.BalanceStore> stores = new ConcurrentHashMap<>();

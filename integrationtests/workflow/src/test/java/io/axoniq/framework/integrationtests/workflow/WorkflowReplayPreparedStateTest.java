@@ -21,7 +21,6 @@ package io.axoniq.framework.integrationtests.workflow;
 import org.jspecify.annotations.Nullable;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
-import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.framework.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
@@ -347,8 +346,7 @@ class WorkflowReplayPreparedStateTest {
             var configurer = WorkflowConfigurer.create();
             var workflow = new ReplayAwareWorkflow(executedWorkflowIds);
 
-            configurer.componentRegistry(MultiTenancyUtils::disable)
-                      .componentRegistry(r -> r.disableEnhancer(AxonServerConfigurationEnhancer.class))
+            configurer.componentRegistry(r -> r.disableEnhancer(AxonServerConfigurationEnhancer.class))
                       .componentRegistry(cr -> cr
                               .registerComponent(EventStorageEngine.class, cfg -> eventStorageEngine)
                               .registerComponent(MutableWorkflowHistoryRepository.class, cfg -> historyRepository)
