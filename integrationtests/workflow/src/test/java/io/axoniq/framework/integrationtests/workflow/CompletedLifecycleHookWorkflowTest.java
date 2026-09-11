@@ -24,11 +24,8 @@ import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import org.axonframework.messaging.core.unitofwork.ProcessingContext;
-import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -75,14 +72,9 @@ class CompletedLifecycleHookWorkflowTest extends AbstractWorkflowIntegrationTest
     protected Function<DetectionPhase<SimpleWorkflowContext>, FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         // A minimal workflow that completes on the happy path (two synchronous steps, no event waits).
         VersionedWorkflow workflow = new VersionedWorkflow();
-        WorkflowStatusChangeListener completedListener = new WorkflowStatusChangeListener() {
-            @Override
-            public <C extends WorkflowContext> void onWorkflowStatus(
-                    WorkflowStatus status, C context, EventMessage event, ProcessingContext processingContext
-            ) {
-                observedStatus.set(status);
-                completedHookInvocations.incrementAndGet();
-            }
+        WorkflowStatusChangeListener completedListener = (status, context, event, processingContext) -> {
+            observedStatus.set(status);
+            completedHookInvocations.incrementAndGet();
         };
         return d -> d
                 .declarative(c -> workflow::execute)

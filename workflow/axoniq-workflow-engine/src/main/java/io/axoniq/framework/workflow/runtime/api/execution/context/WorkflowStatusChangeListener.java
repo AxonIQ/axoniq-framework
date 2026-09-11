@@ -37,13 +37,12 @@ public interface WorkflowStatusChangeListener {
      * {@code processingContext} which contain the status changed event.
      *
      * @param status            the workflow status change this handler reacts to
-     * @param context           the current workflow context of generic type {@code C}
+     * @param context           the current workflow context
      * @param event             event that triggered the status change
      * @param processingContext context in which the event is applied
-     * @param <C>               the type of {@link WorkflowContext} handled by this change listener
      */
-    <C extends WorkflowContext> void onWorkflowStatus(WorkflowStatus status,
-                                                      C context,
-                                                      EventMessage event,
-                                                      ProcessingContext processingContext);
+    void onWorkflowStatus(WorkflowStatus status,
+                          WorkflowContext context,
+                          EventMessage event,
+                          ProcessingContext processingContext);
 }
