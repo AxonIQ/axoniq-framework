@@ -33,6 +33,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -195,17 +196,17 @@ public class SimpleWorkflowManager implements WorkflowManager {
 
         @Override
         public CompletableFuture<Boolean> requestStepCancellation(String stepName, @Nullable Throwable cause) {
-            return cancellation(() -> cancellationService.requestStepCancellation(state.workflowId(), stepName, cause));
+            return cancellation(() -> cancellationService.requestStepCancellation(state.workflowId(), stepName, cause), false);
         }
 
         @Override
         public CompletableFuture<Integer> requestCancellationOfAllSteps(@Nullable Throwable cause) {
-            return cancellation(() -> cancellationService.requestCancellationOfAllSteps(state.workflowId(), cause));
+            return cancellation(() -> cancellationService.requestCancellationOfAllSteps(state.workflowId(), cause), 0);
         }
 
         @Override
         public CompletableFuture<Void> requestWorkflowCancellation(@Nullable Throwable cause) {
-            return cancellation(() -> cancellationService.requestWorkflowCancellation(state.workflowId(), cause));
+            return cancellation(() -> cancellationService.requestWorkflowCancellation(state.workflowId(), cause), null);
         }
     }
 
@@ -292,6 +293,16 @@ public class SimpleWorkflowManager implements WorkflowManager {
     private static <T> CompletableFuture<T> cancellation(CancellationOperation<T> operation) {
         try {
             return operation.request();
+        } catch (RuntimeException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    private static <T> CompletableFuture<T> cancellation(CancellationOperation<T> operation, @Nullable T unavailableResult) {
+        try {
+            return operation.request();
+        } catch (NoSuchElementException e) {
+            return CompletableFuture.completedFuture(unavailableResult);
         } catch (RuntimeException e) {
             return CompletableFuture.failedFuture(e);
         }

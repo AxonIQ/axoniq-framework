@@ -97,16 +97,15 @@ class SimpleWorkflowManagerTest {
     }
 
     @Test
-    void rejectsCancellationOfAHistoryOnlyWorkflow() {
+    void ignoresCancellationOfAHistoryOnlyWorkflow() {
         var history = history(new WorkflowHistory("order-42", state("order-42", "PaymentWorkflow")));
         var manager = manager(history);
 
-        assertThatThrownBy(() -> manager.findOne(WorkflowStateQuery.all().workflowId("order-42"))
-                                        .single()
-                                        .thenCompose(instance -> instance.requestWorkflowCancellation(null))
-                                        .join())
-                .isInstanceOf(CompletionException.class)
-                .hasCauseInstanceOf(java.util.NoSuchElementException.class);
+        var instance = manager.findOne(WorkflowStateQuery.all().workflowId("order-42")).single().join();
+
+        assertThat(instance.requestStepCancellation("step", null).join()).isFalse();
+        assertThat(instance.requestCancellationOfAllSteps(null).join()).isZero();
+        assertThat(instance.requestWorkflowCancellation(null).join()).isNull();
     }
 
     @Test
