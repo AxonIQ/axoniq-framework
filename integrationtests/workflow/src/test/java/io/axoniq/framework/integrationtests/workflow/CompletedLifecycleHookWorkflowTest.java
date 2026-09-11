@@ -27,6 +27,8 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -72,12 +74,13 @@ class CompletedLifecycleHookWorkflowTest extends AbstractWorkflowIntegrationTest
     @Override
     protected Function<DetectionPhase<SimpleWorkflowContext>, FinalizedPhase<SimpleWorkflowContext>> getDeclaredDefinition() {
         // A minimal workflow that completes on the happy path (two synchronous steps, no event waits).
-        var workflow = new VersionedWorkflow();
+        VersionedWorkflow workflow = new VersionedWorkflow();
         WorkflowStatusChangeListener completedListener = new WorkflowStatusChangeListener() {
             @Override
-            public <C extends WorkflowContext> void onWorkflowStatus(WorkflowStatus state,
-                                                                     C context) {
-                observedStatus.set(state);
+            public <C extends WorkflowContext> void onWorkflowStatus(
+                    WorkflowStatus status, C context, EventMessage event, ProcessingContext processingContext
+            ) {
+                observedStatus.set(status);
                 completedHookInvocations.incrementAndGet();
             }
         };
