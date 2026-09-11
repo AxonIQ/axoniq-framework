@@ -22,7 +22,6 @@ import org.jspecify.annotations.Nullable;
 
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.AbstractDSLWorkflowContext;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.*;
@@ -54,8 +53,8 @@ public class WorkflowDefinitionLookupUtilsHandlerBeanTest {
     void shouldDetectWorkflowWorkflowBeanDefinitions() {
         // We look for any workflow context type or a specific one.
         // SpringUtils.handlerBeans takes a Class<? extends WorkflowContext> as a first argument.
-        var handlerBeans = WorkflowDefinitionLookupUtils.workflowBeanDefinitions(WorkflowContext.class,
-                                                                                 beanFactory,
+        var handlerBeans = WorkflowDefinitionLookupUtils.workflowBeanDefinitions(
+                beanFactory,
                                                                                  false);
 
         assertThat(handlerBeans).hasSize(2);

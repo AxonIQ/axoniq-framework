@@ -29,6 +29,7 @@ import org.springframework.core.GenericTypeResolver;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static io.axoniq.framework.workflow.configuration.AutoDetectionUtils.workflowMethods;
 
@@ -52,16 +53,14 @@ class WorkflowDefinitionLookupUtils {
      * consider prototype beans (or any other non-singleton or abstract bean definitions) when
      * {@code includePrototypeBeans} is {@code true}.
      *
-     * @param workflowContextType   The type of workflow to find handlers for.
      * @param beanFactory           The beanFactory to find these handlers in.
      * @param includePrototypeBeans Whether to include prototype beans.
      * @return A map keyed by the workflow context type, containing a list of bean definitions.
      */
     static Map<Class<? extends WorkflowContext>, List<String>> workflowBeanDefinitions(
-            Class<? extends WorkflowContext> workflowContextType,
             ConfigurableListableBeanFactory beanFactory,
-            boolean includePrototypeBeans) {
-
+            boolean includePrototypeBeans
+    ) {
         Map<Class<? extends WorkflowContext>, List<String>> found = new java.util.HashMap<>();
 
         for (String beanName : beanFactory.getBeanDefinitionNames()) {
@@ -71,11 +70,12 @@ class WorkflowDefinitionLookupUtils {
                 if (includePrototypeBeans || (bd.isSingleton() && !bd.isAbstract())) {
                     Class<?> beanType = beanFactory.getType(beanName);
                     if (beanType != null) {
-                        workflowMethods(beanType, workflowContextType)
+                        workflowMethods(beanType)
                                 .map(MethodWithWorkflowAttributes::workflowContextType)
-                                .forEach(workflowContextClass -> {
-                                    found.computeIfAbsent(workflowContextClass, k -> new ArrayList<>()).add(beanName);
-                                });
+                                .filter(Objects::nonNull)
+                                .forEach(workflowContextClass -> found.computeIfAbsent(
+                                        workflowContextClass, k -> new ArrayList<>()
+                                ).add(beanName));
                     }
                 }
             }

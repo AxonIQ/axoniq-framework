@@ -23,14 +23,18 @@ import io.axoniq.framework.workflow.dsl.kotlin.WorkflowKontext
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry
+import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver
+import io.axoniq.framework.workflow.runtime.util.FutureResolver
 import org.assertj.core.api.Assertions.assertThat
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine
 import org.axonframework.messaging.core.QualifiedName
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration
 import org.springframework.boot.test.context.SpringBootTest
@@ -60,8 +64,14 @@ class KotlinWorkflowAutodetectionIT {
         val conf = configurations.first()
         assertThat(conf.configuration().workflowName()).isEqualTo("KotlinWorkflow")
 
+        val kontext = mock(WorkflowKontext::class.java)
+        `when`(kontext.processingContext()).thenReturn(
+            StubProcessingContext.withComponents { cr ->
+                cr.registerComponent(FutureResolver::class.java) { DefaultTimeoutFutureResolver() }
+            }
+        )
         (conf.configuration()
-            .workflowDefinition() as WorkflowDefinition<WorkflowKontext>).accept(mock(WorkflowKontext::class.java))
+            .workflowDefinition() as WorkflowDefinition<WorkflowKontext>).accept(kontext)
         assertThat(kotlinWorkflow.executed).isTrue()
     }
 

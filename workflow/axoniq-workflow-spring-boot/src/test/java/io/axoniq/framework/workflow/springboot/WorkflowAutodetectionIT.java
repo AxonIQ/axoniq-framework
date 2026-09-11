@@ -21,13 +21,15 @@ package io.axoniq.framework.workflow.springboot;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
+import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver;
+import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
@@ -79,7 +81,10 @@ public class WorkflowAutodetectionIT {
         ).isTrue();
         assertThat(conf.configuration().workflowContextFactory()).isInstanceOf(SimpleWorkflowContextFactory.class);
 
-        var ctx = mock(WorkflowContext.class);
+        var ctx = mock(SimpleWorkflowContext.class);
+        when(ctx.processingContext()).thenReturn(StubProcessingContext.withComponents(
+                cr -> cr.registerComponent(FutureResolver.class, cfg -> new DefaultTimeoutFutureResolver())
+        ));
         //noinspection unchecked,rawtypes
         ((WorkflowDefinition) conf.configuration().workflowDefinition()).accept(ctx);
 
