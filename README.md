@@ -19,6 +19,35 @@ See [LICENSE.txt](./LICENSE.txt) for a summary of the restrictions that apply to
 full [Axoniq Terms of Service](https://www.axoniq.io/legal/terms-of-service) for the controlling legal terms. Questions
 about licensing, permitted use, or usage rights should go to your Axoniq account contact, not GitHub issues.
 
+## Getting started
+
+Numerous resources can help you on your journey in using Axoniq Framework.
+Let's take a look at some of these:
+
+* The [getting started](https://docs.axoniq.io/axon-framework-5-getting-started/) follows an example domain wherein an
+  Axoniq Framework application is constructed.
+* The [reference guide](https://docs.axoniq.io) explains all of the components maintained within Axoniq Framework.
+* We have our very own [academy](https://academy.axoniq.io/)!
+  The introductory courses are free, followed by more in-depth (paid) courses.
+* If the guide doesn't help, our [forum](https://discuss.axoniq.io/) provides a place to ask questions you have during
+  development.
+
+## Receiving help
+
+Are you having trouble using any of our libraries or products?
+Know that we want to help you out the best we can!
+There are a couple of things to consider when you're traversing anything Axon:
+
+* Checking the [reference guide](https://docs.axoniq.io) should be your first stop.
+* When the reference guide does not cover your predicament, we would greatly appreciate it if you could file
+  a [documentation issue](https://github.com/AxonIQ/AxoniqFramework/issues) for it.
+* Our [forum](https://discuss.axoniq.io/) provides a space to communicate with the Axon community to help you out.
+  AxonIQ developers will help you out on a best-effort basis.
+  And if you know how to help someone else, we greatly appreciate your contributions!
+* We also monitor Stack Overflow for any question tagged with [**axon
+  **](https://stackoverflow.com/questions/tagged/axon).
+  Similarly to the forum, Axoniq developers help out on a best-effort basis.
+
 ## Reporting bugs
 
 Found a bug? Open an issue here with:
