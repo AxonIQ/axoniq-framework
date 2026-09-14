@@ -70,7 +70,7 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Automatic-Module-Name>io.axoniq.framework.workflow.spring.boot</Automatic-Module-Name>
+                            <Automatic-Module-Name>io.axoniq.framework.workflow.springboot</Automatic-Module-Name>
                         </manifestEntries>
                     </archive>
                 </configuration>
