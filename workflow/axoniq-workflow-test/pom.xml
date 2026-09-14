@@ -69,7 +69,7 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Automatic-Module-Name>io.axoniq.framework.workflow.test</Automatic-Module-Name>
+                            <Automatic-Module-Name>io.axoniq.framework.workflow.runtime.test</Automatic-Module-Name>
                         </manifestEntries>
                     </archive>
                 </configuration>
