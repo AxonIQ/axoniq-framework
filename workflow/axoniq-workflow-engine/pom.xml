@@ -36,7 +36,7 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Automatic-Module-Name>io.axoniq.framework.workflow.engine</Automatic-Module-Name>
+                            <Automatic-Module-Name>io.axoniq.framework.workflow</Automatic-Module-Name>
                         </manifestEntries>
                     </archive>
                 </configuration>
