@@ -274,31 +274,7 @@ Other workflows, entities and projections receive the event you published.
 [source,java]
 .Parent workflow—launches a child and waits for it to finish
 ----
-@Workflow(idProperty = "orderId",
-          startOnEventClass = OrderPlacedEvent.class,
-          workflowNamespace = "io.myapp")
-public void execute(SimpleWorkflowContext ctx) {
-
-    // ... do some work ...
-
-    var orderId = (String) ctx.workflowPayload().get("orderId");
-    var amount = ((Number) ctx.workflowPayload().get("amount")).doubleValue();
-
-    // Register the wait for the child's completion BEFORE launching the child.
-    var completed = ctx.waitForEvent("awaitPaymentProcess",              // <1>
-            PaymentProcessCompleted.class,
-            associate(payloadProperty("orderId"), equalsTo(orderId)),       // <2>
-            step -> step.timeout(Duration.ofMinutes(30)));
-
-    // Launch the child workflow by publishing a dedicated event.
-    ctx.awaitPublish("startPaymentProcess",                              // <3>
-            new StartPaymentProcess("payment-" + orderId, orderId, amount));
-
-    // ... do other work in parallel while child runs ...
-
-    completed.await();                                                    // <4>
-    logger.info("Child workflow completed for order {}", orderId);
-}
+include::example$workflows/commonpatterns/OrderFulfillmentWorkflow.java[tag=parent,indent=0]
 ----
 <.> The non-blocking `waitForEvent` registers the wait first.
 A wait registered after the child's reply has already passed is never woken, so registering it before the publish removes the race between parent and child.
@@ -312,25 +288,7 @@ The published `StartPaymentProcess` event is the step's record: one event, carry
 [source,java]
 .Child workflow—started by the published event, signals completion the same way
 ----
-@Workflow(idProperty = "childWorkflowId",
-          startOnEventClass = StartPaymentProcess.class,                 // <1>
-          workflowNamespace = "io.myapp.payments")
-public void execute(SimpleWorkflowContext ctx) {
-
-    ctx.awaitExecute("validatePayment",
-            ctx.workflowPayload(),
-            PaymentService::validate);
-
-    ctx.awaitExecute("chargeCustomer",
-            ctx.workflowPayload(),
-            PaymentService::charge);
-
-    // Signal the parent explicitly
-    ctx.awaitPublish("notifyParent",                                     // <2>
-            new PaymentProcessCompleted(
-                    (String) ctx.workflowPayload().get("orderId"),
-                    (String) ctx.workflowPayload().get("childWorkflowId")));
-}
+include::example$workflows/commonpatterns/PaymentProcessWorkflow.java[tag=child,indent=0]
 ----
 <.> The child starts when the `StartPaymentProcess` event the parent published is processed.
 The `childWorkflowId` from the payload becomes this workflow's instance ID; it must differ from the parent's ID, because a start whose ID already exists is rejected.

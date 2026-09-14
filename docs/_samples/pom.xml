@@ -89,6 +89,12 @@
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axoniq-multi-tenancy</artifactId>
         </dependency>
+        <!-- Workflow DSL, for the workflow samples (not managed by the BOM) -->
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-workflow-dsl</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <!-- Data Protection types used by the multi-tenancy data-protection samples -->
         <dependency>
             <groupId>io.axoniq.framework</groupId>
@@ -162,6 +168,7 @@
                                 <source>${project.basedir}/../reference-guide/modules/multi-tenancy/examples</source>
                                 <source>${project.basedir}/../reference-guide/modules/migration/examples</source>
                                 <source>${project.basedir}/../reference-guide/modules/snapshotting/examples</source>
+                                <source>${project.basedir}/../reference-guide/modules/workflows/examples</source>
                             </sources>
                         </configuration>
                     </execution>

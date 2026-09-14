@@ -53,9 +53,10 @@ the same check as a safety net. Without this every instance would register the p
 ### Layering
 
 The primitive follows ADR-001, ADR-002 and ADR-003: one raw runtime method returning `WorkflowStepResult`, a
-`PublishStepDefinition(PrimitiveMetadata, EventMessage)` record as the DSL bridge, and `publish` / `awaitPublish`
-convenience methods in the Java and Kotlin DSLs. The DSL also accepts a plain payload, resolving the `MessageType`
-through the configured `MessageTypeResolver`, as `EventAppender#append(Object)` does.
+`PublishStepDefinition(String stepName, EventMessage)` record as the DSL bridge, and `publish` / `awaitPublish`
+convenience methods in the Java and Kotlin DSLs. The definition carries no `PrimitiveMetadata`: the published event
+keeps its own `MessageType`, so an event name customizer would be a silent no-op. The DSL also accepts a plain
+payload, resolving the `MessageType` through the configured `MessageTypeResolver`.
 
 ## Consequences
 

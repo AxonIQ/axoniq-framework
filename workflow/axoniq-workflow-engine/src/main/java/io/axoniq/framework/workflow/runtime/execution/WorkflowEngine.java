@@ -159,8 +159,8 @@ public class WorkflowEngine implements
         var segment = Segment.fromContext(context).orElse(null);
         // An event published by a workflow through the publish primitive carries the publisher's workflowId but is a
         // business event for everyone else, so it never takes the owner-only path below.
-        boolean published = MetadataUtils.isPublishStep(event.metadata());
-        if (!published && MetadataUtils.hasWorkflowId().test(event.metadata())) {
+        boolean workflowPublishedEvent = MetadataUtils.isPublishStep(event.metadata());
+        if (!workflowPublishedEvent && MetadataUtils.hasWorkflowId().test(event.metadata())) {
             var workflowId = MetadataUtils.getWorkflowId(event.metadata());
             // Instance partitioning: a segment only processes instances it owns.
             if (!WorkflowSegmentOwnership.ownedBy(segment, workflowId)) {

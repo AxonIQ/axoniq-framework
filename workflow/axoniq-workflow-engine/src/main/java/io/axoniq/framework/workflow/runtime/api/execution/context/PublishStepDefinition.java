@@ -25,16 +25,17 @@ import java.util.Objects;
 /**
  * Specification for a {@code ctx.publish(stepName, event)} call.
  * <p>
- * The {@link PrimitiveMetadata#eventNameCustomizer()} is not applied: the published event keeps its own
- * {@link org.axonframework.messaging.core.MessageType}.
+ * Unlike the other step definitions this one carries no {@link PrimitiveMetadata}: the published event keeps its own
+ * {@link org.axonframework.messaging.core.MessageType}, so there is no event name to customize. Only the step name is
+ * needed.
  *
- * @param primitiveMetadata metadata of the primitive; only {@link PrimitiveMetadata#stepName()} is used
- * @param event             event to publish
+ * @param stepName logical step name recorded with the published event
+ * @param event    event to publish
  * @author Stefan Dragisic
  * @since 5.4.0
  */
 public record PublishStepDefinition(
-        PrimitiveMetadata primitiveMetadata,
+        String stepName,
         EventMessage event
 ) {
 
@@ -43,18 +44,8 @@ public record PublishStepDefinition(
      * at runtime, so a user ignoring it is detected here at construction.
      */
     public PublishStepDefinition {
-        Objects.requireNonNull(primitiveMetadata, "primitiveMetadata must not be null");
+        Objects.requireNonNull(stepName, "stepName must not be null");
         Objects.requireNonNull(event, "event must not be null");
-    }
-
-    /**
-     * Returns a copy of this definition with the provided primitive metadata.
-     *
-     * @param primitiveMetadata metadata to use
-     * @return copied definition
-     */
-    public PublishStepDefinition primitiveMetadata(PrimitiveMetadata primitiveMetadata) {
-        return new PublishStepDefinition(primitiveMetadata, event);
     }
 
     /**
@@ -64,7 +55,7 @@ public record PublishStepDefinition(
      * @return copied definition
      */
     public PublishStepDefinition stepName(String stepName) {
-        return primitiveMetadata(primitiveMetadata.stepName(stepName));
+        return new PublishStepDefinition(stepName, event);
     }
 
     /**
@@ -74,6 +65,6 @@ public record PublishStepDefinition(
      * @return copied definition
      */
     public PublishStepDefinition event(EventMessage event) {
-        return new PublishStepDefinition(primitiveMetadata, event);
+        return new PublishStepDefinition(stepName, event);
     }
 }

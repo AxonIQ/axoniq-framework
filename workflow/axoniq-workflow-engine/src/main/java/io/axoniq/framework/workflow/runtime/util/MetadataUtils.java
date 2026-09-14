@@ -333,7 +333,7 @@ public class MetadataUtils {
      * Checks whether the metadata marks a publish step.
      *
      * @param metadata metadata to inspect
-     * @return {@code true} iff the metadata carries a {@code stepPrimitive} key with value {@code PUBLISH}.
+     * @return {@code true} iff the metadata carries a {@code stepPrimitive} key with value {@code PUBLISH}
      */
     public static boolean isPublishStep(Metadata metadata) {
         return STEP_PRIMITIVE_PUBLISH.equals(metadata.getOrDefault(METADATA_KEY_STEP_PRIMITIVE, null));

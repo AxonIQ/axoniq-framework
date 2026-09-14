@@ -153,7 +153,7 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
     @Override
     public WorkflowStepResult publish(PublishStepDefinition stepDefinition) {
         return this.publish(PrimitiveCommands.publish(
-                stepDefinition.primitiveMetadata().stepName(),
+                stepDefinition.stepName(),
                 stepDefinition.event()
         ));
     }

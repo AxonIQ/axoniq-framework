@@ -630,7 +630,7 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
      */
     @Internal
     public PublishStepDefinition defaultPublishStepDefinition(String stepName, EventMessage event) {
-        return new PublishStepDefinition(new PrimitiveMetadata(stepName, defaults()), event);
+        return new PublishStepDefinition(stepName, event);
     }
 
     /**

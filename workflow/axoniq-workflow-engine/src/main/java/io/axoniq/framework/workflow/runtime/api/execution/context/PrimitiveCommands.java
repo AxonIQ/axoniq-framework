@@ -99,11 +99,16 @@ public class PrimitiveCommands {
     }
 
     /**
-     * Factory method to create a {@link SimplePublishCommand}.
+     * Factory method to create a {@link SimplePublishCommand}, the parameter object of
+     * {@link PublishPrimitive#publish(PublishPrimitive.PublishCommand)}.
+     * <p>
+     * The command carries the {@code stepName} under which the step is recorded in the workflow state, and the
+     * {@link EventMessage} to publish. The primitive appends that event once, enriched with workflow metadata, and
+     * skips the append on replay when the step is already recorded.
      *
-     * @param stepName logical step name recorded with the published event.
-     * @param event    event to publish.
-     * @return command object.
+     * @param stepName logical step name recorded with the published event
+     * @param event    event to publish
+     * @return command object
      */
     public static SimplePublishCommand publish(String stepName, EventMessage event) {
         return new SimplePublishCommand(stepName, event);

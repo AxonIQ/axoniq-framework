@@ -30,6 +30,7 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
 import org.axonframework.messaging.core.MessageStream;
+import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
@@ -50,9 +51,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * A workflow publishing a business event through {@code ctx.awaitPublish} appends exactly one event: the business event
- * itself, carrying the publisher's step metadata. That event starts a second workflow, which does not mistake the
- * publisher's step for its own.
+ * A workflow publishing a business event through {@code ctx.publish} or {@code ctx.awaitPublish} appends exactly one
+ * event per call: the business event itself, carrying the publisher's step metadata. That event starts a second
+ * workflow, which does not mistake the publisher's step for its own.
  *
  * @author Stefan Dragisic
  */
@@ -108,9 +109,10 @@ class PublishWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWork
             assertThat(histories).allMatch(h -> h.state().workflowStatus() == WorkflowStatus.COMPLETED);
         });
 
-        // the publisher records the published event as its completed step
+        // the publisher records each published event as its own completed step, in call order
         var approval = stateOf(APPROVAL_ID);
-        assertThat(approval.workflowStepNames()).containsExactly("notifyApproved");
+        assertThat(approval.workflowStepNames()).containsExactly("announceApproval", "notifyApproved");
+        assertThat(approval.getStep("announceApproval").status()).isEqualTo(StepStatus.COMPLETED);
         assertThat(approval.getStep("notifyApproved").status()).isEqualTo(StepStatus.COMPLETED);
 
         // the started workflow does not register the publisher's step as its own
@@ -118,12 +120,23 @@ class PublishWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWork
         assertThat(shipment.workflowStepNames()).containsExactly("prepareShipment");
         assertThat(shipment.payload()).containsEntry("orderId", "order-1").containsEntry("approvedBy", "alice");
 
-        // exactly one event for the step, with the user's type and payload
+        // exactly one event per publish call, with the user's type and payload
         var approvalEvents = eventsWithTag(Tag.of(TAG_WORKFLOW_ID, APPROVAL_ID));
         assertThat(approvalEvents)
                 .extracting(event -> event.type().qualifiedName().toString())
-                .containsExactly(NAMESPACE + ".ApprovalStarted", "io.acme.OrderApproved", NAMESPACE + ".ApprovalCompleted");
-        var published = approvalEvents.get(1);
+                .containsExactly(NAMESPACE + ".ApprovalStarted",
+                                 "io.acme.ApprovalAnnounced",
+                                 "io.acme.OrderApproved",
+                                 NAMESPACE + ".ApprovalCompleted");
+        // the non-blocking publish keeps user metadata; the engine's keys win over user entries of the same name
+        var announced = approvalEvents.get(1);
+        assertThat(announced.payloadAs(ApprovalAnnounced.class)).isEqualTo(new ApprovalAnnounced("order-1"));
+        assertThat(announced.metadata())
+                .containsEntry("channel", "email")
+                .containsEntry(METADATA_KEY_WORKFLOW_ID, APPROVAL_ID)
+                .containsEntry(METADATA_KEY_STEP_NAME, "announceApproval")
+                .containsEntry(METADATA_KEY_STEP_PRIMITIVE, STEP_PRIMITIVE_PUBLISH);
+        var published = approvalEvents.get(2);
         assertThat(published.payloadAs(OrderApproved.class)).isEqualTo(new OrderApproved("order-1", "alice"));
         assertThat(published.metadata())
                 .containsEntry(METADATA_KEY_WORKFLOW_ID, APPROVAL_ID)
@@ -166,7 +179,13 @@ class PublishWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWork
 
         public void execute(SimpleWorkflowContext ctx) {
             var orderId = (String) ctx.workflowPayload().get("orderId");
+            // non-blocking publish of a payload with user metadata, awaited at the end
+            var announced = ctx.publish("announceApproval",
+                                        new ApprovalAnnounced(orderId),
+                                        Metadata.with("channel", "email")
+                                                .and(METADATA_KEY_WORKFLOW_ID, "user-supplied"));
             ctx.awaitPublish("notifyApproved", new OrderApproved(orderId, "alice"));
+            announced.await();
         }
     }
 
@@ -183,5 +202,9 @@ class PublishWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWork
 
     @Event(namespace = "io.acme", name = "OrderApproved")
     public record OrderApproved(String orderId, String approvedBy) {
+    }
+
+    @Event(namespace = "io.acme", name = "ApprovalAnnounced")
+    public record ApprovalAnnounced(String orderId) {
     }
 }

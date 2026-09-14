@@ -7,7 +7,7 @@ The `publish` / `awaitPublish` pair appends that business event as a durable wor
 [NOTE]
 ====
 `BaseWorkflowContext.publish(stepName, eventMessage, customizer)` is the canonical non-blocking primitive and returns a `WorkflowStepResult`.
-`awaitPublish(...)` blocks until the step is recorded and returns `void`, like `EventAppender.append(...)` in Axon Framework.
+`awaitPublish(...)` blocks until the step is recorded and returns `void`.
 `SimpleWorkflowContext` adds the payload and payload-plus-metadata overloads shown below.
 ====
 
@@ -15,24 +15,31 @@ The `publish` / `awaitPublish` pair appends that business event as a durable wor
 
 After the approval decision, we publish an `OrderApproved` event so a shipment workflow and the read model can react:
 
+[tabs]
+====
+Java::
++
+--
 [source,java]
 ----
-ctx.awaitPublish("notifyApproved",                                  // <1>
-        new OrderApproved(orderId, approvedBy));                    // <2>
+include::example$workflows/publishingevents/ApprovalWorkflow.java[tag=await-publish,indent=0]
 ----
-
 <.> The step name.
 It is the durable identifier of the step, exactly as for every other primitive.
 <.> The event to publish.
 A plain payload has its `MessageType` resolved through the configured `MessageTypeResolver`; add a `Metadata` argument to publish metadata with it.
 You can pass an `EventMessage` instead when you need to set the type yourself.
+--
 
-Kotlin:
-
+Kotlin::
++
+--
 [source,kotlin]
 ----
 awaitPublish("notifyApproved", OrderApproved(orderId, approvedBy))
 ----
+--
+====
 
 == One event, two roles
 
@@ -70,11 +77,9 @@ Another workflow can start on it or wait for it with xref:waiting-for-events.ado
 [source,java]
 ----
 // Approval workflow
-ctx.awaitPublish("notifyApproved", new OrderApproved(orderId, approvedBy));
+include::example$workflows/publishingevents/ApprovalWorkflow.java[tag=await-publish,indent=0]
 
-// Shipment workflow, started on OrderApproved
-@Workflow(startOnEventClass = OrderApproved.class, idProperty = "orderId", ...)
-public void execute(SimpleWorkflowContext ctx) { ... }
+include::example$workflows/publishingevents/ShipmentWorkflow.java[tag=workflow-to-workflow,indent=0]
 ----
 
 When the publisher also waits for a reply, register the wait first with the non-blocking `waitForEvent`, then publish, then block on the handle.
@@ -82,10 +87,7 @@ A wait registered after the reply has already passed is never woken.
 
 [source,java]
 ----
-var reply = ctx.waitForEvent("awaitQuote", QuoteReceived.class,
-        associate(payloadProperty("orderId"), equalsTo(orderId)));
-ctx.awaitPublish("requestQuote", new QuoteRequested(orderId));
-reply.await();
+include::example$workflows/publishingevents/ApprovalWorkflow.java[tag=wait-then-publish,indent=0]
 ----
 
 == Naming publish steps
@@ -108,9 +110,7 @@ When two workflows are keyed by the same property, give them distinct id prefixe
 
 [source,java]
 ----
-var notified = ctx.publish("notifyApproved", new OrderApproved(orderId, approvedBy));
-var reserved = ctx.execute("reserveStock", Map.of(), (pc, p) -> inventory.reserve(p));
-ctx.allMatch(WorkflowStepResult::success, notified, reserved).await();
+include::example$workflows/publishingevents/ApprovalWorkflow.java[tag=non-blocking,indent=0]
 ----
 
 Each `publish` call is its own ordered append.

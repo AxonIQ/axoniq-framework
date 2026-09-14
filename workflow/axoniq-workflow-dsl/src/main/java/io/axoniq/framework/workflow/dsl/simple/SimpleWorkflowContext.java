@@ -260,7 +260,7 @@ public class SimpleWorkflowContext extends BaseWorkflowContext {
 
     /**
      * Publishes a business event given as payload. The {@link org.axonframework.messaging.core.MessageType} is resolved
-     * through the configured {@link MessageTypeResolver}, as {@code EventAppender#append(Object)} does.
+     * through the configured {@link MessageTypeResolver}.
      *
      * @param stepName logical name of the publish step
      * @param payload  event payload
