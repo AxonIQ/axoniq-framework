@@ -374,11 +374,11 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a retry attempt of a workflow step has started.
      *
-     * @param context    workflow context.
-     * @param stepName   name of the step.
-     * @param retryInfo  retry information payload, {@code attempt} is the attempt being started.
-     * @param customizer event name customizer.
-     * @return event message.
+     * @param context    workflow context
+     * @param stepName   the name of the retry started step
+     * @param retryInfo  retry information payload, {@code attempt} is the attempt being started
+     * @param customizer event name customizer
+     * @return the retry started event message
      */
     public static EventMessage retryStartedStep(WorkflowContext context,
                                                 String stepName,

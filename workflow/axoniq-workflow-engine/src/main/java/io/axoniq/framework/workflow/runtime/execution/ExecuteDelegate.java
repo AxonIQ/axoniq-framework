@@ -28,6 +28,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellation
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepIndeterminateException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
+import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
@@ -36,11 +37,13 @@ import io.axoniq.framework.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -139,44 +142,14 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
         acceptAllPendingTasksForStep(stepName);
 
-        // AT-MOST-ONCE: read the step state once every pending task is applied, and before this run publishes its
-        // own start record. A step present with an in-flight attempt (STARTED or RETRY_STARTED) that this execution
-        // did not start belongs to another run: either a prior incarnation's attempt rebuilt from the durable log, or
-        // the run of whichever execution owns the instance now. Both may already have performed the step's external
-        // effect, so this run must NOT execute the action; instead route the attempt through the regular error flow
-        // via the passed-in failure handler (no retry policy -> step FAILED with StepIndeterminateException; retry
-        // policy -> RETRYING + next attempt). A live retry attempt reaches this method with status RETRYING and earns
-        // ownership below by getting its own RETRY_STARTED accepted.
         var currentState = workflowExecution.state();
-        boolean resumedInFlight = (WorkflowStateUtils.isStepStatus(currentState, stepName, StepStatus.STARTED)
-                || WorkflowStateUtils.isStepStatus(currentState, stepName, StepStatus.RETRY_STARTED))
-                && !ownStartedSteps.contains(stepName);
-
-        if (resumedInFlight) {
+        if (isResumedInFlight(currentState, stepName)) {
             failureHandler.onFailure(stepName, new StepIndeterminateException(stepName), eventNameCustomizer);
             return stateBased(stepName, eventNameCustomizer, workflowExecution);
         }
 
-        if (!workflowExecution.state().containsStep(stepName)) {
-            reachedSteps.assertNoReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
-            if (!tryStartStep(stepName,
-                              () -> started(stepName, sanitize(local), eventNameCustomizer),
-                              StepStatus.STARTED)) {
-                return WorkflowStepResults.canceled(stepName);
-            }
-        } else {
-            var existing = workflowExecution.state().getStep(stepName);
-            if (existing.status() == StepStatus.RETRYING && existing.result() instanceof StepRetryInfo previous) {
-                // A retry attempt passes the same gate as the first one: the action runs only after the store
-                // accepted this execution's own RETRY_STARTED for the attempt. A node that lost the instance during
-                // the backoff is rejected here and never runs the action.
-                var attempt = new StepRetryInfo(previous.attempt() + 1, previous.maxRetries(), previous.error());
-                if (!tryStartStep(stepName,
-                                  () -> retryStarted(stepName, attempt, eventNameCustomizer),
-                                  StepStatus.RETRY_STARTED)) {
-                    return WorkflowStepResults.canceled(stepName);
-                }
-            }
+        if (!startAttempt(currentState, stepName, local, eventNameCustomizer)) {
+            return WorkflowStepResults.canceled(stepName);
         }
 
         var step = workflowExecution.state().getStep(stepName);
@@ -256,6 +229,64 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         }
 
         return stateBased(stepName, eventNameCustomizer, workflowExecution);
+    }
+
+    /**
+     * Tells whether the given step is in flight ({@code STARTED} or {@code RETRY_STARTED}) without this execution
+     * having started the attempt.
+     * <p>
+     * Read the step state once every pending task is applied, and before this run publishes its own start record. An
+     * in-flight attempt that this execution did not start belongs to another run: either a prior incarnation's
+     * attempt rebuilt from the durable log, or the run of whichever execution owns the instance now. Both may already
+     * have performed the step's external effect, so this run must NOT execute the action; instead it routes the
+     * attempt through the regular error flow (no retry policy: step {@code FAILED} with
+     * {@link StepIndeterminateException}; retry policy: {@code RETRYING} plus next attempt). A live retry attempt
+     * reaches this check with status {@code RETRYING} and earns ownership afterwards by getting its own
+     * {@code RETRY_STARTED} accepted.
+     *
+     * @param state    the workflow state after all pending tasks for the step have been applied
+     * @param stepName name of the step
+     * @return {@code true} when the step has an in-flight attempt this execution does not own
+     */
+    private boolean isResumedInFlight(WorkflowState state, String stepName) {
+        return (WorkflowStateUtils.isStepStatus(state, stepName, StepStatus.STARTED)
+                || WorkflowStateUtils.isStepStatus(state, stepName, StepStatus.RETRY_STARTED))
+                && !ownStartedSteps.contains(stepName);
+    }
+
+    /**
+     * Gates the start of one attempt of the given step behind an accepted append of this execution's start record.
+     * <p>
+     * A step not yet present in the state gets a {@code STARTED} record. A step in {@code RETRYING} gets a
+     * {@code RETRY_STARTED} record for the next attempt; a retry attempt passes the same gate as the first one, so a
+     * node that lost the instance during the backoff is rejected here and never runs the action. Any other step state
+     * needs no start record and passes.
+     *
+     * @param state               the workflow state after all pending tasks for the step have been applied
+     * @param stepName            name of the step
+     * @param local               local parameters of the step, recorded with the {@code STARTED} record
+     * @param eventNameCustomizer event name customizer for the start record
+     * @return {@code true} when this execution may run the action, {@code false} when the attempt was not accepted
+     * @see #tryStartStep(String, Supplier, StepStatus)
+     */
+    private boolean startAttempt(WorkflowState state,
+                                 String stepName,
+                                 Map<String, @Nullable Object> local,
+                                 EventNameCustomizer eventNameCustomizer) {
+        if (!state.containsStep(stepName)) {
+            reachedSteps.assertNoReplayDrift(workflowExecution.workflowId(), state, stepName);
+            return tryStartStep(stepName,
+                                () -> started(stepName, sanitize(local), eventNameCustomizer),
+                                StepStatus.STARTED);
+        }
+        var existing = state.getStep(stepName);
+        if (existing.status() == StepStatus.RETRYING && existing.result() instanceof StepRetryInfo previous) {
+            var nextAttempt = new StepRetryInfo(previous.attempt() + 1, previous.maxRetries(), previous.error());
+            return tryStartStep(stepName,
+                                () -> retryStarted(stepName, nextAttempt, eventNameCustomizer),
+                                StepStatus.RETRY_STARTED);
+        }
+        return true;
     }
 
     /**
