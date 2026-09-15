@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.api.manager;
 
+import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import org.jspecify.annotations.Nullable;
 import org.reactivestreams.Publisher;
@@ -26,7 +27,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 /**
- * Represents a collection of workflow instances.
+ * Represents a lazy collection of {@link WorkflowInstance workflow instances} matching a query. The collection can
+ * contain both live workflow executions and historic workflow instances; obtain the individual instances through
+ * {@link #instances()}. Obtain this result from {@link WorkflowManager#findMany(WorkflowStateQuery)}. Cancellation
+ * requests made through this collection operate only on the matching live executions; historic instances are not
+ * modified.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
@@ -51,7 +56,8 @@ public interface WorkflowInstances extends WorkflowInstanceOperator {
     CompletableFuture<Integer> size();
 
     /**
-     * Represents a collection of at most one workflow instances.
+     * Represents a query result containing at most one {@link WorkflowInstance workflow instance}. Obtain this result
+     * from {@link WorkflowManager#findOne(WorkflowStateQuery)}.
      */
     interface Single extends WorkflowInstances {
 

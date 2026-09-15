@@ -60,13 +60,16 @@ Publisher<WorkflowInstance> instances = paymentWorkflows.instances();
 
 `instances()` follows the Reactive Streams demand protocol. Each emitted `WorkflowInstance` is a lazy handle, so call
 `state()` on it to obtain its state. The manager does not provide a `Predicate`-based finder. The named restrictions
-in `WorkflowStateQuery` allow live and history repositories to execute the same search efficiently.
+in `WorkflowStateQuery` allow live and history repositories to execute the same search efficiently. A
+`WorkflowInstances` result includes matching live executions and historic workflow instances. When a workflow is
+available from both sources, the live execution represents that workflow in the result.
 
 == Request cancellation
 
-Cancellation requests are asynchronous and apply only to a live workflow execution. A historic state can be read, but
-cannot receive a cancellation request. Use the manager for a request made by an external caller; use `ctx.cancel()` or
-`ctx.cancelStep(...)` when workflow logic itself decides to stop.
+Cancellation requests are asynchronous and apply only to live workflow executions. Historic instances can appear in a
+`WorkflowInstances` result and their state can be read, but they do not receive cancellation requests. Use the manager
+for a request made by an external caller; use `ctx.cancel()` or `ctx.cancelStep(...)` when workflow logic itself
+decides to stop.
 
 [source,java]
 ----

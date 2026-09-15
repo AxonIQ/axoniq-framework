@@ -17,7 +17,9 @@
  *  https://www.axoniq.io/pricing
  */
 /**
- * Workflow Manager API (outside-in) responsible for manipulating workflow instances.
+ * Provides the outside-in API for locating workflow instances and requesting lifecycle changes from application or
+ * administrative code. Workflow definitions use their execution context for lifecycle changes initiated from within
+ * a workflow.
  *
  * @since 5.4.0
  */

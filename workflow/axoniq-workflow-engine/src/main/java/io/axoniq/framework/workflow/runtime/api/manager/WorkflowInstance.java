@@ -23,7 +23,9 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Represents a workflow instance.
+ * Represents one workflow instance selected by a query. An instance can represent a live execution or a historic
+ * workflow instance, and always provides access to its detached state. The inherited cancellation operations act only
+ * when the selected instance is live.
  *
  * @author Simon Zambrovski
  * @since 5.4.0

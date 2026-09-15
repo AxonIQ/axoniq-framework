@@ -18,7 +18,9 @@
  */
 
 /**
- * Query utilities.
+ * Utilities for evaluating workflow-state queries against in-memory workflow state.
+ * Query-capable repositories should translate queries to their native storage model instead of materializing state for
+ * evaluation.
  */
 @NullMarked
 package io.axoniq.framework.workflow.query.utils;

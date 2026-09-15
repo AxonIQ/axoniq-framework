@@ -18,12 +18,20 @@
  */
 package io.axoniq.framework.workflow.runtime.api.manager;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
 import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Represents an operator of a workflow instance.
+ * Provides operations for requesting lifecycle changes to a workflow instance.
+ * <p>
+ * Cancellation is cooperative: a request does not forcibly terminate user code. Cancelling a step makes its pending
+ * result complete with a {@link StepCancellationException}. Cancelling a workflow wakes its execution, which then
+ * terminates with a {@link WorkflowCancelledException}. Workflow code can catch these signals to release resources,
+ * but should let cancellation continue rather than treating it as successful completion. User code that does not reach
+ * a framework-controlled cancellation point is not forcibly stopped.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
