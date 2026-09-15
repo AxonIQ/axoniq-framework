@@ -41,11 +41,29 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
     private static final String DEAD_LETTER_ENHANCER_DELEGATE =
             "io.axoniq.framework.messaging.multitenancy.deadletter.DeadLetterMultiTenancyConfigurationEnhancerDelegate";
 
+    private final ClassLoader classLoader;
+
     /**
      * The order at which dead-letter queue support is configured after the general and Axon Server multi-tenancy
      * components.
      */
     public static final int ENHANCER_ORDER = MultiTenancyConfigurationDefaults.ENHANCER_ORDER + 4;
+
+    /**
+     * Creates an enhancer using the class loader which loaded this class to detect optional dead-letter queue support.
+     */
+    public DeadLetterMultiTenancyConfigurationEnhancer() {
+        this(DeadLetterMultiTenancyConfigurationEnhancer.class.getClassLoader());
+    }
+
+    /**
+     * Creates an enhancer using the supplied class loader to detect optional dead-letter queue support.
+     *
+     * @param classLoader the class loader used to detect optional dead-letter queue support
+     */
+    DeadLetterMultiTenancyConfigurationEnhancer(ClassLoader classLoader) {
+        this.classLoader = classLoader;
+    }
 
     @Override
     public int order() {
@@ -69,9 +87,8 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
 
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
-        // using reflection here to call the actual enhance() logic on the DeadLetterMultiTenancyConfigurationEnhancerDelegate (see class level javadoc there).
-        // this avoids the SPI to fail when DLQ is not on the classpath
-        ClassLoader classLoader = getClass().getClassLoader();
+        // Keep optional dead-letter queue types out of the ServiceLoader provider's linkage surface.
+        // The delegate is loaded reflectively only when the optional module is available.
         if (!isDeadLetterQueuePresent(classLoader)) {
             return;
         }
