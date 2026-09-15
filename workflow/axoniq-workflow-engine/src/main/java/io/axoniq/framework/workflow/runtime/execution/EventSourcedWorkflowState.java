@@ -275,8 +275,15 @@ public class EventSourcedWorkflowState implements WorkflowState {
             logger.debug("Ignoring event {} for terminal workflow {}", eventMessage.type(), workflowId);
             return this;
         }
-        Object eventPayload = eventMessage.payloadAs(Object.class);
         var metadata = eventMessage.metadata();
+        // Safety net. The execution decides what evolves this state (SimpleWorkflowExecution#onEvent skips events
+        // another instance published through the publish primitive); a step of another workflowId reaching this far
+        // is a routing mistake and must not become one of this instance's steps.
+        if (MetadataUtils.hasWorkflowId().test(metadata)
+                && !workflowId.equals(MetadataUtils.getWorkflowId(metadata))) {
+            return this;
+        }
+        Object eventPayload = eventMessage.payloadAs(Object.class);
         MetadataUtils.getWorkflowDefinitionId(metadata)
                      .ifPresent(definitionId -> this.workflowDefinition = definitionId);
         // Migration events arrive as regular COMPLETED step events that additionally carry the
@@ -338,6 +345,12 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                                   retryInfo,
                                                   eventMessage.timestamp(),
                                                   processingContext)); // TODO copy resources of the context
+                    break;
+                case RETRY_STARTED:
+                    addStep(WorkflowStep.retryStarted(stepName,
+                                                      eventMessage.payloadAs(StepRetryInfo.class),
+                                                      eventMessage.timestamp(),
+                                                      processingContext));
                     break;
                 default:
                     break;

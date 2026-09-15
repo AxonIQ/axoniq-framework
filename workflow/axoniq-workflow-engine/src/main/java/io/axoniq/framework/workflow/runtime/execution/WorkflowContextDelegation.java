@@ -21,6 +21,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
+import io.axoniq.framework.workflow.runtime.api.execution.context.PublishPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.VersionPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WaitForPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
@@ -64,6 +65,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
     private final WorkflowLifecycleControlDelegate lifecycleControlDelegate;
     private final PayloadDelegate payloadDelegate;
     private final VersionDelegate versionDelegate;
+    private final PublishDelegate publishDelegate;
 
     // Combinators
     private final AnyMatchCombinatorDelegate anyCombinatorDelegate;
@@ -180,6 +182,7 @@ public class WorkflowContextDelegation implements WorkflowContext {
                                                    reachedSteps,
                                                    stepParent,
                                                    clock);
+        this.publishDelegate = new PublishDelegate(workflowExecution, reachedSteps);
 
         this.anyCombinatorDelegate = new AnyMatchCombinatorDelegate(workflowExecution);
         this.noneCombinatorDelegate = new NoneMatchCombinatorDelegate(workflowExecution);
@@ -293,6 +296,18 @@ public class WorkflowContextDelegation implements WorkflowContext {
     public WorkflowStepResult version(VersionPrimitive.VersionCommand command) {
         workflowExecution.state().throwTerminalCause();
         return versionDelegate.version(command);
+    }
+
+    /**
+     * Publishes a business event as a durable workflow step according to the given command.
+     *
+     * @param command the publish command
+     * @return the result representing the published step
+     */
+    @Override
+    public WorkflowStepResult publish(PublishPrimitive.PublishCommand command) {
+        workflowExecution.state().throwTerminalCause();
+        return publishDelegate.publish(command);
     }
 
     /**

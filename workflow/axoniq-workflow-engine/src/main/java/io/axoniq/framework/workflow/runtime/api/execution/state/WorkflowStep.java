@@ -71,4 +71,19 @@ public record WorkflowStep(
         Throwable error = retryInfo.error() != null ? retryInfo.error().toThrowable() : null;
         return new WorkflowStep(name, StepStatus.RETRYING, retryInfo, error, timestamp, context);
     }
+
+    /**
+     * A retry attempt that the store accepted and that is now running. {@code retryInfo.attempt()} is the attempt
+     * being started; the error is the one that triggered this retry.
+     *
+     * @param name      name of the step
+     * @param retryInfo retry state of the attempt being started
+     * @param timestamp timestamp of the attempt start
+     * @param context   processing context
+     * @return the step in {@link StepStatus#RETRY_STARTED} status
+     */
+    public static WorkflowStep retryStarted(String name, StepRetryInfo retryInfo, Instant timestamp, Context context) {
+        Throwable error = retryInfo.error() != null ? retryInfo.error().toThrowable() : null;
+        return new WorkflowStep(name, StepStatus.RETRY_STARTED, retryInfo, error, timestamp, context);
+    }
 }

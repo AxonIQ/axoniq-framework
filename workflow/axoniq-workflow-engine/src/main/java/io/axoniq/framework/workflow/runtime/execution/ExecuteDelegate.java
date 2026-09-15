@@ -27,6 +27,8 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailed
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepIndeterminateException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
+import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
@@ -35,6 +37,7 @@ import io.axoniq.framework.workflow.runtime.util.ProcessingContextUtils;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,6 +50,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 /**
  * Execute delegate implementing {@link ExecutePrimitive}.
@@ -65,7 +69,9 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     private final Executor executor;
     private final ExecuteStepActionResolver actionResolver;
     /**
-     * Steps this execution published a {@code STARTED} event for, so their state is known to be its own.
+     * Steps whose attempt currently in flight was started by this execution: the store accepted this execution's
+     * {@code STARTED} or {@code RETRY_STARTED} append for it. Ownership is per attempt and is dropped when the attempt
+     * resolves, so every retry attempt has to earn it again.
      */
     private final Set<String> ownStartedSteps = ConcurrentHashMap.newKeySet();
 
@@ -136,31 +142,18 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
 
         acceptAllPendingTasksForStep(stepName);
 
-        // AT-MOST-ONCE: read the step state once every pending task is applied, and before this run publishes STARTED.
-        // A step present-and-STARTED here belongs to another run: either a prior incarnation's in-flight attempt
-        // rebuilt from the durable log, or the run of whichever execution owns the instance now. Both may already have
-        // performed the step's external effect, so this run must NOT execute the action; instead route the attempt
-        // through the regular error flow via the passed-in failure handler (no retry policy -> step FAILED with
-        // StepIndeterminateException; retry policy -> RETRYING + next attempt). Live retry attempts reach this method
-        // with status RETRYING, never STARTED, so they are unaffected and still execute.
-        boolean resumedInFlight = WorkflowStateUtils.isStepStatus(
-                workflowExecution.state(), stepName, StepStatus.STARTED
-        ) && !ownStartedSteps.contains(stepName);
-
-        if (resumedInFlight) {
+        var currentState = workflowExecution.state();
+        if (isResumedInFlight(currentState, stepName)) {
             failureHandler.onFailure(stepName, new StepIndeterminateException(stepName), eventNameCustomizer);
             return stateBased(stepName, eventNameCustomizer, workflowExecution);
         }
 
-        if (!workflowExecution.state().containsStep(stepName)) {
-            reachedSteps.assertNoReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
-            if (!tryStartStep(stepName, local, eventNameCustomizer)) {
-                return WorkflowStepResults.canceled(stepName);
-            }
+        if (!startAttempt(currentState, stepName, local, eventNameCustomizer)) {
+            return WorkflowStepResults.canceled(stepName);
         }
 
         var step = workflowExecution.state().getStep(stepName);
-        if (step.status() == StepStatus.STARTED || step.status() == StepStatus.RETRYING) {
+        if (step.status() == StepStatus.STARTED || step.status() == StepStatus.RETRY_STARTED) {
             var actualStartTime = step.timestamp();
             var timeoutDeadline = actualStartTime.plus(timeout);
             var remainingTimeout = Duration.between(clock.instant(), timeoutDeadline);
@@ -203,6 +196,8 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                 result.whenComplete((r, e) -> {
                     timeoutTask.cancel();
                     runningSteps.remove(stepName);
+                    // Ownership is per attempt: a following retry attempt must get its own RETRY_STARTED accepted.
+                    ownStartedSteps.remove(stepName);
                     if (e == null) {
                         // Normal completion — a null action result sanitizes to an empty map in completed(),
                         // so a null-returning action COMPLETES rather than wedging on a null-e dereference.
@@ -237,25 +232,83 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     }
 
     /**
-     * Publishes this execution's {@code STARTED} event for the given step and waits until the step is present with
-     * status {@link StepStatus#STARTED}. That state change carries no writer identity: the event may have been recorded
-     * by another execution of the same workflow instance and delivered here over this execution's own event stream. The
-     * store accepting this execution's own append is therefore the only proof that this execution took the step. The
-     * append is then resolved through the workflow's bounded future-resolution policy before the action is allowed to
-     * run.
+     * Tells whether the given step is in flight ({@code STARTED} or {@code RETRY_STARTED}) without this execution
+     * having started the attempt.
+     * <p>
+     * Read the step state once every pending task is applied, and before this run publishes its own start record. An
+     * in-flight attempt that this execution did not start belongs to another run: either a prior incarnation's
+     * attempt rebuilt from the durable log, or the run of whichever execution owns the instance now. Both may already
+     * have performed the step's external effect, so this run must NOT execute the action; instead it routes the
+     * attempt through the regular error flow (no retry policy: step {@code FAILED} with
+     * {@link StepIndeterminateException}; retry policy: {@code RETRYING} plus next attempt). A live retry attempt
+     * reaches this check with status {@code RETRYING} and earns ownership afterwards by getting its own
+     * {@code RETRY_STARTED} accepted.
      *
-     * @param stepName            name of the step to start
-     * @param local               local payload to record on the {@code STARTED} event
-     * @param eventNameCustomizer event name customizer
-     * @return {@code true} when the store accepted this execution's append, so this execution owns the step and may run
-     * its action. {@code false} when the append was rejected, when the step turned STARTED before this execution's
-     * append ran, or when the wait was interrupted (the interrupt flag is restored)
+     * @param state    the workflow state after all pending tasks for the step have been applied
+     * @param stepName name of the step
+     * @return {@code true} when the step has an in-flight attempt this execution does not own
      */
-    private boolean tryStartStep(String stepName, Map<String, Object> local, EventNameCustomizer eventNameCustomizer) {
+    private boolean isResumedInFlight(WorkflowState state, String stepName) {
+        return (WorkflowStateUtils.isStepStatus(state, stepName, StepStatus.STARTED)
+                || WorkflowStateUtils.isStepStatus(state, stepName, StepStatus.RETRY_STARTED))
+                && !ownStartedSteps.contains(stepName);
+    }
+
+    /**
+     * Gates the start of one attempt of the given step behind an accepted append of this execution's start record.
+     * <p>
+     * A step not yet present in the state gets a {@code STARTED} record. A step in {@code RETRYING} gets a
+     * {@code RETRY_STARTED} record for the next attempt; a retry attempt passes the same gate as the first one, so a
+     * node that lost the instance during the backoff is rejected here and never runs the action. Any other step state
+     * needs no start record and passes.
+     *
+     * @param state               the workflow state after all pending tasks for the step have been applied
+     * @param stepName            name of the step
+     * @param local               local parameters of the step, recorded with the {@code STARTED} record
+     * @param eventNameCustomizer event name customizer for the start record
+     * @return {@code true} when this execution may run the action, {@code false} when the attempt was not accepted
+     * @see #tryStartStep(String, Supplier, StepStatus)
+     */
+    private boolean startAttempt(WorkflowState state,
+                                 String stepName,
+                                 Map<String, @Nullable Object> local,
+                                 EventNameCustomizer eventNameCustomizer) {
+        if (!state.containsStep(stepName)) {
+            reachedSteps.assertNoReplayDrift(workflowExecution.workflowId(), state, stepName);
+            return tryStartStep(stepName,
+                                () -> started(stepName, sanitize(local), eventNameCustomizer),
+                                StepStatus.STARTED);
+        }
+        var existing = state.getStep(stepName);
+        if (existing.status() == StepStatus.RETRYING && existing.result() instanceof StepRetryInfo previous) {
+            var nextAttempt = new StepRetryInfo(previous.attempt() + 1, previous.maxRetries(), previous.error());
+            return tryStartStep(stepName,
+                                () -> retryStarted(stepName, nextAttempt, eventNameCustomizer),
+                                StepStatus.RETRY_STARTED);
+        }
+        return true;
+    }
+
+    /**
+     * Publishes this execution's start record for one attempt of the given step ({@code STARTED} for the first
+     * attempt, {@code RETRY_STARTED} for a retry) and waits until the step is present with the expected status. That
+     * state change carries no writer identity: the event may have been recorded by another execution of the same
+     * workflow instance and delivered here over this execution's own event stream. The store accepting this
+     * execution's own append is therefore the only proof that this execution took the attempt. The append is then
+     * resolved through the workflow's bounded future-resolution policy before the action is allowed to run.
+     *
+     * @param stepName name of the step to start
+     * @param publish  publishes this execution's start record for the attempt
+     * @param expected the step status the start record evolves the step into
+     * @return {@code true} when the store accepted this execution's append, so this execution owns the attempt and may
+     * run its action. {@code false} when the append was rejected, when the step reached the expected status before
+     * this execution's append ran, or when the wait was interrupted (the interrupt flag is restored)
+     */
+    private boolean tryStartStep(String stepName, Supplier<CompletableFuture<Void>> publish, StepStatus expected) {
         var ownStarted = new AtomicReference<CompletableFuture<Void>>();
-        workflowExecution.appendTask(i -> ownStarted.set(started(stepName, sanitize(local), eventNameCustomizer)));
+        workflowExecution.appendTask(i -> ownStarted.set(publish.get()));
         try {
-            workflowExecution.awaitStateChange(WorkflowStateUtils.stepStatus(stepName, StepStatus.STARTED));
+            workflowExecution.awaitStateChange(WorkflowStateUtils.stepStatus(stepName, expected));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return false;
@@ -270,8 +323,9 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
         if (accepted) {
             ownStartedSteps.add(stepName);
         } else {
-            logger.info("The STARTED event of step '{}' of workflow '{}' is not this execution's. Leaving the step "
-                                + "to the execution that recorded it.", stepName, workflowExecution.workflowId());
+            logger.info("The {} event of step '{}' of workflow '{}' is not this execution's. Leaving the step "
+                                + "to the execution that recorded it.",
+                        expected, stepName, workflowExecution.workflowId());
         }
         return accepted;
     }

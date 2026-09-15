@@ -15,6 +15,7 @@ The `waitForEvent` / `awaitEvent` pair lets your workflow suspend until a matchi
 The events that `waitForEvent` and `awaitEvent` listen for are standard Axon Framework events.
 They can be published from anywhere—a command handler, an `EventGateway`, a REST controller, a webhook endpoint, or any other component that has access to the event bus.
 For example, a payment provider callback could publish a `PaymentConfirmed` event directly via `eventGateway.publish(...)`, and that will unblock the waiting workflow.
+Another workflow can publish it too, with xref:publishing-events.adoc[`awaitPublish`].
 ====
 
 == The `awaitEvent` method

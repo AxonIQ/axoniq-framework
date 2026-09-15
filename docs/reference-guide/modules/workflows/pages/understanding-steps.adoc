@@ -80,6 +80,16 @@ ctx.awaitExecute("stepB", Map.of(), ServiceB::doWork);
 |No
 |`WorkflowStepResult`
 |xref:waiting-for-events.adoc[]
+
+|`awaitPublish`
+|Yes
+|void
+|xref:publishing-events.adoc[]
+
+|`publish`
+|No
+|`WorkflowStepResult`
+|xref:publishing-events.adoc[]
 |===
 
 For `awaitExecute` and `execute` overloads, usage examples, and Kotlin equivalents, see xref:execute-steps.adoc[Execute Steps].
@@ -445,7 +455,7 @@ The trade-off of at-most-once is that an interrupted action may run **zero or on
 When a step's action is interrupted by a crash and not re-run, the engine resolves it exactly like any other failed attempt:
 
 * **No retry policy** → the step records a terminal **FAILED** status. The failure is surfaced to your workflow body as a `StepFailedException` whose cause is a `StepIndeterminateException` (the dedicated "in-flight at a crash, not re-run, outcome indeterminate" marker). `awaitExecute(...)` throws it; a non-blocking `execute(...)` handle reports it via `result.failure()` / `result.error()`.
-* **With a retry policy** → the interrupted attempt is treated as a failed attempt and the step goes to **RETRYING**; the engine schedules the next attempt per the policy (backoff included). This is identical to the normal retry-on-failure flow, so a step you *want* re-attempted after a crash should carry a `RetryPolicy` (and an idempotent action, since a retry runs the effect again).
+* **With a retry policy** → the interrupted attempt is treated as a failed attempt and the step goes to **RETRYING**; the engine schedules the next attempt per the policy (backoff included). This is identical to the normal retry-on-failure flow, so a step you *want* re-attempted after a crash should carry a `RetryPolicy` (and an idempotent action, since a retry runs the effect again). Each retry attempt records **RETRY_STARTED** before it runs, and runs only if the event store accepted that record. A node that lost the workflow instance during the backoff is rejected there and never runs the action.
 
 [IMPORTANT]
 ====
@@ -505,15 +515,18 @@ ctx.awaitExecute("validateAddress",
 <.> `onRetry` is called before each retry—use it for logging, metrics, or alerts.
 <.> `retryWhile` continues retrying as long as the predicate returns true—here, only transient errors are retried (for example, a 404 is not retried).
 
-The `reserveInventory` step with `RetryPolicy.maxRetries(3)`—fails twice, succeeds on the third attempt:
+The `reserveInventory` step with `RetryPolicy.maxRetries(3)`—fails twice, succeeds on the third attempt.
+Every retry attempt records `RetryStarted` before its action runs; `attempt` on that event is the attempt being started:
 
 ++++
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="reserveInventory with retry">
-1 started   ReserveInventoryStarted
-2 retrying  ReserveInventoryRetrying  {"attempt": 1, "maxRetries": 3, "error": "InventoryUnavailableException"}
-3 retrying  ReserveInventoryRetrying  {"attempt": 2, "maxRetries": 3, "error": "InventoryUnavailableException"}
-4 completed ReserveInventoryCompleted {"reserved": true}
+1 started      ReserveInventoryStarted
+2 retrying     ReserveInventoryRetrying      {"attempt": 1, "maxRetries": 3, "error": "InventoryUnavailableException"}
+3 retryStarted ReserveInventoryRetryStarted  {"attempt": 2, "maxRetries": 3, "error": "InventoryUnavailableException"}
+4 retrying     ReserveInventoryRetrying      {"attempt": 2, "maxRetries": 3, "error": "InventoryUnavailableException"}
+5 retryStarted ReserveInventoryRetryStarted  {"attempt": 3, "maxRetries": 3, "error": "InventoryUnavailableException"}
+6 completed    ReserveInventoryCompleted     {"reserved": true}
   </div>
 </div>
 ++++
@@ -550,6 +563,7 @@ This also applies when the workflow cancels a step through `ctx.cancelStep()` or
 
 Retries are event-sourced—on crash recovery, the engine replays retry events and recalculates backoff from persisted timestamps.
 If the process restarts while a step is in `RETRYING` state, the engine resumes from the correct attempt number with the remaining backoff delay.
+If it restarts while a step is in `RETRY_STARTED` state, that attempt was running at the crash. It is treated as a failed attempt with the recorded attempt number, so the step goes to `RETRYING` and the retry count is not reset.
 
 [[event-name-customization]]
 == Event name customization

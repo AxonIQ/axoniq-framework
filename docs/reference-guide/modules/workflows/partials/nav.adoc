@@ -2,6 +2,7 @@
 ** Primitive Steps
 *** xref:workflows:execute-steps.adoc[]
 *** xref:workflows:waiting-for-events.adoc[]
+*** xref:workflows:publishing-events.adoc[]
 *** xref:workflows:understanding-steps.adoc[]
 ** xref:workflows:workflow-lifecycle.adoc[]
 ** xref:workflows:step-orchestration.adoc[]
