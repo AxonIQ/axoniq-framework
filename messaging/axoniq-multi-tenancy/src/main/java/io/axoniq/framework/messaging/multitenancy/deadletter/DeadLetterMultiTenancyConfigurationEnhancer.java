@@ -25,6 +25,8 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 
+import java.lang.reflect.InvocationTargetException;
+
 /**
  * Makes an enabled dead-letter queue configuration tenant-aware by routing its configured queue factory per tenant.
  * <p>
@@ -95,10 +97,12 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
         try {
             Class<?> delegate = Class.forName(DEAD_LETTER_ENHANCER_DELEGATE, false, classLoader);
             delegate.getDeclaredMethod("enhance", ComponentRegistry.class).invoke(null, componentRegistry);
-        } catch (ClassNotFoundException | LinkageError ignored) {
-            // The optional dead-letter module is not usable from this class loader.
+        } catch (ClassNotFoundException | LinkageError e) {
+            throw new AxonConfigurationException(
+                    "Failed to load tenant-aware dead-letter queue support delegate.", e
+            );
         } catch (ReflectiveOperationException e) {
-            Throwable cause = e instanceof java.lang.reflect.InvocationTargetException invocation
+            Throwable cause = e instanceof InvocationTargetException invocation
                     ? invocation.getCause()
                     : e;
             if (cause instanceof RuntimeException runtimeException) {
