@@ -29,4 +29,21 @@
         </global>
     </input>
 
+    <!--
+         The `deploy` step in CI is a second Maven invocation, after `clean verify` has already
+         populated the cache in the same run, so every module is a cache hit and the extension
+         skips its mojos ("Skipping plugin execution (cached): flatten:flatten"). That skip also
+         skips flatten's `updatePomFile`, which is what substitutes the flattened POM for the
+         raw one, so the POM that gets deployed still carries the literal `${revision}` in its
+         parent version — unresolvable for any consumer. Flattening is cheap and its output is
+         what we publish, so it always runs, cached or not.
+    -->
+    <executionControl>
+        <runAlways>
+            <plugins>
+                <plugin artifactId="flatten-maven-plugin"/>
+            </plugins>
+        </runAlways>
+    </executionControl>
+
 </cache>
