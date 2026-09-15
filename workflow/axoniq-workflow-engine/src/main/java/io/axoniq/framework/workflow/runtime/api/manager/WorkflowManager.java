@@ -24,7 +24,18 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 /**
- * Main component, providing the workflow manager API.
+ * Provides the outside-in API for locating workflow instances and requesting cancellation from application or
+ * administrative code. Use {@link #findOne(WorkflowStateQuery)} when the query must select at most one instance, or
+ * {@link #findMany(WorkflowStateQuery)} to operate on every matching instance.
+ * <p>
+ * Cancellation requests are asynchronous and affect live workflow executions only. For example, to request
+ * cancellation of a workflow identified by its workflow ID:
+ * <pre>{@code
+ * workflowManager.findOne(WorkflowStateQuery.byWorkflowId(workflowId))
+ *                .requestWorkflowCancellation(null);
+ * }</pre>
+ * The returned future completes after the cancellation event is durable and the workflow body has been woken. Use
+ * the workflow execution context to initiate cancellation from inside a workflow definition.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
@@ -38,6 +49,17 @@ public interface WorkflowManager {
      * operation completes with {@code null} when no instance matches. When more than one instance matches, calling
      * {@link CompletableFuture#join()} throws a {@link CompletionException} whose cause is a
      * {@link NonUniqueWorkflowInstanceMatchException}.
+     * <p>
+     * Use a workflow ID when it uniquely identifies the instance to resolve:
+     * <pre>{@code
+     * workflowManager.findOne(WorkflowStateQuery.byWorkflowId(workflowId))
+     *                .singleState()
+     *                .thenAccept(state -> {
+     *                    if (state != null) {
+     *                        inspect(state);
+     *                    }
+     *                });
+     * }</pre>
      *
      * @param query criteria used to select the workflow instance
      * @return lazy result for the single matching workflow instance

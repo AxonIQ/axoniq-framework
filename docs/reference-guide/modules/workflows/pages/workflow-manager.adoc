@@ -11,7 +11,7 @@ The default workflow configuration registers `WorkflowManager` as a component:
 
 [source,java]
 ----
-WorkflowManager workflowManager = configuration.getComponent(WorkflowManager.class);
+include::example$workflows/workflowmanager/WorkflowManagerExamples.java[tag=retrieve-manager,indent=0]
 ----
 
 == Find an instance and read its state
@@ -21,13 +21,7 @@ the detached `WorkflowState` asynchronously.
 
 [source,java]
 ----
-workflowManager.findOne(WorkflowStateQuery.byWorkflowId(orderId))
-               .singleState()
-               .thenAccept(state -> {
-                   if (state != null) {
-                       use(state);
-                   }
-               });
+include::example$workflows/workflowmanager/WorkflowManagerExamples.java[tag=find-one,indent=0]
 ----
 
 No matching instance completes with `null`. For a query matching more than one instance, calling `join()` throws a
@@ -49,13 +43,7 @@ definition by qualified name and version; it is distinct from the `MessageType` 
 
 [source,java]
 ----
-var paymentWorkflows = workflowManager.findMany(
-        WorkflowStateQuery.byWorkflowDefinitionId(VersionedType.of("PaymentWorkflow", "1.0"))
-                          .workflowStatus(WorkflowStatus.STARTED)
-);
-
-CompletableFuture<Integer> count = paymentWorkflows.size();
-Publisher<WorkflowInstance> instances = paymentWorkflows.instances();
+include::example$workflows/workflowmanager/WorkflowManagerExamples.java[tag=find-many,indent=0]
 ----
 
 `instances()` follows the Reactive Streams demand protocol. Each emitted `WorkflowInstance` is a lazy handle, so call
@@ -73,16 +61,7 @@ decides to stop.
 
 [source,java]
 ----
-var order = workflowManager.findOne(WorkflowStateQuery.byWorkflowId(orderId));
-
-// Cancel one running step. The future is true only when a terminal step cancellation was recorded.
-CompletableFuture<Boolean> stepCancelled = order.requestStepCancellation("awaitApproval", null);
-
-// Cancel all currently running steps but leave the workflow active.
-CompletableFuture<Integer> cancelledSteps = order.requestCancellationOfAllSteps(null);
-
-// Cancel the workflow. The future completes after its cancellation event is durable and its body is woken.
-CompletableFuture<Void> workflowCancelled = order.requestWorkflowCancellation(null);
+include::example$workflows/workflowmanager/WorkflowManagerExamples.java[tag=request-cancellation,indent=0]
 ----
 
 Requesting cancellation of a single step records that step as cancelled and lets the workflow observe a
