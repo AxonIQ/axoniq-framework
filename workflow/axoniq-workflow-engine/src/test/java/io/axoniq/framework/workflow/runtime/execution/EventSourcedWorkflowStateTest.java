@@ -18,11 +18,10 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import org.jspecify.annotations.Nullable;
-
+import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
-import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepIndeterminateException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowExecutionException;
@@ -38,6 +37,7 @@ import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
@@ -159,6 +159,26 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
+    void evolveStepFailedWithIndeterminateCauseKeepsType() {
+        // given - a FAILED record written for a step that was in-flight at a crash and not re-run
+        String stepName = "doWork";
+        WorkflowError error = WorkflowError.from(new StepIndeterminateException(stepName));
+        Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.FAILED);
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(metadata);
+        when(eventMessage.timestamp()).thenReturn(Instant.now());
+        when(eventMessage.payloadAs(WorkflowError.class)).thenReturn(error);
+
+        // when
+        state.evolve(eventMessage, processingContext);
+
+        // then - the rebuilt error is catchable by its documented type
+        WorkflowStep step = state.getStep(stepName);
+        assertThat(step.status()).isEqualTo(StepStatus.FAILED);
+        assertThat(step.error()).isInstanceOf(StepIndeterminateException.class);
+    }
+
+    @Test
     void evolveStepRetrying() {
         String stepName = "testStep";
         WorkflowError error = WorkflowError.from(new RuntimeException("retry error"));
@@ -184,6 +204,33 @@ class EventSourcedWorkflowStateTest {
     }
 
     @Test
+    void evolveStepRetryStartedAfterRetrying() {
+        // given a step whose first attempt failed
+        String stepName = "testStep";
+        WorkflowError error = WorkflowError.from(new RuntimeException("retry error"));
+        state.evolve(stepEvent(stepName, StepStatus.RETRYING, new StepRetryInfo(1, 3, error)), processingContext);
+
+        // when the store accepts the start of attempt 2
+        StepRetryInfo attemptTwo = new StepRetryInfo(2, 3, error);
+        state.evolve(stepEvent(stepName, StepStatus.RETRY_STARTED, attemptTwo), processingContext);
+
+        // then the step is running attempt 2 and keeps the error that triggered the retry
+        WorkflowStep step = state.getStep(stepName);
+        assertThat(step.status()).isEqualTo(StepStatus.RETRY_STARTED);
+        assertThat(step.result()).isEqualTo(attemptTwo);
+        assertThat(step.error()).isInstanceOfSatisfying(WorkflowExecutionException.class, e ->
+                assertThat(e.getMessage()).isEqualTo("retry error"));
+    }
+
+    private static EventMessage stepEvent(String stepName, StepStatus status, StepRetryInfo retryInfo) {
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(MetadataUtils.create("workflowId", stepName, status));
+        when(eventMessage.timestamp()).thenReturn(Instant.now());
+        when(eventMessage.payloadAs(StepRetryInfo.class)).thenReturn(retryInfo);
+        return eventMessage;
+    }
+
+    @Test
     void evolveStepCompletedAndEvolvePayload() {
         String stepName = "testStep";
         Map<String, @Nullable Object> initialPayload = Map.of("key1", "value1");
@@ -192,7 +239,7 @@ class EventSourcedWorkflowStateTest {
         Map<String, @Nullable Object> stepResult = Map.of("key2", "value2");
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.COMPLETED)
                                          .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
-                                           NAME);
+                                              NAME);
 
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(metadata);
@@ -375,5 +422,25 @@ class EventSourcedWorkflowStateTest {
         when(eventMessage.timestamp()).thenReturn(Instant.now());
         when(eventMessage.payloadAs(Object.class)).thenReturn(Map.of());
         return eventMessage;
+    }
+
+    @Test
+    void ignoresStepEventsCarryingAnotherWorkflowsId() {
+        // given: a step published by another instance. SimpleWorkflowExecution.onEvent already keeps such an event away
+        // from this state; this is the safety net for a routing mistake that lets one through
+        Metadata metadata = MetadataUtils.create("another-workflow", "notifyApproved", StepStatus.COMPLETED)
+                                         .and(MetadataUtils.METADATA_KEY_STEP_PRIMITIVE,
+                                              MetadataUtils.STEP_PRIMITIVE_PUBLISH);
+        EventMessage eventMessage = mock(EventMessage.class);
+        when(eventMessage.metadata()).thenReturn(metadata);
+        when(eventMessage.timestamp()).thenReturn(Instant.now());
+        when(eventMessage.payloadAs(Object.class)).thenReturn("payload");
+
+        // when
+        state.evolve(eventMessage, processingContext);
+
+        // then: it is a business event for this instance, never one of its steps
+        assertThat(state.containsStep("notifyApproved")).isFalse();
+        assertThat(state.workflowStepNames()).isEmpty();
     }
 }

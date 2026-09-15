@@ -117,7 +117,7 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Automatic-Module-Name>io.axoniq.framework.multitenancy</Automatic-Module-Name>
+                            <Automatic-Module-Name>io.axoniq.framework.messaging.multitenancy</Automatic-Module-Name>
                         </manifestEntries>
                     </archive>
                 </configuration>

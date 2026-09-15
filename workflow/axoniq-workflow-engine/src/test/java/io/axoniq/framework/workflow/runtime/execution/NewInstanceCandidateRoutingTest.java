@@ -25,7 +25,9 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContex
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
@@ -459,6 +461,49 @@ class NewInstanceCandidateRoutingTest {
         assertThat(started)
                 .as("only the highest version of each definition starts, and each of those exactly once")
                 .containsExactlyInAnyOrder("alpha-v2", "beta-v2");
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // events published by a workflow through the publish primitive
+    // ---------------------------------------------------------------------------------------------------------
+
+    @Test
+    void aPublishedEventWithOneStartCandidateOnAnotherSegmentIsBroadcastSoThePublisherStillObservesIt() {
+        register("Alpha", "1.0.0", always(), event -> "alpha-1");
+        var publisherId = idOnAnotherSegmentThan("alpha-1");
+        var publisher = execution(publisherId);
+        repository.save(publisherId, () -> publisher);
+
+        assertThat(routing.sequenceIdentifierFor(publishedEvent(publisherId), context(owningSegment(publisherId))))
+                .as("candidate routing would deliver the event to alpha-1's segment only and leave the publisher on "
+                            + "another segment waiting forever for its own step")
+                .contains(SequencingPolicy.BROADCAST);
+
+        SEGMENTS.forEach(segment -> engine.handle(publishedEvent(publisherId), context(segment)));
+
+        assertThat(started).as("the published event starts the candidate exactly once").containsExactly("alpha-1");
+        verify(publisher, times(1)).onEvent(any(), any());
+    }
+
+    private static String idOnAnotherSegmentThan(String workflowId) {
+        return IntStream.rangeClosed(1, 1_000)
+                        .mapToObj(index -> "publisher-" + index)
+                        .filter(id -> owningSegment(id).getSegmentId() != owningSegment(workflowId).getSegmentId())
+                        .findFirst()
+                        .orElseThrow(() -> new AssertionError("No id landed on another segment"));
+    }
+
+    /**
+     * A business event published by the given workflow through the publish primitive: the start event's type, carrying
+     * the publisher's step metadata.
+     */
+    private static EventMessage publishedEvent(String publisherId) {
+        var eventMessage = businessEvent(START_EVENT);
+        when(eventMessage.metadata()).thenReturn(
+                MetadataUtils.create(publisherId, "notify", StepStatus.COMPLETED)
+                             .and(MetadataUtils.METADATA_KEY_STEP_PRIMITIVE, MetadataUtils.STEP_PRIMITIVE_PUBLISH)
+        );
+        return eventMessage;
     }
 
     private static BiPredicate<EventMessage, ProcessingContext> always() {

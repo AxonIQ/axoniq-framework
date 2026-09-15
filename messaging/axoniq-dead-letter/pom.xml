@@ -116,7 +116,7 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Automatic-Module-Name>io.axoniq.framework.deadletter</Automatic-Module-Name>
+                            <Automatic-Module-Name>io.axoniq.framework.messaging.deadletter</Automatic-Module-Name>
                         </manifestEntries>
                     </archive>
                 </configuration>

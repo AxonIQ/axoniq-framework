@@ -30,6 +30,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionCheckpointingSupport.ExecutionTaskQueue;
 import io.axoniq.framework.workflow.runtime.util.ProcessingContextUtils;
+import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.ExceptionUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
@@ -495,19 +496,28 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
 
     @Override
     public void onEvent(EventMessage eventMessage, ProcessingContext processingContext) {
+        // An event another instance published through the publish primitive is broadcast to every owned execution.
+        // It carries that instance's step metadata, so it may wake a wait here but never evolves this state.
+        boolean ownState = !isForeignStep(eventMessage);
         if (running) {
             // live mode
             appendTask(i -> {
                 eventWaitConditions.evaluateAndApply(eventMessage, processingContext, contextDelegate::eventReceived);
-                workflowState.evolve(eventMessage, processingContext);
+                if (ownState) {
+                    workflowState.evolve(eventMessage, processingContext);
+                }
             });
         } else if (stoppedForRecovery) {
             // The driver was deliberately stopped after a publication-resolution timeout. Keep its projected state in
             // sync with durable events, but do not queue work that no driver can consume before the required restart.
-            workflowState.evolve(eventMessage, processingContext, false);
+            if (ownState) {
+                workflowState.evolve(eventMessage, processingContext, false);
+            }
         } else {
             // replay mode
-            workflowState.evolve(eventMessage, processingContext, false);
+            if (ownState) {
+                workflowState.evolve(eventMessage, processingContext, false);
+            }
             // The wake must not be discarded with them: an event that produced no engine event before the crash is not
             // in the durable state, so evolving alone leaves the instance waiting for something already gone past.
             appendTask(i -> eventWaitConditions.evaluateAndApply(eventMessage,
@@ -565,6 +575,12 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     @Override
     public boolean hasTasks() {
         return !this.taskQueue.isEmpty();
+    }
+
+    private boolean isForeignStep(EventMessage eventMessage) {
+        var metadata = eventMessage.metadata();
+        return MetadataUtils.hasWorkflowId().test(metadata)
+                && !workflowId.equals(MetadataUtils.getWorkflowId(metadata));
     }
 
     @Override

@@ -1,5 +1,6 @@
 * xref:multi-tenancy:index.adoc[[.advanced-framework]#Multi-Tenancy#]
 ** xref:multi-tenancy:tenant-management.adoc[]
+** xref:multi-tenancy:tenant-sequencing.adoc[]
 ** xref:multi-tenancy:tenant-scoped-components.adoc[]
 ** xref:multi-tenancy:tenant-command-handling.adoc[]
 ** xref:multi-tenancy:tenant-event-storage.adoc[]

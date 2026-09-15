@@ -102,8 +102,9 @@ class AxonServerStorageEngineBackedEventStoreIT
 
         Map<String, Object> describedProperties = descriptor.getDescribedProperties();
         assertThat(describedProperties)
-                .hasSize(2)
+                .hasSize(3)
                 .containsKey("connection")
-                .containsKey("converter");
+                .containsKey("converter")
+                .containsKey("snapshotStore");
     }
 }

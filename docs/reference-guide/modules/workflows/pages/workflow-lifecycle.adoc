@@ -354,7 +354,7 @@ They run in the context of the workflow execution and have access to the full wo
 
 == Event versioning
 
-Every event a workflow emits—started, step started/completed/failed/cancelled/retrying/timed-out,
+Every event a workflow emits—started, step started/completed/failed/cancelled/retrying/retry-started/timed-out,
 completed/failed/cancelled/timed-out workflow, and version markers—carries the workflow's current
 definition version on its `MessageType.version()`.
 This is Axon Framework 5's native event-versioning channel, *not* a separate metadata key.

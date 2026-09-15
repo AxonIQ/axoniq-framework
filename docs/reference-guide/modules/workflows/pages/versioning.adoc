@@ -49,13 +49,10 @@ When multiple definitions share the same `(workflowName, startOnEventName, idPro
 differ by `version`, new starts route as follows:
 
 * **No prior instance for the derived workflow id:** start at the *highest* registered version.
-* **Cross-version collision (existing instance at a different version, new start at a higher
-  version):** the new instance's workflow id is augmented with the version suffix (`<base>#<version>`)
-  so the two run in parallel. The older v1 instance keeps replaying on the v1 definition; the new
-  v2 instance runs at the disambiguated id and replays on the v2 definition.
-* **Same-version duplicate (existing instance at the same version as the new instance):** rejected as
-  a duplicate domain event; a warning is logged. For two parallel instances at the same version,
-  use a different `idProperty` value.
+* **Existing instance for the derived workflow id, at any version:** rejected as a duplicate; a
+  warning is logged. Workflow ids MUST be unique, so the version never becomes part of the id. The
+  existing instance keeps replaying on the definition matching its recorded version. For two
+  parallel instances, use a different `idProperty` value.
 
 === Dispatching the body of an existing instance
 

@@ -19,6 +19,7 @@ New to the engine? Start with the xref:axon-workflow-getting-started::index.adoc
 
 * *xref:execute-steps.adoc[Execute Steps]*: Run actions synchronously (`awaitExecute`) or asynchronously (`execute`)
 * *xref:waiting-for-events.adoc[Waiting for Events]*: Suspend until external events arrive (`awaitEvent`, `waitForEvent`, `sleep`)
+* *xref:publishing-events.adoc[Publishing Events]*: Publish a business event as a durable step (`awaitPublish`, `publish`); how workflows talk to each other
 * *xref:understanding-steps.adoc[Understanding Steps]*: Cross-cutting concerns: timeouts, payload reducers, error handling, event naming, execution semantics
 
 == Workflow lifecycle
@@ -31,7 +32,7 @@ New to the engine? Start with the xref:axon-workflow-getting-started::index.adoc
 
 == Patterns
 
-* *xref:common-patterns.adoc[Common Patterns]*: Fan-out/fan-in, saga, scatter-gather, human-in-the-loop, circuit breaker, sub-workflows
+* *xref:common-patterns.adoc[Common Patterns]*: Fan-out/fan-in, saga, scatter-gather, human-in-the-loop, circuit breaker, sub-workflows through published events
 
 == Data & configuration
 

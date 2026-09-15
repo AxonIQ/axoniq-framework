@@ -243,7 +243,7 @@ class GivenWhenTest {
             case FAILED -> WorkflowStep.failed(stepName, new RuntimeException("boom"), Instant.EPOCH, null);
             case TIMED_OUT -> WorkflowStep.timedOut(stepName, Map.of(), Instant.EPOCH, null);
             case CANCELLED -> WorkflowStep.cancelled(stepName, Instant.EPOCH, null);
-            case RETRYING -> throw new IllegalArgumentException("Retrying is not used in these tests");
+            case RETRYING, RETRY_STARTED -> throw new IllegalArgumentException("Retrying is not used in these tests");
         };
     }
 }

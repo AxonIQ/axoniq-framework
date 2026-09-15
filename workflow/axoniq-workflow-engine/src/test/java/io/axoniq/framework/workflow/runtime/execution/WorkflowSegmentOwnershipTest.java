@@ -38,7 +38,7 @@ class WorkflowSegmentOwnershipTest {
 
     @Test
     void everyIdIsOwnedByExactlyOneSegment() {
-        for (var workflowId : List.of("order-1", "order-1#2.0.0", "a#b")) {
+        for (var workflowId : List.of("order-1", "order-1#2.0.0", "a#b", "#123")) {
             var owners = FOUR_SEGMENTS.stream()
                                       .filter(segment -> WorkflowSegmentOwnership.ownedBy(segment, workflowId))
                                       .count();
@@ -46,57 +46,17 @@ class WorkflowSegmentOwnershipTest {
         }
     }
 
-    @Test
-    void crossVersionDisambiguatedIdsShareTheSegmentOfTheirBaseId() {
-        IntStream.range(0, 200).forEach(i -> {
-            var baseId = "order-" + i;
-            var disambiguated = baseId + "#2.0.0";
-            for (var segment : FOUR_SEGMENTS) {
-                assertThat(WorkflowSegmentOwnership.ownedBy(segment, disambiguated))
-                        .as("segment %s must own '%s' iff it owns '%s'", segment, disambiguated, baseId)
-                        .isEqualTo(WorkflowSegmentOwnership.ownedBy(segment, baseId));
-            }
-        });
-    }
-
     /**
-     * The flip side of the test above, and the reason {@code '#'} is a reserved character rather than an implementation
-     * detail: the segment key is everything before the first {@code '#'}, so an application whose
-     * {@code workflowIdProvider} returns {@code order#123} hands every order the same segment key and runs the whole
-     * workload on one segment. Nothing rejects such an id and nothing warns about it, so a sharded processor degrades
-     * to a single segment while every count, claim row and health check still looks right. The remaining segments stay
-     * claimed and idle, which is why this presents as a throughput problem rather than as an error.
+     * Ownership hashes the whole id, so no character is reserved: ids that differ only after a {@code '#'} spread over
+     * the segments like ids with any other separator, instead of collapsing onto the segment of their shared prefix.
      */
     @Test
-    void everyIdSharingItsBasePartCollapsesOntoOneSegment() {
-        var collapsing = IntStream.range(0, 200).mapToObj(i -> "order#" + i).toList();
-        var spreading = IntStream.range(0, 200).mapToObj(i -> "order-" + i).toList();
+    void idsDifferingOnlyAfterAHashSpreadOverEverySegment() {
+        var hashSeparated = IntStream.range(0, 200).mapToObj(i -> "order#" + i).toList();
+        var dashSeparated = IntStream.range(0, 200).mapToObj(i -> "order-" + i).toList();
 
-        assertThat(segmentsOf(collapsing))
-                .as("""
-                            Segments used by 200 ids of the shape 'order#<n>': %s. The segment key stops at the first '#', so \
-                            all 200 share the key 'order' and one of the %d segments does all the work. '#' is a common \
-                            identifier separator and its reservation is neither validated nor documented.""",
-                    segmentsOf(collapsing), FOUR_SEGMENTS.size())
-                .hasSize(1);
-        assertThat(segmentsOf(spreading))
-                .as("the same ids with a separator that is not reserved spread over every segment, which is what "
-                            + "makes the collapse above a property of '#' and not of the ids")
-                .hasSize(FOUR_SEGMENTS.size());
-    }
-
-    /**
-     * An id that starts with {@code '#'} has the empty string as its segment key, whose hash is zero, so it lands on
-     * segment 0 under every mask. Two consequences worth stating separately from the collapse above: segment 0 is where
-     * such ids pile up on any segment count, and the id is not rejected on the way in.
-     */
-    @Test
-    void anIdStartingWithTheSeparatorAlwaysLandsOnSegmentZero() {
-        for (var workflowId : List.of("#123", "#", "#a#b")) {
-            assertThat(WorkflowSegmentOwnership.ownedBy(FOUR_SEGMENTS.getFirst(), workflowId))
-                    .as("'%s' has the empty segment key, and hash 0 masks to segment 0 for every mask", workflowId)
-                    .isTrue();
-        }
+        assertThat(segmentsOf(hashSeparated)).hasSize(FOUR_SEGMENTS.size());
+        assertThat(segmentsOf(dashSeparated)).hasSize(FOUR_SEGMENTS.size());
     }
 
     /**
