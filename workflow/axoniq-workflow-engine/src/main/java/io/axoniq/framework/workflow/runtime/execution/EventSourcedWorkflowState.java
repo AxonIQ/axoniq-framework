@@ -346,6 +346,12 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                                   eventMessage.timestamp(),
                                                   processingContext)); // TODO copy resources of the context
                     break;
+                case RETRY_STARTED:
+                    addStep(WorkflowStep.retryStarted(stepName,
+                                                      eventMessage.payloadAs(StepRetryInfo.class),
+                                                      eventMessage.timestamp(),
+                                                      processingContext));
+                    break;
                 default:
                     break;
             }

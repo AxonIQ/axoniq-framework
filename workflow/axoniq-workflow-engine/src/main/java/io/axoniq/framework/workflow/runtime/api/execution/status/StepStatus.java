@@ -27,11 +27,35 @@ package io.axoniq.framework.workflow.runtime.api.execution.status;
  * @since 5.4.0
  */
 public enum StepStatus {
+    /**
+     * The first attempt of the step was accepted by the store and is running.
+     */
     STARTED,
+    /**
+     * An attempt failed and the retry policy allows another one. The step waits for the backoff before the next
+     * attempt starts.
+     */
     RETRYING,
+    /**
+     * A retry attempt was accepted by the store and is running. Recorded once per retry attempt, after the
+     * {@link #RETRYING} record of the attempt that failed.
+     */
+    RETRY_STARTED,
+    /**
+     * The step finished successfully. Terminal.
+     */
     COMPLETED,
+    /**
+     * The step finished with an error and no retry is left. Terminal.
+     */
     FAILED,
+    /**
+     * The step did not finish within its timeout. Terminal.
+     */
     TIMED_OUT,
+    /**
+     * The step was cancelled, either directly or through a terminal transition of the workflow. Terminal.
+     */
     CANCELLED;
 
     /**
@@ -41,7 +65,7 @@ public enum StepStatus {
      */
     public boolean isTerminal() {
         return switch (this) {
-            case STARTED, RETRYING -> false;
+            case STARTED, RETRYING, RETRY_STARTED -> false;
             case COMPLETED, FAILED, CANCELLED, TIMED_OUT -> true;
         };
     }
