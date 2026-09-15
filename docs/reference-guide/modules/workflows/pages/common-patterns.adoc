@@ -280,8 +280,8 @@ include::example$workflows/commonpatterns/OrderFulfillmentWorkflow.java[tag=pare
 A wait registered after the child's reply has already passed is never woken, so registering it before the publish removes the race between parent and child.
 <.> `payloadProperty("orderId")` matches on a field in the event payload.
 A published event is routed like any business event, so it reaches a waiting workflow on any segment.
-<.> The step name `startPaymentProcess` is the durable identifier of the publish step.
-The published `StartPaymentProcess` event is the step's record: one event, carrying the parent's workflow metadata, that also starts the child.
+<.> The step name `paymentProcessStarted` is the durable identifier of the publish step.
+The published `PaymentProcessStarted` event is the step's record: one event, carrying the parent's workflow metadata, that also starts the child.
 <.> Block on the handle when the parent needs the result.
 `ctx.allMatch(...)` works too when several children are in flight.
 
@@ -290,7 +290,7 @@ The published `StartPaymentProcess` event is the step's record: one event, carry
 ----
 include::example$workflows/commonpatterns/PaymentProcessWorkflow.java[tag=child,indent=0]
 ----
-<.> The child starts when the `StartPaymentProcess` event the parent published is processed.
+<.> The child starts when the `PaymentProcessStarted` event the parent published is processed.
 The `childWorkflowId` from the payload becomes this workflow's instance ID; it must differ from the parent's ID, because a start whose ID already exists is rejected.
 <.> The final `notifyParent` step publishes `PaymentProcessCompleted`, which wakes the parent's `awaitEvent`.
 
@@ -300,13 +300,13 @@ The event store shows the handoff:
 <div class="et-player" data-autoplay>
   <div class="et-src" data-title="Parent — OrderFulfillmentWorkflow (123)">
 1 started AwaitPaymentProcessStarted {"startTime": "2026-03-26T10:00:01Z"}
-2 completed StartPaymentProcess {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
+2 completed PaymentProcessStarted {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
 9 external PaymentProcessCompleted {"orderId": 123, "childWorkflowId": "payment-123"}
 10 completed AwaitPaymentProcessCompleted
 11 completed OrderFulfillmentWorkflow#ExecuteCompleted
   </div>
   <div class="et-src" data-title="Child — PaymentProcessWorkflow (payment-123)">
-2 external StartPaymentProcess {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
+2 external PaymentProcessStarted {"childWorkflowId": "payment-123", "orderId": 123, "amount": 99.95}
 3 started PaymentProcessWorkflow#ExecuteStarted
 4 started ValidatePaymentStarted {"orderId": 123, "amount": 99.95}
 5 completed ValidatePaymentCompleted
@@ -317,7 +317,7 @@ The event store shows the handoff:
 </div>
 ++++
 
-The parent registers its wait (`AwaitPaymentProcessStarted`) and then publishes: its `startPaymentProcess` step is the `StartPaymentProcess` event itself, one record in the parent's stream and the trigger of the child.
+The parent registers its wait (`AwaitPaymentProcessStarted`) and then publishes: its `paymentProcessStarted` step is the `PaymentProcessStarted` event itself, one record in the parent's stream and the trigger of the child.
 The child runs its steps and its final `notifyParent` step is the `PaymentProcessCompleted` event.
 The engine routes that event to the parent, where it matches the `awaitEvent` on `payloadProperty("orderId")`.
 

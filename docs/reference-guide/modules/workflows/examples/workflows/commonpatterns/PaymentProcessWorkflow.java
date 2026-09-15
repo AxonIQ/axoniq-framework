@@ -26,7 +26,7 @@ public class PaymentProcessWorkflow {
 
     // tag::child[]
     @Workflow(idProperty = "childWorkflowId",
-              startOnEventClass = StartPaymentProcess.class,                 // <1>
+              startOnEventClass = PaymentProcessStarted.class,                 // <1>
               workflowNamespace = "io.myapp.payments")
     public void execute(SimpleWorkflowContext ctx) {
 

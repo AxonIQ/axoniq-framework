@@ -19,5 +19,5 @@
 
 package workflows.commonpatterns;
 
-public record StartPaymentProcess(String childWorkflowId, String orderId, double amount) {
+public record PaymentProcessStarted(String childWorkflowId, String orderId, double amount) {
 }

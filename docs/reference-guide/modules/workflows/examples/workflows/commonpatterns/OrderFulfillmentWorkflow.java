@@ -52,8 +52,8 @@ public class OrderFulfillmentWorkflow {
                 step -> step.timeout(Duration.ofMinutes(30)));
 
         // Launch the child workflow by publishing a dedicated event.
-        ctx.awaitPublish("startPaymentProcess",                              // <3>
-                new StartPaymentProcess("payment-" + orderId, orderId, amount));
+        ctx.awaitPublish("paymentProcessStarted",                              // <3>
+                new PaymentProcessStarted("payment-" + orderId, orderId, amount));
 
         // ... do other work in parallel while child runs ...
 
