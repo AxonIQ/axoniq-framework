@@ -52,16 +52,18 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
     public static final int ENHANCER_ORDER = MultiTenancyConfigurationDefaults.ENHANCER_ORDER + 4;
 
     /**
-     * Creates an enhancer using the class loader which loaded this class to detect optional dead-letter queue support.
+     * Creates a new instance of the {@code DeadLetterMultiTenancyConfigurationEnhancer} that uses the class loader
+     * which loaded this class to check for the presence of the optional dead-letter queue module.
      */
     public DeadLetterMultiTenancyConfigurationEnhancer() {
         this(DeadLetterMultiTenancyConfigurationEnhancer.class.getClassLoader());
     }
 
     /**
-     * Creates an enhancer using the supplied class loader to detect optional dead-letter queue support.
+     * Creates a new instance of the {@code DeadLetterMultiTenancyConfigurationEnhancer} that uses the supplied class
+     * loader to check for the presence of the optional dead-letter queue module.
      *
-     * @param classLoader the class loader used to detect optional dead-letter queue support
+     * @param classLoader the class loader to use for checking the presence of the optional dead-letter queue module
      */
     DeadLetterMultiTenancyConfigurationEnhancer(ClassLoader classLoader) {
         this.classLoader = classLoader;
