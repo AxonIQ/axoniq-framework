@@ -69,11 +69,8 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
 
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
-        // important, see bug(#480): when DLQ is not on the classpath, SPI must not depend on any DLQ classes,
-        // otherwise the SPI will fail to load and the application will not start.
-        // Thus, we use reflection here to call the actual enhance() logic.
-        // note: kept simple on purpose, as this is only called once during configuration and not in a hot path.
-        // If we find that this is an expensive operation, we can cache a MethodHandle, but that is premature optimization right now.
+        // using reflection here to call the actual enhance() logic on the DeadLetterMultiTenancyConfigurationEnhancerDelegate (see class level javadoc there).
+        // this avoids the SPI to fail when DLQ is not on the classpath
         ClassLoader classLoader = getClass().getClassLoader();
         if (!isDeadLetterQueuePresent(classLoader)) {
             return;
