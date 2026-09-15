@@ -31,6 +31,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.FailWorkflowDe
 import io.axoniq.framework.workflow.runtime.api.execution.context.PayloadMapping;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PayloadStepDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveMetadata;
+import io.axoniq.framework.workflow.runtime.api.execution.context.PublishStepDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Timing;
 import io.axoniq.framework.workflow.runtime.api.execution.context.VersionStepDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WaitForStepDefinition;
@@ -50,6 +51,7 @@ import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.time.Duration;
 import java.util.Map;
@@ -62,7 +64,7 @@ import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCus
  * Base Java DSL entry point for defining workflow steps.
  * <p>
  * This context exposes the core primitives used by workflow authors: executing external work, waiting for events,
- * mutating workflow payload, sleeping, failing, and cancelling. Non-blocking methods return a
+ * mutating workflow payload, publishing events, sleeping, failing, and cancelling. Non-blocking methods return a
  * {@link WorkflowStepResult} that can be awaited later, while methods prefixed with {@code await} block until the step
  * completes or fails.
  *
@@ -450,6 +452,45 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
     }
 
     /**
+     * Publishes a business event as a durable workflow step and returns a handle to await later. Further customization
+     * is possible using the provided {@code customizer} unary operator.
+     * <p>
+     * Exactly one event is appended: the given {@code event} enriched with workflow metadata ({@code workflowId},
+     * {@code stepName}, {@code stepType}, {@code stepPrimitive}). Its type, payload, identifier and timestamp are
+     * published as-is, so the event other handlers and workflows receive is the event you publish. The workflow
+     * payload is not modified. On replay the step is found in the workflow state and nothing is published again.
+     *
+     * @param stepName   logical name of the publish step
+     * @param event      event to publish
+     * @param customizer customizer for the publish step definition
+     * @return handle for the publish step
+     */
+    public WorkflowStepResult publish(
+            String stepName,
+            EventMessage event,
+            UnaryOperator<PublishStepDefinition> customizer
+    ) {
+        return super.publish(apply(defaultPublishStepDefinition(stepName, event), customizer));
+    }
+
+    /**
+     * Publishes a business event as a durable workflow step and blocks until the step is recorded. Further
+     * customization is possible using the provided {@code customizer} unary operator.
+     *
+     * @param stepName   logical name of the publish step
+     * @param event      event to publish
+     * @param customizer customizer for the publish step definition
+     * @see #publish(String, EventMessage, UnaryOperator)
+     */
+    public void awaitPublish(
+            String stepName,
+            EventMessage event,
+            UnaryOperator<PublishStepDefinition> customizer
+    ) {
+        super.awaitPublish(apply(defaultPublishStepDefinition(stepName, event), customizer));
+    }
+
+    /**
      * Fails the workflow and publishes the configured failure event. Further customization is possible using the
      * provided {@code customizer} unary operator.
      *
@@ -577,6 +618,19 @@ public class BaseWorkflowContext extends AbstractDSLWorkflowContext {
                 new PrimitiveMetadata(stepName, defaults()),
                 modification
         );
+    }
+
+    /**
+     * Creates the default publish step definition used by the {@link #publish(String, EventMessage, UnaryOperator)}
+     * convenience overloads.
+     *
+     * @param stepName logical name of the publish step
+     * @param event    event to publish
+     * @return default publish step definition
+     */
+    @Internal
+    public PublishStepDefinition defaultPublishStepDefinition(String stepName, EventMessage event) {
+        return new PublishStepDefinition(stepName, event);
     }
 
     /**

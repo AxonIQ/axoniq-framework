@@ -26,6 +26,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefini
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
+import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.eventsourcing.eventstore.EventStore;
@@ -87,6 +88,46 @@ class SimpleWorkflowExecutionTest {
         });
 
         assertThat(execution.hasTasks()).isTrue();
+    }
+
+    @Test
+    void anEventPublishedByAnotherInstanceFeedsWaitConditionsButDoesNotEvolveState() {
+        // given: a started execution, and a business event another workflow published through the publish primitive
+        // (it carries that publisher's step metadata: workflowId, stepName, stepType=COMPLETED, stepPrimitive=PUBLISH)
+        var execution = execution();
+        markStarted(execution);
+        var foreignPublish = new GenericEventMessage(
+                new MessageType("io.acme.OrderApproved"),
+                Map.of("orderId", "o-1"),
+                MetadataUtils.create("another-workflow", "notifyApproved", StepStatus.COMPLETED)
+                             .and(MetadataUtils.METADATA_KEY_STEP_PRIMITIVE, MetadataUtils.STEP_PRIMITIVE_PUBLISH)
+        ).withConverter(TestEventConverter.INSTANCE);
+
+        // when
+        execution.onEvent(foreignPublish, execution.processingContext());
+
+        // then: the wait conditions are offered the event (a task is queued), the publisher's step is not this state's
+        assertThat(execution.hasTasks()).isTrue();
+        assertThat(execution.state().containsStep("notifyApproved")).isFalse();
+    }
+
+    @Test
+    void anEventThisInstancePublishedEvolvesItsOwnState() {
+        // given
+        var execution = execution();
+        markStarted(execution);
+        var ownPublish = new GenericEventMessage(
+                new MessageType("io.acme.OrderApproved"),
+                Map.of("orderId", "o-1"),
+                MetadataUtils.create(execution.workflowId(), "notifyApproved", StepStatus.COMPLETED)
+                             .and(MetadataUtils.METADATA_KEY_STEP_PRIMITIVE, MetadataUtils.STEP_PRIMITIVE_PUBLISH)
+        ).withConverter(TestEventConverter.INSTANCE);
+
+        // when
+        execution.onEvent(ownPublish, execution.processingContext());
+
+        // then
+        assertThat(execution.state().containsStep("notifyApproved")).isTrue();
     }
 
     @Test
