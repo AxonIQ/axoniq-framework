@@ -27,10 +27,14 @@ import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import org.axonframework.common.configuration.Configuration;
 import org.axonframework.messaging.core.VersionedType;
 import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.CompletableFuture;
 
 public class WorkflowManagerExamples {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(WorkflowManagerExamples.class);
 
     public WorkflowManager retrieveManager(Configuration configuration) {
         // tag::retrieve-manager[]
@@ -79,6 +83,6 @@ public class WorkflowManagerExamples {
     }
 
     private void use(WorkflowState state) {
-        System.out.printf("Customer id is: %s", state.payload().get("customerId"));
+        LOGGER.info("Customer id is: {}", state.payload().get("customerId"));
     }
 }
