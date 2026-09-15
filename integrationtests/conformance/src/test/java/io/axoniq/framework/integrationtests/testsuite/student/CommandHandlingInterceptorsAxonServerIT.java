@@ -29,7 +29,7 @@ import org.axonframework.integrationtests.testsuite.student.CommandHandlingInter
  */
 public class CommandHandlingInterceptorsAxonServerIT extends CommandHandlingInterceptorsIT {
 
-    private static final TestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.singleTenant();
+    private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
 
     @Override
     protected TestInfrastructure testInfrastructure() {

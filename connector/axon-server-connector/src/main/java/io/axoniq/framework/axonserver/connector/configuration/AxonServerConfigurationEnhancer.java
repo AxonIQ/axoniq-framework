@@ -19,10 +19,12 @@
 
 package io.axoniq.framework.axonserver.connector.configuration;
 
+import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.api.TagsConfiguration;
 import io.axoniq.framework.axonserver.connector.command.AxonServerCommandBusConnector;
+import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
 import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngineFactory;
 import io.axoniq.framework.axonserver.connector.event.EventProcessorControlService;
 import io.axoniq.framework.axonserver.connector.query.AxonServerQueryBusConnector;
@@ -33,6 +35,7 @@ import io.axoniq.framework.messaging.queryhandling.distributed.PayloadConverting
 import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.configuration.ApplicationConfigurer;
+import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.ComponentDecorator;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentLifecycleHandler;
@@ -42,18 +45,54 @@ import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.common.configuration.SearchScope;
 import org.axonframework.common.lifecycle.Phase;
-import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.conversion.MessageConverter;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A {@link ConfigurationEnhancer} that is auto-loadable by the
- * {@link ApplicationConfigurer}, setting sensible defaults when using Axon Server.
+ * A {@link ConfigurationEnhancer} that is auto-loadable by the {@link ApplicationConfigurer}, setting sensible defaults
+ * when using Axon Server.
+ * <p>
+ * Will only register the following components <b>if</b> there is no component registered for the given class yet:
+ * <ul>
+ *     <li>Registers a default {@link AxonServerConfiguration} for class {@link AxonServerConfiguration}</li>
+ *     <li>Registers a {@link AxonServerConnectionManager} for class {@link AxonServerConnectionManager}, connecting
+ *     to Axon Server on start and disconnecting on shutdown.</li>
+ *     <li>Registers a default {@link ManagedChannelCustomizer} ({@link ManagedChannelCustomizer#identity()}) for
+ *     class {@link ManagedChannelCustomizer}</li>
+ *     <li>Registers the {@link AxonServerEventStorageEngine} for classes {@link EventStorageEngine} and
+ *     {@link SnapshotStore}, sharing the same instance for both so snapshot sourcing resolves the snapshot and the
+ *     events that follow it in a single round trip to Axon Server. When a {@link EventStorageEngine} is already
+ *     registered by the time this enhancer runs (e.g. when you combine Axon Server for snapshots with a different event
+ *     storage backend) registers the lighter {@link AxonServerSnapshotStore} for class {@link SnapshotStore}
+ *     instead</li>
+ *     <li>Registers a {@link AxonServerCommandBusConnector} for class {@link CommandBusConnector}</li>
+ *     <li>Registers a {@link AxonServerQueryBusConnector} for class {@link QueryBusConnector}</li>
+ *     <li>Registers a {@link EventProcessorControlService} for class {@link EventProcessorControlService}</li>
+ * </ul>
+ * <p>
+ * Additionally, registers a {@link AxonServerEventStorageEngineFactory}
+ * {@link org.axonframework.common.configuration.ComponentFactory ComponentFactory} constructing an
+ * {@link AxonServerEventStorageEngine} for each named, non-default context requested (named
+ * {@code storageEngine@{context}}).
+ * <p>
+ * Furthermore, this enhancer will decorate the following components:
+ * <ul>
+ *     <li>The {@link CommandBusConnector} in a {@link PayloadConvertingCommandBusConnector}, converting payloads
+ *     using the present {@link MessageConverter}.</li>
+ *     <li>The {@link QueryBusConnector} in a {@link PayloadConvertingQueryBusConnector}, converting payloads using
+ *     the present {@link MessageConverter}.</li>
+ *     <li>The {@link AxonServerConnectionManager}, registering a {@link TopologyChangeListener} with the
+ *     {@link io.axoniq.axonserver.connector.control.ControlChannel ControlChannel} of its default context on start,
+ *     <b>if</b> one is present.</li>
+ * </ul>
  *
  * @author Allard Buijze
+ * @author Steven van Beelen
  * @since 4.0.0
  */
 public class AxonServerConfigurationEnhancer implements ConfigurationEnhancer {
@@ -66,6 +105,9 @@ public class AxonServerConfigurationEnhancer implements ConfigurationEnhancer {
 
     @Override
     public void enhance(ComponentRegistry registry) {
+        boolean userProvidedEventStorageEngine = registry.hasComponent(EventStorageEngine.class, SearchScope.ALL);
+        ComponentBuilder<AxonServerEventStorageEngine> sharedStorageEngineBuilder = eventStorageEngineBuilder();
+
         registry.registerIfNotPresent(AxonServerConfiguration.class,
                                       c -> new AxonServerConfiguration(),
                                       SearchScope.ALL)
@@ -73,7 +115,12 @@ public class AxonServerConfigurationEnhancer implements ConfigurationEnhancer {
                 .registerIfNotPresent(ManagedChannelCustomizer.class,
                                       c -> ManagedChannelCustomizer.identity(),
                                       SearchScope.ALL)
-                .registerIfNotPresent(eventStorageEngineDefinition(), SearchScope.ALL)
+                .registerIfNotPresent(EventStorageEngine.class, sharedStorageEngineBuilder, SearchScope.ALL)
+                .registerIfNotPresent(SnapshotStore.class,
+                                      userProvidedEventStorageEngine
+                                              ? AxonServerConfigurationEnhancer::buildSnapshotStore
+                                              : sharedStorageEngineBuilder,
+                                      SearchScope.ALL)
                 .registerIfNotPresent(commandBusConnectorDefinition(), SearchScope.ALL)
                 .registerIfNotPresent(queryBusConnectorDefinition(), SearchScope.ALL)
                 .registerDecorator(CommandBusConnector.class,
@@ -86,8 +133,7 @@ public class AxonServerConfigurationEnhancer implements ConfigurationEnhancer {
                 )
                 .registerDecorator(topologyChangeListenerRegistration())
                 .registerFactory(new AxonServerEventStorageEngineFactory())
-                .registerIfNotPresent(eventProcessorControlService())
-                .registerIfNotPresent(axonServerSnapshotStore());
+                .registerIfNotPresent(eventProcessorControlService());
     }
 
     private static ComponentDefinition<AxonServerConnectionManager> connectionManagerDefinition() {
@@ -109,16 +155,26 @@ public class AxonServerConfigurationEnhancer implements ConfigurationEnhancer {
                                           .build();
     }
 
-    private static ComponentDefinition<EventStorageEngine> eventStorageEngineDefinition() {
-        return ComponentDefinition.ofType(EventStorageEngine.class)
-                                  .withBuilder(config -> {
-                                      String defaultContext = config.getComponent(AxonServerConfiguration.class)
-                                                                    .getContext();
-                                      return AxonServerEventStorageEngineFactory.constructForContext(
-                                              defaultContext,
-                                              config
-                                      );
-                                  });
+    private static ComponentBuilder<AxonServerEventStorageEngine> eventStorageEngineBuilder() {
+        // An AtomicReference would seem to suffice, but its contract isn't optimal for what this builder does.
+        // There's a none-zero chance that an updateAndGet call would be invoked several times under contention.
+        // As we open a connection, the contention isn't unlikely to happen.
+        // AtomicReference use would thus potentially accidentally open a ghost connection we'd never be able to close cleanly.
+        // Hence, ConcurrentHashMap#computeIfAbsent is used as it does guarantee the mapping function runs at most once per key.
+        ConcurrentHashMap<String, AxonServerEventStorageEngine> instance = new ConcurrentHashMap<>();
+        return config -> instance.computeIfAbsent("shared", ignored -> buildEventStorageEngine(config));
+    }
+
+    private static AxonServerEventStorageEngine buildEventStorageEngine(Configuration config) {
+        String defaultContext = config.getComponent(AxonServerConfiguration.class).getContext();
+        return AxonServerEventStorageEngineFactory.constructForContext(defaultContext, config);
+    }
+
+    private static AxonServerSnapshotStore buildSnapshotStore(Configuration config) {
+        String defaultContext = config.getComponent(AxonServerConfiguration.class).getContext();
+        AxonServerConnection connection = config.getComponent(AxonServerConnectionManager.class)
+                                                .getConnection(defaultContext);
+        return new AxonServerSnapshotStore(connection, config.getComponent(EventConverter.class));
     }
 
     private static ComponentDefinition<CommandBusConnector> commandBusConnectorDefinition() {
@@ -199,14 +255,6 @@ public class AxonServerConfigurationEnhancer implements ConfigurationEnhancer {
                                       );
                                   })
                                   .onStart(Phase.INSTRUCTION_COMPONENTS, EventProcessorControlService::start);
-    }
-
-    private static ComponentDefinition<SnapshotStore> axonServerSnapshotStore() {
-        return ComponentDefinition.ofType(SnapshotStore.class)
-                                  .withBuilder(c -> new AxonServerSnapshotStore(
-                                          c.getComponent(AxonServerConnectionManager.class).getConnection(),
-                                          c.getComponent(GeneralConverter.class)
-                                  ));
     }
 
     @Override

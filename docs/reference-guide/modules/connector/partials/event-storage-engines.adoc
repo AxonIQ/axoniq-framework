@@ -6,6 +6,8 @@ The `AxonServerEventStorageEngine` connects to link:https://www.axoniq.io/produc
 This is the default storage engine when using Axon Server with DCB support.
 As such, configuration is rather straightforward:
 
+The `AxonServerEventStorageEngine` also implements `SnapshotStore` and is registered as the default for both, so sourcing an entity that has a snapshot resolves the snapshot and the events that follow it in a single round trip to Axon Server, instead of the two separate queries a generic `EventStorageEngine`/`SnapshotStore` combination requires. See xref:snapshotting:index.adoc[Snapshotting] for more on snapshot storage in general.
+
 [tabs]
 ======
 Configuration API::

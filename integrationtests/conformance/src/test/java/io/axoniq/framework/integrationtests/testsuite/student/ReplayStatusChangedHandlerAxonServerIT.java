@@ -29,7 +29,7 @@ import org.axonframework.integrationtests.testsuite.student.ReplayStatusChangedH
  */
 public class ReplayStatusChangedHandlerAxonServerIT extends ReplayStatusChangedHandlerIT {
 
-    private static final TestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.singleTenant();
+    private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
 
     @Override
     protected TestInfrastructure testInfrastructure() {

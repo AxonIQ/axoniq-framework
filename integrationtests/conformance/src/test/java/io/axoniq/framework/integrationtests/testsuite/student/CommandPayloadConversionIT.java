@@ -43,7 +43,7 @@ class CommandPayloadConversionIT extends AbstractCommandHandlingStudentIT {
 
     // AxonServer-only: payload conversion is a distributed-bus concern.
     // SimpleCommandBus passes the payload through without serialization, so there is no in-memory equivalent.
-    private static final TestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.singleTenant();
+    private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
 
     @Override
     protected TestInfrastructure testInfrastructure() {

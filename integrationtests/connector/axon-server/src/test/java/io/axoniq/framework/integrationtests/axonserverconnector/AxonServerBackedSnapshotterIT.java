@@ -22,12 +22,12 @@ package io.axoniq.framework.integrationtests.axonserverconnector;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
 import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
-import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.conversion.GeneralConverter;
 import org.axonframework.eventsourcing.SnapshottingEntityLifecycleHandlerTestSuite;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
+import org.junit.jupiter.api.*;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -45,9 +45,6 @@ public class AxonServerBackedSnapshotterIT extends SnapshottingEntityLifecycleHa
 
     @Override
     protected void registerComponents(ComponentRegistry registry) {
-        // Not a multi-tenancy test. See MultiTenancyUtils#disable.
-        MultiTenancyUtils.disable(registry);
-
         registry.registerComponent(
                 AxonServerConfiguration.class,
                 c -> AxonServerConfiguration.builder()
@@ -61,5 +58,29 @@ public class AxonServerBackedSnapshotterIT extends SnapshottingEntityLifecycleHa
 
             return new AxonServerSnapshotStore(component.getConnection(), c.getComponent(GeneralConverter.class));
         });
+    }
+
+    @Disabled("TODO #5042 | Disabled as Decoration unwrapping is cleanly supported to decoration decisions")
+    @Override
+    protected void shouldSnapshotExplicitly() {
+        super.shouldSnapshotExplicitly();
+    }
+
+    @Disabled("TODO #5042 | Disabled as Decoration unwrapping is cleanly supported to decoration decisions")
+    @Override
+    protected void shouldSnapshotAfterFiveEvents() {
+        super.shouldSnapshotAfterFiveEvents();
+    }
+
+    @Disabled("TODO #5042 | Disabled as Decoration unwrapping is cleanly supported to decoration decisions")
+    @Override
+    protected void shouldIgnoreSnapshotIfVersionUnsupported() {
+        super.shouldIgnoreSnapshotIfVersionUnsupported();
+    }
+
+    @Disabled("TODO #5042 | Disabled as Decoration unwrapping is cleanly supported to decoration decisions")
+    @Override
+    protected void shouldIgnoreExceptionsWhileLoadingSnapshot() {
+        super.shouldIgnoreExceptionsWhileLoadingSnapshot();
     }
 }

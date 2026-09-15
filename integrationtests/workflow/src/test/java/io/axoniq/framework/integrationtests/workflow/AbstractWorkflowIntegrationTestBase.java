@@ -19,7 +19,6 @@
 package io.axoniq.framework.integrationtests.workflow;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
-import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
@@ -42,7 +41,6 @@ abstract class AbstractWorkflowIntegrationTestBase<T extends WorkflowContext> ex
 
     @Override
     protected UnaryOperator<WorkflowConfigurer> configure() {
-        return c -> c.componentRegistry(MultiTenancyUtils::disable)
-                     .componentRegistry(r -> r.disableEnhancer(AxonServerConfigurationEnhancer.class));
+        return c -> c.componentRegistry(r -> r.disableEnhancer(AxonServerConfigurationEnhancer.class));
     }
 }

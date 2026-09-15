@@ -19,7 +19,7 @@
 
 package io.axoniq.framework.integrationtests.testsuite.checkpoint;
 
-import io.axoniq.framework.integrationtests.testsuite.infrastructure.SingleTenantInMemoryTestInfrastructure;
+import io.axoniq.framework.integrationtests.testsuite.infrastructure.InMemoryTestInfrastructure;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.CheckpointTrigger;
 import io.axoniq.framework.messaging.eventstreaming.checkpoint.Checkpointing;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
@@ -69,7 +69,7 @@ import static org.awaitility.Awaitility.await;
 public class CheckpointResumeInMemoryIT extends AbstractStudentIT {
 
     private static final String PROCESSOR_NAME = "async-projection";
-    private static final TestInfrastructure INFRASTRUCTURE = new SingleTenantInMemoryTestInfrastructure();
+    private static final TestInfrastructure INFRASTRUCTURE = new InMemoryTestInfrastructure();
 
     private final ResumableProjection projection = new ResumableProjection();
 
