@@ -24,15 +24,21 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContex
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
+import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
+import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.junit.jupiter.api.*;
 
 import java.time.Clock;
@@ -41,6 +47,7 @@ import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,7 +64,8 @@ class ExecuteDelegateTerminalInterruptionTest {
     private static final String STEP_NAME = "running-step";
 
     @Test
-    void terminalInterruptionDoesNotAppendFailureTask() {
+    void terminalInterruptionDoesNotAppendFailureTask() throws InterruptedException {
+        var workflowContext = mock(WorkflowContext.class);
         var workflowExecution = mock(WorkflowExecution.class);
         var workflowState = mock(WorkflowState.class);
         var runningSteps = new RunningSteps();
@@ -68,12 +76,19 @@ class ExecuteDelegateTerminalInterruptionTest {
         var scheduler = mock(WorkflowScheduler.class);
         var timeoutTask = mock(WorkflowScheduler.ScheduledTask.class);
         var timeoutCompletion = new CompletableFuture<Void>();
+        // The step is RETRYING; the retry attempt passes the RETRY_STARTED gate before its action runs.
+        var currentStep = new AtomicReference<>(retryingStep());
 
+        var processingContext = mock(ProcessingContext.class);
+        when(processingContext.component(EventConverter.class)).thenReturn(mock(EventConverter.class));
+        when(workflowContext.processingContext()).thenReturn(processingContext);
+        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         when(workflowExecution.workflowId()).thenReturn("wf-1");
         when(workflowExecution.state()).thenReturn(workflowState);
         when(workflowExecution.isRunning()).thenReturn(true);
+        when(workflowExecution.processingContext()).thenReturn(mock(ProcessingContext.class));
         when(workflowState.containsStep(STEP_NAME)).thenReturn(true);
-        when(workflowState.getStep(STEP_NAME)).thenReturn(retryingStep());
+        when(workflowState.getStep(STEP_NAME)).thenAnswer(invocation -> currentStep.get());
         when(unitOfWorkFactory.create(anyString(), any())).thenReturn(unitOfWork);
         when(unitOfWork.executeWithResult(any())).thenReturn(pendingAction);
         when(scheduler.schedule(any())).thenReturn(timeoutTask);
@@ -82,9 +97,23 @@ class ExecuteDelegateTerminalInterruptionTest {
             queuedTasks.add(invocation.getArgument(0));
             return null;
         }).when(workflowExecution).appendTask(any());
+        // The driver applies queued tasks while a step waits for a state change.
+        doAnswer(invocation -> {
+            while (!queuedTasks.isEmpty()) {
+                queuedTasks.remove().accept(workflowExecution);
+            }
+            return null;
+        }).when(workflowExecution).awaitStateChange(any());
+        // The store accepts the append and the state evolves to RETRY_STARTED.
+        when(workflowExecution.appendWorkflowEvent(any(), any())).thenAnswer(invocation -> {
+            EventMessage event = invocation.getArgument(0);
+            currentStep.set(WorkflowStep.retryStarted(STEP_NAME, event.payloadAs(StepRetryInfo.class),
+                                                      Instant.now(), null));
+            return CompletableFuture.completedFuture(null);
+        });
 
         var delegate = new ExecuteDelegate(
-                mock(WorkflowContext.class),
+                workflowContext,
                 workflowExecution,
                 runningSteps,
                 new ReachedSteps(),
@@ -97,6 +126,7 @@ class ExecuteDelegateTerminalInterruptionTest {
         );
 
         delegate.execute(command());
+        assertThat(currentStep.get().status()).isEqualTo(StepStatus.RETRY_STARTED);
         assertThat(pendingAction).isNotDone();
         assertThat(queuedTasks).isEmpty();
         runningSteps.cancelAll(new StepInterruptedException("Workflow reached terminal state"), ignored -> {
@@ -107,7 +137,8 @@ class ExecuteDelegateTerminalInterruptionTest {
     }
 
     private static WorkflowStep retryingStep() {
-        return new WorkflowStep(STEP_NAME, StepStatus.RETRYING, null, null, Instant.now(), null);
+        var retryInfo = new StepRetryInfo(1, 2, WorkflowError.from(new IllegalStateException("first attempt failed")));
+        return WorkflowStep.retrying(STEP_NAME, retryInfo, Instant.now(), null);
     }
 
     private static ExecutePrimitive.ExecuteCommand command() {
