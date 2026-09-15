@@ -23,8 +23,7 @@ A workflow instance belongs to exactly one segment, decided by its identifier.
 ### Ownership
 
 `WorkflowSegmentOwnership` is the single home of the rule: a segment owns the instances whose segment key it matches.
-The segment key of a workflow id is the part before the first `#`, so the cross-version disambiguated form
-`base#version` shares the segment of its base id and every version of one logical workflow lands together.
+The segment key of a workflow id is the whole id; ids MUST be unique and carry no version, so no character is reserved.
 `String.hashCode()` is specified by the JLS, so the mapping is stable across JVMs and restarts.
 
 ### Routing

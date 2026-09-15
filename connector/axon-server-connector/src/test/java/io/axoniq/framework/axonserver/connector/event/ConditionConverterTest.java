@@ -22,26 +22,25 @@ package io.axoniq.framework.axonserver.connector.event;
 import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.grpc.event.dcb.ConsistencyCondition;
 import io.axoniq.axonserver.grpc.event.dcb.Criterion;
+import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceRequest;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.TagsAndNamesCriterion;
-import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexConsistencyMarker;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexPositions;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.GlobalSequenceTrackingToken;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.axonframework.messaging.eventstreaming.Tag;
-import org.axonframework.messaging.core.QualifiedName;
 import org.junit.jupiter.api.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.fail;
+import static org.assertj.core.api.Assertions.*;
 
 /**
  * Test class validating the {@link ConditionConverter}.
@@ -118,6 +117,46 @@ class ConditionConverterTest {
         SourceEventsRequest result = ConditionConverter.convertSourcingCondition(testCondition);
         // then...
         assertThat(result.getFromSequence()).isEqualTo(START);
+        List<Criterion> resultCriterion = result.getCriterionList();
+        assertThat(resultCriterion).hasSize(3);
+        validateCriterion(resultCriterion.getFirst().getTagsAndNames());
+        validateCriterion(resultCriterion.get(1).getTagsAndNames());
+        validateCriterion(resultCriterion.getLast().getTagsAndNames());
+    }
+
+    @Test
+    void convertSnapshottedSourcingConditionThrowsNullPointerExceptionForNullSourcingCondition() {
+        ByteString snapshotKey = ByteString.copyFromUtf8("test-entity");
+        //noinspection DataFlowIssue
+        assertThatThrownBy(() -> ConditionConverter.convertSnapshottedSourcingCondition(null, snapshotKey))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void convertSnapshottedSourcingConditionConstructsSnapshottedSourceRequestAsExpected() {
+        // given...
+        ByteString snapshotKey = ByteString.copyFromUtf8("test-entity" + '\0' + "entity-id");
+        SourcingCondition testCondition = SourcingCondition.conditionFor(
+                EventCriteria.havingTags(
+                                     Tag.of("key1OnCriterion1", "value1OnCriterion1"),
+                                     Tag.of("key2OnCriterion1", "value2OnCriterion1")
+                             )
+                             .andBeingOneOfTypes(new QualifiedName("name1OnCriterion1"))
+                             .or()
+                             .havingTags(Tag.of("key1OnCriterion2", "value1OnCriterion2"))
+                             .andBeingOneOfTypes(
+                                     new QualifiedName("name1OnCriterion2"),
+                                     new QualifiedName("name2OnCriterion2")
+                             )
+                             .or()
+                             .havingTags(Tag.of("key1OnCriterion3", "value1OnCriterion3"))
+        );
+        // when...
+        SnapshottedSourceRequest result = ConditionConverter.convertSnapshottedSourcingCondition(
+                testCondition, snapshotKey
+        );
+        // then...
+        assertThat(result.getSnapshotKey()).isEqualTo(snapshotKey);
         List<Criterion> resultCriterion = result.getCriterionList();
         assertThat(resultCriterion).hasSize(3);
         validateCriterion(resultCriterion.getFirst().getTagsAndNames());

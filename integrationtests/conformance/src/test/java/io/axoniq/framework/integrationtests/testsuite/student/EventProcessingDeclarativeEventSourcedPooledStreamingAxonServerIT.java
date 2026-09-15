@@ -31,7 +31,7 @@ import org.axonframework.integrationtests.testsuite.student.EventProcessingDecla
 public class EventProcessingDeclarativeEventSourcedPooledStreamingAxonServerIT
         extends EventProcessingDeclarativeEventSourcedPooledStreamingIT {
 
-    private static final TestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.singleTenant();
+    private static final TestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
 
     @Override
     protected TestInfrastructure testInfrastructure() {

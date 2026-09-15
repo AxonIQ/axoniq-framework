@@ -80,11 +80,8 @@ final class NewWorkflowInstanceRouting {
      * Decides the workflow id to use for a new start given an existing execution repository:
      * <ul>
      *   <li>No existing execution at {@code baseWorkflowId} → return the base id unchanged.</li>
-     *   <li>Existing execution at the <em>same</em> version → reject the start (returns {@code null})
-     *       and warn.</li>
-     *   <li>Existing execution at a <em>different</em> version → return {@code <base>#<version>} so
-     *       both versions coexist in parallel.</li>
-     *   <li>The disambiguated id is also already taken → reject and warn.</li>
+     *   <li>Existing execution at {@code baseWorkflowId}, at any version → reject the start (returns {@code null})
+     *       and warn. Workflow ids MUST be unique, so the version never becomes part of the id.</li>
      * </ul>
      */
     @Nullable
@@ -99,30 +96,12 @@ final class NewWorkflowInstanceRouting {
             return baseWorkflowId;
         }
         var existingVersion = existing.get().state().workflowDefinitionId().version();
-        if (existingVersion.equals(newInstanceVersion)) {
-            logger.warn(
-                    "A workflow with id '{}' is already running at version '{}'; ignoring new start request "
-                            + "triggered by event '{}'. The new start would be at the same version, so it is "
-                            + "treated as a duplicate. To run two instances of the same version in parallel, "
-                            + "use a different idProperty value.",
-                    baseWorkflowId, existingVersion, eventMessage.type().qualifiedName()
-            );
-            return null;
-        }
-        var disambiguated = baseWorkflowId + "#" + newInstanceVersion;
-        if (repository.findById(disambiguated).isPresent()) {
-            logger.warn(
-                    "A workflow with id '{}' is already running (cross-version disambiguated from '{}' at version "
-                            + "'{}'); ignoring new start request triggered by event '{}'.",
-                    disambiguated, baseWorkflowId, newInstanceVersion, eventMessage.type().qualifiedName()
-            );
-            return null;
-        }
-        logger.info(
-                "Starting a parallel workflow at version '{}' alongside the existing instance '{}' at version '{}'. "
-                        + "Disambiguated workflow id: '{}'.",
-                newInstanceVersion, baseWorkflowId, existingVersion, disambiguated
+        logger.warn(
+                "A workflow with id '{}' is already running at version '{}'; ignoring new start request at version "
+                        + "'{}' triggered by event '{}'. Workflow ids MUST be unique, so the start is treated as a "
+                        + "duplicate. To run two instances in parallel, use a different idProperty value.",
+                baseWorkflowId, existingVersion, newInstanceVersion, eventMessage.type().qualifiedName()
         );
-        return disambiguated;
+        return null;
     }
 }

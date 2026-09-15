@@ -89,7 +89,7 @@ import static org.axonframework.common.FutureUtils.joinAndUnwrap;
 @ExtendWith(DisableMultiTenancyTestsWithoutLicense.class)
 class MultiTenantDeadLetterQueueIT {
 
-    private static final AxonServerTestInfrastructure INFRASTRUCTURE = AxonServerTestInfrastructure.multiTenant();
+    private static final AxonServerTestInfrastructure INFRASTRUCTURE = new AxonServerTestInfrastructure();
     private static final String TENANT_A = "dlq-tenant-a";
     private static final String TENANT_B = "dlq-tenant-b";
     private static final String UNKNOWN_TENANT = "unknown-dlq-tenant";

@@ -19,7 +19,7 @@
 package io.axoniq.framework.workflow.runtime.api.execution.state;
 
 import org.axonframework.conversion.jackson.JacksonConverter;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.io.IOException;
 
@@ -204,12 +204,73 @@ class WorkflowErrorTest {
         var error = WorkflowError.from(outer);
         var reconstructed = error.toThrowable();
 
-        assertThat(reconstructed.type()).isEqualTo(outer.type());
-        assertThat(reconstructed.getMessage()).isEqualTo(outer.getMessage());
+        assertThat(reconstructed).isInstanceOfSatisfying(WorkflowExecutionException.class, e -> {
+            assertThat(e.type()).isEqualTo(outer.type());
+            assertThat(e.getMessage()).isEqualTo(outer.getMessage());
+        });
         assertThat(reconstructed.getCause()).isInstanceOfSatisfying(WorkflowExecutionException.class, c -> {
             assertThat(c.type()).isEqualTo(inner.type());
             assertThat(c.getMessage()).isEqualTo(inner.getMessage());
         });
+    }
+
+    @Nested
+    class StepIndeterminateExceptionReconstruction {
+
+        @Test
+        void toThrowableRebuildsStepIndeterminateExceptionAsItsOwnType() {
+            // given
+            var original = new StepIndeterminateException("doWork");
+            var error = WorkflowError.from(original);
+
+            // when
+            RuntimeException reconstructed = error.toThrowable();
+
+            // then
+            assertThat(reconstructed).isInstanceOf(StepIndeterminateException.class);
+            assertThat(reconstructed.getMessage()).isEqualTo(original.getMessage());
+            assertThat(reconstructed.getCause()).isNull();
+        }
+
+        @Test
+        void converterRoundTripRebuildsStepIndeterminateExceptionAsItsOwnType() {
+            // given - the durable path: compacted, serialized, deserialized, then rebuilt on replay
+            var converter = new JacksonConverter();
+            var compact = WorkflowError.from(new StepIndeterminateException("doWork"));
+
+            // when
+            WorkflowError stored = converter.convert(converter.convert(compact, byte[].class), WorkflowError.class);
+            RuntimeException reconstructed = stored.toThrowable();
+
+            // then
+            assertThat(reconstructed).isInstanceOf(StepIndeterminateException.class);
+            assertThat(reconstructed).isInstanceOf(StepFailedException.class);
+            assertThat(reconstructed.getMessage()).contains("doWork");
+        }
+
+        @Test
+        void roundTripStepIndeterminateExceptionThroughWorkflowErrorIsStable() {
+            // given
+            var error = WorkflowError.from(new StepIndeterminateException("doWork"));
+
+            // when
+            var fromReconstructed = WorkflowError.from(error.toThrowable());
+
+            // then
+            assertThat(fromReconstructed).isEqualTo(error);
+        }
+
+        @Test
+        void toThrowableKeepsWorkflowExecutionExceptionForOtherTypes() {
+            // given
+            var error = WorkflowError.from(new StepFailedException("plain failure"));
+
+            // when
+            RuntimeException reconstructed = error.toThrowable();
+
+            // then
+            assertThat(reconstructed).isExactlyInstanceOf(WorkflowExecutionException.class);
+        }
     }
 
     @Test

@@ -436,6 +436,120 @@ class AxonServerCommandBusConnectorTest {
     }
 
     @Nested
+    class CommandsInProgressCleanup {
+
+        @Test
+        void successfullyHandledCommandIsRemovedFromCommandsInProgress() {
+            Registration mockRegistration = mock(Registration.class);
+            when(commandChannel.registerCommandHandler(any(), eq(ANY_TEST_LOAD_FACTOR), eq(ANY_TEST_COMMAND_NAME.name())))
+                    .thenReturn(mockRegistration);
+            testSubject.subscribe(ANY_TEST_COMMAND_NAME, ANY_TEST_LOAD_FACTOR);
+
+            AtomicReference<CommandBusConnector.ResultCallback> resultCallback = new AtomicReference<>();
+            testSubject.onIncomingCommand((commandMessage, callback) -> resultCallback.set(callback));
+
+            Command command = createTestIncomingCommand();
+
+            // when ...
+            getRegisteredCommandHandler(mockRegistration).apply(command);
+            assertThat(getCommandsInProgress(testSubject)).containsKey(ANY_TEST_MESSAGE_ID);
+            resultCallback.get().onSuccess(new GenericCommandResultMessage(ANY_TEST_TYPE, ANY_TEST_PAYLOAD));
+
+            // then ...
+            assertThat(getCommandsInProgress(testSubject)).doesNotContainKey(ANY_TEST_MESSAGE_ID);
+        }
+
+        @Test
+        void erroneouslyHandledCommandIsRemovedFromCommandsInProgress() {
+            Registration mockRegistration = mock(Registration.class);
+            when(commandChannel.registerCommandHandler(any(), eq(ANY_TEST_LOAD_FACTOR), eq(ANY_TEST_COMMAND_NAME.name())))
+                    .thenReturn(mockRegistration);
+            testSubject.subscribe(ANY_TEST_COMMAND_NAME, ANY_TEST_LOAD_FACTOR);
+
+            AtomicReference<CommandBusConnector.ResultCallback> resultCallback = new AtomicReference<>();
+            testSubject.onIncomingCommand((commandMessage, callback) -> resultCallback.set(callback));
+
+            Command command = createTestIncomingCommand();
+
+            // when ...
+            getRegisteredCommandHandler(mockRegistration).apply(command);
+            assertThat(getCommandsInProgress(testSubject)).containsKey(ANY_TEST_MESSAGE_ID);
+            resultCallback.get().onError(new RuntimeException("boom"));
+
+            // then ...
+            assertThat(getCommandsInProgress(testSubject)).doesNotContainKey(ANY_TEST_MESSAGE_ID);
+        }
+
+        @Test
+        void commandsInProgressIsRemovedWhenSuccessConversionFails() {
+            Registration mockRegistration = mock(Registration.class);
+            when(commandChannel.registerCommandHandler(any(), eq(ANY_TEST_LOAD_FACTOR), eq(ANY_TEST_COMMAND_NAME.name())))
+                    .thenReturn(mockRegistration);
+            testSubject.subscribe(ANY_TEST_COMMAND_NAME, ANY_TEST_LOAD_FACTOR);
+
+            AtomicReference<CommandBusConnector.ResultCallback> resultCallback = new AtomicReference<>();
+            testSubject.onIncomingCommand((commandMessage, callback) -> resultCallback.set(callback));
+
+            Command command = createTestIncomingCommand();
+            CompletableFuture<CommandResponse> result = getRegisteredCommandHandler(mockRegistration).apply(command);
+            assertThat(getCommandsInProgress(testSubject)).containsKey(ANY_TEST_MESSAGE_ID);
+
+            // when ... the result message carries a payload CommandConverter.convertResultMessage rejects (not byte[])
+            resultCallback.get().onSuccess(new GenericCommandResultMessage(ANY_TEST_TYPE, "not-a-byte-array"));
+
+            // then ... the connector still completes (exceptionally) instead of leaking the entry forever
+            assertThat(result).isCompletedExceptionally();
+            assertThat(getCommandsInProgress(testSubject)).doesNotContainKey(ANY_TEST_MESSAGE_ID);
+        }
+
+        @Test
+        void commandsInProgressIsRemovedWhenErrorConversionFails() {
+            Registration mockRegistration = mock(Registration.class);
+            when(commandChannel.registerCommandHandler(any(), eq(ANY_TEST_LOAD_FACTOR), eq(ANY_TEST_COMMAND_NAME.name())))
+                    .thenReturn(mockRegistration);
+            testSubject.subscribe(ANY_TEST_COMMAND_NAME, ANY_TEST_LOAD_FACTOR);
+
+            AtomicReference<CommandBusConnector.ResultCallback> resultCallback = new AtomicReference<>();
+            testSubject.onIncomingCommand((commandMessage, callback) -> resultCallback.set(callback));
+
+            Command command = createTestIncomingCommand();
+            CompletableFuture<CommandResponse> result = getRegisteredCommandHandler(mockRegistration).apply(command);
+            assertThat(getCommandsInProgress(testSubject)).containsKey(ANY_TEST_MESSAGE_ID);
+
+            // when ... converting the exception's own details payload fails
+            when(converter.convert("some details", byte[].class)).thenThrow(new RuntimeException("conversion boom"));
+            resultCallback.get().onError(new CommandExecutionException("boom", null, "some details"));
+
+            // then ... the connector still completes (exceptionally) instead of leaking the entry forever
+            assertThat(result).isCompletedExceptionally();
+            assertThat(getCommandsInProgress(testSubject)).doesNotContainKey(ANY_TEST_MESSAGE_ID);
+        }
+
+        @SuppressWarnings("unchecked")
+        private Function<Command, CompletableFuture<CommandResponse>> getRegisteredCommandHandler(
+                Registration mockRegistration
+        ) {
+            ArgumentCaptor<Function<Command, CompletableFuture<CommandResponse>>> handlerCaptor =
+                    ArgumentCaptor.forClass(Function.class);
+            verify(commandChannel).registerCommandHandler(handlerCaptor.capture(),
+                                                          eq(ANY_TEST_LOAD_FACTOR),
+                                                          eq(ANY_TEST_COMMAND_NAME.name()));
+            return handlerCaptor.getValue();
+        }
+
+        private Command createTestIncomingCommand() {
+            return Command.newBuilder()
+                          .setName(ANY_TEST_COMMAND_NAME.name())
+                          .setMessageIdentifier(ANY_TEST_MESSAGE_ID)
+                          .setPayload(SerializedObject.newBuilder()
+                                                      .setType(ANY_TEST_COMMAND_TYPE)
+                                                      .setRevision(ANY_TEST_REVISION)
+                                                      .setData(ByteString.copyFrom(ANY_TEST_PAYLOAD)))
+                          .build();
+        }
+    }
+
+    @Nested
     class FutureResultCallback {
 
         @Test
@@ -531,6 +645,18 @@ class AxonServerCommandBusConnectorTest {
             Field field = AxonServerCommandBusConnector.class.getDeclaredField("incomingHandler");
             field.setAccessible(true);
             return (CommandBusConnector.Handler) field.get(instance);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private Map<String, CompletableFuture<?>> getCommandsInProgress(AxonServerCommandBusConnector instance) {
+        try {
+            Field field = AxonServerCommandBusConnector.class.getDeclaredField("commandsInProgress");
+            field.setAccessible(true);
+
+            //noinspection unchecked
+            return (Map<String, CompletableFuture<?>>) field.get(instance);
         } catch (NoSuchFieldException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
