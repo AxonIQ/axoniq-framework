@@ -206,7 +206,7 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Automatic-Module-Name>io.axoniq.framework.springboot.autoconfig</Automatic-Module-Name>
+                            <Automatic-Module-Name>io.axoniq.framework.springboot.autoconfigure</Automatic-Module-Name>
                         </manifestEntries>
                     </archive>
                 </configuration>
