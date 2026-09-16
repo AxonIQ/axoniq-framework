@@ -2060,6 +2060,10 @@ answer the manager inherits from the cancellation surface it exposes. Every othe
 | `DstSwarmFuzzTest` | swarm seeds 0–39 green (23 s, exit 0) | shape varied per seed
 | `DstInterleavingFuzzTest` | 40 schedules green (23 s, exit 0) | world seed fixed, carrier interleaving varied
 | `DstBuggifyFuzzTest` | 60 seeds green (35 s, exit 0) | `dst.seeds=60` confirmed in the surefire property dump; existing fire points
+| **After the fix** — per-PR gate on the fixed engine | 298 run, 2 red, both known load artifacts | `ClaimRestoreForeignWriteTest` (engine module, pre-existing 1-in-2 flake under the full suite, passes 8/8 in isolation, red on baseline too) and `InterruptedTerminalTransitionTest` (P6's recorded load artifact — the interrupt missed its window, `expected 2 but was 1`; 3/3 green in isolation on the fixed engine; its path is the workflow's own terminal publish, not `cancelStep`). Every manager arm, smoke and the 37 regression seeds green.
+| **After the fix** — `DstFuzzTest` seeds 0–299 | green (181 s, exit 0) | the store sourcing of every finished instance at each settled step and horizon absorbed
+| **After the fix** — `DstChaosFuzzTest` seeds 0–99 | green (66 s, exit 0) |
+| **After the fix** — `feature/workflow-manager-api` + the cherry-picked fix, full workflow reactor | BUILD SUCCESS | engine 608 (1 skipped), DSL, test 82, workflow integration tests 53 (2 skipped), Spring Boot 4, event streaming 115, JDK 25
 | New deterministic arms, 3 consecutive gate-style passes | 17/17, 17/17, 17/17 after one probe fix | first pass 16/17: the equivalence arm's parked-snapshot probe read the manager before the live state had absorbed the step record (the live state evolves on processor delivery, a moment after the commit) — a readiness race in the probe, fixed by waiting for the manager's live answer to hold the step; 3/3 green afterwards on seeds 0, 11, 42
 |===
 
