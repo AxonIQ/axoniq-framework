@@ -51,6 +51,12 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * An {@link AbstractSubscriptionQueryTestSuite} implementation validating the {@link DistributedQueryBus}.
+ * <p>
+ * Runs against its own dedicated container rather than the shared one: reproducibly hits a client-side
+ * "no connection to AxonServer" (AxonServerManagedChannel$FailingCall) on its very first query registration
+ * when pointed at a freshly created context, unlike the otherwise-identical DistributedQueryBusInterceptorIT.
+ * Root cause looks to be in axonserver-connector-java rather than in this suite's setup; isolating this test
+ * sidesteps it without blocking consolidation of the rest of the suite.
  *
  * @author Mateusz Nowak
  * @author Milan Savic
@@ -61,8 +67,7 @@ class DistributedQueryBusSubscriptionQueryIT extends AbstractSubscriptionQueryTe
 
     protected static final Logger logger = LoggerFactory.getLogger(DistributedQueryBusSubscriptionQueryIT.class);
 
-    private static final AxonServerContainer container = new AxonServerContainer(
-            "docker.axoniq.io/axoniq/axonserver:2025.2.0")
+    private static final AxonServerContainer container = new AxonServerContainer()
             .withAxonServerHostname("localhost")
             .withDevMode(true)
             .withReuse(true);

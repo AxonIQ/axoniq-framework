@@ -23,6 +23,7 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.messaging.queryhandling.distributed.DistributedQueryBus;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
+import io.axoniq.framework.testcontainer.SharedAxonServerContainer;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.integrationtests.queryhandling.AbstractQueryInterceptorTestSuite;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
@@ -30,11 +31,8 @@ import org.axonframework.messaging.queryhandling.QueryBus;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.io.IOException;
-
-import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
 
 /**
  * An {@link AbstractQueryInterceptorTestSuite} implementation validating query interceptor functionality with the
@@ -43,26 +41,31 @@ import static io.axoniq.framework.axonserver.connector.api.AxonServerConfigurati
  * @author Mateusz Nowak
  * @since 5.0.0
  */
-@Testcontainers
 public class DistributedQueryBusInterceptorIT extends AbstractQueryInterceptorTestSuite {
 
     protected static final Logger logger = LoggerFactory.getLogger(DistributedQueryBusInterceptorIT.class);
 
-    private static final AxonServerContainer container = new AxonServerContainer(
-            "docker.axoniq.io/axoniq/axonserver:2025.2.0")
-            .withAxonServerHostname("localhost")
-            .withDevMode(true)
-            .withReuse(true);
+    /*
+     * A context of its own, rather than the shared container's default context, so that this suite doesn't race
+     * DistributedQueryBusSubscriptionQueryIT (same module, can run in a concurrent fork) recreating "default" too.
+     */
+    private static final String CONTEXT = "distributed-query-bus-interceptor-it";
+
+    private static final AxonServerContainer container = SharedAxonServerContainer.INSTANCE;
 
     @BeforeAll
     static void beforeAll() throws IOException {
-        container.start();
+        SharedAxonServerContainer.ensureStarted();
 
-        // Mainly needed to create DBC context now:
-        AxonServerContainerUtils.purgeEventsFromAxonServer(container.getHost(),
-                                                           container.getHttpPort(),
-                                                           DEFAULT_CONTEXT,
-                                                           AxonServerContainerUtils.DCB_CONTEXT);
+        try {
+            AxonServerContainerUtils.deleteContext(container.getHost(), container.getHttpPort(), CONTEXT);
+        } catch (IOException ignored) {
+            // Context didn't exist yet.
+        }
+        AxonServerContainerUtils.createContext(container.getHost(),
+                                               container.getHttpPort(),
+                                               CONTEXT,
+                                               AxonServerContainerUtils.DCB_CONTEXT);
         logger.info("Using Axon Server for integration test. UI is available at http://localhost:{}",
                     container.getHttpPort());
     }
@@ -70,6 +73,7 @@ public class DistributedQueryBusInterceptorIT extends AbstractQueryInterceptorTe
     private static AxonServerConfiguration testContainerAxonServerConfiguration() {
         AxonServerConfiguration axonServerConfiguration = new AxonServerConfiguration();
         axonServerConfiguration.setServers(container.getHost() + ":" + container.getGrpcPort());
+        axonServerConfiguration.setContext(CONTEXT);
         return axonServerConfiguration;
     }
 
