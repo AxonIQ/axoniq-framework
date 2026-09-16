@@ -71,6 +71,7 @@ import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.Subscri
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.VersionedOrderRequestedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.VersioningEdgesRequestedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.VersioningEdgesSignalEvent;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1390,7 +1391,7 @@ public final class DstSimulation {
      */
     private static Map<String, List<String>> stepNamesByWorkflowId(SimulationWorld world) {
         var byWorkflow = new java.util.TreeMap<String, List<String>>();
-        for (var history : world.engine().historyRepository().findAll()) {
+        for (var history : FutureUtils.joinAndUnwrap(world.engine().historyRepository().findAll())) {
             byWorkflow.put(history.workflowId(), List.copyOf(history.state().workflowStepNames()));
         }
         return byWorkflow;
