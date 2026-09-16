@@ -30,8 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * A cancellation requested through the {@code WorkflowManager} on a node that lost the instance records nothing. The
- * manager twin of {@link FencedExternalCancelTest}; see {@link FencedManagerCancelScenario}. Also pins candidate
- * finding F-43: the request's {@code true} is not tied to the durable record it claims.
+ * manager twin of {@link FencedExternalCancelTest}; see {@link FencedManagerCancelScenario}. Also guards the F-43 fix:
+ * the request's answer is {@code false} when the fence rejects the record it would otherwise claim.
  *
  * @author Stefan Dragisic
  */
@@ -57,12 +57,11 @@ class FencedManagerCancelTest {
         assertThat(outcome.terminalRecords())
                 .as("no terminal workflow record from a fenced node")
                 .isZero();
-        // THE GAP (F-43): the API documents true as "a terminal step cancellation was recorded", but the answer is
-        // decided by the in-memory step cancellation (WorkflowLifecycleControlDelegate#cancelStep) before the store
-        // has accepted or rejected the CANCELLED append. On a fenced node nothing is recorded and the caller is still
-        // told true. Expected-gap pin: flips when the answer is tied to an accepted append.
+        // F-43, closed: the API documents true as "a terminal step cancellation was recorded". The rejected append
+        // interrupts the driver while cancelStep awaits the terminal record, and the answer is false — before the fix
+        // that interrupt was swallowed and the fenced node answered true.
         assertThat(outcome.lastAnswer())
-                .as("expected-gap pin: the fenced node answers true for a cancellation it never recorded")
-                .isTrue();
+                .as("a fenced node never answers true for a cancellation it did not record")
+                .isFalse();
     }
 }
