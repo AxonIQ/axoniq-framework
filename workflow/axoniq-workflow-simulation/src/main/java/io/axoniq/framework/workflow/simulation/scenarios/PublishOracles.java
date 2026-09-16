@@ -21,6 +21,7 @@ package io.axoniq.framework.workflow.simulation.scenarios;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import io.axoniq.framework.workflow.simulation.harness.SimulationWorld;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
 
@@ -100,7 +101,7 @@ final class PublishOracles {
      */
     static Map<String, List<String>> stepNamesById(SimulationWorld world) {
         var byWorkflow = new TreeMap<String, List<String>>();
-        for (var history : world.engine().historyRepository().findAll()) {
+        for (var history : FutureUtils.joinAndUnwrap(world.engine().historyRepository().findAll())) {
             byWorkflow.put(history.workflowId(), List.copyOf(history.state().workflowStepNames()));
         }
         return byWorkflow;

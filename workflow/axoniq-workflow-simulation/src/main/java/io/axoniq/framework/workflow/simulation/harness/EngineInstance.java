@@ -106,6 +106,7 @@ import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.Version
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.VersioningEdgesRequestedEvent;
 import java.util.List;
 import java.util.function.Consumer;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.messaging.core.MessageType;
@@ -1442,7 +1443,7 @@ public final class EngineInstance implements AutoCloseable {
      */
         public java.util.Map<String, java.util.Map<String, Object>> reconstructedPayloads(String idPrefix) {
         var payloads = new java.util.LinkedHashMap<String, java.util.Map<String, Object>>();
-        for (var history : historyRepository.findAll()) {
+        for (var history : FutureUtils.joinAndUnwrap(historyRepository.findAll())) {
             if (history.workflowId().startsWith(idPrefix)) {
                 payloads.put(history.workflowId(), history.state().payload());
             }
