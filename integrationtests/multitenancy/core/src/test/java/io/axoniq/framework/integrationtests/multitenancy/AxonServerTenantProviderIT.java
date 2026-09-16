@@ -48,7 +48,6 @@ class AxonServerTenantProviderIT {
     @BeforeEach
     void setUp() {
         INFRASTRUCTURE.start();
-        INFRASTRUCTURE.purgeData();
         contextManager = INFRASTRUCTURE.getContextManager();
 
         assertThat(contextManager.getContexts()).containsExactlyInAnyOrder(DEFAULT_CONTEXT, ADMIN_CONTEXT);
@@ -56,7 +55,6 @@ class AxonServerTenantProviderIT {
 
     @AfterEach
     void tearDown() {
-        INFRASTRUCTURE.purgeData();
         contextManager.deleteAllCustomContexts();
         INFRASTRUCTURE.stop();
     }

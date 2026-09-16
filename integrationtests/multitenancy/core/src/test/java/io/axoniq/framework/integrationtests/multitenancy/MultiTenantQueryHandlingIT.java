@@ -98,7 +98,6 @@ class MultiTenantQueryHandlingIT {
     @BeforeEach
     void setUp() {
         INFRASTRUCTURE.start();
-        INFRASTRUCTURE.purgeData();
         contextManager = INFRASTRUCTURE.getContextManager();
         contextManager.createContext(TENANT_A);
         contextManager.createContext(TENANT_B);
@@ -140,7 +139,6 @@ class MultiTenantQueryHandlingIT {
     @AfterEach
     void tearDown() {
         application.shutdown();
-        INFRASTRUCTURE.purgeData();
         contextManager.deleteAllCustomContexts();
         capturedEmitters.clear();
         INFRASTRUCTURE.stop();

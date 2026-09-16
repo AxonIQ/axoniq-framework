@@ -105,7 +105,6 @@ class MultiTenantDeadLetterQueueIT {
     @BeforeEach
     void setUp() {
         INFRASTRUCTURE.start();
-        INFRASTRUCTURE.purgeData();
         contextManager = INFRASTRUCTURE.getContextManager();
         contextManager.createContext(TENANT_A);
         contextManager.createContext(TENANT_B);
@@ -256,7 +255,6 @@ class MultiTenantDeadLetterQueueIT {
             application.shutdown();
             application = null;
         }
-        INFRASTRUCTURE.purgeData();
         contextManager.deleteAllCustomContexts();
         INFRASTRUCTURE.stop();
     }
