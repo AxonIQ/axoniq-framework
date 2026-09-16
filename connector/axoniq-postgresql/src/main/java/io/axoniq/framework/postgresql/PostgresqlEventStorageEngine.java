@@ -451,6 +451,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     private final TransactionalExecutorProvider<Connection> transactionalExecutorProvider;
     private final DataSource dataSource;
     private final EventConverter converter;
+    private final SchemaInitialization schemaInitialization;
     private final EntitlementManager entitlementManager;
     private final PostgresqlSnapshotStore snapshotStore;
 
@@ -532,35 +533,52 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     private final PostgresqlFinalizer finalizer;
 
     /**
-     * Constructs a new instance.
+     * Constructs a new instance, using {@link SchemaInitialization#CREATE_IF_MISSING} to ensure the schema is
+     * present.
      *
      * @param dataSource a data source to connect to PostgreSQL, cannot be {@code null}
      * @param converter  an event converter for converting the payload to bytes, cannot be {@code null}
      */
     public PostgresqlEventStorageEngine(DataSource dataSource, EventConverter converter) {
-        this(dataSource, converter, EntitlementManager.INSTANCE);
+        this(dataSource, converter, SchemaInitialization.CREATE_IF_MISSING);
+    }
+
+    /**
+     * Constructs a new instance.
+     *
+     * @param dataSource           a data source to connect to PostgreSQL, cannot be {@code null}
+     * @param converter            an event converter for converting the payload to bytes, cannot be {@code null}
+     * @param schemaInitialization how to handle a missing or incomplete schema, cannot be {@code null}
+     */
+    public PostgresqlEventStorageEngine(DataSource dataSource, EventConverter converter,
+                                        SchemaInitialization schemaInitialization) {
+        this(dataSource, converter, schemaInitialization, EntitlementManager.INSTANCE);
         EntitlementManager.INSTANCE.registerAddon(PostgresAxoniqAddon.class);
     }
 
     /**
      * Package-private constructor for testing, allowing injection of an alternative {@link EntitlementManager}.
-     * Production code must use {@link #PostgresqlEventStorageEngine(DataSource, EventConverter)}, which
-     * uses {@link EntitlementManager#INSTANCE} directly.
+     * Production code must use {@link #PostgresqlEventStorageEngine(DataSource, EventConverter)} or
+     * {@link #PostgresqlEventStorageEngine(DataSource, EventConverter, SchemaInitialization)}, which use
+     * {@link EntitlementManager#INSTANCE} directly.
      *
-     * @param dataSource         a data source to connect to PostgreSQL, cannot be {@code null}
-     * @param converter          an event converter for converting the payload to bytes, cannot be {@code null}
-     * @param entitlementManager the entitlement manager to use, cannot be {@code null}
+     * @param dataSource           a data source to connect to PostgreSQL, cannot be {@code null}
+     * @param converter            an event converter for converting the payload to bytes, cannot be {@code null}
+     * @param schemaInitialization how to handle a missing or incomplete schema, cannot be {@code null}
+     * @param entitlementManager   the entitlement manager to use, cannot be {@code null}
      */
     @Internal
-    PostgresqlEventStorageEngine(DataSource dataSource, EventConverter converter, EntitlementManager entitlementManager) {
+    PostgresqlEventStorageEngine(DataSource dataSource, EventConverter converter,
+                                 SchemaInitialization schemaInitialization, EntitlementManager entitlementManager) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         this.converter = Objects.requireNonNull(converter, "converter");
+        this.schemaInitialization = Objects.requireNonNull(schemaInitialization, "schemaInitialization");
         this.entitlementManager = Objects.requireNonNull(entitlementManager, "entitlementManager");
         this.transactionalExecutorProvider = new JdbcTransactionalExecutorProvider(dataSource);
         this.snapshotStore = new PostgresqlSnapshotStore(dataSource, converter);
 
         try {
-            PostgresqlSchemaInitializer.initialize(dataSource);
+            PostgresqlSchemaInitializer.initialize(dataSource, schemaInitialization);
         }
         catch (SQLException e) {
             throw new IllegalStateException("Could not initialize " + getClass().getSimpleName(), e);
@@ -599,6 +617,7 @@ public final class PostgresqlEventStorageEngine implements EventStorageEngine, S
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("dataSource", dataSource);
         descriptor.describeProperty("converter", converter);
+        descriptor.describeProperty("schemaInitialization", schemaInitialization);
         descriptor.describeProperty("transactionalExecutorProvider", transactionalExecutorProvider);
         descriptor.describeProperty("snapshotStore", snapshotStore);
     }
