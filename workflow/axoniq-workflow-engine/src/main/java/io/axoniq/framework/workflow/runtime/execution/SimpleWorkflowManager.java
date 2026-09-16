@@ -21,6 +21,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
+import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.manager.NonUniqueWorkflowInstanceMatchException;
@@ -28,12 +29,14 @@ import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstance;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstances;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.jspecify.annotations.Nullable;
 import org.reactivestreams.FlowAdapters;
 import org.reactivestreams.Publisher;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -43,7 +46,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Flow;
 import java.util.concurrent.SubmissionPublisher;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -58,6 +60,8 @@ public class SimpleWorkflowManager implements WorkflowManager {
     private final WorkflowHistoryRepository historyRepository;
     private final WorkflowExecutionRepository executionRepository;
     private final WorkflowCancellationService cancellationService;
+    private final WorkflowStore workflowStore;
+    private final UnitOfWorkFactory unitOfWorkFactory;
     private final Executor executor;
 
     /**
@@ -66,11 +70,15 @@ public class SimpleWorkflowManager implements WorkflowManager {
      * @param historyRepository   repository containing projected workflow states
      * @param executionRepository repository containing live workflow executions
      * @param cancellationService service delivering cancellation requests to live workflows
+     * @param workflowStore       store the state of a non-live workflow is sourced from
+     * @param unitOfWorkFactory   factory for the unit of work each such sourcing runs in
      * @param executor            executor used for asynchronous manager operations
      */
     public SimpleWorkflowManager(WorkflowHistoryRepository historyRepository,
                                  WorkflowExecutionRepository executionRepository,
                                  WorkflowCancellationService cancellationService,
+                                 WorkflowStore workflowStore,
+                                 UnitOfWorkFactory unitOfWorkFactory,
                                  Executor executor) {
         this.historyRepository = Objects.requireNonNull(historyRepository,
                                                         "The WorkflowHistoryRepository must not be null.");
@@ -78,6 +86,9 @@ public class SimpleWorkflowManager implements WorkflowManager {
                                                           "The WorkflowExecutionRepository must not be null.");
         this.cancellationService = Objects.requireNonNull(cancellationService,
                                                           "The WorkflowCancellationService must not be null.");
+        this.workflowStore = Objects.requireNonNull(workflowStore, "The WorkflowStore must not be null.");
+        this.unitOfWorkFactory = Objects.requireNonNull(unitOfWorkFactory,
+                                                        "The UnitOfWorkFactory must not be null.");
         this.executor = Objects.requireNonNull(executor, "The executor must not be null.");
     }
 
@@ -91,21 +102,63 @@ public class SimpleWorkflowManager implements WorkflowManager {
         return new MultipleInstances(Objects.requireNonNull(query, "The WorkflowStateQuery must not be null."));
     }
 
+    /**
+     * Resolves the states matching a query: live executions answer for themselves; every other candidate is sourced
+     * from the {@link WorkflowStore}, so the answer for an id that is no longer live is the event store's, never a
+     * projection that may still lag behind it.
+     * <p>
+     * Candidates for sourcing are the history matches that are not live, plus every workflow id the query names
+     * explicitly, so a workflow the projection has not seen yet is still found by id. A sourced state is kept only
+     * when it exists and still matches the query.
+     */
     private CompletableFuture<List<WorkflowState>> matching(WorkflowStateQuery query) {
         return executionRepository.findAll(query)
-                                  .thenCombine(historyRepository.findAll(query), (liveExecutions, history) ->
-                                          Stream.concat(
-                                                        liveExecutions.stream().map(WorkflowExecution::state),
-                                                        history.stream().map(WorkflowHistory::state)
-                                                )
-                                                .collect(Collectors.toMap(WorkflowState::workflowId,
-                                                                          Function.identity(),
-                                                                          (live, historical) -> live,
-                                                                          LinkedHashMap::new))
-                                                .values()
-                                                .stream()
-                                                .toList()
-                                  );
+                                  .thenCombine(historyRepository.findAll(query), (liveExecutions, history) -> {
+                                      var byId = new LinkedHashMap<String, WorkflowState>();
+                                      liveExecutions.forEach(e -> byId.putIfAbsent(e.state().workflowId(), e.state()));
+                                      var candidates = new LinkedHashSet<String>();
+                                      history.stream().map(WorkflowHistory::workflowId).forEach(candidates::add);
+                                      explicitWorkflowIds(query).forEach(candidates::add);
+                                      candidates.removeAll(byId.keySet());
+                                      return new Merge(byId, List.copyOf(candidates));
+                                  })
+                                  .thenCompose(merge -> sourceAll(merge.candidates()).thenApply(sourced -> {
+                                      for (WorkflowState state : sourced) {
+                                          if (WorkflowStateQueryMatcher.matches(query, state)) {
+                                              merge.byId().putIfAbsent(state.workflowId(), state);
+                                          }
+                                      }
+                                      return List.copyOf(merge.byId().values());
+                                  }));
+    }
+
+    private record Merge(LinkedHashMap<String, WorkflowState> byId, List<String> candidates) {
+
+    }
+
+    private static Stream<String> explicitWorkflowIds(WorkflowStateQuery query) {
+        return query.criteria().stream()
+                    .filter(WorkflowStateQuery.WorkflowIdCriterion.class::isInstance)
+                    .map(WorkflowStateQuery.WorkflowIdCriterion.class::cast)
+                    .map(WorkflowStateQuery.WorkflowIdCriterion::workflowId);
+    }
+
+    private CompletableFuture<List<WorkflowState>> sourceAll(List<String> workflowIds) {
+        var loads = workflowIds.stream().map(this::source).toList();
+        return CompletableFuture.allOf(loads.toArray(CompletableFuture[]::new))
+                                .thenApply(ignored -> loads.stream()
+                                                           .map(CompletableFuture::resultNow)
+                                                           .flatMap(Optional::stream)
+                                                           .toList());
+    }
+
+    /**
+     * Sources one workflow from the store in its own unit of work. Empty when the store holds no events for the id,
+     * which is how an id a query names but nothing has recorded is told apart from an existing one.
+     */
+    private CompletableFuture<Optional<WorkflowState>> source(String workflowId) {
+        return unitOfWorkFactory.create("workflow-manager-" + workflowId)
+                                .executeWithResult(context -> workflowStore.findWorkflow(workflowId, context));
     }
 
     private CompletableFuture<List<WorkflowState>> matchingLive(WorkflowStateQuery query) {

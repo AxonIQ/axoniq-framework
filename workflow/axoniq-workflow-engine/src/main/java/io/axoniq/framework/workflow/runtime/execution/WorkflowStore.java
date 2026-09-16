@@ -22,6 +22,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -50,4 +51,14 @@ public interface WorkflowStore {
      */
     CompletableFuture<WorkflowState> loadWorkflow(String workflowId,
                                                   ProcessingContext processingContext);
+
+    /**
+     * Sources the state of a workflow that may not exist.
+     *
+     * @param workflowId        identifier of the workflow to source
+     * @param processingContext processing context the sourcing runs in
+     * @return a future completing with the sourced state, or empty when the store holds no events for the workflow
+     */
+    CompletableFuture<Optional<WorkflowState>> findWorkflow(String workflowId,
+                                                            ProcessingContext processingContext);
 }

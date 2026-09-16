@@ -332,6 +332,8 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                         cfg.getComponent(WorkflowHistoryRepository.class),
                         cfg.getComponent(WorkflowExecutionRepository.class),
                         cfg.getComponent(WorkflowCancellationService.class),
+                        cfg.getComponent(WorkflowStore.class),
+                        cfg.getComponent(UnitOfWorkFactory.class),
                         cfg.getComponent(ExecutorService.class, WORKFLOW_ENGINE_EXECUTOR)
                 )
         );

@@ -19,6 +19,7 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
+import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
 import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
 import io.axoniq.framework.workflow.query.utils.WorkflowStateQueryMatcher;
@@ -27,6 +28,9 @@ import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.api.manager.NonUniqueWorkflowInstanceMatchException;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstance;
 import org.axonframework.messaging.core.VersionedType;
+import org.axonframework.messaging.core.EmptyApplicationContext;
+import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.*;
 import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
@@ -237,7 +241,35 @@ class SimpleWorkflowManagerTest {
         return new SimpleWorkflowManager(history,
                                          executions,
                                          cancellations,
+                                         storeMirroring(history),
+                                         new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE),
                                          Runnable::run);
+    }
+
+    /**
+     * A store that answers what the history projection holds, and an empty state for anything else — the shape of a
+     * store whose projection is fully caught up, so the tests keep judging the merge rules rather than the sourcing.
+     */
+    private static WorkflowStore storeMirroring(WorkflowHistoryRepository history) {
+        return new WorkflowStore() {
+            @Override
+            public CompletableFuture<RunningWorkflows> loadRunningWorkflows(ProcessingContext processingContext) {
+                throw new UnsupportedOperationException("not used by the manager");
+            }
+
+            @Override
+            public CompletableFuture<WorkflowState> loadWorkflow(String workflowId,
+                                                                 ProcessingContext processingContext) {
+                return findWorkflow(workflowId, processingContext).thenApply(state -> state.orElseGet(
+                        () -> new EventSourcedWorkflowState(workflowId, VersionedType.of("none", "0.0.1"))));
+            }
+
+            @Override
+            public CompletableFuture<Optional<WorkflowState>> findWorkflow(String workflowId,
+                                                                           ProcessingContext processingContext) {
+                return history.findById(workflowId).thenApply(entry -> entry.map(WorkflowHistory::state));
+            }
+        };
     }
 
     private static WorkflowExecution execution(String workflowId, String workflowName) {

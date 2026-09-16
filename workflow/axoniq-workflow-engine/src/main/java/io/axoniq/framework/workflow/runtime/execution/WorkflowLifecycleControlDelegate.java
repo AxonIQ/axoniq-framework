@@ -156,9 +156,12 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         try {
             workflowExecution.awaitStateChange(WorkflowStateUtils.stepTerminal(stepName));
         } catch (InterruptedException e) {
+            // The driver is interrupted when an append of this execution was rejected (another writer owns the
+            // instance) or the engine shuts down. Either way no terminal step record of ours is durable.
             Thread.currentThread().interrupt();
+            return false;
         }
-        return true;
+        return WorkflowStateUtils.stepTerminal(stepName).test(workflowExecution.state());
     }
 
     private void publishFailed(WorkflowLifecycleControl.FailWorkflowCommand command,
