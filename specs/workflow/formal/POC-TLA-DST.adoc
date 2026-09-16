@@ -2015,9 +2015,9 @@ campaign began. The campaign asked: is the merged answer ever wrong, does it eve
 language agree with the log, does cancellation through the manager reach what the in-engine surface reaches and
 nothing else, and does a fenced node tell the truth.
 
-**Two findings, both recorded as expected-gap pins, neither filed yet.** F-42 is a design gap of the two-source read
-that TLC finds in five steps with no fault at all; F-43 is a misleading answer the manager inherits from the
-cancellation surface it exposes. Every other arm passed on the code as written.
+**Two findings, both pinned as expected gaps and both fixed the same day (pins flipped, see "Fixes landed").**
+F-42 is a design gap of the two-source read that TLC finds in five steps with no fault at all; F-43 is a misleading
+answer the manager inherits from the cancellation surface it exposes. Every other arm passed on the code as written.
 
 === What was added
 
@@ -2095,6 +2095,28 @@ that lost the instance the append is rejected (1 rejection warning, record count
 terminal record) and the caller is still told `true`. Inherited from the internal `WorkflowCancellation` contract; the
 manager is the first public surface to hand the value to a caller who cannot see the log. **Candidate fix:** complete
 with the append's outcome, or document the value as "the running step was cancelled on this node".
+
+=== Fixes landed the same day (both pins flipped)
+
+Simon asked for a same-day fix, so both findings were fixed on the backport first and the pins were used as the
+acceptance criteria, then the engine commit was cherry-picked onto `feature/workflow-manager-api`.
+
+* **F-42** — `SimpleWorkflowManager.matching` now keeps live executions as they are and sources every other candidate
+  — the history matches and every workflow id the query names — from the `WorkflowStore` in its own unit of work.
+  `WorkflowStore` gained `findWorkflow(id, context)`, empty when the store holds no events for the id (this is what
+  tells an id the query names but nothing recorded apart from an existing one; `loadOrCreate` cannot, its entity
+  factory dereferences the first event). The projection is thereby an index, never the answer. Pins: the
+  `VISIBILITY` and `STATUS` arms of `ManagerVisibilityProbeTest` flipped from `null` / `STARTED` to `COMPLETED` and
+  now guard the fix; `MC_managerview_fixed.cfg` is the shipped design. Cost: one store sourcing per non-live match —
+  `findMany(all())` at the horizon sources every finished instance; the gate, 300 fuzz seeds and 100 chaos seeds
+  absorbed it (table above, rows "after the fix").
+* **F-43** — `WorkflowLifecycleControlDelegate.cancelStep` answers `false` when `awaitStateChange` is interrupted
+  (the driver interrupt a rejected append or a shutdown delivers) and otherwise answers whether the step is terminal,
+  instead of `return true` after a swallowed `InterruptedException`. Pin: `FencedManagerCancelTest` flipped from
+  `true` to `false` and guards it; two unit tests were added next to the existing `cancelStep` test, which now stubs
+  the terminal record arriving.
+* Unit-test consequence worth knowing: `SimpleWorkflowManagerTest` builds its manager with a `WorkflowStore` that
+  mirrors the history repository, so its eleven merge-rule tests keep judging the merge and not the sourcing.
 
 === Precise negatives — documented so they are not re-hunted
 

@@ -1976,15 +1976,18 @@ duplicated the *effect* while the *record* stayed ≤1, which is exactly why the
   `WorkflowHistoryRepository.findAll(query)` by `workflowId`, live wins); `WorkflowEngine.removeExecution` (drops the
   finished execution from the live repository the moment its body finishes, `WorkflowEngine.java` `execute` callback);
   `WorkflowHistoryProjector.handle` (the history half, fed by the pooled streaming processor with unbounded lag).
-- **Currently holds?** **No — F-42.** The removal is not tied to the projector's position: an id whose execution has
-  finished is answered from the live repository, then from nothing until the projector has applied its STARTED.
-  Mutation-checked in reverse: `MC_managerview.cfg` violates it at depth 5 with no crash; `MC_managerview_retain.cfg`
-  shows that retaining the execution until projected closes the removal window but not the crash window.
+- **Currently holds?** **Yes — F-42 fixed** (2026-09-16): `SimpleWorkflowManager.matching` sources every non-live
+  candidate — history matches and the ids the query names — from the `WorkflowStore` (`findWorkflow`, empty when the
+  store holds no events), so the projection is only an index. Before the fix: the removal was not tied to the
+  projector's position and a finished id was answered from nothing until the projector applied its STARTED.
+  Mutation-checked in reverse: `MC_managerview.cfg` violates the pre-fix design at depth 5 with no crash;
+  `MC_managerview_retain.cfg` shows that retaining the execution until projected closes the removal window but not the
+  crash window; `MC_managerview_fixed.cfg` is the shipped design.
 - **Checked by:** TLA+ `ManagerView.tla` operator `ManagerVisibilityMonotonic` (`MC_managerview.cfg` **VIOLATED**,
   `MC_managerview_retain.cfg` **VIOLATED**, `MC_managerview_fixed.cfg` holds); DST
   `Invariants.assertManagerVisibilityMonotonic` — exercised by `ManagerVisibilityProbeScenario` (mode `VISIBILITY`,
-  the `LaggingHistoryRepository` seam) and pinned as an expected gap in `ManagerVisibilityProbeTest`. Not always-on:
-  it is red on the code as written.
+  the `LaggingHistoryRepository` seam); `ManagerVisibilityProbeTest` was the expected-gap pin and now guards the fix
+  (`afterRemoval` is COMPLETED with history frozen empty).
 
 ### INV-32: The manager never takes a terminal answer back
 - **Name:** `ManagerStatusMonotonic`
@@ -1995,11 +1998,13 @@ duplicated the *effect* while the *record* stayed ≤1, which is exactly why the
   status(answer(q1, w))`.
 - **Engine mapping:** as INV-31; the terminal live state exists between `EventSourcedWorkflowState.evolve` applying the
   terminal event and `WorkflowEngine.removeExecution`, after which the lagging projection answers.
-- **Currently holds?** **No — F-42 (second facet).** `MC_managerview_status.cfg` violates it at depth 5 with no
-  crash: Start, Complete, Query (COMPLETED), Remove — the next answer is the projection's STARTED.
+- **Currently holds?** **Yes — F-42 fixed** (same fix as INV-31). Before: `MC_managerview_status.cfg` violates the
+  pre-fix design at depth 5 with no crash: Start, Complete, Query (COMPLETED), Remove — the next answer was the
+  projection's STARTED.
 - **Checked by:** TLA+ `ManagerView.tla` operator `ManagerStatusMonotonic` (`MC_managerview_status.cfg`
   **VIOLATED**, `MC_managerview_fixed.cfg` holds); DST `Invariants.assertManagerStatusMonotonic` — exercised by
-  `ManagerVisibilityProbeScenario` (mode `STATUS`) and pinned as an expected gap in `ManagerVisibilityProbeTest`.
+  `ManagerVisibilityProbeScenario` (mode `STATUS`); `ManagerVisibilityProbeTest` was the expected-gap pin and now
+  guards the fix.
 
 ### INV-33: The manager's answer is the log
 - **Name:** `ManagerViewMatchesLog`
@@ -2111,8 +2116,8 @@ carries the weaker label *confirmed on real infrastructure*. Closing the gap mea
 | INV-28 | `SpawnExactlyOnce` | Safety | Yes — the campaign's strongest **precise negative**, no finding | — (double starts trace to ownership, not routing: INV-25/F-27 fixed, S-9 open. Untested adjacent hazard: **S-10**, `#` is silently load-bearing in the segment key, so a `workflowIdProvider` returning `order#123` collapses every order onto one segment) | `sharding/WfShard.tla` — `SpawnExactlyOnce` + `WakeExactlyOnce`, with `NoDoubleStart` and `AtMostOneCompletion`; both hold with **all four modelled defects enabled** at 3 segments / 3 instances / **1,722,131 distinct states, depth 31** (`cfg_asis3_spawn`, `cfg_asis3_wake`, `cfg_fixed3`), and both fail within **8 steps** once the `shouldHandle`/`shouldSpawn` guards are deleted (`cfg_mut`, `cfg_mut_wake`) — so the green is not vacuous | **none** — see INV-24's scope note | **real infrastructure, not seeds:** `DuplicateStartEventsIT` (8 duplicate starts + 8 duplicate resumes committed, effect once, on **both** the hash-routed and the broadcast path); `TimerAcrossHandoverIT` (timers **RESUME** at the original deadline across a handover — a 60 000 ms timeout fired at `msFromArmed=60110` on the node that *took* the segment, retry backoff at `msFromFirstAttempt=30018`; deadlines come from the durable step timestamp); `IdleClusterSparseTrafficIT` (claim renewal is **not** event-driven — `maxClaimAgeMs=6014` against a 10 s timeout across a 120 s idle gap, owners unchanged, and placement after idleness still routes by hash rather than to the warm node); `CrossSegmentSpawnIT`; `SustainedLoadHandoverIT` |
 | INV-29 | `NoForeignStepRecorded` | Safety | Yes — works as expected (mutation-checked) | — | `PublishRouting.tla` — `NoForeignStepRecorded`; `MC_publish.cfg` **No error** (204 distinct states), `MC_publish_noguard.cfg` **VIOLATED** (guard deleted) | `Invariants.assertNoForeignStepRecorded` — always-on in `DstSimulation` on the publish chain; `PublishChainScenario`, `PublishWaitOrderScenario`, `PublishFanOutWakeScenario`, `PublishCrashScenario` | `Inv29PublishPrimitiveTest` (seeds 3, 5, 7, 11, 17, 19, 23, 31), smoke/fuzz/chaos via the chain in `defaultRegistrations()` |
 | INV-30 | `PublisherObservesOwnPublish` | Safety | Yes — works as expected (mutation-checked); cross-segment delivery carried by TLA+ + the engine's routing unit test, not DST | — | `PublishRouting.tla` — `PublisherObservesOwnPublish` + `AtMostOnceRecording` + `WakeExactlyOnce` + `SpawnAtMostOnce` + `LateWaitNeverWakes`; `MC_publish.cfg` **No error**, `MC_publish_candidate.cfg` / `MC_publish_candidate_wake.cfg` **VIOLATED** (candidate routing), `MC_publish_nogate.cfg` **VIOLATED** (gate deleted) | `Invariants.assertPublisherObservesOwnPublish` — always-on in `DstSimulation` for both publishers; `PublishChainScenario`, `PublishCrashScenario`, `FencedPublishScenario`, `PublishToEventHandlerScenario` | `Inv29PublishPrimitiveTest`, `FencedPublishTest` (seed 29), `PublishAppendFailureTest` (seeds 37, 41, 43) |
-| INV-31 | `ManagerVisibilityMonotonic` | Safety | **No** | **F-42** | `ManagerView.tla` — `ManagerVisibilityMonotonic`; **VIOLATED** in `MC_managerview.cfg` (depth 5, no crash: Start, Query, Complete, Remove) and `MC_managerview_retain.cfg` (engine-side retention, still broken by a crash); holds in `MC_managerview_fixed.cfg` (12 683 distinct states) | `assertManagerVisibilityMonotonic` (an answered id stays answered) | `ManagerVisibilityProbeScenario` (`VISIBILITY`) · `ManagerVisibilityProbeTest` · seed 3 (expected-gap pin) |
-| INV-32 | `ManagerStatusMonotonic` | Safety | **No** | **F-42** | `ManagerView.tla` — `ManagerStatusMonotonic`; **VIOLATED** in `MC_managerview_status.cfg` (depth 5: Start, Complete, Query, Remove); holds in `MC_managerview_fixed.cfg` | `assertManagerStatusMonotonic` (a terminal answer is never taken back) | `ManagerVisibilityProbeScenario` (`STATUS`) · `ManagerVisibilityProbeTest` · seed 5 (expected-gap pin) |
+| INV-31 | `ManagerVisibilityMonotonic` | Safety | Yes — F-42 **fixed** (store-sourced non-live ids) | F-42 | `ManagerView.tla` — `ManagerVisibilityMonotonic`; **VIOLATED** in `MC_managerview.cfg` (depth 5, no crash: Start, Query, Complete, Remove) and `MC_managerview_retain.cfg` (engine-side retention, still broken by a crash); holds in `MC_managerview_fixed.cfg` (12 683 distinct states) | `assertManagerVisibilityMonotonic` (an answered id stays answered) | `ManagerVisibilityProbeScenario` (`VISIBILITY`) · `ManagerVisibilityProbeTest` · seed 3 (flipped pin, now a guard) |
+| INV-32 | `ManagerStatusMonotonic` | Safety | Yes — F-42 **fixed** | F-42 | `ManagerView.tla` — `ManagerStatusMonotonic`; **VIOLATED** in `MC_managerview_status.cfg` (depth 5: Start, Complete, Query, Remove); holds in `MC_managerview_fixed.cfg` | `assertManagerStatusMonotonic` (a terminal answer is never taken back) | `ManagerVisibilityProbeScenario` (`STATUS`) · `ManagerVisibilityProbeTest` · seed 5 (flipped pin, now a guard) |
 | INV-33 | `ManagerViewMatchesLog` | Safety | Yes | — | DST-only (the model reduces state to a status) | `assertManagerViewMatchesLog` — always-on after every settled step and at the horizon | smoke seeds 1, 2, 3, 42; `RegressionSeedsTest` 37 seeds; `ManagerQueryEquivalenceScenario` · `ManagerQueryEquivalenceTest` · seeds 0, 11, 42 |
 | INV-34 | `ManagerOneStatePerId` | Safety | Yes (mutation-checked, canary (b)) | — | DST-only | `assertManagerOneStatePerId` — always-on next to INV-33 | as INV-33 |
 | INV-35 | `ManagerCancelTargetsLiveOnly` | Safety | Yes | — | DST-only | `assertManagerCancelTargetsLiveOnly` | `ManagerCancellationScenario.cancelTerminalTarget` · `ManagerCancellationTest` · seed 3 |
