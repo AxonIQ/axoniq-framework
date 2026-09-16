@@ -37,6 +37,8 @@ import java.util.concurrent.CompletableFuture;
  * The projector reads through {@link #findById(String)} and writes through {@link #save(WorkflowHistory)}; both go
  * straight to the delegate so the projection itself stays consistent. Only {@link #findAll(WorkflowStateQuery)}, the
  * read {@code SimpleWorkflowManager} uses, answers from the snapshot taken by {@link #hold()} until {@link #release()}.
+ * The snapshot holds {@link FrozenWorkflowState} copies: the projector evolves its stored state objects in place, so
+ * a snapshot of references would follow it.
  * <p>
  * This is the deterministic twin of the processor lag the real engine has: the manager answers from a projection that
  * is behind the log by an amount nothing in the engine bounds. Production is untouched; the seam is the repository
@@ -54,7 +56,10 @@ public final class LaggingHistoryRepository implements MutableWorkflowHistoryRep
      * Freezes the query-side view at the projection's current content.
      */
     public void hold() {
-        heldSnapshot = FutureUtils.joinAndUnwrap(delegate.findAll());
+        heldSnapshot = FutureUtils.joinAndUnwrap(delegate.findAll()).stream()
+                                  .map(history -> new WorkflowHistory(history.workflowId(),
+                                                                      new FrozenWorkflowState(history.state())))
+                                  .toList();
     }
 
     /**
