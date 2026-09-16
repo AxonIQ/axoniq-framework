@@ -20,22 +20,26 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import org.jspecify.annotations.Nullable;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepIndeterminateException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowExecutionException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
-import org.axonframework.messaging.core.MessageType;
-import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.common.TypeReference;
+import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Instant;
@@ -49,7 +53,7 @@ import static org.mockito.Mockito.*;
 class EventSourcedWorkflowStateTest {
 
     private static final String WORKFLOW_ID = "workflowId";
-    private static final MessageType DEFINITION_ID = new MessageType(new QualifiedName("TestWorkflow"), "0.0.1");
+    private static final VersionedType DEFINITION_ID = VersionedType.of(new QualifiedName("TestWorkflow"), "0.0.1");
 
     private EventSourcedWorkflowState state;
     private ProcessingContext processingContext;
@@ -217,7 +221,7 @@ class EventSourcedWorkflowStateTest {
         Map<String, @Nullable Object> stepResult = Map.of("key2", "value2");
         Metadata metadata = MetadataUtils.create("workflowId", stepName, StepStatus.COMPLETED)
                                          .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
-                                           NAME);
+                                              NAME);
 
         EventMessage eventMessage = mock(EventMessage.class);
         when(eventMessage.metadata()).thenReturn(metadata);
@@ -317,7 +321,7 @@ class EventSourcedWorkflowStateTest {
         // the configured version (not the implicit "0.0.1" default).
         var seeded = new EventSourcedWorkflowState("wf-1",
                                                    Map.of(),
-                                                   new MessageType(new QualifiedName("OrderWorkflow"), "1.2.3"),
+                                                   VersionedType.of(new QualifiedName("OrderWorkflow"), "1.2.3"),
                                                    mock(WorkflowContext.class),
                                                    Map.of());
         assertThat(seeded.workflowDefinitionId().version()).isEqualTo("1.2.3");
@@ -331,7 +335,7 @@ class EventSourcedWorkflowStateTest {
         // route to the matching sibling.
         var seeded = new EventSourcedWorkflowState("wf-1",
                                                    Map.of(),
-                                                   new MessageType(new QualifiedName("OrderWorkflow"), "2.0.0"),
+                                                   VersionedType.of(new QualifiedName("OrderWorkflow"), "2.0.0"),
                                                    mock(WorkflowContext.class),
                                                    Map.of());
 
@@ -349,9 +353,9 @@ class EventSourcedWorkflowStateTest {
 
     @Test
     void versionReturnsCurrentWorkflowVersionWhenNoMarkerRecorded() {
-        // Default before any STARTED event applies is MessageType.DEFAULT_VERSION ("0.0.1").
+        // Default before any STARTED event applies is Version.DEFAULT_VERSION ("0.0.1").
         assertThat(state.versionFor("payment-redesign"))
-                .isEqualTo(MessageType.DEFAULT_VERSION);
+                .isEqualTo(Version.DEFAULT_VERSION);
         assertThat(state.hasVersionMigrationStep("payment-redesign")).isFalse();
     }
 

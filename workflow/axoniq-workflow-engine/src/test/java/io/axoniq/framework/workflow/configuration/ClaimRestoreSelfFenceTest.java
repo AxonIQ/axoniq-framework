@@ -19,6 +19,7 @@
 package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
@@ -35,8 +36,8 @@ import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -68,8 +69,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTestBase {
 
     private static final String MODULE = "claim-restore-self-fence";
-    private static final MessageType DEFINITION_ID =
-            new MessageType(new QualifiedName(MODULE), MessageType.DEFAULT_VERSION);
+    private static final VersionedType DEFINITION_ID =
+            VersionedType.of(new QualifiedName(MODULE), Version.DEFAULT_VERSION);
 
     private final DefaultEventNameCustomizer customizer = DefaultEventNameCustomizer.Builder.defaults();
 
@@ -79,8 +80,8 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
         configuration = configurationWith(storageEngine);
         configuration.start();
 
-        var instanceA = workflowContext("wf-a", MessageType.DEFAULT_VERSION);
-        var instanceB = workflowContext("wf-b", MessageType.DEFAULT_VERSION);
+        var instanceA = workflowContext("wf-a", Version.DEFAULT_VERSION);
+        var instanceB = workflowContext("wf-b", Version.DEFAULT_VERSION);
         publish(EventMessageUtils.startedWorkflow(instanceA, MODULE, DEFINITION_ID, customizer));
         publish(EventMessageUtils.startedWorkflow(instanceB, MODULE, DEFINITION_ID, customizer));
 
@@ -106,7 +107,7 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
         configuration = configurationWith(new PreviousOwnerWritingStorageEngine(new InMemoryEventStorageEngine()));
         configuration.start();
 
-        var instance = workflowContext("wf-a", MessageType.DEFAULT_VERSION);
+        var instance = workflowContext("wf-a", Version.DEFAULT_VERSION);
         publish(EventMessageUtils.startedWorkflow(instance, MODULE, DEFINITION_ID, customizer));
 
         restoreSegment();

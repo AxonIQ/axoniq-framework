@@ -25,8 +25,8 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventstreaming.EventCriteria;
@@ -55,7 +55,7 @@ class RunningWorkflowsRepositoryIntegrationTest extends AbstractEventSourcedEnti
         configuration.start();
 
         var customizer = DefaultEventNameCustomizer.Builder.defaults();
-        var definitionId = new MessageType(new QualifiedName("OrderWorkflow"), "0.0.1");
+        var definitionId = VersionedType.of(new QualifiedName("OrderWorkflow"), "0.0.1");
         var first = workflowContext("wf-1");
         var second = workflowContext("wf-2");
 

@@ -25,8 +25,8 @@ import io.axoniq.framework.workflow.runtime.util.WorkflowReflectionUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 
 import java.util.List;
 import java.util.Objects;
@@ -140,6 +140,6 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
 
     private static void validateWorkflowDefinition(String workflowName, String workflowVersion) {
         // validating by construction
-        new MessageType(new QualifiedName(workflowName), workflowVersion);
+        VersionedType.of(new QualifiedName(workflowName), workflowVersion);
     }
 }

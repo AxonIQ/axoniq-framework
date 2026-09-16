@@ -31,6 +31,7 @@ import org.axonframework.common.TypeReference;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.common.configuration.ComponentNotFoundException;
@@ -74,8 +75,8 @@ import static org.mockito.Mockito.*;
 class WorkflowEngineClaimGapWakeTest {
 
     private static final String RESIDENT_ID = "sharded-0";
-    private static final MessageType DEFINITION_ID =
-            new MessageType(new QualifiedName("RestoredWorkflow"), "1.0.0");
+    private static final VersionedType DEFINITION_ID =
+            VersionedType.of(new QualifiedName("RestoredWorkflow"), "1.0.0");
     private static final QualifiedName RESUME_EVENT = new QualifiedName("io.axoniq.test", "PaymentReceived");
     private static final String WAIT_STEP = "awaitPayment";
 

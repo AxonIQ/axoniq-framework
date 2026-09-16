@@ -18,8 +18,6 @@
  */
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
-import org.axonframework.messaging.core.MessageType;
-
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
@@ -29,8 +27,7 @@ import java.util.regex.Pattern;
 /**
  * Workflow version value type. Wraps a semver string ({@code MAJOR.MINOR.PATCH} with optional {@code -prerelease}
  * suffix) together with its parsed semver-aware comparison. Use this in place of raw {@code String} whenever ordering
- * or "is-greater-than" logic is needed; the wire format (e.g. {@link MessageType#version()}) stays {@code String} via
- * {@link #value()}.
+ * or "is-greater-than" logic is needed; the wire format stays {@code String} via {@link #value()}.
  *
  * @author Stefan Dragisic
  * @since 5.4.0
@@ -42,10 +39,11 @@ public final class Version implements Comparable<Version> {
     );
 
     /**
-     * The default version assigned to workflow definitions that do not declare one explicitly, aligned with
-     * {@link MessageType#DEFAULT_VERSION}.
+     * The default version assigned to workflow definitions that do not declare one explicitly.
      */
-    public static final Version DEFAULT = Version.of(MessageType.DEFAULT_VERSION);
+    public static final String DEFAULT_VERSION = "0.0.1";
+
+    public static final Version DEFAULT = Version.of(DEFAULT_VERSION);
 
     private final String value;
     private final int major;
@@ -129,8 +127,7 @@ public final class Version implements Comparable<Version> {
     }
 
     /**
-     * The canonical {@code String} representation, suitable for {@link MessageType#version()} and other wire-format
-     * boundaries.
+     * The canonical {@code String} representation, suitable for wire-format boundaries.
      */
     public String value() {
         return value;

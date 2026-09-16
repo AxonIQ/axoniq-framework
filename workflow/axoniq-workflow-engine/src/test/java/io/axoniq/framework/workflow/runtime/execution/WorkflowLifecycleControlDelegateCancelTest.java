@@ -28,8 +28,8 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -243,7 +243,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
     private EventSourcedWorkflowState workflowState(Map<WorkflowStatus, WorkflowStatusChangeListener> listeners) {
         return new EventSourcedWorkflowState("wf-1",
                                              Map.of(),
-                                             new MessageType(new QualifiedName("test-workflow"), "0.0.1"),
+                                             VersionedType.of(new QualifiedName("test-workflow"), "0.0.1"),
                                              workflowContext,
                                              listeners);
     }
