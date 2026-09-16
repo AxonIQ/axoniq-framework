@@ -19,6 +19,8 @@
 package io.axoniq.framework.workflow.simulation.invariants;
 
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
+import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
@@ -3091,6 +3093,227 @@ public final class Invariants {
                         "PublisherObservesOwnPublish",
                         "Publisher " + workflowId + " holds step \'" + publishStepName
                                 + "\' in its state without a durable record of the published event");
+            }
+        }
+    }
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // INV-31: ManagerVisibilityMonotonic (Safety, No — F-42)
+    // ----------------------------------------------------------------------------------------------------------------
+
+    /**
+     * INV-31 — Once the Workflow Manager has returned a state for a workflow id, every later query for that id
+     * returns a state.
+     * <p>
+     * Asserted against two manager reads of the same world: every id the earlier read answered must be answered by the
+     * later read. An id the earlier read did not answer is not judged — the manager is allowed to lag behind the log;
+     * it is not allowed to forget.
+     *
+     * @param answeredEarlier the workflow ids an earlier manager read returned a state for.
+     * @param currentView     the manager's current answer per workflow id.
+     */
+    public static void assertManagerVisibilityMonotonic(Set<String> answeredEarlier,
+                                                        Map<String, WorkflowState> currentView) {
+        for (String workflowId : answeredEarlier) {
+            if (!currentView.containsKey(workflowId)) {
+                throw new InvariantViolation(
+                        "ManagerVisibilityMonotonic",
+                        "the manager answered a state for '" + workflowId
+                                + "' earlier but now returns nothing for it; current ids: "
+                                + new java.util.TreeSet<>(currentView.keySet()));
+            }
+        }
+    }
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // INV-32: ManagerStatusMonotonic (Safety, No — F-42)
+    // ----------------------------------------------------------------------------------------------------------------
+
+    /**
+     * INV-32 — Once the Workflow Manager has returned a terminal state for a workflow id, every later query for that
+     * id returns that terminal state.
+     * <p>
+     * Asserted against two manager reads of the same world: for every id the earlier read answered with a terminal
+     * workflow status, the later read must answer the same terminal status. A non-terminal earlier answer is not
+     * judged (it may legitimately move forward).
+     *
+     * @param terminalAnsweredEarlier the terminal workflow status an earlier manager read returned per workflow id.
+     * @param currentView             the manager's current answer per workflow id.
+     */
+    public static void assertManagerStatusMonotonic(Map<String, WorkflowStatus> terminalAnsweredEarlier,
+                                                    Map<String, WorkflowState> currentView) {
+        for (var entry : terminalAnsweredEarlier.entrySet()) {
+            if (!entry.getValue().isTerminal()) {
+                continue;
+            }
+            var current = currentView.get(entry.getKey());
+            var currentStatus = current == null ? null : current.workflowStatus();
+            if (currentStatus != entry.getValue()) {
+                throw new InvariantViolation(
+                        "ManagerStatusMonotonic",
+                        "the manager answered terminal status " + entry.getValue() + " for '" + entry.getKey()
+                                + "' earlier but now answers " + currentStatus);
+            }
+        }
+    }
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // INV-33: ManagerViewMatchesLog (Safety, Yes; DST-only)
+    // ----------------------------------------------------------------------------------------------------------------
+
+    /**
+     * INV-33 — After the world has settled, the Workflow Manager returns a state for every workflow id in the
+     * committed log, and that state's workflow status, step names and step statuses equal the fold of that id's
+     * committed events.
+     * <p>
+     * The expected value is folded per {@code workflowId} in committed order: the workflow status is the last status
+     * record, each step's status is its last step record. Step names are compared as sets — the detached state orders
+     * them by step timestamp, the log by commit order, and this invariant judges content, not order. An id the log
+     * holds but the manager does not is a violation only once the world has settled; the caller is responsible for
+     * reading after settle, as for every other read-model cross-check.
+     *
+     * @param committedLog the committed workflow event log (oldest first).
+     * @param managerView  the manager's current answer per workflow id.
+     */
+    public static void assertManagerViewMatchesLog(List<EventMessage> committedLog,
+                                                   Map<String, WorkflowState> managerView) {
+        var expected = foldLog(committedLog);
+        for (var entry : expected.entrySet()) {
+            String workflowId = entry.getKey();
+            var fold = entry.getValue();
+            var state = managerView.get(workflowId);
+            if (state == null) {
+                throw new InvariantViolation(
+                        "ManagerViewMatchesLog",
+                        "the committed log holds '" + workflowId + "' (" + fold.status + ", steps " + fold.steps.keySet()
+                                + ") but the manager returns nothing for it; manager ids: "
+                                + new java.util.TreeSet<>(managerView.keySet()));
+            }
+            if (fold.status != null && state.workflowStatus() != fold.status) {
+                throw new InvariantViolation(
+                        "ManagerViewMatchesLog",
+                        "'" + workflowId + "': the log folds to workflow status " + fold.status
+                                + " but the manager answers " + state.workflowStatus());
+            }
+            var stateSteps = new LinkedHashMap<String, StepStatus>();
+            for (String stepName : state.workflowStepNames()) {
+                WorkflowStep step = state.getStep(stepName);
+                stateSteps.put(stepName, step == null ? null : step.status());
+            }
+            if (!stateSteps.keySet().equals(fold.steps.keySet())) {
+                throw new InvariantViolation(
+                        "ManagerViewMatchesLog",
+                        "'" + workflowId + "': the log folds to steps " + fold.steps.keySet()
+                                + " but the manager answers steps " + stateSteps.keySet());
+            }
+            for (var step : fold.steps.entrySet()) {
+                if (stateSteps.get(step.getKey()) != step.getValue()) {
+                    throw new InvariantViolation(
+                            "ManagerViewMatchesLog",
+                            "'" + workflowId + "/" + step.getKey() + "': the log folds to step status "
+                                    + step.getValue() + " but the manager answers " + stateSteps.get(step.getKey()));
+                }
+            }
+        }
+    }
+
+    /**
+     * The per-{@code workflowId} fold of the committed log that INV-33 compares the manager against: the last
+     * workflow status record and the last status per step name, in committed order.
+     *
+     * @param committedLog the committed workflow event log (oldest first).
+     * @return the fold per workflow id, insertion-ordered by first appearance.
+     */
+    public static Map<String, LogFold> foldLog(List<EventMessage> committedLog) {
+        var folds = new LinkedHashMap<String, LogFold>();
+        for (EventMessage event : committedLog) {
+            if (!MetadataUtils.hasWorkflowId().test(event.metadata())) {
+                continue;
+            }
+            String workflowId = MetadataUtils.getWorkflowId(event.metadata());
+            var fold = folds.computeIfAbsent(workflowId, k -> new LogFold());
+            MetadataUtils.getWorkflowStatus(event.metadata()).ifPresent(status -> fold.status = status);
+            var stepStatus = MetadataUtils.getStepStatus(event.metadata());
+            if (stepStatus.isPresent()) {
+                fold.steps.put(MetadataUtils.getStepName(event.metadata()), stepStatus.get());
+            }
+        }
+        return folds;
+    }
+
+    /**
+     * One workflow id's fold of the committed log: its last workflow status and the last status per step name.
+     */
+    public static final class LogFold {
+
+        /** The last workflow status record, or {@code null} when the id has none yet. */
+        public @org.jspecify.annotations.Nullable WorkflowStatus status;
+        /** The last step status per step name, in first-appearance order. */
+        public final Map<String, StepStatus> steps = new LinkedHashMap<>();
+    }
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // INV-34: ManagerOneStatePerId (Safety, Yes; DST-only)
+    // ----------------------------------------------------------------------------------------------------------------
+
+    /**
+     * INV-34 — A Workflow Manager result publishes at most one state per workflow id, and its reported size equals
+     * the number of states it publishes.
+     *
+     * @param publishedStates the states one {@code WorkflowInstances} result published for a query.
+     * @param reportedSize    the size the same result reported for that query.
+     */
+    public static void assertManagerOneStatePerId(List<WorkflowState> publishedStates, int reportedSize) {
+        var seen = new HashSet<String>();
+        for (WorkflowState state : publishedStates) {
+            if (!seen.add(state.workflowId())) {
+                throw new InvariantViolation(
+                        "ManagerOneStatePerId",
+                        "the manager published '" + state.workflowId() + "' more than once in one result");
+            }
+        }
+        if (reportedSize != publishedStates.size()) {
+            throw new InvariantViolation(
+                    "ManagerOneStatePerId",
+                    "the manager reported size " + reportedSize + " but published " + publishedStates.size()
+                            + " state(s): " + new java.util.TreeSet<>(seen));
+        }
+    }
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // INV-35: ManagerCancelTargetsLiveOnly (Safety, Yes; DST-only)
+    // ----------------------------------------------------------------------------------------------------------------
+
+    /**
+     * INV-35 — A cancellation requested through the Workflow Manager appends events only for workflow ids that were
+     * live when the request was made.
+     * <p>
+     * Asserted against the committed log before and after the request: every event appended in between must carry a
+     * workflow id from the live set captured before the request. Events for ids that were only historic are the
+     * violation this guards against — a cancellation delivered to an instance nobody runs.
+     *
+     * @param logBefore      the committed log captured before the cancellation request.
+     * @param logAfter       the committed log captured after the request completed and the world settled.
+     * @param liveIdsBefore  the workflow ids that were live when the request was made.
+     */
+    public static void assertManagerCancelTargetsLiveOnly(List<EventMessage> logBefore,
+                                                          List<EventMessage> logAfter,
+                                                          Set<String> liveIdsBefore) {
+        var before = new HashSet<String>();
+        for (EventMessage event : logBefore) {
+            before.add(event.identifier());
+        }
+        for (EventMessage event : logAfter) {
+            if (before.contains(event.identifier()) || !MetadataUtils.hasWorkflowId().test(event.metadata())) {
+                continue;
+            }
+            String workflowId = MetadataUtils.getWorkflowId(event.metadata());
+            if (!liveIdsBefore.contains(workflowId)) {
+                throw new InvariantViolation(
+                        "ManagerCancelTargetsLiveOnly",
+                        "a cancellation requested through the manager appended " + event.type().qualifiedName()
+                                + " for '" + workflowId + "', which was not live at the request; live ids were "
+                                + new java.util.TreeSet<>(liveIdsBefore));
             }
         }
     }

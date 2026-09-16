@@ -32,6 +32,8 @@ import io.axoniq.framework.workflow.simulation.faults.RestartFault;
 import io.axoniq.framework.workflow.simulation.faults.StaleWriterFault;
 import io.axoniq.framework.workflow.simulation.faults.WorkerCrashFault;
 import io.axoniq.framework.workflow.simulation.faults.WriteThenVanishFault;
+import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
+import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import io.axoniq.framework.workflow.simulation.harness.SimulationContext.PendingEvent;
 import io.axoniq.framework.workflow.simulation.invariants.InvariantViolation;
@@ -701,6 +703,12 @@ public final class DstSimulation {
                                                          PublishChainWorkflow.STEP_PUBLISH_REPLY,
                                                          world.engine().messageTypeOf(new PublishReplyEvent(PUBLISH_ORDER_ID)).qualifiedName(),
                                                          stepNamesByWorkflowId);
+            // INV-33 / INV-34: the Workflow Manager's merged live-over-history answer for every id in the committed
+            // log equals the log's own fold (status, step names, step statuses), and one result publishes each id at
+            // most once with a size that matches what it publishes. Read after settle, like every read-model check.
+            var managerStates = world.engine().managerStates(WorkflowStateQuery.all());
+            Invariants.assertManagerOneStatePerId(managerStates, world.engine().managerSize(WorkflowStateQuery.all()));
+            Invariants.assertManagerViewMatchesLog(committedLog, managerViewById(managerStates));
             // INV-4 (intra-run): each instance's committed subsequence only ever grows — a previously committed
             // prefix is never rewritten or lost across a step (the cross-instance interleaving of the single global
             // log is the F-2 surface and is not asserted here; per-instance order is what replay determinism means).
@@ -745,6 +753,12 @@ public final class DstSimulation {
             // The versioned instance is included so its non-termination is a liveness failure too (it self-completes via
             // execute steps, so a stuck one would signal a routing/replay regression, not an intended wait).
             Invariants.assertEventuallyTerminates(allNonTerminal(world, orderIds));
+            // INV-33 at the horizon: with every instance terminal, the manager must answer each id from history alone
+            // (the live set is empty) and still match the log fold — the two-source merge's history half, end to end.
+            var horizonManagerStates = world.engine().managerStates(WorkflowStateQuery.all());
+            Invariants.assertManagerOneStatePerId(horizonManagerStates,
+                                                  world.engine().managerSize(WorkflowStateQuery.all()));
+            Invariants.assertManagerViewMatchesLog(world.committedLog(), managerViewById(horizonManagerStates));
             // INV-11 at the horizon: now the versioned start must have produced an instance (never 0) — require its
             // presence, in addition to the per-step exactly-one-version / highest-version checks.
             Invariants.assertVersionRoutingSound(world.committedLog(), VERSIONED_ID_PREFIX,
@@ -1389,6 +1403,14 @@ public final class DstSimulation {
     /**
      * The engine's own reconstructed step names per {@code workflowId}, read from the workflow-history read-model.
      */
+    private static Map<String, WorkflowState> managerViewById(List<WorkflowState> states) {
+        var byId = new java.util.LinkedHashMap<String, WorkflowState>();
+        for (WorkflowState state : states) {
+            byId.putIfAbsent(state.workflowId(), state);
+        }
+        return byId;
+    }
+
     private static Map<String, List<String>> stepNamesByWorkflowId(SimulationWorld world) {
         var byWorkflow = new java.util.TreeMap<String, List<String>>();
         for (var history : FutureUtils.joinAndUnwrap(world.engine().historyRepository().findAll())) {

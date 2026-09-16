@@ -54,7 +54,7 @@ public final class SimulationWorld implements AutoCloseable {
 
     private ControllableEventStorageEngine eventStore = new ControllableEventStorageEngine();
     private final DurableTokenStore tokenStore = new DurableTokenStore();
-    private final MutableWorkflowHistoryRepository historyRepository = new InMemoryWorkflowHistoryRepository();
+    private final MutableWorkflowHistoryRepository historyRepository;
     private final CountingEffects effects = new CountingEffects();
 
     private final Instant epoch;
@@ -211,7 +211,7 @@ public final class SimulationWorld implements AutoCloseable {
                            @org.jspecify.annotations.Nullable List<EngineInstance.WorkflowRegistration> registrations,
                            java.util.concurrent.@org.jspecify.annotations.Nullable ExecutorService bodyExecutorOverride,
                            boolean alignedEventClock) {
-        this(idSeed, registrations, bodyExecutorOverride, alignedEventClock, null);
+        this(idSeed, registrations, bodyExecutorOverride, alignedEventClock, null, null);
     }
 
     /**
@@ -228,14 +228,36 @@ public final class SimulationWorld implements AutoCloseable {
             long idSeed,
             List<EngineInstance.WorkflowRegistration> registrations,
             java.util.function.Consumer<ComponentRegistry> extraRegistrations) {
-        return new SimulationWorld(idSeed, registrations, null, false, extraRegistrations);
+        return new SimulationWorld(idSeed, registrations, null, false, extraRegistrations, null);
+    }
+
+    /**
+     * Builds a world whose history read-model is the given repository instead of a fresh in-memory one. The seam a
+     * scenario uses to put a {@link LaggingHistoryRepository} under the {@code WorkflowManager}, so the projection the
+     * manager reads can be held at a chosen lag deterministically. The repository is shared by every engine this world
+     * builds, initial and recovered, exactly like the default one.
+     *
+     * @param idSeed            seed for the deterministic workflow-id source.
+     * @param registrations     the workflow registrations for this world.
+     * @param historyRepository the history read-model every engine of this world projects into and reads from.
+     * @return the world.
+     */
+    public static SimulationWorld withHistoryRepository(
+            long idSeed,
+            List<EngineInstance.WorkflowRegistration> registrations,
+            MutableWorkflowHistoryRepository historyRepository) {
+        return new SimulationWorld(idSeed, registrations, null, false, null, historyRepository);
     }
 
     private SimulationWorld(long idSeed,
                             @org.jspecify.annotations.Nullable List<EngineInstance.WorkflowRegistration> registrations,
                             java.util.concurrent.@org.jspecify.annotations.Nullable ExecutorService bodyExecutorOverride,
                             boolean alignedEventClock,
-                            java.util.function.@org.jspecify.annotations.Nullable Consumer<ComponentRegistry> extraRegistrations) {
+                            java.util.function.@org.jspecify.annotations.Nullable Consumer<ComponentRegistry> extraRegistrations,
+                            @org.jspecify.annotations.Nullable MutableWorkflowHistoryRepository historyRepository) {
+        this.historyRepository = historyRepository != null
+                ? historyRepository
+                : new InMemoryWorkflowHistoryRepository();
         this.extraRegistrations = extraRegistrations;
         this.epoch = Instant.EPOCH;
         this.clock = new MutableClock(epoch);

@@ -109,6 +109,10 @@ import java.util.function.Consumer;
 import org.axonframework.common.FutureUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
+import io.axoniq.framework.workflow.query.api.WorkflowStateQuery;
+import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
+import io.axoniq.framework.workflow.runtime.api.manager.WorkflowInstance;
+import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -169,6 +173,9 @@ public final class EngineInstance implements AutoCloseable {
     private final MessageTypeResolver messageTypeResolver;
     private final EventConverter eventConverter;
     private final MutableWorkflowHistoryRepository historyRepository;
+    private final WorkflowManager workflowManager;
+    /** Bound on every manager read the harness performs, so a stuck publisher or future never hangs a run. */
+    public static final java.time.Duration MANAGER_READ_TIMEOUT = java.time.Duration.ofSeconds(10);
 
     /**
      * Builds and starts an engine driving the default {@link OrderWorkflow} (the fuzz/scenario workhorse) over the
@@ -348,6 +355,7 @@ public final class EngineInstance implements AutoCloseable {
         this.eventSink = configuration.getComponent(EventSink.class);
         this.messageTypeResolver = configuration.getComponent(MessageTypeResolver.class);
         this.eventConverter = configuration.getComponent(EventConverter.class);
+        this.workflowManager = configuration.getComponent(WorkflowManager.class);
     }
 
     /**
@@ -1430,6 +1438,86 @@ public final class EngineInstance implements AutoCloseable {
      */
         public MutableWorkflowHistoryRepository historyRepository() {
         return historyRepository;
+    }
+
+    /**
+     * Returns the engine's {@code WorkflowManager} component, the outside-in query and cancellation API that reads the
+     * live execution repository and the history read-model and merges them by {@code workflowId}.
+     *
+     * @return the manager registered by the engine's default configuration.
+     */
+    public WorkflowManager workflowManager() {
+        return workflowManager;
+    }
+
+    /**
+     * Resolves every state the manager publishes for a query, by subscribing to
+     * {@code WorkflowInstances#instances()} with unbounded demand and reading each instance's detached state. Bounded
+     * by {@link #MANAGER_READ_TIMEOUT}; a publisher that never completes surfaces as an {@link IllegalStateException}
+     * rather than a hang.
+     *
+     * @param query the state query to resolve.
+     * @return the published states, in publication order.
+     */
+    public List<WorkflowState> managerStates(WorkflowStateQuery query) {
+        var states = new java.util.concurrent.CopyOnWriteArrayList<WorkflowState>();
+        var done = new java.util.concurrent.CompletableFuture<Void>();
+        workflowManager.findMany(query).instances().subscribe(new org.reactivestreams.Subscriber<>() {
+            @Override
+            public void onSubscribe(org.reactivestreams.Subscription subscription) {
+                subscription.request(Long.MAX_VALUE);
+            }
+
+            @Override
+            public void onNext(WorkflowInstance instance) {
+                states.add(FutureUtils.joinAndUnwrap(instance.state().orTimeout(
+                        MANAGER_READ_TIMEOUT.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS)));
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                done.completeExceptionally(throwable);
+            }
+
+            @Override
+            public void onComplete() {
+                done.complete(null);
+            }
+        });
+        try {
+            done.get(MANAGER_READ_TIMEOUT.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            throw new IllegalStateException("WorkflowManager publisher did not complete within " + MANAGER_READ_TIMEOUT
+                                                    + "; " + states.size() + " state(s) received", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while reading the WorkflowManager publisher", e);
+        } catch (java.util.concurrent.ExecutionException e) {
+            throw new IllegalStateException("WorkflowManager publisher failed", e.getCause());
+        }
+        return List.copyOf(states);
+    }
+
+    /**
+     * Resolves the manager's reported size for a query, bounded by {@link #MANAGER_READ_TIMEOUT}.
+     *
+     * @param query the state query to count.
+     * @return the size the manager reports.
+     */
+    public int managerSize(WorkflowStateQuery query) {
+        return FutureUtils.joinAndUnwrap(workflowManager.findMany(query).size().orTimeout(
+                MANAGER_READ_TIMEOUT.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS));
+    }
+
+    /**
+     * Resolves {@code findOne(query).singleState()} for a query, bounded by {@link #MANAGER_READ_TIMEOUT}.
+     *
+     * @param query the state query to resolve.
+     * @return the detached state, or {@code null} when nothing matched.
+     */
+    public @org.jspecify.annotations.Nullable WorkflowState managerSingleState(WorkflowStateQuery query) {
+        return FutureUtils.joinAndUnwrap(workflowManager.findOne(query).singleState().orTimeout(
+                MANAGER_READ_TIMEOUT.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS));
     }
 
     /**
