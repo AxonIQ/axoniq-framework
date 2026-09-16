@@ -127,6 +127,11 @@ Each fix flips its acceptance test from "gap present" to "gap closed". Two cheap
 - **Real Axon Server DCB event store** (Testcontainers) — everything ran on `InMemoryEventStorageEngine`; the
   F-0/F-1 fixes hinge on the real store's **append-condition / optimistic concurrency**, never exercised. Re-run
   the crash/split-brain scenarios on the `examples/bike-rental` Testcontainers + Axon Server path.
+- **The Workflow Manager's real projector window (F-42, PR #452)** — the gap is induced deterministically through
+  `LaggingHistoryRepository`; the unheld arm saw 0 stale answers on the dev machine because the pooled streaming
+  processor delivers the projector's events faster than a finished body can be followed by a manager read. A vehicle
+  that pauses the processor's work package, or a `Buggify` fire point on `WorkflowHistoryProjector.handle`, would make
+  the live window reproducible under seeds. Acceptance stays `ManagerVisibilityProbeTest` (held arms).
 - **Cross-segment publish delivery (ADR-019)** — a published event must reach the publisher's own segment, the
   segment of every instance it starts and the segment of every waiter, which is why the engine sequences `PUBLISH`
   events as `BROADCAST`. The harness runs one segment, so DST proves the single-segment half only; the multi-segment

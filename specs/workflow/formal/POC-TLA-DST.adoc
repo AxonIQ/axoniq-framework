@@ -2003,6 +2003,148 @@ wake) and by the engine's two-segment routing unit test on `main` (`NewInstanceC
 `FOLLOW-UPS.md` Track B with the vehicle it needs. Also out of scope, tracked as issue #482: correlation data on every
 engine event, published ones included, comes from the start-event context rather than the last handled event.
 
+== P7 — Workflow Manager campaign: `WorkflowManager` / `WorkflowStateQuery` (PR #452, ADR-018)
+
+Subject: the Workflow Manager backported from `feature/workflow-manager-api` (PR #452) onto `poc/tla_dst` as
+`poc/tla_dst-pr452-backport`. `WorkflowManager.findOne(query)` / `findMany(query)` answer an outside-in caller from
+two sources merged by `workflowId` — the live `WorkflowExecutionRepository` and the `WorkflowHistoryRepository`
+projection, live winning — and route cancellation to live executions only. `WorkflowStateQuery` is the value-based
+criteria language both repositories must evaluate natively. The PR also turns the history repository asynchronous
+(`CompletableFuture`), which broke three harness reads (`findAll()` iterated directly) — fixed harness-side before the
+campaign began. The campaign asked: is the merged answer ever wrong, does it ever move backwards, does the criteria
+language agree with the log, does cancellation through the manager reach what the in-engine surface reaches and
+nothing else, and does a fenced node tell the truth.
+
+**Two findings, both recorded as expected-gap pins, neither filed yet.** F-42 is a design gap of the two-source read
+that TLC finds in five steps with no fault at all; F-43 is a misleading answer the manager inherits from the
+cancellation surface it exposes. Every other arm passed on the code as written.
+
+=== What was added
+
+* **Invariants** INV-31 `ManagerVisibilityMonotonic`, INV-32 `ManagerStatusMonotonic` (TLA+ and DST), INV-33
+  `ManagerViewMatchesLog`, INV-34 `ManagerOneStatePerId`, INV-35 `ManagerCancelTargetsLiveOnly`, INV-36
+  `ManagerLiveWins` (DST-only), worded identically in `INVARIANTS.md`, `ManagerView.tla` and `Invariants.assert*`.
+  INV-33 and INV-34 are always-on in `DstSimulation` after every settled step and at the horizon; INV-31/32 are not
+  always-on because they are red on the code as written.
+* **TLA+** `ManagerView.tla` (standalone, `-deadlock`): per-id log reduced to status and step count, the live set, the
+  projector's position, one crash/restore, the manager's last answer; toggles `RETAIN_LIVE_UNTIL_PROJECTED`
+  (engine-side) and `READ_LOG_ON_HISTORY_MISS` (manager-side). Four cfgs, verdicts below.
+* **Harness seams** `EngineInstance.workflowManager()` plus bounded reads (`managerStates`, `managerSize`,
+  `managerSingleState`, 10 s cap); `SimulationWorld.withHistoryRepository(...)`; `LaggingHistoryRepository`, which
+  freezes only the `findAll(query)` read the manager uses while the projector keeps reading and writing through it,
+  with `FrozenWorkflowState` copies (the in-memory repository stores the projector's own state object and evolves it
+  in place — a snapshot of references follows it, which cost one round-trip). Production untouched.
+* **Workload** `ManagerLiveWinsWorkflow` (parks, compensates on an outside cancel, parks again), scenario-only.
+* **Scenarios** `ManagerVisibilityProbeScenario` (modes `VISIBILITY`, `STATUS`, `UNHELD`), `ManagerCancellationScenario`
+  (step, all-steps, workflow, historic target incl. the batch operations, non-unique query),
+  `FencedManagerCancelScenario`, `ManagerQueryEquivalenceScenario` (twenty probes, one per criterion shape and
+  combination, each compared with `Invariants.foldLog`), `ManagerLiveWinsScenario`. Pinned by
+  `ManagerVisibilityProbeTest`, `ManagerCancellationTest`, `FencedManagerCancelTest`, `ManagerQueryEquivalenceTest`
+  (seeds 0, 11, 42), `ManagerLiveWinsTest`.
+* **Test logging** `workflow/axoniq-workflow-simulation/src/test/resources/log4j2-test.properties`: the simulation
+  package at INFO so the outcome lines the tests already log are visible in a gate run (the harness logs nothing at
+  INFO).
+
+=== Runs
+
+[cols="2,1,3"]
+|===
+| Tier | Result | Notes
+| TLC `ManagerView.tla`, 4 cfgs | 3 × VIOLATED as designed, 1 × No error | `MC_managerview.cfg` Start, Query, Complete, Remove (197 distinct states, depth 5, `MAX_CRASHES = 0`); `MC_managerview_status.cfg` Start, Complete, Query, Remove (203 / 5); `MC_managerview_retain.cfg` Start, Query, Crash (126 / 4) — engine-side retention is not a fix; `MC_managerview_fixed.cfg` 12 683 distinct states, depth 17, `MAX_CRASHES = 1`. TLC2 2.19, `Sanity.tla` proven first.
+| Deterministic pins, first pass | 15/15 green after one seam fix | the `STATUS` arm read COMPLETED through a held snapshot that aliased the projector's mutable state; `FrozenWorkflowState` fixed the seam, not the test's expectation
+| Canary (recipe F), five mutations, first pass | 4 caught, **1 escaped** | (a) merge prefers history: **escaped every arm** — all oracles read after settle, when both sources agree; (b) `toMap` dedupe deleted: INV-34 red in 9/10 smoke arms and 13 manager arms (`'order-wf0' published more than once`); (c) batch cancels target history too: the historic-target arm errored (`NoSuchElementException` surfaced as a failed future); (d) `DetachedWorkflowState` drops its steps: INV-33 red in 9/10 smoke arms (`the manager answers steps []`) and 3/3 equivalence arms; (e) matcher ignores step status: 3/3 equivalence arms red. Engine reverted after each; `git diff` clean.
+| Canary (a) rerun against the new INV-36 arm | **caught** | `ManagerLiveWinsTest` green on the clean engine (manager steps = live steps `{awaitApproval=CANCELLED, compensate=COMPLETED, awaitResume=STARTED}` against held history `{awaitApproval=STARTED}`), red under the mutation (manager answers `{awaitApproval=STARTED}`). Reverted.
+| Per-PR gate (`./mvnw -pl workflow/axoniq-workflow-simulation -am test`) | 298/298 green, exit 0 (281 before the campaign) | 254 s wall; INV-33/34 asserted after every settled step of the smoke seeds 1, 2, 3, 42 and of the 37 regression seeds at 21 instances
+| `DstFuzzTest` | seeds 0–299 green (173 s, exit 0) | `ALL_FAULTS`, 21 instances; "300 seeds" read back from the harness banner
+| `DstChaosFuzzTest` | seeds 0–99 green (60 s, exit 0) | `CHAOS_FAULTS`, 26 instances
+| `DstSwarmFuzzTest` | swarm seeds 0–39 green (23 s, exit 0) | shape varied per seed
+| `DstInterleavingFuzzTest` | 40 schedules green (23 s, exit 0) | world seed fixed, carrier interleaving varied
+| `DstBuggifyFuzzTest` | 60 seeds green (35 s, exit 0) | `dst.seeds=60` confirmed in the surefire property dump; existing fire points
+| New deterministic arms, 3 consecutive gate-style passes | 17/17, 17/17, 17/17 after one probe fix | first pass 16/17: the equivalence arm's parked-snapshot probe read the manager before the live state had absorbed the step record (the live state evolves on processor delivery, a moment after the commit) — a readiness race in the probe, fixed by waiting for the manager's live answer to hold the step; 3/3 green afterwards on seeds 0, 11, 42
+|===
+
+=== Finding F-42 — the manager forgets, or rewinds, a finished id until the projection catches up (design)
+
+**Class:** replay-divergent API surface / non-monotonic read. **Severity:** medium (an outside-in caller polling a
+completed workflow can see it disappear, or read it as running, for as long as the processor lags; self-heals).
+**How found:** model-checked first (`ManagerView.tla`, five steps, no fault), then reproduced by test with the
+projector lag induced deterministically (`ManagerVisibilityProbeTest`, expected-gap pins at seeds 3 and 5). Not
+observed live: the `UNHELD` arm polled the real window on this machine and saw 0 stale answers — the window is a
+processor-delivery lag, real but short here.
+
+`WorkflowEngine.removeExecution` drops a finished execution from the live repository the moment its body finishes;
+`WorkflowHistoryProjector` applies that instance's events later, on the pooled streaming processor, with nothing tying
+the two. `SimpleWorkflowManager.matching` answers live-then-history, so between the removal and the projector's
+catch-up the id is answered from a projection that has not yet seen its STARTED (nothing) or its COMPLETED (STARTED).
+The same holds after a crash: the live repository is rebuilt from the store, the projection is wherever the token left
+it. **Candidate fix:** answer a non-live id from the event store (source it, as recovery does) instead of trusting the
+projection — `READ_LOG_ON_HISTORY_MISS` in the model, `MC_managerview_fixed.cfg` is the acceptance criterion and the
+two held arms flip. The engine-side alternative, keeping the execution live until projected, is shown insufficient by
+`MC_managerview_retain.cfg`. **Filing bar:** met by the two pins (red today, green on the fix); recorded here for the
+PR review first since the PR is still open.
+
+=== Candidate finding F-43 — a fenced node answers `true` for a cancellation it never recorded
+
+**Class:** misleading result. **Severity:** low. **How found:** reproduced by test (`FencedManagerCancelTest`, seed 15,
+expected-gap pin), confirmed by reading.
+
+`WorkflowInstanceOperator.requestStepCancellation` documents `true` as "a terminal step cancellation was recorded".
+`WorkflowLifecycleControlDelegate.cancelStep` returns `true` once `runningSteps.cancelWithCause` succeeded and
+`awaitStateChange(stepTerminal)` returned, before the store has accepted or rejected the CANCELLED append. On a node
+that lost the instance the append is rejected (1 rejection warning, record count 2 → 2, no CANCELLED record, no
+terminal record) and the caller is still told `true`. Inherited from the internal `WorkflowCancellation` contract; the
+manager is the first public surface to hand the value to a caller who cannot see the log. **Candidate fix:** complete
+with the append's outcome, or document the value as "the running step was cancelled on this node".
+
+=== Precise negatives — documented so they are not re-hunted
+
+* **The criteria language agrees with the log.** Twenty probes — by id, definition id (matching and other version),
+  each workflow status, step existence, step status (three values), payload value (present, missing value, absent
+  key), two AND combinations, `byVersion` for an unknown change (answers every instance at the default version),
+  `byVersionMigration` for an unknown change (answers none) — equal the log fold at seeds 0, 11, 42, and INV-34 holds
+  per probe. The `SubmissionPublisher`-backed `instances()` completes under the engine executor and under the
+  same-thread override.
+* **Detached state is a copy.** A state read while parked still reads STARTED with its single step after the instance
+  completed. Step order in the detached state, the history state and the log agreed for a two-step instance on every
+  seed; the timestamp sort did not reorder here (steps carry distinct timestamps under the harness clock).
+* **Cancellation through the manager reaches what `cancelRunningStep` reaches.** Step cancel: CANCELLED, compensation
+  COMPLETED once, workflow COMPLETED, answer `true`. All-steps: same, answer 1. Workflow cancel while parked: one
+  terminal CANCELLED, INV-7 holds, the compensation is never recorded; the parked step gets no terminal step record of
+  its own (the in-body `ctx.cancel()` semantics, not a manager artefact). Historic id: `false`, 0, normal completion
+  for the single requests and `false`, 0, normal completion for the batch requests; INV-35 holds, nothing appended.
+  Non-unique: `singleState()` fails with `NonUniqueWorkflowInstanceMatchException`, `findMany.size()` is 2, the batch
+  step cancel reaches both.
+* **A fenced node records nothing through the manager either** (F-43 is about the answer, not the log).
+
+=== Harness lessons (class (b), not engine)
+
+1. **The in-memory history repository hands out the projector's live object.** `WorkflowHistory.state()` is the
+   `EventSourcedWorkflowState` the projector keeps evolving; a snapshot that keeps references is not a snapshot. The
+   manager's own `DetachedWorkflowState` copies for this reason; `FrozenWorkflowState` does the same for the seam.
+2. **Settle-time oracles cannot see a merge rule.** After settle the two sources agree, so "live wins" is unobservable
+   there; canary (a) proved it. The rule needs a read while the projection is deliberately behind a live instance whose
+   state has moved (`ManagerLiveWinsScenario`).
+3. **Simulation-module INFO lines were invisible.** The shared test logging pins `io.axoniq.framework` at WARN, so the
+   outcome lines 28 test classes log at INFO never reached a gate log. A module-local `log4j2-test.properties` raises
+   the simulation package to INFO; the harness logs nothing at INFO, so the volume is one line per arm.
+4. **A live state lags its own commit by one delivery.** The execution's state evolves when the processor delivers
+   the record back, so "the STARTED record is in the log" does not mean "the live answer holds the step". A probe that
+   reads the manager right after the commit judges the delivery lag, not the property; wait for the manager's answer
+   to hold the step first (the equivalence arm's one red in three repeats).
+5. **A canary chain must run detached.** A tool-killed build leaves the engine mutated; the chain reverts per canary and
+   is started with `nohup` so no kill can land between the mutation and the revert.
+
+=== What this campaign could not cover
+
+The real projector window. The `UNHELD` arm measured 0 stale answers on this machine; the lag exists (the model and
+the held arms show its consequences) but the pooled streaming processor delivers faster than the harness can observe
+between a finished body and the next manager read. A vehicle that pauses the processor's work package, or a
+`Buggify` point on the projector's handle, would make the unheld window reproducible — recorded in `FOLLOW-UPS.md`.
+Database-backed `WorkflowHistoryRepository` implementations, which ADR-018 requires to translate `WorkflowStateQuery`
+natively, are out of DST scope (in-memory store); the differential oracle is the shape such an implementation should
+be run against. Also not covered: ADR numbering — the PR adds `019-workflow-definition-versioned-type.md` while
+`poc/tla_dst` already carries `019-publish-primitive.md`; one of them needs a new number before merge.
+
 == Phases 1–6 — status
 
 [cols="1,3,1"]

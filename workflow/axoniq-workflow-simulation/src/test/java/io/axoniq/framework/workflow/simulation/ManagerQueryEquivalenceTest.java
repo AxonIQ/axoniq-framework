@@ -51,6 +51,8 @@ class ManagerQueryEquivalenceTest {
                                                        seed, c.name(), c.expected(), c.managerIds(), c.managerSize()));
         logger.info("seed {} step order of A — detached {} / history {} / log {}", seed,
                     outcome.detachedStepOrderA(), outcome.historyStepOrderA(), outcome.logStepOrderA());
+        logger.info("seed {} detached snapshot of B while parked -> after completion: {}", seed,
+                    outcome.detachedSnapshot());
 
         assertThat(outcome.disagreements())
                 .as("every probe's manager answer equals the log fold's selection")

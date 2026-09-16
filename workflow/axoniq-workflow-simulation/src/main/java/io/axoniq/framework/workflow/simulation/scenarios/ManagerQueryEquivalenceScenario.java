@@ -120,12 +120,14 @@ public final class ManagerQueryEquivalenceScenario {
      * @param comparisons              one comparison per probe.
      * @param detachedSnapshotUnchanged whether the detached state of {@code B} taken while parked still reads STARTED
      *                                  with its single STARTED step after {@code B} completed.
+     * @param detachedSnapshot         the snapshot as read while parked and as re-read after {@code B} completed.
      * @param detachedStepOrderA       the detached {@code workflowStepNames()} of {@code A}.
      * @param historyStepOrderA        the history state's {@code workflowStepNames()} of {@code A}.
      * @param logStepOrderA            the step names of {@code A} in first-commit order.
      */
     public record Outcome(List<Comparison> comparisons,
                           boolean detachedSnapshotUnchanged,
+                          String detachedSnapshot,
                           List<String> detachedStepOrderA,
                           List<String> historyStepOrderA,
                           List<String> logStepOrderA) {
@@ -158,6 +160,13 @@ public final class ManagerQueryEquivalenceScenario {
             Polling.awaitOrFail(DEADLINE, "the wait-timeouts to be scheduled",
                                 () -> world.scheduler().pendingTasks() > 0);
 
+            // The live state absorbs a step record when the processor delivers it back, a moment after the record
+            // committed; read the parked snapshot only once the manager's live answer holds the step, so the probe
+            // judges the copy and not the delivery lag.
+            Polling.awaitOrFail(DEADLINE, "the manager's live answer for B to hold the parked step", () -> {
+                var state = world.engine().managerSingleState(WorkflowStateQuery.byWorkflowId(ID_B));
+                return state != null && state.containsStep(STEP_AWAIT_APPROVAL);
+            });
             var parkedB = world.engine().managerSingleState(WorkflowStateQuery.byWorkflowId(ID_B));
             var parkedBStatus = parkedB == null ? null : parkedB.workflowStatus();
             var parkedBSteps = parkedB == null ? List.<String>of() : List.copyOf(parkedB.workflowStepNames());
@@ -196,11 +205,13 @@ public final class ManagerQueryEquivalenceScenario {
                     && parkedB.workflowStatus() == WorkflowStatus.STARTED
                     && parkedB.workflowStepNames().equals(parkedBSteps)
                     && parkedBSteps.equals(List.of(STEP_AWAIT_APPROVAL));
+            var snapshotNow = parkedB.workflowStatus() + " " + parkedB.workflowStepNames();
 
             var detachedA = world.engine().managerSingleState(WorkflowStateQuery.byWorkflowId(ID_A));
             var historyA = FutureUtils.joinAndUnwrap(world.engine().historyRepository().findById(ID_A));
             return new Outcome(List.copyOf(comparisons),
                                snapshotUnchanged,
+                               parkedBStatus + " " + parkedBSteps + " -> " + snapshotNow,
                                detachedA == null ? List.of() : List.copyOf(detachedA.workflowStepNames()),
                                historyA.map(h -> List.copyOf(h.state().workflowStepNames())).orElse(List.of()),
                                logStepOrder(world.committedLog(), ID_A));
