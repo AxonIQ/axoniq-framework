@@ -3,7 +3,7 @@
 Maps every **documented guarantee** of the axon-flow-spec engine — the `axon-flow-workflow` skill
 (§3 non-negotiables, §4 primitives, §5 step customization, §7 recipes, §10 anti-patterns), the ADRs
 (000–005, plus **ADR-014 workflow instance sharding** in §10), and the protocol invariants
-(`INVARIANTS.md` INV-1..28) — to the **invariant + scenario/test**
+(`INVARIANTS.md` INV-1..36) — to the **invariant + scenario/test**
 that exercises it in the TLA+ model and/or the DST harness, or an explicit **out-of-scope / not-modelled**
 note with rationale.
 
@@ -17,7 +17,7 @@ This file is the human-facing index; the authoritative per-invariant wording liv
 
 ---
 
-## 1. The invariant spine (INV-1..28)
+## 1. The invariant spine (INV-1..36)
 
 | INV | MachineName | TLA+ | DST assertion | DST scenario · test | Verdict |
 |---|---|---|---|---|---|
@@ -49,6 +49,14 @@ This file is the human-facing index; the authoritative per-invariant wording liv
 | 26 | `NoWorkWhileReplaying` | `sharding/WfShard.tla` — `cfg_live_trap` (temporal VIOLATED, State 17 stuttering, 9,154 distinct) / `cfg_live_fixed3` | **none** — see INV-24 | `WorkflowEngineSegmentLiveModeScopeTest`, `WorkflowEngineClaimDuringReplayTest` | ✅ (**F-28 + F-33 FIXED together** — splitting them trades a safety bug for a hang); ⚠️ residual: cross-node migration still starts at head, blocked upstream on **FW-2** |
 | 27 | `TokenNeverPassesUnappliedEvent` | `sharding/Holdback.tla` — `C2_*`, `C4_shutdown_clears_first` (VIOLATED) vs `C3*`/`C4b`; `M1`/`M2`/`M3` mutation arms | **none** — see INV-24 | `WorkflowEngineCrossSegmentCheckpointTest`, `WorkflowConfigurationDefaultsTest`, `WorkflowEngineReplayTest`; `DurableWaitAcrossRebalanceIT` (~1000 observations, zero losses) | ✅ (**F-26 + F-35 + F-36 FIXED**); ⚠️ out of its scope: **F-34b** (no wait was ever published, so no barrier exists) and **FW-4** (the framework never clamps an over-high request) |
 | 28 | `SpawnExactlyOnce` (+ `WakeExactlyOnce`) | `sharding/WfShard.tla` — hold with **all four modelled defects enabled**, 1,722,131 distinct states, depth 31 (`cfg_asis3_spawn`/`cfg_asis3_wake`); fail in 8 steps under a guard mutation (`cfg_mut`/`cfg_mut_wake`) | **none** — see INV-24 | `DuplicateStartEventsIT`, `TimerAcrossHandoverIT`, `IdleClusterSparseTrafficIT`, `CrossSegmentSpawnIT`, `SustainedLoadHandoverIT` | 🟢 **works as expected** — the campaign's strongest precise negative: broadcast fan-in is genuinely safe; ⚠️ untested adjacent hazard **S-10** (`#` silently load-bearing in the segment key) |
+| 29 | `NoForeignStepRecorded` | `MC_publish` (No error) / `MC_publish_noguard` (VIOLATED) | `assertNoForeignStepRecorded` (always-on) | `PublishChainScenario` · `Inv29PublishPrimitiveTest` | ✅ works as expected (P6) |
+| 30 | `PublisherObservesOwnPublish` | `MC_publish` (No error) / `MC_publish_candidate`, `MC_publish_nogate` (VIOLATED) | `assertPublisherObservesOwnPublish` (always-on) | `PublishChainScenario`, `FencedPublishScenario`, `PublishAppendFailureScenario` · `Inv29PublishPrimitiveTest`, `FencedPublishTest`, `PublishAppendFailureTest` | ✅ works as expected (P6); candidate 🟠 **F-41** on a failed engine append |
+| 31 | `ManagerVisibilityMonotonic` | `MC_managerview` (VIOLATED, no crash) / `MC_managerview_retain` (VIOLATED, crash) / `MC_managerview_fixed` | `assertManagerVisibilityMonotonic` | `ManagerVisibilityProbeScenario` (`VISIBILITY`) · `ManagerVisibilityProbeTest` | 🔴 **F-42** (a finished id vanishes from the manager until the projection catches up; expected-gap pin) |
+| 32 | `ManagerStatusMonotonic` | `MC_managerview_status` (VIOLATED) / `MC_managerview_fixed` | `assertManagerStatusMonotonic` | `ManagerVisibilityProbeScenario` (`STATUS`) · `ManagerVisibilityProbeTest` | 🔴 **F-42** second facet (a completed id is answered STARTED; expected-gap pin) |
+| 33 | `ManagerViewMatchesLog` | DST-only | `assertManagerViewMatchesLog` (always-on after settle + horizon) | smoke/fuzz/chaos; `ManagerQueryEquivalenceScenario` · `ManagerQueryEquivalenceTest` | ✅ held on every settled step and horizon; mutation-checked (detached steps dropped → caught) |
+| 34 | `ManagerOneStatePerId` | DST-only | `assertManagerOneStatePerId` (always-on) | as INV-33 | ✅ held; mutation-checked (dedupe deleted → caught in smoke) |
+| 35 | `ManagerCancelTargetsLiveOnly` | DST-only | `assertManagerCancelTargetsLiveOnly` | `ManagerCancellationScenario` · `ManagerCancellationTest` | ✅ held; surfaced 🟠 **F-43** (a fenced node answers `true` for a cancellation it never recorded — `FencedManagerCancelTest`, expected-gap pin) |
+| 36 | `ManagerLiveWins` | DST-only (the model's `View` takes live by construction) | `assertManagerLiveWins` | `ManagerLiveWinsScenario` · `ManagerLiveWinsTest` | ✅ held; added because canary (a) — history wins over live — escaped every settle-time oracle |
 
 ---
 

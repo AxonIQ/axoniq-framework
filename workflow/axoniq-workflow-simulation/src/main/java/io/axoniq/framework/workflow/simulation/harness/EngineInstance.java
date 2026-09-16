@@ -48,6 +48,7 @@ import io.axoniq.framework.workflow.simulation.workflow.CountingEffects;
 import io.axoniq.framework.workflow.simulation.workflow.CustomNamedWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.DriftWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.ExternalCancelCompensationWorkflow;
+import io.axoniq.framework.workflow.simulation.workflow.ManagerLiveWinsWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.FailingWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.HookWorkflow;
 import io.axoniq.framework.workflow.simulation.workflow.LoopingPollWorkflow;
@@ -78,6 +79,7 @@ import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.Correla
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.CustomNamedRequestedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.DriftRequestedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.ExternalCancelRequestedEvent;
+import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.ManagerProbeRequestedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.FailExhaustionRequestedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.FailRequestedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.HookRequestedEvent;
@@ -1070,6 +1072,20 @@ public final class EngineInstance implements AutoCloseable {
      * @param effects counting side-effect registry the compensation body records into.
      * @return the external-cancel workflow registration.
      */
+    /**
+     * The manager live-wins registration: the {@link ManagerLiveWinsWorkflow} (parks on an approval wait, compensates
+     * when it is cancelled from outside, parks again on a resume signal), driven by {@code ManagerProbeRequestedEvent},
+     * ids prefixed {@code mgrlive-}. Scenario-only: it never terminates without the scenario's cancel and signal.
+     *
+     * @param effects counting side-effect registry the compensation records into.
+     * @return the registration.
+     */
+    public static WorkflowRegistration managerLiveWinsWorkflow(CountingEffects effects) {
+        var workflow = new ManagerLiveWinsWorkflow(effects);
+        return new WorkflowRegistration(ManagerLiveWinsWorkflow.WORKFLOW_NAME, ManagerProbeRequestedEvent.class,
+                                        "mgrlive-", workflow::execute);
+    }
+
         public static WorkflowRegistration externalCancelWorkflow(CountingEffects effects) {
         var workflow = new ExternalCancelCompensationWorkflow(effects);
         return new WorkflowRegistration(ExternalCancelCompensationWorkflow.WORKFLOW_NAME,

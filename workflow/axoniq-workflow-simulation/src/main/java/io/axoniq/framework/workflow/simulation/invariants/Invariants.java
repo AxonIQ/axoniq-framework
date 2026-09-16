@@ -3317,4 +3317,50 @@ public final class Invariants {
             }
         }
     }
+
+    // ----------------------------------------------------------------------------------------------------------------
+    // INV-36: ManagerLiveWins (Safety, Yes; DST-only)
+    // ----------------------------------------------------------------------------------------------------------------
+
+    /**
+     * INV-36 — When a workflow id is both live and projected, the Workflow Manager answers the live state.
+     * <p>
+     * Asserted by comparing the manager's answer for a live id with the live execution's own state at the same moment:
+     * workflow status, step names and step statuses must be the live ones, whatever the projection holds. The caller
+     * supplies both reads; the projection is expected to be deliberately behind, otherwise the two sources agree and
+     * the check is vacuous.
+     *
+     * @param liveState     the live execution's state for the id.
+     * @param managerAnswer the manager's answer for the same id, or {@code null} when it returned nothing.
+     */
+    public static void assertManagerLiveWins(WorkflowState liveState,
+                                             @org.jspecify.annotations.Nullable WorkflowState managerAnswer) {
+        String workflowId = liveState.workflowId();
+        if (managerAnswer == null) {
+            throw new InvariantViolation(
+                    "ManagerLiveWins",
+                    "'" + workflowId + "' is live but the manager returns nothing for it");
+        }
+        if (managerAnswer.workflowStatus() != liveState.workflowStatus()) {
+            throw new InvariantViolation(
+                    "ManagerLiveWins",
+                    "'" + workflowId + "' is live with status " + liveState.workflowStatus()
+                            + " but the manager answers " + managerAnswer.workflowStatus());
+        }
+        var liveSteps = new LinkedHashMap<String, StepStatus>();
+        for (String stepName : liveState.workflowStepNames()) {
+            WorkflowStep step = liveState.getStep(stepName);
+            liveSteps.put(stepName, step == null ? null : step.status());
+        }
+        var answeredSteps = new LinkedHashMap<String, StepStatus>();
+        for (String stepName : managerAnswer.workflowStepNames()) {
+            WorkflowStep step = managerAnswer.getStep(stepName);
+            answeredSteps.put(stepName, step == null ? null : step.status());
+        }
+        if (!liveSteps.equals(answeredSteps)) {
+            throw new InvariantViolation(
+                    "ManagerLiveWins",
+                    "'" + workflowId + "' is live with steps " + liveSteps + " but the manager answers " + answeredSteps);
+        }
+    }
 }

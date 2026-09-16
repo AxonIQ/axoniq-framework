@@ -112,6 +112,8 @@ class ManagerCancellationTest {
             assertThat(outcome.workflowAnswered())
                     .as("workflow cancel on a historic id completes normally rather than failing")
                     .isTrue();
+            assertThat(outcome.batchStepAnswer()).as("the batch step cancel found no live target").isFalse();
+            assertThat(outcome.batchAllStepsAnswer()).as("the batch cancel-all-steps found no live target").isZero();
             // INV-35 was asserted inside the scenario; this pins the same observable in plain numbers.
             assertThat(outcome.appendedEvents())
                     .as("INV-35: no event is appended for an id that was not live at the request")

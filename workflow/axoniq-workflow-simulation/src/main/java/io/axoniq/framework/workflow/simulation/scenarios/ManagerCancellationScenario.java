@@ -110,12 +110,16 @@ public final class ManagerCancellationScenario {
      * @param stepAnswer       the {@code requestStepCancellation} answer.
      * @param allStepsAnswer   the {@code requestCancellationOfAllSteps} answer.
      * @param workflowAnswered whether {@code requestWorkflowCancellation} completed normally.
+     * @param batchStepAnswer  the {@code findMany(...).requestStepCancellation} answer.
+     * @param batchAllStepsAnswer the {@code findMany(...).requestCancellationOfAllSteps} answer.
      * @param appendedEvents   events appended for the id after the requests (INV-35 requires 0).
      * @param stateStatus      the manager's answer for the id after the requests.
      */
     public record TerminalTargetOutcome(boolean stepAnswer,
                                         int allStepsAnswer,
                                         boolean workflowAnswered,
+                                        boolean batchStepAnswer,
+                                        int batchAllStepsAnswer,
                                         int appendedEvents,
                                         @Nullable WorkflowStatus stateStatus) {
 
@@ -230,11 +234,17 @@ public final class ManagerCancellationScenario {
             boolean stepAnswer = bounded(one.requestStepCancellation(STEP_AWAIT_APPROVAL, cause()));
             int allAnswer = bounded(one.requestCancellationOfAllSteps(cause()));
             bounded(one.requestWorkflowCancellation(null));
+            // The batch operations resolve their targets from the live repository only, so on a historic id they
+            // must find nothing to do: false, 0, normal completion — and never a failed future.
+            var many = world.engine().workflowManager().findMany(query);
+            boolean batchStepAnswer = bounded(many.requestStepCancellation(STEP_AWAIT_APPROVAL, cause()));
+            int batchAllAnswer = bounded(many.requestCancellationOfAllSteps(cause()));
+            bounded(many.requestWorkflowCancellation(null));
             Polling.await(Duration.ofSeconds(2), () -> false);
             var logAfter = world.committedLog();
             Invariants.assertManagerCancelTargetsLiveOnly(logBefore, logAfter, liveBefore);
             var state = world.engine().managerSingleState(query);
-            return new TerminalTargetOutcome(stepAnswer, allAnswer, true,
+            return new TerminalTargetOutcome(stepAnswer, allAnswer, true, batchStepAnswer, batchAllAnswer,
                                              countFor(logAfter, workflowId) - countFor(logBefore, workflowId),
                                              state == null ? null : state.workflowStatus());
         }

@@ -662,6 +662,17 @@ public final class SimulationEvents {
      *
      * @param orderId business key; also the correlation key the blocking wait associates on.
      */
+    /**
+     * Start event for the {@link io.axoniq.framework.workflow.simulation.workflow.ManagerLiveWinsWorkflow}: a workflow
+     * that parks on an approval wait, compensates when that wait is cancelled from outside, and parks again on a
+     * resume signal. Used by the manager live-wins scenario.
+     *
+     * @param orderId business key; also the correlation key both waits associate on (the second with a suffix).
+     */
+    public record ManagerProbeRequestedEvent(String orderId) {
+
+    }
+
     public record ExternalCancelRequestedEvent(String orderId) {
 
     }
