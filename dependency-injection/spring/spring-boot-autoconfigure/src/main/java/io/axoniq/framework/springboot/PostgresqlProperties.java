@@ -19,6 +19,7 @@
 
 package io.axoniq.framework.springboot;
 
+import io.axoniq.framework.postgresql.SchemaInitialization;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -27,6 +28,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * These properties are bound to the {@code axon.postgresql} prefix.
  *
  * @author Steven van Beelen
+ * @author John Hendrikx
  * @since 1.0.0
  */
 @ConfigurationProperties("axon.postgresql")
@@ -41,6 +43,12 @@ public class PostgresqlProperties {
      * {@link org.axonframework.eventsourcing.eventstore.EventStorageEngine}. Defaults to {@code true}.
      */
     private boolean enabled = true;
+
+    /**
+     * How the {@link io.axoniq.framework.postgresql.PostgresqlEventStorageEngine} should handle a missing or
+     * incomplete schema on startup. Defaults to {@link SchemaInitialization#CREATE_IF_MISSING}.
+     */
+    private SchemaInitialization schemaInitialization = SchemaInitialization.CREATE_IF_MISSING;
 
     /**
      * Returns whether the PostgreSQL extension is enabled.
@@ -58,5 +66,23 @@ public class PostgresqlProperties {
      */
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    /**
+     * Returns how the engine should handle a missing or incomplete schema on startup.
+     *
+     * @return the configured {@link SchemaInitialization}
+     */
+    public SchemaInitialization getSchemaInitialization() {
+        return schemaInitialization;
+    }
+
+    /**
+     * Sets how the engine should handle a missing or incomplete schema on startup.
+     *
+     * @param schemaInitialization the {@link SchemaInitialization} to use, cannot be {@code null}
+     */
+    public void setSchemaInitialization(SchemaInitialization schemaInitialization) {
+        this.schemaInitialization = schemaInitialization;
     }
 }
