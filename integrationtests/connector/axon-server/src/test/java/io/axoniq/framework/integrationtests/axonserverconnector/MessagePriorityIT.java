@@ -28,6 +28,7 @@ import io.axoniq.framework.messaging.commandhandling.distributed.DistributedComm
 import io.axoniq.framework.messaging.commandhandling.distributed.DistributedCommandBusConfiguration;
 import io.axoniq.framework.messaging.commandhandling.distributed.PayloadConvertingCommandBusConnector;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
+import io.axoniq.framework.testcontainer.SharedAxonServerContainer;
 import io.grpc.ManagedChannelBuilder;
 import org.axonframework.conversion.jackson.JacksonConverter;
 import org.axonframework.messaging.commandhandling.CommandMessage;
@@ -47,8 +48,6 @@ import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.Objects;
 import java.util.Queue;
@@ -69,13 +68,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Jens Mayer
  * @author Steven van Beelen
  */
-@Testcontainers
 class MessagePriorityIT {
 
-    @Container
-    private static final AxonServerContainer axonServer = new AxonServerContainer()
-            .withAxonServerHostname("localhost")
-            .withDevMode(true);
+    private static final AxonServerContainer axonServer = SharedAxonServerContainer.INSTANCE;
 
     private static final int PRIORITY = 42;
     private static final int REGULAR = 0;
@@ -85,6 +80,11 @@ class MessagePriorityIT {
     private AxonServerConnectionManager connectionManager;
     private DistributedCommandBus commandBus;
     private CommandGateway commandGateway;
+
+    @BeforeAll
+    static void startContainer() {
+        SharedAxonServerContainer.ensureStarted();
+    }
 
     @BeforeEach
     void setUp() {

@@ -65,12 +65,18 @@ class AxonServerEventStorageEngineIT extends StorageEngineTestSuite<AxonServerEv
 
     private static final String CONTEXT = "default";
 
+    /*
+     * Pinned to 2026.1.0 (not the shared canonical container) because this suite exercises the
+     * AxonServerEventStorageEngine's SnapshotStore support, which requires a newer server than the
+     * docker.axoniq.io/axoniq/axonserver:latest tag currently provides.
+     */
     @SuppressWarnings("resource")
     @Container
     private static final AxonServerContainer container =
             new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:2026.1.0")
                     .withDevMode(true)
-                    .withDcbContext(true);
+                    .withDcbContext(true)
+                    .withReuse(true);
 
     private static AxonServerConnection connection;
 
