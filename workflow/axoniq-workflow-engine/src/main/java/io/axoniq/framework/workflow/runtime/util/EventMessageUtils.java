@@ -27,6 +27,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.VersionedType;
@@ -37,6 +38,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.Map;
+import java.time.Clock;
 import java.util.function.Predicate;
 
 import static io.axoniq.framework.workflow.runtime.util.MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD;
@@ -68,7 +70,10 @@ public class EventMessageUtils {
                                              MessageType type,
                                              @Nullable Object payload,
                                              Metadata metadata) {
-        return new GenericEventMessage(type, payload, metadata)
+        // Timestamp from the engine's Clock component, not the global ClockUtils: step deadlines are compared with
+        // that clock, and a fixture advances it. Both are the system clock in production.
+        var clock = context.processingContext().component(Clock.class);
+        return new GenericEventMessage(new GenericMessage(type, payload, metadata), clock::instant)
                 .withConverter(context.processingContext().component(EventConverter.class));
     }
 
