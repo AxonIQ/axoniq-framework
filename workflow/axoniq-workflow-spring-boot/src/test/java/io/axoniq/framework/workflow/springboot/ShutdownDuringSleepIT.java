@@ -20,7 +20,7 @@ package io.axoniq.framework.workflow.springboot;
 
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.test.utils.PrettyPrintingRecordingEventStore;

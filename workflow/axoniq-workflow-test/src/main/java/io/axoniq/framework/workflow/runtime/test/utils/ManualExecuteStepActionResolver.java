@@ -19,7 +19,7 @@
 package io.axoniq.framework.workflow.runtime.test.utils;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
@@ -43,13 +43,13 @@ public class ManualExecuteStepActionResolver implements ExecuteStepActionResolve
     /**
      * Resolves the action for an execute step, blocking until the fixture supplies behavior for the step name.
      *
-     * @param workflowContext   workflow context
+     * @param workflowExecutionOperations   workflow context
      * @param workflowExecution workflow execution
      * @param command           execute command
      * @return payload processor to execute
      */
     @Override
-    public PayloadProcessor resolve(WorkflowContext workflowContext,
+    public PayloadProcessor resolve(WorkflowExecutionOperations workflowExecutionOperations,
                                     WorkflowExecution workflowExecution,
                                     ExecutePrimitive.ExecuteCommand command) {
         var actionFactory = actions.computeIfAbsent(command.stepName(), ignored -> new CompletableFuture<>());

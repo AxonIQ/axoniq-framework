@@ -19,7 +19,7 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
@@ -30,7 +30,6 @@ import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
-import org.axonframework.messaging.eventhandling.EventSink;
 
 import java.time.Clock;
 import java.util.ArrayList;

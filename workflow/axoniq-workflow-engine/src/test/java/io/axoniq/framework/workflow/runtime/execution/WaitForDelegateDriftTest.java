@@ -18,11 +18,12 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WaitForPrimitive;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
@@ -53,7 +54,7 @@ import static org.mockito.ArgumentMatchers.anyString;
  */
 class WaitForDelegateDriftTest {
 
-    private WorkflowContext workflowContext;
+    private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private WaitForDelegate delegate;
@@ -61,7 +62,7 @@ class WaitForDelegateDriftTest {
 
     @BeforeEach
     void setUp() {
-        workflowContext = mock(WorkflowContext.class);
+        workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
         EventSink eventSink = mock(EventSink.class);
@@ -76,7 +77,7 @@ class WaitForDelegateDriftTest {
         when(workflowExecution.hasTasks()).thenReturn(false);
 
         delegate = new WaitForDelegate(
-                workflowContext, workflowExecution, new RunningSteps(), new EventWaitConditions(), reachedSteps, parent,
+                workflowExecutionOperations, workflowExecution, new RunningSteps(), new EventWaitConditions(), reachedSteps, parent,
                 Clock.systemUTC(), new ControllableWorkflowScheduler()
         );
     }

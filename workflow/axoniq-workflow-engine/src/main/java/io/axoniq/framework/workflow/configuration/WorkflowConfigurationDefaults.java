@@ -22,7 +22,7 @@ import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepo
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.WorkflowHistoryProjector;
 import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.DefaultExecuteStepActionResolver;

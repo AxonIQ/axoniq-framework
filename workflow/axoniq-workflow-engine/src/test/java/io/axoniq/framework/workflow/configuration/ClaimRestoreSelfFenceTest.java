@@ -18,9 +18,9 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
@@ -80,8 +80,8 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
         configuration = configurationWith(storageEngine);
         configuration.start();
 
-        var instanceA = workflowContext("wf-a", Version.DEFAULT_VERSION);
-        var instanceB = workflowContext("wf-b", Version.DEFAULT_VERSION);
+        var instanceA = workflowExecutionOperations("wf-a", Version.DEFAULT_VERSION);
+        var instanceB = workflowExecutionOperations("wf-b", Version.DEFAULT_VERSION);
         publish(EventMessageUtils.startedWorkflow(instanceA, MODULE, DEFINITION_ID, customizer));
         publish(EventMessageUtils.startedWorkflow(instanceB, MODULE, DEFINITION_ID, customizer));
 
@@ -107,7 +107,7 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
         configuration = configurationWith(new PreviousOwnerWritingStorageEngine(new InMemoryEventStorageEngine()));
         configuration.start();
 
-        var instance = workflowContext("wf-a", Version.DEFAULT_VERSION);
+        var instance = workflowExecutionOperations("wf-a", Version.DEFAULT_VERSION);
         publish(EventMessageUtils.startedWorkflow(instance, MODULE, DEFINITION_ID, customizer));
 
         restoreSegment();
@@ -179,7 +179,7 @@ class ClaimRestoreSelfFenceTest extends AbstractEventSourcedEntityRepositoryTest
         }
     }
 
-    private EventMessage step(WorkflowContext context, String stepName) {
+    private EventMessage step(WorkflowExecutionOperations context, String stepName) {
         return EventMessageUtils.completedStep(context, stepName, Map.of("approved", true), null, customizer);
     }
 

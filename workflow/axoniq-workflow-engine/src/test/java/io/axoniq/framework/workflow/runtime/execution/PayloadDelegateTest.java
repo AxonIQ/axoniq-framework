@@ -18,11 +18,12 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
 import org.jspecify.annotations.Nullable;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
@@ -61,7 +62,7 @@ import static org.mockito.Mockito.eq;
  */
 class PayloadDelegateTest {
 
-    private WorkflowContext workflowContext;
+    private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowExecution workflowExecution;
     private EventSink eventSink;
     private ProcessingContext processingContext;
@@ -74,7 +75,7 @@ class PayloadDelegateTest {
     @SuppressWarnings("unchecked")
     @BeforeEach
     void setUp() {
-        workflowContext = mock(WorkflowContext.class);
+        workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowExecution = mock(WorkflowExecution.class);
         eventSink = mock(EventSink.class);
         processingContext = mock(ProcessingContext.class);
@@ -93,16 +94,16 @@ class PayloadDelegateTest {
                 });
 
         when(workflowExecution.processingContext()).thenReturn(processingContext);
-        when(workflowExecution.workflowContext()).thenReturn(workflowContext);
+        when(workflowExecution.workflowExecutionOperations()).thenReturn(workflowExecutionOperations);
         when(workflowExecution.state()).thenReturn(mock(WorkflowState.class));
-        when(workflowContext.processingContext()).thenReturn(processingContext);
-        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
+        when(workflowExecutionOperations.processingContext()).thenReturn(processingContext);
+        when(workflowExecutionOperations.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         when(processingContext.component(EventConverter.class)).thenReturn(TestEventConverter.INSTANCE);
         when(workflowExecution.appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         delegate = new PayloadDelegate(
-                workflowContext,
+                workflowExecutionOperations,
                 workflowExecution,
                 new RunningSteps(),
                 new ReachedSteps(),
@@ -118,7 +119,7 @@ class PayloadDelegateTest {
         String stepName = "testStep";
         Map<String, @Nullable Object> currentPayload = new HashMap<>();
         currentPayload.put("key1", "value1");
-        when(workflowContext.workflowPayload()).thenReturn(currentPayload);
+        when(workflowExecutionOperations.workflowPayload()).thenReturn(currentPayload);
 
         PayloadModification modification = p -> {
             Map<String, @Nullable Object> next = new HashMap<>(p);

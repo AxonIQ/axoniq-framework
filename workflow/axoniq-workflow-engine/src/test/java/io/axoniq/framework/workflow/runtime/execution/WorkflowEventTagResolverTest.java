@@ -18,10 +18,11 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
 import org.jspecify.annotations.Nullable;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
@@ -48,11 +49,11 @@ class WorkflowEventTagResolverTest {
     private final WorkflowEventTagResolver resolver = new WorkflowEventTagResolver();
     private final EventNameCustomizer customizer = new TestEventNameCustomizer();
     private final VersionedType workflowDefinitionId = VersionedType.of(new QualifiedName("OrderWorkflow"), "0.0.1");
-    private WorkflowContext context;
+    private WorkflowExecutionOperations context;
 
     @BeforeEach
     void setUp() {
-        context = mock(WorkflowContext.class);
+        context = mock(WorkflowExecutionOperations.class);
         when(context.workflowId()).thenReturn("wf-123");
         when(context.workflowPayload()).thenReturn(Map.of("orderId", "123"));
         when(context.workflowVersion()).thenReturn("0.0.1");

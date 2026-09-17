@@ -57,11 +57,11 @@ public interface WorkflowExecution extends DescribableComponent {
     CompletableFuture<Void> execute(Consumer<WorkflowExecution> terminationHandler);
 
     /**
-     * Returns the workflow context of the current execution.
+     * Returns the runtime operations for the current execution.
      *
-     * @return workflow context facing the user
+     * @return runtime operations for the current execution
      */
-    WorkflowContext workflowContext();
+    WorkflowExecutionOperations workflowExecutionOperations();
 
     /**
      * Applies queued tasks until the condition is satisfied.

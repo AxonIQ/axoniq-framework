@@ -18,10 +18,11 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PayloadPrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
@@ -51,7 +52,7 @@ import static org.mockito.ArgumentMatchers.anyString;
  */
 class PayloadDelegateDriftTest {
 
-    private WorkflowContext workflowContext;
+    private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private PayloadDelegate delegate;
@@ -59,7 +60,7 @@ class PayloadDelegateDriftTest {
 
     @BeforeEach
     void setUp() {
-        workflowContext = mock(WorkflowContext.class);
+        workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
         EventSink eventSink = mock(EventSink.class);
@@ -71,7 +72,7 @@ class PayloadDelegateDriftTest {
         when(workflowExecution.state()).thenReturn(state);
 
         delegate = new PayloadDelegate(
-                workflowContext, workflowExecution, new RunningSteps(), reachedSteps, parent,
+                workflowExecutionOperations, workflowExecution, new RunningSteps(), reachedSteps, parent,
                 Clock.systemUTC(), new ControllableWorkflowScheduler()
         );
     }

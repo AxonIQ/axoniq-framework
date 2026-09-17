@@ -22,8 +22,8 @@ import org.jspecify.annotations.Nullable;
 
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
-import io.axoniq.framework.workflow.runtime.execution.AbstractDSLWorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.*;
@@ -83,7 +83,7 @@ public class WorkflowDefinitionLookupUtilsHandlerBeanTest {
         }
     }
 
-    static class MyWorkflowContext extends AbstractDSLWorkflowContext {
+    static class MyWorkflowContext extends AbstractWorkflowContext {
 
         public MyWorkflowContext(String workflowId, Map<String, @Nullable Object> payload, ProcessingContext processingContext,
                                  WorkflowConfiguration<?> workflowConfiguration) {
@@ -91,7 +91,7 @@ public class WorkflowDefinitionLookupUtilsHandlerBeanTest {
         }
     }
 
-    static class OtherWorkflowContext extends AbstractDSLWorkflowContext {
+    static class OtherWorkflowContext extends AbstractWorkflowContext {
 
         public OtherWorkflowContext(String workflowId, Map<String, @Nullable Object> payload, ProcessingContext processingContext,
                                     WorkflowConfiguration<?> workflowConfiguration) {

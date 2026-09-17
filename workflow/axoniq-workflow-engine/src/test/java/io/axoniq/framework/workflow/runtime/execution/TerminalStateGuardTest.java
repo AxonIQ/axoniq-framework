@@ -18,10 +18,12 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
 import org.jspecify.annotations.Nullable;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;
@@ -60,6 +62,7 @@ import static org.mockito.Mockito.*;
  */
 class TerminalStateGuardTest {
 
+    private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowContext workflowContext;
     private WorkflowExecution workflowExecution;
     private EventSourcedWorkflowState workflowState;
@@ -74,10 +77,10 @@ class TerminalStateGuardTest {
      */
     private static class TestableStepExecutor extends AbstractStepExecutor {
 
-        TestableStepExecutor(WorkflowContext workflowContext, WorkflowExecution workflowExecution,
+        TestableStepExecutor(WorkflowExecutionOperations workflowExecutionOperations, WorkflowExecution workflowExecution,
                              EventNameCustomizer parentEventNameCustomizer, Clock clock,
                              UnitOfWorkFactory unitOfWorkFactory, EventSink eventSink, Executor executor) {
-            super(workflowContext, workflowExecution, new RunningSteps(), new ReachedSteps(), parentEventNameCustomizer,
+            super(workflowExecutionOperations, workflowExecution, new RunningSteps(), new ReachedSteps(), parentEventNameCustomizer,
                   clock, new ControllableWorkflowScheduler());
         }
 
@@ -102,6 +105,7 @@ class TerminalStateGuardTest {
     @SuppressWarnings("unchecked")
     @BeforeEach
     void setUp() {
+        workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowContext = mock(WorkflowContext.class);
         workflowExecution = mock(WorkflowExecution.class);
         eventSink = mock(EventSink.class);
@@ -124,10 +128,10 @@ class TerminalStateGuardTest {
                 new DelegatingEventConverter(new JacksonConverter())
         );
         when(processingContext.component(PayloadReducerRegistry.class)).thenReturn(new PayloadReducerRegistry());
-        when(workflowContext.processingContext()).thenReturn(processingContext);
-        when(workflowContext.workflowId()).thenReturn("wf-1");
-        when(workflowContext.workflowPayload()).thenReturn(Map.of());
-        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
+        when(workflowExecutionOperations.processingContext()).thenReturn(processingContext);
+        when(workflowExecutionOperations.workflowId()).thenReturn("wf-1");
+        when(workflowExecutionOperations.workflowPayload()).thenReturn(Map.of());
+        when(workflowExecutionOperations.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         when(eventSink.publish(any(ProcessingContext.class), any(EventMessage.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
@@ -140,14 +144,14 @@ class TerminalStateGuardTest {
         when(workflowExecution.state()).thenReturn(workflowState);
 
         stepExecutor = new TestableStepExecutor(
-                workflowContext, workflowExecution, eventNameCustomizer,
+                workflowExecutionOperations, workflowExecution, eventNameCustomizer,
                 Clock.systemUTC(), unitOfWorkFactory, eventSink, executor
         );
     }
 
     @Test
     void completedReturnsFailedFutureWhenWorkflowIsTerminal() {
-        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.COMPLETED);
+        when(workflowExecutionOperations.workflowStatus()).thenReturn(WorkflowStatus.COMPLETED);
 
         var future = stepExecutor.testCompleted("step-1", Map.of(), eventNameCustomizer);
 
@@ -160,7 +164,7 @@ class TerminalStateGuardTest {
 
     @Test
     void failedReturnsFailedFutureWhenWorkflowIsTerminal() {
-        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.FAILED);
+        when(workflowExecutionOperations.workflowStatus()).thenReturn(WorkflowStatus.FAILED);
 
         var future = stepExecutor.testFailed("step-1", new RuntimeException("boom"), eventNameCustomizer);
 
@@ -173,7 +177,7 @@ class TerminalStateGuardTest {
 
     @Test
     void startedReturnsFailedFutureWhenWorkflowIsTerminal() {
-        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.CANCELLED);
+        when(workflowExecutionOperations.workflowStatus()).thenReturn(WorkflowStatus.CANCELLED);
 
         var future = stepExecutor.testStarted("step-1", Map.of(), eventNameCustomizer);
 
@@ -186,9 +190,9 @@ class TerminalStateGuardTest {
 
     @Test
     void completedReturnsFailedFutureWhenStepIsTerminal() {
-        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
+        when(workflowExecutionOperations.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
 
-        workflowState.evolve(EventMessageUtils.completedStep(workflowContext,
+        workflowState.evolve(EventMessageUtils.completedStep(workflowExecutionOperations,
                                                              "step-1",
                                                              Map.of(),
                                                              NAME,
@@ -206,7 +210,7 @@ class TerminalStateGuardTest {
 
     @Test
     void failedFutureContainsStepNameInMessage() {
-        workflowState.evolve(EventMessageUtils.completedStep(workflowContext, "my-step", Map.of(),
+        workflowState.evolve(EventMessageUtils.completedStep(workflowExecutionOperations, "my-step", Map.of(),
                                                              NAME, eventNameCustomizer),
                              processingContext);
 

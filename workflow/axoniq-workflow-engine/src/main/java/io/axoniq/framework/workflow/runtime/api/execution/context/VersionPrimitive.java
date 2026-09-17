@@ -18,6 +18,8 @@
  */
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
 
 /**

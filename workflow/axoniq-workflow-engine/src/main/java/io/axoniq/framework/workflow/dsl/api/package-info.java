@@ -17,7 +17,8 @@
  *  https://www.axoniq.io/pricing
  */
 /**
- * Author-facing DSL entry points for defining workflow steps and manipulating workflow payloads.
+ * Author-facing DSL entry points, step-definition value types, event conditions, and workflow lifecycle exceptions.
+ * These types describe a workflow author's intent; the runtime translates them into execution commands.
  * @since 5.4.0
  */
 @NullMarked

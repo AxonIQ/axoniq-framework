@@ -19,7 +19,7 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepIndeterminateException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;

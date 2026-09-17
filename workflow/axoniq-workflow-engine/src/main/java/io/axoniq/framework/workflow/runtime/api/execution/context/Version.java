@@ -43,8 +43,6 @@ public final class Version implements Comparable<Version> {
      */
     public static final String DEFAULT_VERSION = "0.0.1";
 
-    public static final Version DEFAULT = Version.of(DEFAULT_VERSION);
-
     private final String value;
     private final int major;
     private final int minor;

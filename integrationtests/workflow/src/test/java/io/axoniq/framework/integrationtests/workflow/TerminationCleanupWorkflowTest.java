@@ -24,7 +24,7 @@ import io.axoniq.framework.workflow.dsl.api.Payload;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.junit.jupiter.api.*;
 

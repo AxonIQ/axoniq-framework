@@ -23,8 +23,8 @@ import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinit
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.BackoffStrategy;
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy;
+import io.axoniq.framework.workflow.dsl.api.retry.BackoffStrategy;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;

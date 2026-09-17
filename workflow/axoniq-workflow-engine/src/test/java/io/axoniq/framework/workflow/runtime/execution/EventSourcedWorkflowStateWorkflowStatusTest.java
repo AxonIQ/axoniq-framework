@@ -146,7 +146,7 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
         try {
             state.throwTerminalCause();
         } catch (Throwable t) {
-            assertThat(t).isInstanceOf(io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException.class);
+            assertThat(t).isInstanceOf(io.axoniq.framework.workflow.dsl.api.WorkflowFailedException.class);
             assertThat(t.getCause()).isNotNull();
             assertThat(t.getCause().getMessage()).isEqualTo("Workflow already failed");
             return;
@@ -168,7 +168,7 @@ class EventSourcedWorkflowStateWorkflowStatusTest {
         try {
             state.throwTerminalCause();
         } catch (Throwable t) {
-            assertThat(t).isInstanceOf(io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException.class);
+            assertThat(t).isInstanceOf(io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException.class);
             assertThat(t.getMessage()).isEqualTo("Workflow already cancelled");
             return;
         }

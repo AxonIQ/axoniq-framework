@@ -18,6 +18,10 @@
  */
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer;
 

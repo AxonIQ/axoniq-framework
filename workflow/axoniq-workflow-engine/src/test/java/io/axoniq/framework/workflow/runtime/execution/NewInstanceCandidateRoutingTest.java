@@ -18,9 +18,11 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
@@ -561,14 +563,18 @@ class NewInstanceCandidateRoutingTest {
      * stubbing.
      */
     private static WorkflowContext workflowContext() {
-        var workflowContext = mock(WorkflowContext.class);
+        return mock(WorkflowContext.class);
+    }
+
+    private static io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations workflowExecutionOperations() {
+        var workflowExecutionOperations = mock(io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations.class);
         var bodyContext = mock(ProcessingContext.class);
-        doReturn(bodyContext).when(workflowContext).processingContext();
+        doReturn(bodyContext).when(workflowExecutionOperations).processingContext();
         doAnswer(invocation -> {
             invocation.<Consumer<ProcessingContext>>getArgument(0).accept(bodyContext);
             return bodyContext;
         }).when(bodyContext).whenComplete(any());
-        return workflowContext;
+        return workflowExecutionOperations;
     }
 
     private static WorkflowExecution execution(String workflowId) {
@@ -577,7 +583,7 @@ class NewInstanceCandidateRoutingTest {
         doReturn(WorkflowStatus.STARTED).when(state).workflowStatus();
         doReturn(workflowId).when(execution).workflowId();
         doReturn(state).when(execution).state();
-        doReturn(workflowContext()).when(execution).workflowContext();
+        doReturn(workflowExecutionOperations()).when(execution).workflowExecutionOperations();
         doReturn(mock(WorkflowCancellation.class)).when(execution).workflowCancellation();
         return execution;
     }

@@ -24,7 +24,7 @@ import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinit
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;

@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 
 /**
@@ -33,7 +34,7 @@ public interface WorkflowStatusChangeListener {
      * React on workflow status change.
      *
      * @param state   workflow status.
-     * @param context workflow context.
+     * @param workflowContext author-facing workflow context
      */
-    <C extends WorkflowContext> void onWorkflowStatus(WorkflowStatus state, C context);
+    <C extends WorkflowContext> void onWorkflowStatus(WorkflowStatus state, C workflowContext);
 }

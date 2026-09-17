@@ -18,12 +18,13 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryContext;
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryContext;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
@@ -59,7 +60,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
     /**
      * Constructs the delegate.
      * @param delegate executoion delegate.
-     * @param workflowContext workflow context.
+     * @param workflowExecutionOperations runtime primitive-operation surface
      * @param workflowExecution workflow execution.
      * @param runningSteps running step registry
      * @param reachedSteps reached steps tracker
@@ -70,7 +71,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
     @Internal
     public RetryableExecuteDelegate(
             ExecuteDelegate delegate,
-            WorkflowContext workflowContext,
+            WorkflowExecutionOperations workflowExecutionOperations,
             WorkflowExecution workflowExecution,
             RunningSteps runningSteps,
             ReachedSteps reachedSteps,
@@ -78,7 +79,7 @@ public class RetryableExecuteDelegate extends AbstractStepExecutor implements Ex
             Clock clock,
             WorkflowScheduler timeoutScheduler
     ) {
-        super(workflowContext,
+        super(workflowExecutionOperations,
               workflowExecution,
               runningSteps,
               reachedSteps,

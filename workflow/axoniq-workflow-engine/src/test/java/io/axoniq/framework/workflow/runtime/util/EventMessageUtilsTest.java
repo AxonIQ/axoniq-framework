@@ -20,9 +20,9 @@ package io.axoniq.framework.workflow.runtime.util;
 
 import org.jspecify.annotations.Nullable;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowEventPublicationContext;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
@@ -58,7 +58,7 @@ class EventMessageUtilsTest {
     private static final TypeReference<Map<String, @Nullable Object>> MAP_TYPE = new TypeReference<>() {
     };
 
-    private WorkflowContext context;
+    private WorkflowEventPublicationContext context;
     private EventNameCustomizer customizer;
     private VersionedType workflowDefinitionId;
     private final String workflowId = "wf123";
@@ -66,7 +66,7 @@ class EventMessageUtilsTest {
 
     @BeforeEach
     void setUp() {
-        context = mock(WorkflowContext.class);
+        context = mock(WorkflowEventPublicationContext.class);
         customizer = mock(EventNameCustomizer.class);
         workflowDefinitionId = VersionedType.of(new QualifiedName("myWorkflow"), "0.0.1");
 

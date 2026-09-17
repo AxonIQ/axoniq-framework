@@ -18,13 +18,14 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
 import org.jspecify.annotations.Nullable;
 
 import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WaitForPrimitive;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
@@ -61,7 +62,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
     /**
      * Constructs the delegate.
      *
-     * @param workflowContext            workflow context.
+     * @param workflowExecutionOperations runtime primitive-operation surface
      * @param workflowExecution          workflow state.
      * @param runningSteps              running step registry
      * @param eventWaitConditions       event wait condition registry
@@ -75,7 +76,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
      */
     @Internal
     public WaitForDelegate(
-            WorkflowContext workflowContext,
+            WorkflowExecutionOperations workflowExecutionOperations,
             WorkflowExecution workflowExecution,
             RunningSteps runningSteps,
             EventWaitConditions eventWaitConditions,
@@ -84,7 +85,7 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
             Clock clock,
             WorkflowScheduler timeoutScheduler
     ) {
-        super(workflowContext,
+        super(workflowExecutionOperations,
               workflowExecution,
               runningSteps,
               reachedSteps,

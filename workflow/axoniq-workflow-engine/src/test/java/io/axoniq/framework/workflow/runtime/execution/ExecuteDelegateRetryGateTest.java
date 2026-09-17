@@ -18,11 +18,12 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepIndeterminateException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
@@ -84,7 +85,7 @@ class ExecuteDelegateRetryGateTest {
 
     @BeforeEach
     void setUp() throws InterruptedException {
-        var workflowContext = mock(WorkflowContext.class);
+        var workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowExecution = mock(WorkflowExecution.class);
         var workflowState = mock(WorkflowState.class);
         var unitOfWorkFactory = mock(UnitOfWorkFactory.class);
@@ -95,8 +96,8 @@ class ExecuteDelegateRetryGateTest {
 
         var processingContext = mock(ProcessingContext.class);
         when(processingContext.component(EventConverter.class)).thenReturn(mock(EventConverter.class));
-        when(workflowContext.processingContext()).thenReturn(processingContext);
-        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
+        when(workflowExecutionOperations.processingContext()).thenReturn(processingContext);
+        when(workflowExecutionOperations.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         when(workflowExecution.workflowId()).thenReturn("wf-1");
         when(workflowExecution.state()).thenReturn(workflowState);
         when(workflowExecution.isRunning()).thenReturn(true);
@@ -133,7 +134,7 @@ class ExecuteDelegateRetryGateTest {
         });
 
         delegate = new ExecuteDelegate(
-                workflowContext,
+                workflowExecutionOperations,
                 workflowExecution,
                 new RunningSteps(),
                 new ReachedSteps(),

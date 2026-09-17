@@ -18,13 +18,14 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
@@ -56,7 +57,7 @@ import static org.mockito.Mockito.*;
  */
 class ExecuteDelegateDriftTest {
 
-    private WorkflowContext workflowContext;
+    private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private ExecuteDelegate delegate;
@@ -64,7 +65,7 @@ class ExecuteDelegateDriftTest {
 
     @BeforeEach
     void setUp() {
-        workflowContext = mock(WorkflowContext.class);
+        workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
         EventSink eventSink = mock(EventSink.class);
@@ -79,7 +80,7 @@ class ExecuteDelegateDriftTest {
         when(workflowExecution.hasTasks()).thenReturn(false);
 
         delegate = new ExecuteDelegate(
-                workflowContext,
+                workflowExecutionOperations,
                 workflowExecution,
                 new RunningSteps(),
                 reachedSteps,

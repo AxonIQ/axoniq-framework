@@ -23,7 +23,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.context.annotation.Bean
 
 /**
- * Autoconfiguration for the Kotlin workflow DSL context factory.
+ * Autoconfiguration for the Kotlin workflow context factory.
  *
  * @author Simon Zambrovski
  * @since 5.4.0

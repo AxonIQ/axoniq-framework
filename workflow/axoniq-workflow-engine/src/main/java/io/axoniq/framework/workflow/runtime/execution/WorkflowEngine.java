@@ -580,7 +580,7 @@ public class WorkflowEngine implements
     }
 
     private void execute(WorkflowExecution execution, @Nullable Segment segment) {
-        execution.workflowContext()
+        execution.workflowExecutionOperations()
                  .processingContext()
                  .whenComplete(context -> {
                      try {

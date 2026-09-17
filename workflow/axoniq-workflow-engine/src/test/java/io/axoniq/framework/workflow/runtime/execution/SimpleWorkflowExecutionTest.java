@@ -19,13 +19,13 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
@@ -377,17 +377,13 @@ class SimpleWorkflowExecutionTest {
 
         when(processingContext.component(eq(ExecutorService.class), any())).thenReturn(executor);
         when(processingContext.component(eq(java.util.concurrent.Executor.class), any())).thenReturn(executor);
-        var workflowContext = mock(WorkflowContext.class);
-        when(workflowContext.workflowId()).thenReturn("workflow-id");
-        when(workflowContext.workflowVersion()).thenReturn("0.0.1");
-        when(workflowContext.workflowPayload()).thenReturn(Map.of());
-        when(workflowContext.processingContext()).thenReturn(processingContext);
+        var workflowExecutionOperations = mock(WorkflowContext.class);
         return new SimpleWorkflowExecution(
                 "workflow-id",
                 Map.of(),
                 processingContext,
                 new TestWorkflowConfiguration(workflowDefinition),
-                workflowContext
+                workflowExecutionOperations
         );
     }
 

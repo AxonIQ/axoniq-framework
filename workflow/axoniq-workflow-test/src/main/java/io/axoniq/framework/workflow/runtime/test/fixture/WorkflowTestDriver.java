@@ -21,7 +21,7 @@ package io.axoniq.framework.workflow.runtime.test.fixture;
 import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
 import io.axoniq.framework.workflow.history.api.WorkflowHistory;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
 import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;

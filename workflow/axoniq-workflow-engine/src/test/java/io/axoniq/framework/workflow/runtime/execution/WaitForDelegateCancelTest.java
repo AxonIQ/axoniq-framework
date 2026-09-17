@@ -18,9 +18,9 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
 import org.junit.jupiter.api.*;
 

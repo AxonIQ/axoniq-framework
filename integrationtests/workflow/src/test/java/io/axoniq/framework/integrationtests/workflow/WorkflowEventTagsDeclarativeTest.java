@@ -21,7 +21,7 @@ package io.axoniq.framework.integrationtests.workflow;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;

@@ -18,9 +18,9 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
@@ -230,7 +230,7 @@ class WorkflowReplayRoutingTest {
 
         @Override
         public WorkflowExecutionFactory workflowExecutionFactory() {
-            return new DSLAdoptingExecutionFactory<>(getWorkflowContextType());
+            return new WorkflowContextAdoptingExecutionFactory<>(getWorkflowContextType());
         }
 
         @Override

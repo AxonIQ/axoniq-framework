@@ -18,9 +18,10 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
@@ -64,7 +65,7 @@ import static org.mockito.Mockito.when;
  */
 class VersionDelegateTest {
 
-    private WorkflowContext workflowContext;
+    private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private EventSink eventSink;
@@ -79,7 +80,7 @@ class VersionDelegateTest {
     @SuppressWarnings("unchecked")
     @BeforeEach
     void setUp() {
-        workflowContext = mock(WorkflowContext.class);
+        workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
         eventSink = mock(EventSink.class);
@@ -97,20 +98,20 @@ class VersionDelegateTest {
                     return action.apply(processingContext);
                 });
 
-        when(workflowContext.workflowId()).thenReturn("wf-1");
-        when(workflowContext.workflowPayload()).thenReturn(java.util.Map.of());
+        when(workflowExecutionOperations.workflowId()).thenReturn("wf-1");
+        when(workflowExecutionOperations.workflowPayload()).thenReturn(java.util.Map.of());
         when(workflowExecution.workflowId()).thenReturn("wf-1");
         when(workflowExecution.processingContext()).thenReturn(processingContext);
-        when(workflowExecution.workflowContext()).thenReturn(workflowContext);
-        when(workflowContext.processingContext()).thenReturn(processingContext);
-        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
+        when(workflowExecution.workflowExecutionOperations()).thenReturn(workflowExecutionOperations);
+        when(workflowExecutionOperations.processingContext()).thenReturn(processingContext);
+        when(workflowExecutionOperations.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         when(processingContext.component(EventConverter.class)).thenReturn(TestEventConverter.INSTANCE);
         when(workflowExecution.state()).thenReturn(state);
         when(workflowExecution.appendWorkflowEvent(any(EventMessage.class), any(ProcessingContext.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         delegate = new VersionDelegate(
-                workflowContext,
+                workflowExecutionOperations,
                 workflowExecution,
                 reachedSteps,
                 parentCustomizer,
@@ -156,7 +157,7 @@ class VersionDelegateTest {
         when(state.versionFor("payment-redesign")).thenReturn("0.0.2");
         givenWorkflowDefinitionVersion("0.0.1");
         when(state.workflowStepNames()).thenReturn(List.of());
-        when(workflowContext.workflowVersion()).thenReturn("0.0.1");
+        when(workflowExecutionOperations.workflowVersion()).thenReturn("0.0.1");
         runAppendedTaskImmediately();
 
         String v = invokeVersion("payment-redesign", "0.0.2");
@@ -210,7 +211,7 @@ class VersionDelegateTest {
         when(state.versionFor("payment-redesign")).thenReturn("0.0.2");
         givenWorkflowDefinitionVersion("0.0.1");
         when(state.workflowStepNames()).thenReturn(List.of());
-        when(workflowContext.workflowVersion()).thenReturn("0.0.1");
+        when(workflowExecutionOperations.workflowVersion()).thenReturn("0.0.1");
         runAppendedTaskImmediately();
 
         String first = invokeVersion("payment-redesign", "0.0.2");
@@ -257,7 +258,7 @@ class VersionDelegateTest {
         givenWorkflowDefinitionVersion("0.0.1");
         when(state.workflowStepNames()).thenReturn(List.of("A"));
         when(state.getStep("A")).thenReturn(stepInStatus(StepStatus.COMPLETED));
-        when(workflowContext.workflowVersion()).thenReturn("0.0.1");
+        when(workflowExecutionOperations.workflowVersion()).thenReturn("0.0.1");
         runAppendedTaskImmediately();
 
         String v = invokeVersion("x", "0.0.2");
@@ -272,7 +273,7 @@ class VersionDelegateTest {
         when(state.versionFor("x")).thenReturn("0.0.3");
         givenWorkflowDefinitionVersion("0.0.1");
         when(state.workflowStepNames()).thenReturn(List.of());
-        when(workflowContext.workflowVersion()).thenReturn("0.0.1");
+        when(workflowExecutionOperations.workflowVersion()).thenReturn("0.0.1");
         runAppendedTaskImmediately();
 
         String v = invokeVersion("x", "0.0.3");
@@ -294,7 +295,7 @@ class VersionDelegateTest {
         when(state.workflowStepNames()).thenReturn(List.of("A", "B"));
         when(state.getStep("A")).thenReturn(stepInStatus(StepStatus.COMPLETED));
         when(state.getStep("B")).thenReturn(stepInStatus(StepStatus.STARTED));
-        when(workflowContext.workflowVersion()).thenReturn("0.0.1");
+        when(workflowExecutionOperations.workflowVersion()).thenReturn("0.0.1");
         runAppendedTaskImmediately();
 
         String v = invokeVersion("x", "0.0.2");

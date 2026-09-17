@@ -20,8 +20,8 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.runtime.association.Associations;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.PayloadReducerRegistry;

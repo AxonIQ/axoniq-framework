@@ -238,7 +238,7 @@ They can be published from anywhere—a command handler, an `EventGateway`, a RE
 
 == Kotlin DSL
 
-If you prefer Kotlin, `WorkflowKontext` is the runtime-facing context and `Kontext` is the author-facing DSL wrapper.
+If you prefer Kotlin, `WorkflowKontext` is the workflow context instance and `Kontext` is the author-facing DSL wrapper.
 `Kontext` offers the same kind of concise defaults as the Java DSL:
 
 [source,kotlin]
@@ -259,7 +259,8 @@ class OrderFulfillmentWorkflow {
 }
 ----
 
-Under the hood, `Kontext` still builds the same `ExecuteStepDefinition` and `WaitForStepDefinition` objects as the runtime-facing API through `WorkflowKontext`.
+Under the hood, `Kontext` builds the same DSL `ExecuteStepDefinition` and `WaitForStepDefinition` objects exposed by
+`WorkflowContext` through `WorkflowKontext`.
 You can stay concise for common cases and drop down to explicit definitions only when you need full control.
 When you need to pass step-local data with a named Kotlin argument, use `inputPayload = ...`.
 To learn more about all execution options, event associations, orchestration patterns, and advanced configuration, see the xref:development@axon-framework-reference:workflows:index.adoc[Reference Guide].

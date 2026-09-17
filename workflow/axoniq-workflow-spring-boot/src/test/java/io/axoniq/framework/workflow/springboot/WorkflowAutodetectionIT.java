@@ -21,7 +21,7 @@ package io.axoniq.framework.workflow.springboot;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
@@ -79,7 +79,7 @@ public class WorkflowAutodetectionIT {
         ).isTrue();
         assertThat(conf.configuration().workflowContextFactory()).isInstanceOf(SimpleWorkflowContextFactory.class);
 
-        var ctx = mock(WorkflowContext.class);
+        var ctx = mock(WorkflowExecutionOperations.class);
         //noinspection unchecked,rawtypes
         ((WorkflowDefinition) conf.configuration().workflowDefinition()).accept(ctx);
 

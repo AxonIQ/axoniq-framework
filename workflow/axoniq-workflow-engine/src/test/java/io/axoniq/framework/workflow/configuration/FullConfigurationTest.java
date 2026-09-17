@@ -21,9 +21,9 @@ package io.axoniq.framework.workflow.configuration;
 
 import org.jspecify.annotations.Nullable;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.execution.AbstractDSLWorkflowContext;
+import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.InMemoryWorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
@@ -101,7 +101,7 @@ class FullConfigurationTest {
         // SimpleWorkflowModule doesn't export them with a name, but it registers them in the local registry.
     }
 
-    static class TestContext extends AbstractDSLWorkflowContext {
+    static class TestContext extends AbstractWorkflowContext {
 
         public TestContext(Map<String, @Nullable Object> payload, String workflowId,
                            ProcessingContext processingContext,

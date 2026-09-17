@@ -18,13 +18,14 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.BackoffStrategy;
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy;
+import io.axoniq.framework.workflow.dsl.api.retry.BackoffStrategy;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepIndeterminateException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
@@ -165,7 +166,7 @@ class RetryableExecuteDelegateTest {
     }
 
     private static Fixture fixture(WorkflowStep recoveredStep) {
-        var workflowContext = mock(WorkflowContext.class);
+        var workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         var workflowExecution = mock(WorkflowExecution.class);
         var state = mock(WorkflowState.class);
         var executeDelegate = mock(ExecuteDelegate.class);
@@ -177,8 +178,8 @@ class RetryableExecuteDelegateTest {
 
         var processingContext = mock(ProcessingContext.class);
         when(processingContext.component(EventConverter.class)).thenReturn(mock(EventConverter.class));
-        when(workflowContext.processingContext()).thenReturn(processingContext);
-        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
+        when(workflowExecutionOperations.processingContext()).thenReturn(processingContext);
+        when(workflowExecutionOperations.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         when(workflowExecution.state()).thenReturn(state);
         when(state.containsStep(STEP_NAME)).thenReturn(true);
         when(state.getStep(STEP_NAME)).thenReturn(recoveredStep);
@@ -194,7 +195,7 @@ class RetryableExecuteDelegateTest {
 
         var delegate = new RetryableExecuteDelegate(
                 executeDelegate,
-                workflowContext,
+                workflowExecutionOperations,
                 workflowExecution,
                 runningSteps,
                 new ReachedSteps(),

@@ -46,7 +46,7 @@ class EventSourcedWorkflowStateRepositoryIntegrationTest extends AbstractEventSo
 
         var definitionId = VersionedType.of(new QualifiedName("OrderWorkflow"), "1.0.0");
         var customizer = DefaultEventNameCustomizer.Builder.defaults();
-        var context = workflowContext("wf-1", "1.0.0");
+        var context = workflowExecutionOperations("wf-1", "1.0.0");
 
         publish(EventMessageUtils.startedWorkflow(context, "OrderWorkflow", definitionId, customizer));
         publish(EventMessageUtils.completedStep(

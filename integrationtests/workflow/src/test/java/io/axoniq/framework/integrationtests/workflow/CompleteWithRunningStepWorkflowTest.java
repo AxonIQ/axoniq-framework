@@ -115,7 +115,7 @@ class CompleteWithRunningStepWorkflowTest extends AbstractWorkflowIntegrationTes
                     step -> step.timeout(Duration.ofMinutes(5))
             );
 
-            var status = payload(ctx).<String>get("status");
+            var status = payload(ctx.workflowPayload()).<String>get("status");
             switch (status) {
                 case "FAIL" -> ctx.fail(new RuntimeException("boom"));
                 case "CANCEL" -> ctx.cancel("user-initiated");

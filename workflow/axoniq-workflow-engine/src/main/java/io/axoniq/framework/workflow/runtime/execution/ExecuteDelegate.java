@@ -18,12 +18,13 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.ExecutePrimitive;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepIndeterminateException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
@@ -78,7 +79,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
     /**
      * Constructs the delegate.
      *
-     * @param context                   workflow context
+     * @param workflowExecutionOperations runtime operations for the workflow execution
      * @param workflowExecution         workflow state
      * @param runningSteps              running step registry
      * @param reachedSteps              reached steps tracker
@@ -90,7 +91,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
      * @param actionResolver            resolver for execute step actions
      */
     @Internal
-    public ExecuteDelegate(WorkflowContext context,
+    public ExecuteDelegate(WorkflowExecutionOperations workflowExecutionOperations,
                            WorkflowExecution workflowExecution,
                            RunningSteps runningSteps,
                            ReachedSteps reachedSteps,
@@ -101,7 +102,7 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                            WorkflowScheduler timeoutScheduler,
                            ExecuteStepActionResolver actionResolver
     ) {
-        super(context,
+        super(workflowExecutionOperations,
               workflowExecution,
               runningSteps,
               reachedSteps,
@@ -166,9 +167,9 @@ public class ExecuteDelegate extends AbstractStepExecutor implements ExecutePrim
                                                                                                 .getStep(stepName)
                                                                                                 .context(),
                                                                                processingContext);
-                        var payload = parameterPayloadReducer.apply(workflowContext.workflowPayload(), local);
+                        var payload = parameterPayloadReducer.apply(workflowExecutionOperations.workflowPayload(), local);
                         try {
-                            var action = actionResolver.resolve(workflowContext, workflowExecution, command);
+                            var action = actionResolver.resolve(workflowExecutionOperations, workflowExecution, command);
                             return CompletableFuture.completedFuture(action.apply(procContext, payload));
                         } catch (StepCancellationException | WorkflowCancelledException | WorkflowFailedException t) {
                             // Framework control-flow signals must keep their original type

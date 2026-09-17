@@ -18,12 +18,14 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
@@ -82,7 +84,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final WorkflowConfiguration<?> workflowConfiguration;
 
     // Execution
-    private final WorkflowContextDelegation contextDelegate;
+    private final WorkflowExecutionOperationsDelegation contextDelegate;
 
     // Runtime
     private boolean running = false;
@@ -130,7 +132,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @param initial               initial payload of workflow instance.
      * @param processingContext     processing context.
      * @param workflowConfiguration workflow configuration.
-     * @param workflowContext       workflow context created by the factory.
+     * @param workflowContext           author-facing context created by the factory
      */
     public SimpleWorkflowExecution(String workflowId,
                                    Map<String, @Nullable Object> initial,
@@ -172,7 +174,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 workflowConfiguration.workflowVersion()
         );
 
-        this.contextDelegate = new WorkflowContextDelegation(
+        this.contextDelegate = new WorkflowExecutionOperationsDelegation(
                 workflowConfiguration,
                 workflowContext,
                 this,
@@ -204,7 +206,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * {@inheritDoc}
      * <p>
      * The body runs inside a unit of work spanning the instance's entire lifetime. It is created from the
-     * non-transactional {@link WorkflowContextDelegation#workflowBodyUnitOfWorkFactory()} so that no transactional
+     * non-transactional {@link WorkflowExecutionOperationsDelegation#workflowBodyUnitOfWorkFactory()} so that no transactional
      * resources are held while the instance is parked.
      */
     @Override
@@ -265,7 +267,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      *
      * @return the context of this instance, as the result of an execution that ran no body
      */
-    private CompletableFuture<WorkflowContextDelegation> skipTerminalInstance() {
+    private CompletableFuture<WorkflowExecutionOperationsDelegation> skipTerminalInstance() {
         logger.trace("Workflow instance has reached terminal state {}, skipping execution.",
                      this.state().workflowStatus());
         return CompletableFuture.completedFuture(this.contextDelegate);
@@ -279,7 +281,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private void publishStartWorkflow(ProcessingContext ctx) {
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         if (this.state().workflowStatus() == WorkflowStatus.NONE) {
-            publishAndWait(startedWorkflow(this.workflowContext(), workflowName,
+            publishAndWait(startedWorkflow(this.workflowExecutionOperations(), workflowName,
                                            workflowState.workflowDefinitionId(), eventNameCustomizer), ctx);
             try {
                 awaitStateChange(s -> s.workflowStatus() == WorkflowStatus.STARTED);
@@ -296,7 +298,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * @throws Exception if something went wrong.
      */
     private void executeWorkflow(ProcessingContext ctx) throws Exception {
-        var workflowPayload = this.workflowContext().workflowPayload();
+        var workflowPayload = this.workflowExecutionOperations().workflowPayload();
         var eventNameCustomizer = this.workflowConfiguration.eventNameCustomizer();
         logger.info("Executing workflow with initial payload {} from thread {}",
                     workflowPayload,
@@ -316,11 +318,11 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         }
         if (!this.state().workflowStatus().isTerminal()) {
             terminalTransition.transition(() -> {
-                publishAndWait(completedWorkflow(this.workflowContext(), workflowName,
+                publishAndWait(completedWorkflow(this.workflowExecutionOperations(), workflowName,
                                                  workflowState.workflowDefinitionId(), eventNameCustomizer), ctx);
             });
         }
-        logger.info("Workflow executed. Resulting workflow payload {}.", this.workflowContext().workflowPayload());
+        logger.info("Workflow executed. Resulting workflow payload {}.", this.workflowExecutionOperations().workflowPayload());
     }
 
     /**
@@ -353,10 +355,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                     logPaused("the event store did not accept one of its events", storeFailure);
             // If WorkflowLifecycleControlDelegate already published the terminal event, endWith does nothing.
             case WorkflowFailedException wfe ->
-                    endWith(ctx, () -> failedWorkflow(workflowContext(), workflowName, wfe, definitionId, names));
+                    endWith(ctx, () -> failedWorkflow(workflowExecutionOperations(), workflowName, wfe, definitionId, names));
             case WorkflowCancelledException wce ->
-                    endWith(ctx, () -> cancelledWorkflow(workflowContext(), workflowName, wce, definitionId, names));
-            case TimeoutException te -> endWith(ctx, () -> timeoutWorkflow(workflowContext(), workflowName,
+                    endWith(ctx, () -> cancelledWorkflow(workflowExecutionOperations(), workflowName, wce, definitionId, names));
+            case TimeoutException te -> endWith(ctx, () -> timeoutWorkflow(workflowExecutionOperations(), workflowName,
                                                                            contextDelegate.clock().instant(),
                                                                            definitionId, names));
             // No terminal event: the next replay runs cleanly once the code is reverted or wrapped in
@@ -370,14 +372,14 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
             case StepInterruptedException sie ->
                     logger.debug("Workflow {} driver stopped: {}", workflowId, sie.getMessage());
             case StepFailedException sfe ->
-                    endWith(ctx, () -> failedWorkflow(workflowContext(), workflowName, sfe, definitionId, names));
+                    endWith(ctx, () -> failedWorkflow(workflowExecutionOperations(), workflowName, sfe, definitionId, names));
             case Throwable recoverable
                     when workflowConfiguration.recoverableExceptionPolicy().isRecoverable(recoverable) ->
                     logPaused("a recoverable exception in its body", recoverable);
             default -> {
                 logger.error("Workflow {} failed after an unhandled exception in its body.", workflowId, exception);
                 var failure = new WorkflowFailedException("Unhandled exception in workflow body", exception);
-                endWith(ctx, () -> failedWorkflow(workflowContext(), workflowName, failure, definitionId, names));
+                endWith(ctx, () -> failedWorkflow(workflowExecutionOperations(), workflowName, failure, definitionId, names));
             }
         }
     }
@@ -424,7 +426,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         Thread.interrupted();
         try {
             terminalTransition.transition(() -> {
-                publishAndWait(cancelledWorkflow(this.workflowContext(), workflowName, cancellation.cause(),
+                publishAndWait(cancelledWorkflow(this.workflowExecutionOperations(), workflowName, cancellation.cause(),
                                                  workflowState.workflowDefinitionId(),
                                                  workflowConfiguration.eventNameCustomizer()), ctx);
             });
@@ -654,7 +656,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     @Override
-    public WorkflowContext workflowContext() {
+    public WorkflowExecutionOperations workflowExecutionOperations() {
         return this.contextDelegate;
     }
 

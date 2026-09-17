@@ -18,11 +18,12 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
 import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
@@ -59,7 +60,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
 
     private static final Logger logger = LoggerFactory.getLogger(WorkflowLifecycleControlDelegate.class);
 
-    private final WorkflowContext workflowContext;
+    private final WorkflowExecutionOperations workflowExecutionOperations;
     private final WorkflowExecution workflowExecution;
     private final RunningSteps runningSteps;
     private final ReachedSteps reachedSteps;
@@ -69,7 +70,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     /**
      * Constructs a lifecycle-control delegate.
      *
-     * @param workflowContext    workflow context
+     * @param workflowExecutionOperations runtime primitive-operation surface
      * @param workflowExecution  workflow execution
      * @param runningSteps       running step registry
      * @param reachedSteps       reached steps tracker
@@ -77,13 +78,14 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
      */
     @Internal
     public WorkflowLifecycleControlDelegate(
-            WorkflowContext workflowContext,
+            WorkflowExecutionOperations workflowExecutionOperations,
             WorkflowExecution workflowExecution,
             RunningSteps runningSteps,
             ReachedSteps reachedSteps,
             WorkflowTerminalTransition terminalTransition
     ) {
-        this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
+        this.workflowExecutionOperations = Objects.requireNonNull(workflowExecutionOperations,
+                                                                   "Workflow execution operations are mandatory");
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow execution is mandatory");
         this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
         this.reachedSteps = Objects.requireNonNull(reachedSteps, "Reached steps tracker is mandatory");
@@ -174,9 +176,9 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         logger.error("Workflow '{}' failed", workflowExecution.workflowId(), exception);
 
         awaitTerminalEventPublication(workflowExecution.appendWorkflowEvent(
-                failedWorkflow(workflowContext, effectiveName, exception, workflowDefinitionId,
+                failedWorkflow(workflowExecutionOperations, effectiveName, exception, workflowDefinitionId,
                                eventNameCustomizer),
-                workflowContext.processingContext()), "FAILED");
+                workflowExecutionOperations.processingContext()), "FAILED");
     }
 
     private void publishCancelled(WorkflowLifecycleControl.CancelWorkflowCommand command,
@@ -186,9 +188,9 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
         var workflowDefinitionId = workflowExecution.state().workflowDefinitionId();
 
         awaitTerminalEventPublication(workflowExecution.appendWorkflowEvent(
-                cancelledWorkflow(workflowContext, effectiveName, cause, workflowDefinitionId,
+                cancelledWorkflow(workflowExecutionOperations, effectiveName, cause, workflowDefinitionId,
                                   eventNameCustomizer),
-                workflowContext.processingContext()), "CANCELLED");
+                workflowExecutionOperations.processingContext()), "CANCELLED");
     }
 
     /**
@@ -205,7 +207,7 @@ public class WorkflowLifecycleControlDelegate implements WorkflowLifecycleContro
     private void awaitTerminalEventPublication(CompletableFuture<Void> publication,
                                                String terminalStatus) {
         try {
-            FutureResolver.resolve(workflowContext.processingContext(), publication);
+            FutureResolver.resolve(workflowExecutionOperations.processingContext(), publication);
         } catch (Throwable exception) {
             logger.error("Failed to publish {} terminal event for workflow '{}'", terminalStatus,
                          workflowExecution.workflowId(), exception);

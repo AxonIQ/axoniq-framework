@@ -18,9 +18,10 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
@@ -57,7 +58,7 @@ import static org.mockito.ArgumentMatchers.any;
  */
 class PayloadDelegateRerunTest {
 
-    private WorkflowContext workflowContext;
+    private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private PayloadDelegate delegate;
@@ -65,7 +66,7 @@ class PayloadDelegateRerunTest {
 
     @BeforeEach
     void setUp() {
-        workflowContext = mock(WorkflowContext.class);
+        workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
         reachedSteps = new ReachedSteps();
@@ -81,7 +82,7 @@ class PayloadDelegateRerunTest {
         when(state.payload()).thenReturn(Map.of());
 
         delegate = new PayloadDelegate(
-                workflowContext, workflowExecution, new RunningSteps(), reachedSteps, parent,
+                workflowExecutionOperations, workflowExecution, new RunningSteps(), reachedSteps, parent,
                 Clock.systemUTC(), new ControllableWorkflowScheduler()
         );
     }

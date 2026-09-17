@@ -23,8 +23,8 @@ import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinit
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.messaging.eventhandling.annotation.Event;
@@ -75,9 +75,8 @@ class CompletedLifecycleHookWorkflowTest extends AbstractWorkflowIntegrationTest
         var workflow = new VersionedWorkflow();
         WorkflowStatusChangeListener completedListener = new WorkflowStatusChangeListener() {
             @Override
-            public <C extends WorkflowContext> void onWorkflowStatus(WorkflowStatus state,
-                                                                     C context) {
-                observedStatus.set(state);
+            public <C extends WorkflowContext> void onWorkflowStatus(WorkflowStatus workflowStatus, C workflowContext) {
+                observedStatus.set(workflowStatus);
                 completedHookInvocations.incrementAndGet();
             }
         };

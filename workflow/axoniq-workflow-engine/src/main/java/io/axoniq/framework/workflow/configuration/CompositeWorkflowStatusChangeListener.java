@@ -18,8 +18,8 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.common.annotation.Internal;
 
@@ -75,7 +75,7 @@ public class CompositeWorkflowStatusChangeListener implements WorkflowStatusChan
     }
 
     @Override
-    public void onWorkflowStatus(WorkflowStatus workflowStatus, WorkflowContext workflowContext) {
+    public <C extends WorkflowContext> void onWorkflowStatus(WorkflowStatus workflowStatus, C workflowContext) {
         if (this.workflowStatus == workflowStatus) {
             this.listeners.forEach(l -> l.onWorkflowStatus(workflowStatus, workflowContext));
         }

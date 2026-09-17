@@ -40,7 +40,7 @@ configurer.componentRegistry(r -> r.registerEnhancer(registry ->
                         .usingContext(SimpleWorkflowContext.class)
                         .workflowContextFactory(c -> new SimpleWorkflowContextFactory())
                         .workflowExecutionFactory(c ->
-                                new DSLAdoptingExecutionFactory<>(SimpleWorkflowContext.class))
+                                new WorkflowContextAdoptingExecutionFactory<>(SimpleWorkflowContext.class))
                         .definitions(d -> d
                                 .declarative(c -> new OrderFulfillmentWorkflow()::execute)
                                 .workflowName("OrderFulfillment")
@@ -94,10 +94,17 @@ Provides a factory that creates new context instances for each workflow executio
 
 [source,java]
 ----
-.workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(SimpleWorkflowContext.class))
+.workflowExecutionFactory(c -> new WorkflowContextAdoptingExecutionFactory<>(SimpleWorkflowContext.class))
 ----
 
-`DSLAdoptingExecutionFactory` is the standard execution factory for DSL-based contexts (anything extending `AbstractDSLWorkflowContext`). It bridges the context to the engine's execution model.
+`WorkflowContextAdoptingExecutionFactory` is the standard execution factory for author-facing workflow contexts
+(anything extending `AbstractWorkflowContext`). It bridges the context to the engine's execution model.
+
+Import `WorkflowContextAdoptingExecutionFactory` and `AbstractWorkflowContext` from
+`io.axoniq.framework.workflow.runtime.execution`. The author-facing `WorkflowContext`, step definitions,
+`EventCondition`, `EventConditions`, and workflow lifecycle exceptions reside in
+`io.axoniq.framework.workflow.dsl.api`; retry configuration resides in
+`io.axoniq.framework.workflow.dsl.api.retry`.
 
 === Step 4: Workflow definitions
 
@@ -420,7 +427,7 @@ Wire it all together:
 WorkflowModule
     .usingContext(ApprovalWorkflowContext.class)
     .workflowContextFactory(c -> new ApprovalWorkflowContextFactory())
-    .workflowExecutionFactory(c -> new DSLAdoptingExecutionFactory<>(ApprovalWorkflowContext.class))
+    .workflowExecutionFactory(c -> new WorkflowContextAdoptingExecutionFactory<>(ApprovalWorkflowContext.class))
     .definitions(d -> d
             .declarative(c -> new PurchaseApprovalWorkflow()::execute)
             .workflowName("PurchaseApproval")

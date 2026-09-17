@@ -18,8 +18,9 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
@@ -45,7 +46,7 @@ import static org.mockito.Mockito.*;
  */
 class WorkflowLifecycleControlDelegateDriftTest {
 
-    private WorkflowContext workflowContext;
+    private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private WorkflowLifecycleControlDelegate delegate;
@@ -53,7 +54,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
 
     @BeforeEach
     void setUp() {
-        workflowContext = mock(WorkflowContext.class);
+        workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
         EventSink eventSink = mock(EventSink.class);
@@ -65,7 +66,7 @@ class WorkflowLifecycleControlDelegateDriftTest {
         when(workflowExecution.state()).thenReturn(state);
 
         delegate = new WorkflowLifecycleControlDelegate(
-                workflowContext, workflowExecution, new RunningSteps(), reachedSteps,
+                workflowExecutionOperations, workflowExecution, new RunningSteps(), reachedSteps,
                 terminalEventPublication -> terminalEventPublication.run()
         );
     }

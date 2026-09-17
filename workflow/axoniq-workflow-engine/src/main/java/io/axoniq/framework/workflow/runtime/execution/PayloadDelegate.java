@@ -18,9 +18,10 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PayloadPrimitive;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
@@ -48,7 +49,7 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
     /**
      * Constructs the primitive implementation.
      *
-     * @param workflowContext            workflow context
+     * @param workflowExecutionOperations runtime primitive-operation surface
      * @param workflowExecution          workflow execution
      * @param runningSteps              running step registry
      * @param reachedSteps              reached steps tracker
@@ -58,7 +59,7 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
      */
     @Internal
     public PayloadDelegate(
-            WorkflowContext workflowContext,
+            WorkflowExecutionOperations workflowExecutionOperations,
             WorkflowExecution workflowExecution,
             RunningSteps runningSteps,
             ReachedSteps reachedSteps,
@@ -66,7 +67,7 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
             Clock clock,
             WorkflowScheduler timeoutScheduler
     ) {
-        super(workflowContext,
+        super(workflowExecutionOperations,
               workflowExecution,
               runningSteps,
               reachedSteps,
@@ -88,7 +89,7 @@ public class PayloadDelegate extends AbstractStepExecutor implements PayloadPrim
             reachedSteps.assertNoReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
             workflowExecution.appendTask(e -> {
                                              // apply modification right away
-                                             var newPayload = payloadModification.apply(workflowExecution.workflowContext().workflowPayload());
+                                             var newPayload = payloadModification.apply(workflowExecution.workflowExecutionOperations().workflowPayload());
                                              FutureResolver.resolve(
                                                      workflowExecution.processingContext(),
                                                      completed(stepName,

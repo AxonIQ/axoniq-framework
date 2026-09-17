@@ -18,12 +18,12 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowStatusChangedHandler;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
@@ -32,14 +32,13 @@ import io.axoniq.framework.workflow.runtime.association.ValueComparisonOperatorR
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.PayloadPropertyWorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.util.WorkflowReflectionUtils;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.ReflectionUtils;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.QualifiedName;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
@@ -172,8 +171,8 @@ public class AutoDetectionUtils {
                             listeners.get(status).addListener(
                                     new WorkflowStatusChangeListener() {
                                         @Override
-                                        public <X extends WorkflowContext> void onWorkflowStatus(
-                                                WorkflowStatus state, X context) {
+                                        public <C extends WorkflowContext> void onWorkflowStatus(WorkflowStatus state,
+                                                                                                 C workflowContext) {
                                             Method method = mwa.method();
                                             Class<?>[] parameterTypes = method.getParameterTypes();
                                             Object[] args = new Object[parameterTypes.length];
@@ -181,11 +180,11 @@ public class AutoDetectionUtils {
                                                 if (parameterTypes[i].isAssignableFrom(WorkflowStatus.class)) {
                                                     args[i] = state;
                                                 } else if (WorkflowContext.class.isAssignableFrom(parameterTypes[i])) {
-                                                    args[i] = context;
+                                                    args[i] = workflowContext;
                                                 } else if (parameterTypes[i].isInstance(instance)) {
                                                     args[i] = instance;
                                                 } else {
-                                                    Object wrap = wrapIfPossible(parameterTypes[i], context);
+                                                    Object wrap = wrapIfPossible(parameterTypes[i], workflowContext);
                                                     if (wrap != null) {
                                                         args[i] = wrap;
                                                     }
@@ -278,8 +277,8 @@ public class AutoDetectionUtils {
     }
 
     /**
-     * Extract workflow version. Falls back to {@link Version#DEFAULT_VERSION}
-     * ({@code "0.0.1"}) when the annotation does not specify one.
+     * Extract workflow version. Falls back to {@link Version#DEFAULT_VERSION} ({@code "0.0.1"}) when the annotation
+     * does not specify one.
      *
      * @param attributes attributes parsed from method annotation.
      * @return workflow version, validated as a semver string.
@@ -337,24 +336,24 @@ public class AutoDetectionUtils {
     /**
      * Wraps the context if possible.
      *
-     * @param type    type to wrap into.
-     * @param context context to wrap.
+     * @param type            type to wrap into.
+     * @param workflowContext context to wrap.
      * @return wrapped context or null.
      */
     @Nullable
-    public static Object wrapIfPossible(Class<?> type, @Nullable WorkflowContext context) {
-        if (context == null) {
+    public static Object wrapIfPossible(Class<?> type, @Nullable WorkflowContext workflowContext) {
+        if (workflowContext == null) {
             return null;
         }
         try {
-            var constructor = type.getConstructor(context.getClass());
-            return constructor.newInstance(context);
+            var constructor = type.getConstructor(workflowContext.getClass());
+            return constructor.newInstance(workflowContext);
         } catch (NoSuchMethodException | InvocationTargetException | InstantiationException |
                  IllegalAccessException e) {
             // try with interface
             try {
                 var constructor = type.getConstructor(WorkflowContext.class);
-                return constructor.newInstance(context);
+                return constructor.newInstance(workflowContext);
             } catch (NoSuchMethodException | InvocationTargetException | InstantiationException |
                      IllegalAccessException ex) {
                 return null;

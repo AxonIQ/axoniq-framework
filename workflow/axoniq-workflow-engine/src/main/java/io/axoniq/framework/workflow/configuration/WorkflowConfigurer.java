@@ -18,6 +18,8 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
+
 import org.axonframework.common.configuration.ApplicationConfigurer;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentRegistry;
@@ -38,7 +40,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * This configurer registers the following defaults:
  * <ul>
- *     <li>Registers a {@link io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer} for class {@link io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer}</li>
+ *     <li>Registers a {@link io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer} for class {@link io.axoniq.framework.workflow.dsl.api.EventNameCustomizer}</li>
  *     <li>Registers a {@link io.axoniq.framework.workflow.runtime.execution.InMemoryWorkflowExecutionRepository} </li>
  *     <li>Registers a {@link io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository}</li>
  *     <li>Registers a {@link io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowConfigurationRegistry}</li>

@@ -23,7 +23,7 @@ import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinit
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.test.utils.PrettyPrintingRecordingEventStore;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;

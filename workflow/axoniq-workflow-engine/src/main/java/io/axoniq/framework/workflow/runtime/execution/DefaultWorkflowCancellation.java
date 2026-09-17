@@ -19,7 +19,7 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
 import org.jspecify.annotations.Nullable;
@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicReference;
 final class DefaultWorkflowCancellation implements WorkflowCancellation.Request {
 
     private final WorkflowExecution workflowExecution;
-    private final WorkflowContextDelegation workflowContext;
+    private final WorkflowExecutionOperationsDelegation workflowExecutionOperations;
     private final RunningSteps runningSteps;
     private final AtomicReference<WorkflowCancellation.PendingRequest> pendingWorkflowCancellation = new AtomicReference<>();
     private final AtomicBoolean workflowCancellationConsumed = new AtomicBoolean();
@@ -53,14 +53,15 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
      * Creates a cancellation coordinator for one workflow execution.
      *
      * @param workflowExecution workflow execution providing control-thread mechanics
-     * @param workflowContext   workflow context delegating terminal primitive operations
+     * @param workflowExecutionOperations runtime operations delegating terminal primitive operations
      * @param runningSteps      registry of active asynchronous step executions
      */
     DefaultWorkflowCancellation(WorkflowExecution workflowExecution,
-                                WorkflowContextDelegation workflowContext,
+                                WorkflowExecutionOperationsDelegation workflowExecutionOperations,
                                 RunningSteps runningSteps) {
         this.workflowExecution = Objects.requireNonNull(workflowExecution, "Workflow execution is mandatory");
-        this.workflowContext = Objects.requireNonNull(workflowContext, "Workflow context is mandatory");
+        this.workflowExecutionOperations = Objects.requireNonNull(workflowExecutionOperations,
+                                                                   "Workflow execution operations are mandatory");
         this.runningSteps = Objects.requireNonNull(runningSteps, "Running steps are mandatory");
     }
 
@@ -72,7 +73,7 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
         var done = new CompletableFuture<Boolean>();
         workflowExecution.appendTask(ignored -> {
             try {
-                done.complete(workflowContext.cancelStep(PrimitiveCommands.cancelStep(
+                done.complete(workflowExecutionOperations.cancelStep(PrimitiveCommands.cancelStep(
                         stepName, cause, workflowExecution.workflowConfiguration().eventNameCustomizer()
                                                           .forStepInheritance())));
             } catch (Throwable t) {
@@ -93,7 +94,7 @@ final class DefaultWorkflowCancellation implements WorkflowCancellation.Request 
             try {
                 var cancelled = 0;
                 for (var stepName : stepNames) {
-                    if (workflowContext.cancelStep(PrimitiveCommands.cancelStep(
+                    if (workflowExecutionOperations.cancelStep(PrimitiveCommands.cancelStep(
                             stepName, cause, workflowExecution.workflowConfiguration().eventNameCustomizer()
                                                               .forStepInheritance()))) {
                         cancelled++;

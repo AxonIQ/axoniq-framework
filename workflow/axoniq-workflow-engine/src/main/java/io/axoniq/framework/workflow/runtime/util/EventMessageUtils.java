@@ -18,9 +18,9 @@
  */
 package io.axoniq.framework.workflow.runtime.util;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowEventPublicationContext;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
@@ -56,20 +56,20 @@ public class EventMessageUtils {
     }
 
     /**
-     * Reads the workflow's current definition version from {@code context}, falling back to
-     * {@link Version#DEFAULT_VERSION} when the context returns null (e.g. unit-test mocks with no stub).
+     * Reads the workflow's current definition version from {@code workflowEventPublicationContext}, falling back to
+     * {@link Version#DEFAULT_VERSION} when the operation returns null (e.g. unit-test mocks with no stub).
      */
-    private static String versionOf(WorkflowContext context) {
-        var v = context.workflowVersion();
+    private static String versionOf(WorkflowEventPublicationContext workflowEventPublicationContext) {
+        var v = workflowEventPublicationContext.workflowVersion();
         return (v == null || v.isBlank()) ? Version.DEFAULT_VERSION : v;
     }
 
-    private static EventMessage eventMessage(WorkflowContext context,
+    private static EventMessage eventMessage(WorkflowEventPublicationContext workflowEventPublicationContext,
                                              MessageType type,
                                              @Nullable Object payload,
                                              Metadata metadata) {
         return new GenericEventMessage(type, payload, metadata)
-                .withConverter(context.processingContext().component(EventConverter.class));
+                .withConverter(workflowEventPublicationContext.processingContext().component(EventConverter.class));
     }
 
     /**
@@ -85,18 +85,18 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow has started.
      *
-     * @param context      workflow context.
+     * @param workflowEventPublicationContext      read-only workflow event-publication context.
      * @param workflowName name of the workflow.
      * @param customizer   event name customizer.
      * @return event message.
      */
-    public static EventMessage startedWorkflow(WorkflowContext context,
+    public static EventMessage startedWorkflow(WorkflowEventPublicationContext workflowEventPublicationContext,
                                                String workflowName,
                                                VersionedType workflowDefinitionId,
                                                EventNameCustomizer customizer) {
-        var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.STARTED);
-        return eventMessage(context, new MessageType(name, versionOf(context)), context.workflowPayload(),
-                            MetadataUtils.create(context.workflowId(),
+        var name = customizer.getEventName(workflowName, workflowEventPublicationContext.workflowPayload(), WorkflowStatus.STARTED);
+        return eventMessage(workflowEventPublicationContext, new MessageType(name, versionOf(workflowEventPublicationContext)), workflowEventPublicationContext.workflowPayload(),
+                            MetadataUtils.create(workflowEventPublicationContext.workflowId(),
                                                  WorkflowStatus.STARTED,
                                                  workflowDefinitionId)
                                          .and(METADATA_KEY_MODIFY_PAYLOAD,
@@ -107,18 +107,18 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow has completed successfully.
      *
-     * @param context      workflow context.
+     * @param workflowEventPublicationContext      read-only workflow event-publication context.
      * @param workflowName name of the workflow.
      * @param customizer   event name customizer.
      * @return event message.
      */
-    public static EventMessage completedWorkflow(WorkflowContext context,
+    public static EventMessage completedWorkflow(WorkflowEventPublicationContext workflowEventPublicationContext,
                                                  String workflowName,
                                                  VersionedType workflowDefinitionId,
                                                  EventNameCustomizer customizer) {
-        var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.COMPLETED);
-        return eventMessage(context, new MessageType(name, versionOf(context)), Map.of(),
-                            MetadataUtils.create(context.workflowId(),
+        var name = customizer.getEventName(workflowName, workflowEventPublicationContext.workflowPayload(), WorkflowStatus.COMPLETED);
+        return eventMessage(workflowEventPublicationContext, new MessageType(name, versionOf(workflowEventPublicationContext)), Map.of(),
+                            MetadataUtils.create(workflowEventPublicationContext.workflowId(),
                                                  WorkflowStatus.COMPLETED,
                                                  workflowDefinitionId)
         );
@@ -127,21 +127,21 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow has failed.
      *
-     * @param context              workflow context
+     * @param workflowEventPublicationContext              read-only workflow event-publication context
      * @param workflowName         name of the workflow
      * @param exception            exception that caused the failure
      * @param workflowDefinitionId workflow definition identity
      * @param customizer           event name customizer
      * @return event message.
      */
-    public static EventMessage failedWorkflow(WorkflowContext context,
+    public static EventMessage failedWorkflow(WorkflowEventPublicationContext workflowEventPublicationContext,
                                               String workflowName,
                                               Exception exception,
                                               VersionedType workflowDefinitionId,
                                               EventNameCustomizer customizer) {
-        var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.FAILED);
-        return eventMessage(context, new MessageType(name, versionOf(context)), WorkflowError.from(exception),
-                            MetadataUtils.create(context.workflowId(),
+        var name = customizer.getEventName(workflowName, workflowEventPublicationContext.workflowPayload(), WorkflowStatus.FAILED);
+        return eventMessage(workflowEventPublicationContext, new MessageType(name, versionOf(workflowEventPublicationContext)), WorkflowError.from(exception),
+                            MetadataUtils.create(workflowEventPublicationContext.workflowId(),
                                                  WorkflowStatus.FAILED,
                                                  workflowDefinitionId)
         );
@@ -150,21 +150,21 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow has timed out.
      *
-     * @param context              workflow context
+     * @param workflowEventPublicationContext              read-only workflow event-publication context
      * @param workflowName         name of the workflow
      * @param time                 time when the timeout occurred
      * @param workflowDefinitionId workflow definition identity
      * @param customizer           event name customizer
      * @return event message.
      */
-    public static EventMessage timeoutWorkflow(WorkflowContext context,
+    public static EventMessage timeoutWorkflow(WorkflowEventPublicationContext workflowEventPublicationContext,
                                                String workflowName,
                                                Instant time,
                                                VersionedType workflowDefinitionId,
                                                EventNameCustomizer customizer) {
-        var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.TIMED_OUT);
-        return eventMessage(context, new MessageType(name, versionOf(context)), time,
-                            MetadataUtils.create(context.workflowId(),
+        var name = customizer.getEventName(workflowName, workflowEventPublicationContext.workflowPayload(), WorkflowStatus.TIMED_OUT);
+        return eventMessage(workflowEventPublicationContext, new MessageType(name, versionOf(workflowEventPublicationContext)), time,
+                            MetadataUtils.create(workflowEventPublicationContext.workflowId(),
                                                  WorkflowStatus.TIMED_OUT,
                                                  workflowDefinitionId)
         );
@@ -173,28 +173,28 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow has been cancelled.
      *
-     * @param context      workflow context
+     * @param workflowEventPublicationContext      read-only workflow event-publication context
      * @param workflowName name of the workflow
      * @param workflowDefinitionId workflow definition identity
      * @param customizer   event name customizer
      * @return event message.
      */
-    public static EventMessage cancelledWorkflow(WorkflowContext context,
+    public static EventMessage cancelledWorkflow(WorkflowEventPublicationContext workflowEventPublicationContext,
                                                  String workflowName,
                                                  VersionedType workflowDefinitionId,
                                                  EventNameCustomizer customizer) {
-        return cancelledWorkflow(context, workflowName, null, workflowDefinitionId, customizer);
+        return cancelledWorkflow(workflowEventPublicationContext, workflowName, null, workflowDefinitionId, customizer);
     }
 
-    public static EventMessage cancelledWorkflow(WorkflowContext context,
+    public static EventMessage cancelledWorkflow(WorkflowEventPublicationContext workflowEventPublicationContext,
                                                  String workflowName,
                                                  @Nullable Throwable cause,
                                                  VersionedType workflowDefinitionId,
                                                  EventNameCustomizer customizer) {
-        var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.CANCELLED);
-        return eventMessage(context, new MessageType(name, versionOf(context)),
+        var name = customizer.getEventName(workflowName, workflowEventPublicationContext.workflowPayload(), WorkflowStatus.CANCELLED);
+        return eventMessage(workflowEventPublicationContext, new MessageType(name, versionOf(workflowEventPublicationContext)),
                             cause != null ? WorkflowError.from(cause) : Map.of(),
-                            MetadataUtils.create(context.workflowId(),
+                            MetadataUtils.create(workflowEventPublicationContext.workflowId(),
                                                  WorkflowStatus.CANCELLED,
                                                  workflowDefinitionId)
         );
@@ -203,40 +203,40 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow step has started.
      *
-     * @param context    workflow context.
+     * @param workflowEventPublicationContext    read-only workflow event-publication context.
      * @param stepName   name of the step.
-     * @param local      local context for the step.
+     * @param local      local payload for the step.
      * @param customizer event name customizer.
      * @return event message.
      */
-    public static EventMessage startedStep(WorkflowContext context,
+    public static EventMessage startedStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                            String stepName,
                                            Map<String, @Nullable Object> local,
                                            EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, local, StepStatus.STARTED);
-        return eventMessage(context, new MessageType(name, versionOf(context)), local,
-                            MetadataUtils.create(context.workflowId(), stepName, StepStatus.STARTED)
+        return eventMessage(workflowEventPublicationContext, new MessageType(name, versionOf(workflowEventPublicationContext)), local,
+                            MetadataUtils.create(workflowEventPublicationContext.workflowId(), stepName, StepStatus.STARTED)
         );
     }
 
     /**
      * Creates a new started event for a wait-for-event step.
      *
-     * @param context    workflow context
+     * @param workflowEventPublicationContext    read-only workflow event-publication context
      * @param stepName   name of the step
      * @param local      local data
      * @param customizer customizer for event name
      */
-    public static EventMessage startedWaitForEventStep(WorkflowContext context,
+    public static EventMessage startedWaitForEventStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                                        String stepName,
                                                        Map<String, @Nullable Object> local,
                                                        EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, local, StepStatus.STARTED);
-        return eventMessage(context,
-                            new MessageType(name, versionOf(context)),
+        return eventMessage(workflowEventPublicationContext,
+                            new MessageType(name, versionOf(workflowEventPublicationContext)),
                             local,
                             MetadataUtils.markWaitForEventStep(
-                                    MetadataUtils.create(context.workflowId(), stepName, StepStatus.STARTED)
+                                    MetadataUtils.create(workflowEventPublicationContext.workflowId(), stepName, StepStatus.STARTED)
                             )
         );
     }
@@ -244,7 +244,7 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow step has completed.
      *
-     * @param context                  workflow context.
+     * @param workflowEventPublicationContext                  read-only workflow event-publication context.
      * @param stepName                 name of the step.
      * @param result                   result of the step.
      * @param resultPayloadReducerName name of the result payload reducer, or {@code null} if no reducer is used, see
@@ -257,104 +257,104 @@ public class EventMessageUtils {
      * @param customizer               event name customizer.
      * @return event message.
      */
-    public static EventMessage completedStep(WorkflowContext context,
+    public static EventMessage completedStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                              String stepName,
                                              Map<String, @Nullable Object> result,
                                              @Nullable String resultPayloadReducerName,
                                              EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, result, StepStatus.COMPLETED);
-        var meta = MetadataUtils.create(context.workflowId(), stepName, StepStatus.COMPLETED);
+        var meta = MetadataUtils.create(workflowEventPublicationContext.workflowId(), stepName, StepStatus.COMPLETED);
         if (resultPayloadReducerName != null) {
             meta = meta.and(METADATA_KEY_MODIFY_PAYLOAD, resultPayloadReducerName);
         }
-        return eventMessage(context, new MessageType(name, versionOf(context)), result, meta);
+        return eventMessage(workflowEventPublicationContext, new MessageType(name, versionOf(workflowEventPublicationContext)), result, meta);
     }
 
     /**
      * Creates a completed event for a wait-for-event step.
      */
-    public static EventMessage completedWaitForEventStep(WorkflowContext context,
+    public static EventMessage completedWaitForEventStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                                          String stepName,
                                                          Map<String, @Nullable Object> result,
                                                          @Nullable String resultPayloadReducerName,
                                                          EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, result, StepStatus.COMPLETED);
         var meta = MetadataUtils.markWaitForEventStep(
-                MetadataUtils.create(context.workflowId(), stepName, StepStatus.COMPLETED)
+                MetadataUtils.create(workflowEventPublicationContext.workflowId(), stepName, StepStatus.COMPLETED)
         );
         if (resultPayloadReducerName != null) {
             meta = meta.and(METADATA_KEY_MODIFY_PAYLOAD, resultPayloadReducerName);
         }
-        return eventMessage(context, new MessageType(name, versionOf(context)), result, meta);
+        return eventMessage(workflowEventPublicationContext, new MessageType(name, versionOf(workflowEventPublicationContext)), result, meta);
     }
 
     /**
      * Creates a new event message stating that a workflow step has failed.
      *
-     * @param context    workflow context.
+     * @param workflowEventPublicationContext    read-only workflow event-publication context.
      * @param stepName   name of the step.
      * @param exception  exception that caused the step failure.
      * @param customizer event name customizer.
      * @return event message.
      */
-    public static EventMessage failStep(WorkflowContext context,
+    public static EventMessage failStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                         String stepName,
                                         Throwable exception,
                                         EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.FAILED);
-        return eventMessage(context, new MessageType(name, versionOf(context)), WorkflowError.from(exception),
-                            MetadataUtils.create(context.workflowId(), stepName, StepStatus.FAILED)
+        return eventMessage(workflowEventPublicationContext, new MessageType(name, versionOf(workflowEventPublicationContext)), WorkflowError.from(exception),
+                            MetadataUtils.create(workflowEventPublicationContext.workflowId(), stepName, StepStatus.FAILED)
         );
     }
 
     /**
      * Creates a new event message stating that a workflow step has been cancelled.
      *
-     * @param context    workflow context.
+     * @param workflowEventPublicationContext    read-only workflow event-publication context.
      * @param stepName   name of the step.
      * @param customizer event name customizer.
      * @return event message.
      */
-    public static EventMessage cancelledStep(WorkflowContext context,
+    public static EventMessage cancelledStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                              String stepName,
                                              EventNameCustomizer customizer) {
-        return cancelledStep(context, stepName, null, customizer);
+        return cancelledStep(workflowEventPublicationContext, stepName, null, customizer);
     }
 
     /**
      * Creates a new event message stating that a workflow step has been cancelled, optionally with a cause.
      *
-     * @param context    workflow context.
+     * @param workflowEventPublicationContext    read-only workflow event-publication context.
      * @param stepName   name of the step.
      * @param cause      the cause of the cancellation, or {@code null}.
      * @param customizer event name customizer.
      * @return event message.
      */
-    public static EventMessage cancelledStep(WorkflowContext context,
+    public static EventMessage cancelledStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                              String stepName,
                                              @Nullable Throwable cause,
                                              EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.CANCELLED);
         Object payload = cause != null ? WorkflowError.from(cause) : Map.of();
-        return eventMessage(context, new MessageType(name, versionOf(context)), payload,
-                            MetadataUtils.create(context.workflowId(), stepName, StepStatus.CANCELLED)
+        return eventMessage(workflowEventPublicationContext, new MessageType(name, versionOf(workflowEventPublicationContext)), payload,
+                            MetadataUtils.create(workflowEventPublicationContext.workflowId(), stepName, StepStatus.CANCELLED)
         );
     }
 
     /**
      * Creates a cancelled event for a wait-for-event step.
      */
-    public static EventMessage cancelledWaitForEventStep(WorkflowContext context,
+    public static EventMessage cancelledWaitForEventStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                                          String stepName,
                                                          @Nullable Throwable cause,
                                                          EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.CANCELLED);
         Object payload = cause != null ? WorkflowError.from(cause) : Map.of();
-        return eventMessage(context,
-                            new MessageType(name, versionOf(context)),
+        return eventMessage(workflowEventPublicationContext,
+                            new MessageType(name, versionOf(workflowEventPublicationContext)),
                             payload,
                             MetadataUtils.markWaitForEventStep(
-                                    MetadataUtils.create(context.workflowId(), stepName, StepStatus.CANCELLED)
+                                    MetadataUtils.create(workflowEventPublicationContext.workflowId(), stepName, StepStatus.CANCELLED)
                             )
         );
     }
@@ -362,73 +362,73 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow step is retrying.
      *
-     * @param context    workflow context.
+     * @param workflowEventPublicationContext    read-only workflow event-publication context.
      * @param stepName   name of the step.
      * @param retryInfo  retry information payload.
      * @param customizer event name customizer.
      * @return event message.
      */
-    public static EventMessage retryingStep(WorkflowContext context,
+    public static EventMessage retryingStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                             String stepName,
                                             StepRetryInfo retryInfo,
                                             EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.RETRYING);
-        return eventMessage(context, new MessageType(name, versionOf(context)), retryInfo,
-                            MetadataUtils.create(context.workflowId(), stepName, StepStatus.RETRYING)
+        return eventMessage(workflowEventPublicationContext, new MessageType(name, versionOf(workflowEventPublicationContext)), retryInfo,
+                            MetadataUtils.create(workflowEventPublicationContext.workflowId(), stepName, StepStatus.RETRYING)
         );
     }
 
     /**
      * Creates a new event message stating that a retry attempt of a workflow step has started.
      *
-     * @param context    workflow context
+     * @param workflowEventPublicationContext    read-only workflow event-publication context
      * @param stepName   the name of the retry started step
      * @param retryInfo  retry information payload, {@code attempt} is the attempt being started
      * @param customizer event name customizer
      * @return the retry started event message
      */
-    public static EventMessage retryStartedStep(WorkflowContext context,
+    public static EventMessage retryStartedStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                                 String stepName,
                                                 StepRetryInfo retryInfo,
                                                 EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.RETRY_STARTED);
-        return eventMessage(context, new MessageType(name, versionOf(context)), retryInfo,
-                            MetadataUtils.create(context.workflowId(), stepName, StepStatus.RETRY_STARTED)
+        return eventMessage(workflowEventPublicationContext, new MessageType(name, versionOf(workflowEventPublicationContext)), retryInfo,
+                            MetadataUtils.create(workflowEventPublicationContext.workflowId(), stepName, StepStatus.RETRY_STARTED)
         );
     }
 
     /**
      * Creates a new event message stating that a workflow step has timed out.
      *
-     * @param context    workflow context.
+     * @param workflowEventPublicationContext    read-only workflow event-publication context.
      * @param stepName   name of the step.
      * @param time       time when the timeout occurred.
      * @param customizer event name customizer.
      * @return event message.
      */
-    public static EventMessage timeoutStep(WorkflowContext context,
+    public static EventMessage timeoutStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                            String stepName,
                                            Instant time,
                                            EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.TIMED_OUT);
-        return eventMessage(context, new MessageType(name, versionOf(context)), time,
-                            MetadataUtils.create(context.workflowId(), stepName, StepStatus.TIMED_OUT)
+        return eventMessage(workflowEventPublicationContext, new MessageType(name, versionOf(workflowEventPublicationContext)), time,
+                            MetadataUtils.create(workflowEventPublicationContext.workflowId(), stepName, StepStatus.TIMED_OUT)
         );
     }
 
     /**
      * Creates a timed-out event for a wait-for-event step.
      */
-    public static EventMessage timeoutWaitForEventStep(WorkflowContext context,
+    public static EventMessage timeoutWaitForEventStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                                        String stepName,
                                                        Instant time,
                                                        EventNameCustomizer customizer) {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.TIMED_OUT);
-        return eventMessage(context,
-                            new MessageType(name, versionOf(context)),
+        return eventMessage(workflowEventPublicationContext,
+                            new MessageType(name, versionOf(workflowEventPublicationContext)),
                             time,
                             MetadataUtils.markWaitForEventStep(
-                                    MetadataUtils.create(context.workflowId(), stepName, StepStatus.TIMED_OUT)
+                                    MetadataUtils.create(workflowEventPublicationContext.workflowId(), stepName, StepStatus.TIMED_OUT)
                             )
         );
     }
@@ -441,13 +441,13 @@ public class EventMessageUtils {
      * {@link StepStatus#COMPLETED} step event with {@code versionChangeId} + {@code version} migration metadata keys;
      * the {@code versionChangeId} presence identifies it as a migration step.
      *
-     * @param context    workflow context.
+     * @param workflowEventPublicationContext    read-only workflow event-publication context.
      * @param changeId   developer-chosen identifier of the code change.
      * @param version    the new workflow version being recorded.
      * @param customizer event name customizer.
      * @return event message.
      */
-    public static EventMessage versionMigrationStep(WorkflowContext context,
+    public static EventMessage versionMigrationStep(WorkflowEventPublicationContext workflowEventPublicationContext,
                                                     String changeId,
                                                     String version,
                                                     EventNameCustomizer customizer) {
@@ -456,8 +456,8 @@ public class EventMessageUtils {
                 "version", version
         );
         var name = customizer.versionMigrationEventName(changeId, payload);
-        return eventMessage(context, new MessageType(name, version), payload,
-                            MetadataUtils.createVersionMigrationStep(context.workflowId(), changeId, version)
+        return eventMessage(workflowEventPublicationContext, new MessageType(name, version), payload,
+                            MetadataUtils.createVersionMigrationStep(workflowEventPublicationContext.workflowId(), changeId, version)
         );
     }
 }

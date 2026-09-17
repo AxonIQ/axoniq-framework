@@ -18,12 +18,13 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.runtime.api.execution.context.retry.RetryPolicy;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
@@ -54,7 +55,7 @@ import static org.mockito.Mockito.*;
  */
 class DelegateInterruptedAwaitTest {
 
-    private WorkflowContext workflowContext;
+    private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private EventNameCustomizer parentCustomizer;
@@ -66,7 +67,7 @@ class DelegateInterruptedAwaitTest {
     void setUp() throws InterruptedException {
         Thread.interrupted();
 
-        workflowContext = mock(WorkflowContext.class);
+        workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
         EventSink eventSink = mock(EventSink.class);
@@ -83,7 +84,7 @@ class DelegateInterruptedAwaitTest {
                 .awaitStateChange(any());
 
         waitForDelegate = new WaitForDelegate(
-                workflowContext,
+                workflowExecutionOperations,
                 workflowExecution,
                 new RunningSteps(),
                 new EventWaitConditions(),
@@ -93,7 +94,7 @@ class DelegateInterruptedAwaitTest {
                 new ControllableWorkflowScheduler()
         );
         executeDelegate = new ExecuteDelegate(
-                workflowContext,
+                workflowExecutionOperations,
                 workflowExecution,
                 new RunningSteps(),
                 new ReachedSteps(),

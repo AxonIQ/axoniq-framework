@@ -21,7 +21,7 @@ package io.axoniq.framework.workflow.configuration;
 
 import org.jspecify.annotations.Nullable;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.association.ValueComparisonOperatorRegistry;
 import org.axonframework.common.configuration.Configuration;

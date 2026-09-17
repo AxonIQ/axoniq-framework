@@ -18,9 +18,9 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventConditions;
+import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
@@ -40,7 +40,6 @@ import org.axonframework.messaging.core.ApplicationContext;
 import org.axonframework.messaging.core.unitofwork.SimpleUnitOfWorkFactory;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
-import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.junit.jupiter.api.*;
 
@@ -195,19 +194,19 @@ class WorkflowEngineClaimGapWakeTest {
         when(configuration.eventNameCustomizer()).thenReturn(defaults());
         when(configuration.workflowStatusChangeListeners()).thenReturn(Map.of());
 
-        var workflowContext = mock(WorkflowContext.class);
+        var workflowExecutionOperations = mock(WorkflowContext.class);
         WorkflowContextFactory<WorkflowContext> contextFactory = mock(WorkflowContextFactory.class);
         WorkflowExecutionFactory executionFactory = mock(WorkflowExecutionFactory.class);
         when(configuration.workflowContextFactory()).thenReturn(contextFactory);
         when(configuration.workflowExecutionFactory()).thenReturn(executionFactory);
         when(contextFactory.createContext(anyMap(), eq(RESIDENT_ID), any(), eq(configuration)))
-                .thenReturn(workflowContext);
-        when(executionFactory.create(workflowContext)).thenAnswer(invocation -> {
+                .thenReturn(workflowExecutionOperations);
+        when(executionFactory.create(workflowExecutionOperations)).thenAnswer(invocation -> {
             restored = new SimpleWorkflowExecution(RESIDENT_ID,
                                                    Map.of("orderId", RESIDENT_ID),
                                                    bodyContext(),
                                                    configuration,
-                                                   workflowContext,
+                                                   workflowExecutionOperations,
                                                    runningSteps,
                                                    eventWaitConditions,
                                                    reachedSteps);

@@ -19,7 +19,7 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
@@ -193,7 +193,7 @@ class WorkflowEngineRestoreFaultIsolationTest {
             var workflowId = contextInvocation.<String>getArgument(1);
             var execution = WorkflowExecutionFixture.mockExecution(workflowId, stateOf(workflowId), false);
             WorkflowExecutionFixture.recordBodyStartOn(execution, bodyStarts::add, workflowId);
-            var workflowContext = execution.workflowContext();
+            var workflowContext = mock(WorkflowContext.class);
             when(executionFactory.create(workflowContext)).thenReturn(execution);
             return workflowContext;
         }).when(contextFactory).createContext(anyMap(), any(), any(), eq(configuration));

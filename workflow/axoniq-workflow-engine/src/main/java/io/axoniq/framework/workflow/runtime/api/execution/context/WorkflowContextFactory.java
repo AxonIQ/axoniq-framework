@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
+import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 

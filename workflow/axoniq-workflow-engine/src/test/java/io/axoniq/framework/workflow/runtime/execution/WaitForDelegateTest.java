@@ -18,13 +18,14 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
+
 import org.jspecify.annotations.Nullable;
 
 import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventCondition;
-import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.dsl.api.EventCondition;
+import io.axoniq.framework.workflow.dsl.api.EventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
@@ -61,7 +62,7 @@ import static org.mockito.Mockito.*;
 class WaitForDelegateTest {
 
     private final Clock clock = Clock.fixed(Instant.parse("2026-07-08T10:00:00Z"), ZoneOffset.UTC);
-    private WorkflowContext workflowContext;
+    private WorkflowExecutionOperations workflowExecutionOperations;
     private WorkflowExecution workflowExecution;
     private WorkflowState state;
     private UnitOfWorkFactory unitOfWorkFactory;
@@ -74,7 +75,7 @@ class WaitForDelegateTest {
 
     @BeforeEach
     void setUp() {
-        workflowContext = mock(WorkflowContext.class);
+        workflowExecutionOperations = mock(WorkflowExecutionOperations.class);
         workflowExecution = mock(WorkflowExecution.class);
         state = mock(WorkflowState.class);
         unitOfWorkFactory = mock(UnitOfWorkFactory.class);
@@ -85,11 +86,11 @@ class WaitForDelegateTest {
         Executor executor = Runnable::run;
         EventNameCustomizer customizer = DefaultEventNameCustomizer.Builder.defaults();
 
-        when(workflowContext.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
-        when(workflowContext.workflowId()).thenReturn("wf-123");
-        when(workflowContext.workflowVersion()).thenReturn("0.0.1");
-        when(workflowContext.workflowPayload()).thenReturn(Map.of("orderId", "123"));
-        when(workflowContext.processingContext()).thenReturn(processingContext);
+        when(workflowExecutionOperations.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
+        when(workflowExecutionOperations.workflowId()).thenReturn("wf-123");
+        when(workflowExecutionOperations.workflowVersion()).thenReturn("0.0.1");
+        when(workflowExecutionOperations.workflowPayload()).thenReturn(Map.of("orderId", "123"));
+        when(workflowExecutionOperations.processingContext()).thenReturn(processingContext);
         when(processingContext.component(EventConverter.class)).thenReturn(TestEventConverter.INSTANCE);
 
         when(workflowExecution.workflowId()).thenReturn("wf-123");
@@ -111,7 +112,7 @@ class WaitForDelegateTest {
         stubEventPublishing();
 
         delegate = new WaitForDelegate(
-                workflowContext,
+                workflowExecutionOperations,
                 workflowExecution,
                 runningSteps = new RunningSteps(),
                 eventWaitConditions,

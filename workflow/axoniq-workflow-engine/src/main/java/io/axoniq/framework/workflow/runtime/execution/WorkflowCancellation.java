@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 
