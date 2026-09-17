@@ -13,6 +13,11 @@ jobs:
     name: Test and Build on JDK ${{ matrix.java-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      # The build cache extension defaults to disabled (see .mvn/maven-build-cache-config.xml);
+      # CI is the only place with the SNAPSHOT-fingerprinting safety net, so it is the only place
+      # that opts back in.
+      MAVEN_OPTS: -Dmaven.build.cache.enabled=true
     strategy:
       fail-fast: false
       matrix:

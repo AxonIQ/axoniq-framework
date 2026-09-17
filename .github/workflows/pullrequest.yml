@@ -14,6 +14,11 @@ jobs:
     name: Test and Build on JDK ${{ matrix.java-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      # The build cache extension defaults to disabled (see .mvn/maven-build-cache-config.xml);
+      # CI is the only place with the SNAPSHOT-fingerprinting safety net, so it is the only place
+      # that opts back in.
+      MAVEN_OPTS: -Dmaven.build.cache.enabled=true
     strategy:
       fail-fast: false
       matrix:
@@ -60,20 +65,40 @@ jobs:
       - name: Regular Build
         if: ${{ !matrix.sonar-enabled }}
         run: |
+          set -o pipefail
           ./mvnw -B -U -ntp -Dstyle.color=always -fae -Possrh -Pintegration-test -Djacoco.skip=true clean verify \
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
-          -Dparallel=classes -DthreadCount=1 -DforkCount=2
+          -Dparallel=classes -DthreadCount=1 -DforkCount=2 2>&1 | tee build.log
         env:
           AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
 
       - name: Build with Coverage reports
         if: matrix.sonar-enabled
         run: |
+          set -o pipefail
           ./mvnw -B -U -ntp -Dstyle.color=always -fae -Possrh -Dcoverage clean verify \
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
-          -Dparallel=classes -DthreadCount=1 -DforkCount=2
+          -Dparallel=classes -DthreadCount=1 -DforkCount=2 2>&1 | tee build.log
         env:
           AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
+
+      - name: Generate build status report
+        if: always()
+        run: |
+          if [ -f build.log ]; then
+            ./.github/scripts/generate-build-report.sh build.log "JDK ${{ matrix.java-version }}" build-report.md \
+              || echo "#### JDK ${{ matrix.java-version }} - _Could not generate the per-module status table (a script error, not a build failure) -- see the 'Generate build status report' step log for details._" > build-report.md
+          else
+            echo "#### JDK ${{ matrix.java-version }} - _Build did not reach the Maven build step; no per-module status available._" > build-report.md
+          fi
+
+      - name: Upload build status report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-report-jdk${{ matrix.java-version }}
+          path: build-report.md
+          retention-days: 1
 
       - name: Sonar Analysis
         if: false # ${{ success() && matrix.sonar-enabled && github.event.pull_request.head.repo.full_name == github.repository }} | disabled for the time being
@@ -92,3 +117,35 @@ jobs:
           paths: "**/target/surefire-reports/TEST-*.xml"
           show: "fail, skip"
         if: always() # This allows the build step to fail -- due to failing tests -- but still produce a test summary.
+
+  report:
+    name: Post build status comment
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download build status reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: build-report-jdk*
+          path: reports
+
+      - name: Combine reports and post PR comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "### Build status ([run ${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}), commit ${{ github.event.pull_request.head.sha }})"
+            for dir in reports/build-report-jdk*/; do
+              jdk="$(basename "$dir" | sed 's/build-report-jdk//')"
+              echo
+              if [ -f "${dir}build-report.md" ]; then
+                cat "${dir}build-report.md"
+              else
+                echo "#### JDK ${jdk} - _No report available for this leg._"
+              fi
+            done
+          } > combined-report.md
+          gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --edit-last --create-if-none --body-file combined-report.md
