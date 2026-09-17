@@ -31,6 +31,8 @@ The segment key of a workflow id is the whole id; ids MUST be unique and carry n
 `SegmentedSequencingPolicy` applies that rule as the processor's `SequencingPolicy`:
 
 - events carrying `workflowId` metadata are sequenced by that id's segment key
+- events published by a workflow through the publish primitive carry `workflowId` metadata too, but are always
+  broadcast, see [ADR-019](./019-publish-primitive.md)
 - a business event with exactly one start candidate is sequenced by the candidate id, so a new instance is created on
   the segment that will own it
 - every other event is sequenced by `SequencingPolicy.BROADCAST` and delivered to all segments

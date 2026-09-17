@@ -100,7 +100,7 @@ class BackoffWindowCancellationWorkflowTest extends AbstractWorkflowIntegrationT
         // The cancellation must be honored within the backoff window: step CANCELLED, body catches and compensates,
         // workflow completes.
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
-            var history = workflowHistoryRepository.findAll().stream().findFirst();
+            var history = workflowHistoryRepository.findAll().join().stream().findFirst();
             assertThat(history).isPresent();
             var state = history.get().state();
             assertThat(state.getStep("flaky").status()).isEqualTo(StepStatus.CANCELLED);

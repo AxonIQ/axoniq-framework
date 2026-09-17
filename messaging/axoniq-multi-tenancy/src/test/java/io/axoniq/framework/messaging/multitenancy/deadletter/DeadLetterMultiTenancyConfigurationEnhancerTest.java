@@ -24,6 +24,7 @@ import io.axoniq.framework.axonserver.connector.api.RecordingAxonServerConnectio
 import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
+import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
@@ -34,6 +35,8 @@ import org.axonframework.messaging.eventhandling.processing.streaming.pooled.Poo
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class DeadLetterMultiTenancyConfigurationEnhancerTest {
 
@@ -95,5 +98,21 @@ class DeadLetterMultiTenancyConfigurationEnhancerTest {
         assertThat(DeadLetterMultiTenancyConfigurationEnhancer.isDeadLetterQueuePresent(
                 getClass().getClassLoader()
         )).isTrue();
+    }
+
+    @Test
+    void doesNotInteractWithTheComponentRegistryWhenTheDeadLetterQueueModuleIsUnavailable() {
+        // given
+        ComponentRegistry componentRegistry = mock(ComponentRegistry.class);
+        ClassLoader classLoaderWithoutDeadLetterQueue = new ClassLoader(null) {
+        };
+        DeadLetterMultiTenancyConfigurationEnhancer testSubject =
+                new DeadLetterMultiTenancyConfigurationEnhancer(classLoaderWithoutDeadLetterQueue);
+
+        // when
+        testSubject.enhance(componentRegistry);
+
+        // then
+        verifyNoInteractions(componentRegistry);
     }
 }

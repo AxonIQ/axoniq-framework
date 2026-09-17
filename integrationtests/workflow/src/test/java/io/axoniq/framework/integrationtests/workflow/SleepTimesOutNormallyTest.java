@@ -61,7 +61,7 @@ class SleepTimesOutNormallyTest extends AbstractWorkflowIntegrationTestBase<Simp
         delayedPublisher.start();
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
-            var history = workflowHistoryRepository.findById("sleep-ok");
+            var history = workflowHistoryRepository.findById("sleep-ok").join();
             assertThat(history).isPresent();
             var state = history.get().state();
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);

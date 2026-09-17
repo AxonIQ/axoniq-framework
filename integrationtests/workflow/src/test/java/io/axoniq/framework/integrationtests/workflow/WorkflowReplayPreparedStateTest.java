@@ -29,6 +29,7 @@ import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepository;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
@@ -46,6 +47,7 @@ import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -264,8 +266,8 @@ class WorkflowReplayPreparedStateTest {
                     payload,
                     MetadataUtils.create(workflowId,
                                          WorkflowStatus.STARTED,
-                                         new MessageType(new QualifiedName("ReplayAwareWorkflow"),
-                                                         MessageType.DEFAULT_VERSION))
+                                         VersionedType.of(new QualifiedName("ReplayAwareWorkflow"),
+                                                          Version.DEFAULT_VERSION))
                                  .and(MetadataUtils.METADATA_KEY_MODIFY_PAYLOAD,
                                       CombineGlobalAndLocalPayloadReducer.NAME)
             ).withConverter(eventConverter));
@@ -275,7 +277,7 @@ class WorkflowReplayPreparedStateTest {
             Metadata metadata = MetadataUtils.create(
                     workflowId,
                     WorkflowStatus.COMPLETED,
-                    new MessageType(new QualifiedName("ReplayAwareWorkflow"), MessageType.DEFAULT_VERSION)
+                    VersionedType.of(new QualifiedName("ReplayAwareWorkflow"), Version.DEFAULT_VERSION)
             );
             EventMessage workflowCompleted = new GenericEventMessage(
                     new MessageType("ReplayAwareWorkflowCompleted"),
@@ -392,7 +394,7 @@ class WorkflowReplayPreparedStateTest {
         }
 
         private Optional<io.axoniq.framework.workflow.history.api.WorkflowHistory> history(String workflowId) {
-            return configuration.getComponent(MutableWorkflowHistoryRepository.class).findById(workflowId);
+            return configuration.getComponent(MutableWorkflowHistoryRepository.class).findById(workflowId).join();
         }
 
         @Override

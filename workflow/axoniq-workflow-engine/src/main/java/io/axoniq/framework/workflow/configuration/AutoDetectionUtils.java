@@ -278,7 +278,7 @@ public class AutoDetectionUtils {
     }
 
     /**
-     * Extract workflow version. Falls back to {@link org.axonframework.messaging.core.MessageType#DEFAULT_VERSION}
+     * Extract workflow version. Falls back to {@link Version#DEFAULT_VERSION}
      * ({@code "0.0.1"}) when the annotation does not specify one.
      *
      * @param attributes attributes parsed from method annotation.
@@ -286,8 +286,8 @@ public class AutoDetectionUtils {
      */
     static String workflowVersion(Map<String, @Nullable Object> attributes) {
         var version = AutoDetectionUtils.<String>getIfNotDefault(attributes, ATTR_WORKFLOW_VERSION,
-                                                                 MessageType.DEFAULT_VERSION)
-                                        .orElse(MessageType.DEFAULT_VERSION);
+                                                                 Version.DEFAULT_VERSION)
+                                        .orElse(Version.DEFAULT_VERSION);
         Version.validate(version);
         return version;
     }

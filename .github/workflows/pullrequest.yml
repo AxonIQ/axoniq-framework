@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up JDK ${{ matrix.java-version }}
-        uses: actions/setup-java@v6.0.0
+        uses: actions/setup-java@v6.0.1
         with:
           distribution: 'zulu'
           java-version: ${{ matrix.java-version }}
@@ -55,12 +55,21 @@ jobs:
 
       - name: Write Axon Server test license
         run: |
-          mkdir -p integrationtests/support/src/test/resources
-          printf '%s' "$AXON_SERVER_LICENSE" > integrationtests/support/src/test/resources/axon-server-test.license
-          echo "Axon Server test license written to integrationtests/support/src/test/resources/axon-server-test.license"
-          echo "License file size: $(wc -c < integrationtests/support/src/test/resources/axon-server-test.license) bytes"
+          # Written to every module referencing SharedAxonServerContainer: Testcontainers' reuse hash doesn't
+          # account for the license file copy, so whichever module's JVM starts the shared container first
+          # determines whether it ends up licensed. Without the license present everywhere, an unlicensed
+          # module could "poison" the shared container for modules that need multi-context support.
+          for dir in integrationtests/support connector/axon-server-connector integrationtests/connector/axon-server integrationtests/conformance; do
+            mkdir -p "$dir/src/test/resources"
+            printf '%s' "$AXON_SERVER_LICENSE" > "$dir/src/test/resources/axon-server-test.license"
+            echo "Axon Server test license written to $dir/src/test/resources/axon-server-test.license"
+            echo "License file size: $(wc -c < "$dir/src/test/resources/axon-server-test.license") bytes"
+          done
         env:
           AXON_SERVER_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
+
+      - name: Enable Testcontainers reuse
+        run: printf 'testcontainers.reuse.enable=true\n' > ~/.testcontainers.properties
 
       - name: Regular Build
         if: ${{ !matrix.sonar-enabled }}
@@ -94,7 +103,7 @@ jobs:
 
       - name: Upload build status report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-report-jdk${{ matrix.java-version }}
           path: build-report.md
@@ -127,7 +136,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Download build status reports
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: build-report-jdk*
           path: reports

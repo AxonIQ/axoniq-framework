@@ -21,9 +21,9 @@ package io.axoniq.framework.workflow.runtime.util;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -93,6 +93,11 @@ public class MetadataUtils {
      */
     public static final String STEP_PRIMITIVE_WAIT_FOR_EVENT = "WAIT_FOR_EVENT";
 
+    /**
+     * Marker value identifying a step as a publish primitive: a business event that is also the completed step.
+     */
+    public static final String STEP_PRIMITIVE_PUBLISH = "PUBLISH";
+
     private MetadataUtils() {
         // avoid
     }
@@ -144,7 +149,7 @@ public class MetadataUtils {
      */
     public static Metadata create(String workflowId,
                                   WorkflowStatus workflowStatus,
-                                  MessageType workflowDefinitionId) {
+                                  VersionedType workflowDefinitionId) {
         return withWorkflowDefinitionId(create(workflowId, workflowStatus), workflowDefinitionId);
     }
 
@@ -227,7 +232,7 @@ public class MetadataUtils {
      * @param workflowDefinitionId workflow definition id to store
      * @return enriched metadata
      */
-    public static Metadata withWorkflowDefinitionId(Metadata metadata, MessageType workflowDefinitionId) {
+    public static Metadata withWorkflowDefinitionId(Metadata metadata, VersionedType workflowDefinitionId) {
         return metadata.and(METADATA_KEY_WORKFLOW_DEFINITION_NAME, workflowDefinitionId.qualifiedName().toString())
                        .and(METADATA_KEY_WORKFLOW_DEFINITION_VERSION, workflowDefinitionId.version());
     }
@@ -238,12 +243,12 @@ public class MetadataUtils {
      * @param metadata metadata to inspect
      * @return optional workflow definition id
      */
-    public static Optional<MessageType> getWorkflowDefinitionId(Metadata metadata) {
+    public static Optional<VersionedType> getWorkflowDefinitionId(Metadata metadata) {
         if (!metadata.containsKey(METADATA_KEY_WORKFLOW_DEFINITION_NAME)
                 || !metadata.containsKey(METADATA_KEY_WORKFLOW_DEFINITION_VERSION)) {
             return Optional.empty();
         }
-        return Optional.of(new MessageType(
+        return Optional.of(VersionedType.of(
                 new QualifiedName(metadata.get(METADATA_KEY_WORKFLOW_DEFINITION_NAME)),
                 metadata.get(METADATA_KEY_WORKFLOW_DEFINITION_VERSION)
         ));
@@ -322,5 +327,15 @@ public class MetadataUtils {
      */
     public static Predicate<Metadata> hasWorkflowId() {
         return m -> m.containsKey(METADATA_KEY_WORKFLOW_ID);
+    }
+
+    /**
+     * Checks whether the metadata marks a publish step.
+     *
+     * @param metadata metadata to inspect
+     * @return {@code true} iff the metadata carries a {@code stepPrimitive} key with value {@code PUBLISH}
+     */
+    public static boolean isPublishStep(Metadata metadata) {
+        return STEP_PRIMITIVE_PUBLISH.equals(metadata.getOrDefault(METADATA_KEY_STEP_PRIMITIVE, null));
     }
 }

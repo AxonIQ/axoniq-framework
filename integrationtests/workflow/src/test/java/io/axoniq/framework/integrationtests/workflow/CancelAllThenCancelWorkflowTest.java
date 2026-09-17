@@ -117,7 +117,7 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowIntegrationTestBas
                                    .join();
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
-            var history = workflowHistoryRepository.findById(id);
+            var history = workflowHistoryRepository.findById(id).join();
             assertThat(history).isPresent();
             var state = history.get().state();
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED);

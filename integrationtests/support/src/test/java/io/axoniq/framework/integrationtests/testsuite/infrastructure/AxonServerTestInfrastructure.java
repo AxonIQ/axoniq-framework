@@ -40,10 +40,16 @@ import static io.axoniq.framework.axonserver.connector.api.AxonServerConfigurati
  * {@link TestInfrastructure} implementation that wires tests against a real Axon Server instance managed by
  * Testcontainers.
  * <p>
- * The underlying {@link AxonServerContainer} is a {@code static final} field, so it is shared across all instances of
- * this class and all leaf test classes that use it. {@link AxonServerContainer#start()} is idempotent — Testcontainers
- * makes it a no-op when the container is already running — so calling {@link #start()} from every {@code @BeforeEach}
- * is safe and cheap after the first test.
+ * The underlying {@link AxonServerContainer} is a {@code static final} field of its own -- deliberately not
+ * {@link io.axoniq.framework.testcontainer.SharedAxonServerContainer}, and deliberately not reused across JVMs
+ * (each consumer module gets its own fresh container, exactly as before build-wide Testcontainers reuse was
+ * enabled): the modules depending on this class churn through many tenant contexts already, and sharing that
+ * churn -- either with each other across module boundaries, or with other suites entirely -- was found to degrade
+ * the container over the course of a CI run (contexts start failing to create with HTTP 400). It is still shared
+ * across all instances of this class and all leaf test classes within one module's JVM, so it only needs to start
+ * once per module. {@link AxonServerContainer#start()} is idempotent -- Testcontainers makes it a no-op when the
+ * container is already running -- so calling {@link #start()} from every {@code @BeforeEach} is safe and cheap
+ * after the first test.
  *
  * @since 5.1.0
  */
@@ -56,7 +62,12 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
             new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:latest")
                     .withAxonServerHostname("localhost")
                     .withDevMode(true)
-                    .withReuse(true)
+                    // Deliberately not reused across JVMs (unlike SharedAxonServerContainer): this class's
+                    // consumer modules (multitenancy/core, multitenancy/data-protection, conformance) churn
+                    // through many tenant contexts, and sharing that churn across module boundaries degrades
+                    // the container under the combined load. Still shared *within* one module's JVM via the
+                    // static field below, regardless.
+                    .withReuse(false)
                     .withDcbContext(true)
                     .withLicense(licenseExists() ? AXON_SERVER_TEST_LICENSE : null);
 
@@ -169,6 +180,21 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
                     throw new RuntimeException("Failed to delete context in Axon Server", e);
                 }
             }
+
+            @Override
+            public void emptyContext(String name) {
+                try {
+                    AxonServerContainerUtils.purgeEventsFromAxonServer(
+                            CONTAINER.getHost(),
+                            CONTAINER.getHttpPort(),
+                            name,
+                            AxonServerContainerUtils.DCB_CONTEXT,
+                            DEFAULT_REPLICATION_GROUP
+                    );
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to empty context in Axon Server", e);
+                }
+            }
         };
     }
 
@@ -207,6 +233,13 @@ public final class AxonServerTestInfrastructure implements TestInfrastructure {
          * @param name the context name
          */
         void deleteContext(String name);
+
+        /**
+         * Empty a context of all its events, leaving the context itself (and its configuration) in place.
+         *
+         * @param name the context name
+         */
+        void emptyContext(String name);
 
         /**
          * Delete all contexts except the default and admin contexts

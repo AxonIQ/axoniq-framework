@@ -99,7 +99,7 @@ class ExternalStepCancellationWorkflowTest extends AbstractWorkflowIntegrationTe
 
         // The workflow must catch the cancellation, run the compensate step, and complete normally.
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
-            var history = workflowHistoryRepository.findAll().stream().findFirst();
+            var history = workflowHistoryRepository.findAll().join().stream().findFirst();
             assertThat(history).isPresent();
             var state = history.get().state();
             assertThat(state.workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);

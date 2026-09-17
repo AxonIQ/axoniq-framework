@@ -77,7 +77,6 @@ class MultiTenantCommandHandlingIT {
     @BeforeEach
     void setUp() {
         INFRASTRUCTURE.start();
-        INFRASTRUCTURE.purgeData();
         contextManager = INFRASTRUCTURE.getContextManager();
         contextManager.createContext(TENANT_A);
         contextManager.createContext(TENANT_B);
@@ -110,7 +109,6 @@ class MultiTenantCommandHandlingIT {
     @AfterEach
     void tearDown() {
         application.shutdown();
-        INFRASTRUCTURE.purgeData();
         contextManager.deleteAllCustomContexts();
         recordedCommands.clear();
         INFRASTRUCTURE.stop();

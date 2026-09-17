@@ -25,6 +25,7 @@ import org.axonframework.modelling.repository.ManagedEntity;
 import org.axonframework.modelling.repository.Repository;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -64,5 +65,12 @@ public class EventSourcedWorkflowStore implements WorkflowStore {
                                                          ProcessingContext processingContext) {
         return workflowStateRepository.loadOrCreate(workflowId, processingContext)
                                       .thenApply(ManagedEntity::entity);
+    }
+
+    @Override
+    public CompletableFuture<Optional<WorkflowState>> findWorkflow(String workflowId,
+                                                                   ProcessingContext processingContext) {
+        return workflowStateRepository.load(workflowId, processingContext)
+                                      .thenApply(managed -> Optional.<WorkflowState>ofNullable(managed.entity()));
     }
 }

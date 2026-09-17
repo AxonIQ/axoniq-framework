@@ -24,6 +24,7 @@ import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
 import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.messaging.eventhandling.EventMessage;
 
 import java.time.Duration;
 import java.util.Map;
@@ -95,6 +96,22 @@ public class PrimitiveCommands {
             EventNameCustomizer eventNameCustomizer
     ) {
         return new SimpleVersionCommand(stepName, newVersion, eventNameCustomizer);
+    }
+
+    /**
+     * Factory method to create a {@link SimplePublishCommand}, the parameter object of
+     * {@link PublishPrimitive#publish(PublishPrimitive.PublishCommand)}.
+     * <p>
+     * The command carries the {@code stepName} under which the step is recorded in the workflow state, and the
+     * {@link EventMessage} to publish. The primitive appends that event once, enriched with workflow metadata, and
+     * skips the append on replay when the step is already recorded.
+     *
+     * @param stepName logical step name recorded with the published event
+     * @param event    event to publish
+     * @return command object
+     */
+    public static SimplePublishCommand publish(String stepName, EventMessage event) {
+        return new SimplePublishCommand(stepName, event);
     }
 
     /**
@@ -255,6 +272,10 @@ public class PrimitiveCommands {
 
     /**
      * Default version command implementation.
+     *
+     * @param stepName            logical step name (the developer-chosen change id)
+     * @param newVersion          new workflow version to record (semver string)
+     * @param eventNameCustomizer event name customizer
      */
     @Internal
     public record SimpleVersionCommand(
@@ -262,6 +283,19 @@ public class PrimitiveCommands {
             String newVersion,
             EventNameCustomizer eventNameCustomizer
     ) implements VersionPrimitive.VersionCommand {
+    }
+
+    /**
+     * Default publish command implementation.
+     *
+     * @param stepName logical step name recorded with the published event
+     * @param event    event to publish
+     */
+    @Internal
+    public record SimplePublishCommand(
+            String stepName,
+            EventMessage event
+    ) implements PublishPrimitive.PublishCommand {
     }
 
     /**

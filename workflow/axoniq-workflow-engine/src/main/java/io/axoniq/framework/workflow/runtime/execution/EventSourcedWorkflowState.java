@@ -35,7 +35,7 @@ import org.jspecify.annotations.Nullable;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
-import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -72,7 +72,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
 
     private final String workflowId;
     private Map<String, @Nullable Object> payload;
-    private volatile MessageType workflowDefinition;
+    private volatile VersionedType workflowDefinition;
     private final WorkflowStateListenerSupport listenerSupport;
 
     private final Map<String, WorkflowStep> steps = new ConcurrentHashMap<>();
@@ -89,7 +89,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
      */
     @Internal
     public EventSourcedWorkflowState(String workflowId,
-                                     MessageType workflowDefinition) {
+                                     VersionedType workflowDefinition) {
         this(workflowId, Map.of(), workflowDefinition);
     }
 
@@ -104,7 +104,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     public EventSourcedWorkflowState(
             String workflowId,
             Map<String, @Nullable Object> payload,
-            MessageType workflowDefinition
+            VersionedType workflowDefinition
     ) {
         this.workflowId = requireNonNull(workflowId, "Workflow id must be set.");
         this.payload = requireNonNull(payload, "Payload must be set.");
@@ -124,7 +124,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     EventSourcedWorkflowState(
             String workflowId,
             Map<String, @Nullable Object> payload,
-            MessageType workflowDefinition,
+            VersionedType workflowDefinition,
             WorkflowContext context,
             Map<WorkflowStatus, WorkflowStatusChangeListener> listeners
     ) {
@@ -202,6 +202,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
     }
 
     @Override
+    @Nullable
     public WorkflowStep getStep(String stepName) {
         return steps.get(stepName);
     }
@@ -223,7 +224,12 @@ public class EventSourcedWorkflowState implements WorkflowState {
     }
 
     @Override
-    public MessageType workflowDefinitionId() {
+    public Map<String, String> versionMigrations() {
+        return Map.copyOf(versions);
+    }
+
+    @Override
+    public VersionedType workflowDefinitionId() {
         return workflowDefinition;
     }
 
@@ -275,8 +281,15 @@ public class EventSourcedWorkflowState implements WorkflowState {
             logger.debug("Ignoring event {} for terminal workflow {}", eventMessage.type(), workflowId);
             return this;
         }
-        Object eventPayload = eventMessage.payloadAs(Object.class);
         var metadata = eventMessage.metadata();
+        // Safety net. The execution decides what evolves this state (SimpleWorkflowExecution#onEvent skips events
+        // another instance published through the publish primitive); a step of another workflowId reaching this far
+        // is a routing mistake and must not become one of this instance's steps.
+        if (MetadataUtils.hasWorkflowId().test(metadata)
+                && !workflowId.equals(MetadataUtils.getWorkflowId(metadata))) {
+            return this;
+        }
+        Object eventPayload = eventMessage.payloadAs(Object.class);
         MetadataUtils.getWorkflowDefinitionId(metadata)
                      .ifPresent(definitionId -> this.workflowDefinition = definitionId);
         // Migration events arrive as regular COMPLETED step events that additionally carry the
@@ -339,6 +352,12 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                                   eventMessage.timestamp(),
                                                   processingContext)); // TODO copy resources of the context
                     break;
+                case RETRY_STARTED:
+                    addStep(WorkflowStep.retryStarted(stepName,
+                                                      eventMessage.payloadAs(StepRetryInfo.class),
+                                                      eventMessage.timestamp(),
+                                                      processingContext));
+                    break;
                 default:
                     break;
             }
@@ -372,7 +391,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
                                      && !startedVersion.isBlank()
                                      && !startedVersion.equals(workflowDefinition.version())) {
                                  synchronized (this) {
-                                     this.workflowDefinition = new MessageType(
+                                     this.workflowDefinition = VersionedType.of(
                                              workflowDefinition.qualifiedName(),
                                              startedVersion
                                      );
@@ -397,7 +416,7 @@ public class EventSourcedWorkflowState implements WorkflowState {
         versions.putIfAbsent(changeId, newVersion);
         synchronized (this) {
             if (Version.of(newVersion).isGreaterThan(Version.of(workflowDefinition.version()))) {
-                workflowDefinition = new MessageType(workflowDefinition.qualifiedName(), newVersion);
+                workflowDefinition = VersionedType.of(workflowDefinition.qualifiedName(), newVersion);
             }
         }
     }

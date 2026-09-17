@@ -198,7 +198,9 @@ class GivenWhenTest {
                                                  TestClock clock,
                                                  ManualWorkflowScheduler scheduler) {
         var historyRepository = mock(MutableWorkflowHistoryRepository.class);
-        when(historyRepository.findAll()).thenReturn(List.of(new WorkflowHistory("wf-1", state)));
+        when(historyRepository.findAll()).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(
+                List.of(new WorkflowHistory("wf-1", state))
+        ));
         var configuration = mock(AxonConfiguration.class);
         when(configuration.getComponent(WorkflowEngine.class)).thenReturn(mock(WorkflowEngine.class));
         when(configuration.getComponent(DelayedPublisher.class)).thenReturn(mock(DelayedPublisher.class));
@@ -241,7 +243,7 @@ class GivenWhenTest {
             case FAILED -> WorkflowStep.failed(stepName, new RuntimeException("boom"), Instant.EPOCH, null);
             case TIMED_OUT -> WorkflowStep.timedOut(stepName, Map.of(), Instant.EPOCH, null);
             case CANCELLED -> WorkflowStep.cancelled(stepName, Instant.EPOCH, null);
-            case RETRYING -> throw new IllegalArgumentException("Retrying is not used in these tests");
+            case RETRYING, RETRY_STARTED -> throw new IllegalArgumentException("Retrying is not used in these tests");
         };
     }
 }

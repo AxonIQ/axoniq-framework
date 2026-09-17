@@ -280,7 +280,7 @@ class WorkflowTestDriverTest {
         when(workflowEngine.workflowExecutions()).thenReturn(Set.copyOf(executions));
 
         var historyRepository = mock(MutableWorkflowHistoryRepository.class);
-        when(historyRepository.findAll()).thenReturn(histories);
+        when(historyRepository.findAll()).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(histories));
 
         var configuration = mock(AxonConfiguration.class);
         when(configuration.getComponent(WorkflowEngine.class)).thenReturn(workflowEngine);

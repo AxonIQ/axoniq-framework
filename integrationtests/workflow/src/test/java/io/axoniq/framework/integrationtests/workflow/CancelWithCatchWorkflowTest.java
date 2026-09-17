@@ -74,7 +74,7 @@ class CancelWithCatchWorkflowTest extends AbstractWorkflowIntegrationTestBase<Si
         }
 
         testDriver.noExecution();
-        if (!workflowHistoryRepository.findAll().isEmpty()) {
+        if (!workflowHistoryRepository.findAll().join().isEmpty()) {
             testDriver.historyMatches(h -> h.state().workflowStatus() == WorkflowStatus.CANCELLED);
             testDriver.testingState().hasSteps("stepA");
             testDriver.testingState().noStep("stepAfterCancel");

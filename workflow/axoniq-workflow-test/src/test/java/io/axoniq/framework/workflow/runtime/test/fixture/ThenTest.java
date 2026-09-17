@@ -243,7 +243,7 @@ class ThenTest {
 
     private WorkflowTestDriver testDriverWith(WorkflowState selectedState, List<WorkflowHistory> histories) {
         var historyRepository = mock(MutableWorkflowHistoryRepository.class);
-        when(historyRepository.findAll()).thenReturn(histories);
+        when(historyRepository.findAll()).thenReturn(java.util.concurrent.CompletableFuture.completedFuture(histories));
 
         var workflowEngine = mock(WorkflowEngine.class);
         when(workflowEngine.workflowExecutions()).thenReturn(Set.of());
@@ -301,7 +301,7 @@ class ThenTest {
             case FAILED -> WorkflowStep.failed(stepName, new RuntimeException("boom"), Instant.EPOCH, null);
             case TIMED_OUT -> WorkflowStep.timedOut(stepName, Map.of(), Instant.EPOCH, null);
             case CANCELLED -> WorkflowStep.cancelled(stepName, Instant.EPOCH, null);
-            case RETRYING -> throw new IllegalArgumentException("Retrying is not used in these tests");
+            case RETRYING, RETRY_STARTED -> throw new IllegalArgumentException("Retrying is not used in these tests");
         };
     }
 }

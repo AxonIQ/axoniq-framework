@@ -22,6 +22,7 @@ package io.axoniq.framework.integrationtests.testsuite.course;
 import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
+import io.axoniq.framework.testcontainer.SharedAxonServerContainer;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.integrationtests.testsuite.course.commands.CreateCourse;
 import org.axonframework.integrationtests.testsuite.course.events.CourseCreated;
@@ -34,28 +35,33 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.UUID;
 
-import static io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration.DEFAULT_CONTEXT;
-
 class StudentAxonTestFixtureAxonServerIntegrationIT {
 
     protected static final Logger logger = LoggerFactory.getLogger(StudentAxonTestFixtureAxonServerIntegrationIT.class);
 
-    private static final AxonServerContainer container = new AxonServerContainer(
-            "docker.axoniq.io/axoniq/axonserver:2025.2.0")
-            .withAxonServerHostname("localhost")
-            .withDevMode(true)
-            .withReuse(true);
+    /*
+     * A context of its own, rather than the shared container's default context, so repeatedly recreating it
+     * (once per @BeforeEach, see testConfigurer()) can't collide with other suites sharing the container.
+     */
+    private static final String CONTEXT = "student-axon-test-fixture-axon-server-it";
+
+    private static final AxonServerContainer container = SharedAxonServerContainer.INSTANCE;
 
     private AxonTestFixture fixture;
 
     @BeforeAll
-    static void beforeAll() {
-        container.start();
-    }
+    static void beforeAll() throws IOException {
+        SharedAxonServerContainer.ensureStarted();
 
-    @AfterAll
-    static void afterAll() {
-        container.stop();
+        try {
+            AxonServerContainerUtils.deleteContext(container.getHost(), container.getHttpPort(), CONTEXT);
+        } catch (IOException ignored) {
+            // Context didn't exist yet.
+        }
+        AxonServerContainerUtils.createContext(container.getHost(),
+                                               container.getHttpPort(),
+                                               CONTEXT,
+                                               AxonServerContainerUtils.DCB_CONTEXT);
     }
 
     @BeforeEach
@@ -69,12 +75,11 @@ class StudentAxonTestFixtureAxonServerIntegrationIT {
     }
 
     private EventSourcingConfigurer testConfigurer() {
-        container.start();
         var configurer = EventSourcingConfigurer.create();
         try {
             AxonServerContainerUtils.purgeEventsFromAxonServer(container.getHost(),
                                                                container.getHttpPort(),
-                                                               DEFAULT_CONTEXT,
+                                                               CONTEXT,
                                                                AxonServerContainerUtils.DCB_CONTEXT);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -83,6 +88,7 @@ class StudentAxonTestFixtureAxonServerIntegrationIT {
                     container.getHttpPort());
         AxonServerConfiguration axonServerConfiguration = new AxonServerConfiguration();
         axonServerConfiguration.setServers(container.getHost() + ":" + container.getGrpcPort());
+        axonServerConfiguration.setContext(CONTEXT);
         configurer.componentRegistry(cr -> cr.registerComponent(
                 AxonServerConfiguration.class,
                 c -> axonServerConfiguration

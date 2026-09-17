@@ -23,9 +23,10 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.MessageStream;
-import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventHandler;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -66,13 +67,13 @@ public class WorkflowHistoryProjector implements EventHandler {
         }
 
         String workflowId = MetadataUtils.getWorkflowId(event.metadata());
-        Optional<WorkflowHistory> optionalHistory = historyRepository.findById(workflowId);
+        Optional<WorkflowHistory> optionalHistory = FutureUtils.joinAndUnwrap(historyRepository.findById(workflowId));
         if (optionalHistory.isPresent()) {
             historyRepository.save(
                     new WorkflowHistory(workflowId, evolveState(optionalHistory.get().state(), event, context))
             );
         } else {
-            Optional<MessageType> optionalWorkflowDefinition = MetadataUtils.getWorkflowDefinitionId(event.metadata());
+            Optional<VersionedType> optionalWorkflowDefinition = MetadataUtils.getWorkflowDefinitionId(event.metadata());
             if (optionalWorkflowDefinition.isPresent()) {
                 EventSourcedWorkflowState workflowState = new EventSourcedWorkflowState(
                         workflowId, new HashMap<>(), optionalWorkflowDefinition.get()

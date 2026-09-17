@@ -19,19 +19,21 @@
 package io.axoniq.framework.workflow.runtime.util;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepRetryInfo;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
-import org.jspecify.annotations.Nullable;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.Map;
@@ -55,11 +57,11 @@ public class EventMessageUtils {
 
     /**
      * Reads the workflow's current definition version from {@code context}, falling back to
-     * {@link MessageType#DEFAULT_VERSION} when the context returns null (e.g. unit-test mocks with no stub).
+     * {@link Version#DEFAULT_VERSION} when the context returns null (e.g. unit-test mocks with no stub).
      */
     private static String versionOf(WorkflowContext context) {
         var v = context.workflowVersion();
-        return (v == null || v.isBlank()) ? MessageType.DEFAULT_VERSION : v;
+        return (v == null || v.isBlank()) ? Version.DEFAULT_VERSION : v;
     }
 
     private static EventMessage eventMessage(WorkflowContext context,
@@ -90,7 +92,7 @@ public class EventMessageUtils {
      */
     public static EventMessage startedWorkflow(WorkflowContext context,
                                                String workflowName,
-                                               MessageType workflowDefinitionId,
+                                               VersionedType workflowDefinitionId,
                                                EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.STARTED);
         return eventMessage(context, new MessageType(name, versionOf(context)), context.workflowPayload(),
@@ -112,7 +114,7 @@ public class EventMessageUtils {
      */
     public static EventMessage completedWorkflow(WorkflowContext context,
                                                  String workflowName,
-                                                 MessageType workflowDefinitionId,
+                                                 VersionedType workflowDefinitionId,
                                                  EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.COMPLETED);
         return eventMessage(context, new MessageType(name, versionOf(context)), Map.of(),
@@ -125,16 +127,17 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow has failed.
      *
-     * @param context      workflow context.
-     * @param workflowName name of the workflow.
-     * @param exception    exception that caused the failure.
-     * @param customizer   event name customizer.
+     * @param context              workflow context
+     * @param workflowName         name of the workflow
+     * @param exception            exception that caused the failure
+     * @param workflowDefinitionId workflow definition identity
+     * @param customizer           event name customizer
      * @return event message.
      */
     public static EventMessage failedWorkflow(WorkflowContext context,
                                               String workflowName,
                                               Exception exception,
-                                              MessageType workflowDefinitionId,
+                                              VersionedType workflowDefinitionId,
                                               EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.FAILED);
         return eventMessage(context, new MessageType(name, versionOf(context)), WorkflowError.from(exception),
@@ -147,16 +150,17 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow has timed out.
      *
-     * @param context      workflow context.
-     * @param workflowName name of the workflow.
-     * @param time         time when the timeout occurred.
-     * @param customizer   event name customizer.
+     * @param context              workflow context
+     * @param workflowName         name of the workflow
+     * @param time                 time when the timeout occurred
+     * @param workflowDefinitionId workflow definition identity
+     * @param customizer           event name customizer
      * @return event message.
      */
     public static EventMessage timeoutWorkflow(WorkflowContext context,
                                                String workflowName,
                                                Instant time,
-                                               MessageType workflowDefinitionId,
+                                               VersionedType workflowDefinitionId,
                                                EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.TIMED_OUT);
         return eventMessage(context, new MessageType(name, versionOf(context)), time,
@@ -169,14 +173,15 @@ public class EventMessageUtils {
     /**
      * Creates a new event message stating that a workflow has been cancelled.
      *
-     * @param context      workflow context.
-     * @param workflowName name of the workflow.
-     * @param customizer   event name customizer.
+     * @param context      workflow context
+     * @param workflowName name of the workflow
+     * @param workflowDefinitionId workflow definition identity
+     * @param customizer   event name customizer
      * @return event message.
      */
     public static EventMessage cancelledWorkflow(WorkflowContext context,
                                                  String workflowName,
-                                                 MessageType workflowDefinitionId,
+                                                 VersionedType workflowDefinitionId,
                                                  EventNameCustomizer customizer) {
         return cancelledWorkflow(context, workflowName, null, workflowDefinitionId, customizer);
     }
@@ -184,7 +189,7 @@ public class EventMessageUtils {
     public static EventMessage cancelledWorkflow(WorkflowContext context,
                                                  String workflowName,
                                                  @Nullable Throwable cause,
-                                                 MessageType workflowDefinitionId,
+                                                 VersionedType workflowDefinitionId,
                                                  EventNameCustomizer customizer) {
         var name = customizer.getEventName(workflowName, context.workflowPayload(), WorkflowStatus.CANCELLED);
         return eventMessage(context, new MessageType(name, versionOf(context)),
@@ -243,8 +248,10 @@ public class EventMessageUtils {
      * @param stepName                 name of the step.
      * @param result                   result of the step.
      * @param resultPayloadReducerName name of the result payload reducer, or {@code null} if no reducer is used, see
-     *                                 {@link io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer},
-     *                                 {@link io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer},
+     *                                 {@link
+     *                                 io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer},
+     *                                 {@link
+     *                                 io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer},
      *                                 {@link
      *                                 io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer}
      * @param customizer               event name customizer.
@@ -368,6 +375,25 @@ public class EventMessageUtils {
         var name = customizer.getEventName(stepName, Map.of(), StepStatus.RETRYING);
         return eventMessage(context, new MessageType(name, versionOf(context)), retryInfo,
                             MetadataUtils.create(context.workflowId(), stepName, StepStatus.RETRYING)
+        );
+    }
+
+    /**
+     * Creates a new event message stating that a retry attempt of a workflow step has started.
+     *
+     * @param context    workflow context
+     * @param stepName   the name of the retry started step
+     * @param retryInfo  retry information payload, {@code attempt} is the attempt being started
+     * @param customizer event name customizer
+     * @return the retry started event message
+     */
+    public static EventMessage retryStartedStep(WorkflowContext context,
+                                                String stepName,
+                                                StepRetryInfo retryInfo,
+                                                EventNameCustomizer customizer) {
+        var name = customizer.getEventName(stepName, Map.of(), StepStatus.RETRY_STARTED);
+        return eventMessage(context, new MessageType(name, versionOf(context)), retryInfo,
+                            MetadataUtils.create(context.workflowId(), stepName, StepStatus.RETRY_STARTED)
         );
     }
 
