@@ -18,9 +18,16 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.workflow.history.api.WorkflowHistoryRepository;
+import io.axoniq.framework.workflow.runtime.api.manager.WorkflowManager;
+import io.axoniq.framework.workflow.runtime.execution.SimpleWorkflowManager;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowCancellationService;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
+import io.axoniq.framework.workflow.runtime.execution.WorkflowStore;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver;
 import org.axonframework.common.configuration.Component;
+import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.common.configuration.ComponentDefinition;
 import org.axonframework.common.configuration.ComponentFactory;
 import org.axonframework.common.configuration.ComponentRegistry;
@@ -94,6 +101,27 @@ class WorkflowConfigurationDefaultsTest {
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void registersWorkflowManagerWithItsDefaultImplementation() {
+        var registry = new CapturingComponentRegistry();
+        var configuration = mock(Configuration.class);
+        when(configuration.getComponent(WorkflowHistoryRepository.class)).thenReturn(mock(WorkflowHistoryRepository.class));
+        when(configuration.getComponent(WorkflowExecutionRepository.class))
+                .thenReturn(mock(WorkflowExecutionRepository.class));
+        when(configuration.getComponent(WorkflowCancellationService.class))
+                .thenReturn(mock(WorkflowCancellationService.class));
+        when(configuration.getComponent(WorkflowStore.class)).thenReturn(mock(WorkflowStore.class));
+        when(configuration.getComponent(UnitOfWorkFactory.class)).thenReturn(mock(UnitOfWorkFactory.class));
+        when(configuration.getComponent(ExecutorService.class, WorkflowConfigurationDefaults.WORKFLOW_ENGINE_EXECUTOR))
+                .thenReturn(mock(ExecutorService.class));
+
+        subject.registerWorkflowManager(registry);
+
+        var component = ((ComponentDefinition.ComponentCreator<?>) registry.componentDefinition).createComponent();
+        assertThat(component.identifier().type().getTypeAsClass()).isEqualTo(WorkflowManager.class);
+        assertThat(component.resolve(configuration)).isInstanceOf(SimpleWorkflowManager.class);
     }
 
     @Test

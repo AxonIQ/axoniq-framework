@@ -22,8 +22,8 @@ import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.junit.jupiter.api.*;
 
@@ -44,7 +44,7 @@ class EventSourcedWorkflowStateRepositoryIntegrationTest extends AbstractEventSo
         configuration = configuration("workflow-state-module");
         configuration.start();
 
-        var definitionId = new MessageType(new QualifiedName("OrderWorkflow"), "1.0.0");
+        var definitionId = VersionedType.of(new QualifiedName("OrderWorkflow"), "1.0.0");
         var customizer = DefaultEventNameCustomizer.Builder.defaults();
         var context = workflowContext("wf-1", "1.0.0");
 

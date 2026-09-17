@@ -24,6 +24,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedExcept
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.payload.PayloadProcessor;
 import org.awaitility.core.ThrowingRunnable;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.common.annotation.Internal;
 
 import java.time.Duration;
@@ -140,7 +141,9 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
         Objects.requireNonNull(predicate, "Predicate must not be null");
         awaitEventually("Expected a workflow history entry matching the given predicate to appear",
                         () -> {
-                            var histories = this.workflowTestServices.workflowHistoryRepository().findAll();
+                            var histories = FutureUtils.joinAndUnwrap(
+                                    this.workflowTestServices.workflowHistoryRepository().findAll()
+                            );
                             if (histories.stream().noneMatch(predicate)) {
                                 throw new AssertionError(
                                         "Expected a workflow history entry matching the given predicate, but recorded histories are %s."
@@ -150,7 +153,8 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
                         }
         );
 
-        var histories = this.workflowTestServices.workflowHistoryRepository().findAll().stream()
+        var histories = FutureUtils.joinAndUnwrap(this.workflowTestServices.workflowHistoryRepository().findAll())
+                                .stream()
                                                  .filter(predicate).toList();
         this.mutableTestingState().setHistory(histories.getFirst());
         return this.testingState.history();
@@ -169,7 +173,7 @@ public class DefaultWorkflowTestDriver implements WorkflowTestDriver {
 
     @Override
     public void noHistory() {
-        var histories = workflowTestServices().workflowHistoryRepository().findAll();
+        var histories = FutureUtils.joinAndUnwrap(workflowTestServices().workflowHistoryRepository().findAll());
         if (!histories.isEmpty()) {
             throw new AssertionError(
                     "Expected no workflow history, but recorded histories are %s."

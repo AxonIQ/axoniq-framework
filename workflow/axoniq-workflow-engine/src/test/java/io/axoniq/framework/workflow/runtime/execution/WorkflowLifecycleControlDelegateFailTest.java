@@ -28,8 +28,8 @@ import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.test.appender.ListAppender;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -213,7 +213,7 @@ class WorkflowLifecycleControlDelegateFailTest {
     private EventSourcedWorkflowState workflowState(Map<WorkflowStatus, WorkflowStatusChangeListener> listeners) {
         return new EventSourcedWorkflowState("wf-1",
                                              Map.of(),
-                                             new MessageType(new QualifiedName("test-workflow"), "0.0.1"),
+                                             VersionedType.of(new QualifiedName("test-workflow"), "0.0.1"),
                                              workflowContext,
                                              listeners);
     }

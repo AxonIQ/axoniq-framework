@@ -25,6 +25,7 @@ import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -35,8 +36,8 @@ import static org.mockito.Mockito.*;
 
 class WorkflowHistoryProjectorTest {
 
-    private static final MessageType DEFINITION_ID =
-            new MessageType(new QualifiedName("test-workflow"), "1.0.0");
+    private static final VersionedType DEFINITION_ID =
+            VersionedType.of(new QualifiedName("test-workflow"), "1.0.0");
 
     private InMemoryWorkflowHistoryRepository repository;
     private WorkflowHistoryProjector projector;
@@ -59,8 +60,8 @@ class WorkflowHistoryProjectorTest {
 
         projector.handle(event, context);
 
-        assertThat(repository.findById(workflowId)).isPresent();
-        assertThat(repository.findById(workflowId).get().workflowId()).isEqualTo(workflowId);
+        assertThat(repository.findById(workflowId).join()).isPresent();
+        assertThat(repository.findById(workflowId).join().get().workflowId()).isEqualTo(workflowId);
     }
 
     @Test
@@ -76,7 +77,7 @@ class WorkflowHistoryProjectorTest {
         );
         projector.handle(event1, context);
 
-        WorkflowHistory firstHistory = repository.findById(workflowId).get();
+        WorkflowHistory firstHistory = repository.findById(workflowId).join().get();
 
         // Second event
         EventMessage event2 = new GenericEventMessage(
@@ -86,7 +87,7 @@ class WorkflowHistoryProjectorTest {
         );
         projector.handle(event2, context);
 
-        WorkflowHistory secondHistory = repository.findById(workflowId).get();
+        WorkflowHistory secondHistory = repository.findById(workflowId).join().get();
 
         assertThat(secondHistory).isNotSameAs(firstHistory);
         assertThat(secondHistory.workflowId()).isEqualTo(workflowId);
@@ -101,6 +102,6 @@ class WorkflowHistoryProjectorTest {
 
         projector.handle(event, context);
 
-        assertThat(repository.findAll()).isEmpty();
+        assertThat(repository.findAll().join()).isEmpty();
     }
 }

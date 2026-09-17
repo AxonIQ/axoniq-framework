@@ -19,7 +19,6 @@
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import org.axonframework.messaging.core.MessageType;
 
 import java.util.Map;
 
@@ -79,12 +78,12 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
 
     /**
      * Workflow definition version (semver, e.g. {@code "0.0.2"}). Defaults to
-     * {@link MessageType#DEFAULT_VERSION} ({@code "0.0.1"}).
+     * {@link Version#DEFAULT_VERSION} ({@code "0.0.1"}).
      *
      * @return workflow definition version.
      */
     default String workflowVersion() {
-        return MessageType.DEFAULT_VERSION;
+        return Version.DEFAULT_VERSION;
     }
 
     /**

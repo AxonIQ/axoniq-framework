@@ -23,6 +23,7 @@ import org.jspecify.annotations.Nullable;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import org.axonframework.common.FutureUtils;
 
 import java.util.Map;
 import java.util.Objects;
@@ -155,16 +156,16 @@ public class Then<SELF extends Then<SELF, ACTION>, ACTION extends GivenWhen<ACTI
         Objects.requireNonNull(workflowStatus, "Workflow status must not be null");
         noExecution();
         testDriver.awaitEventually("Expected workflow to finish with status %s".formatted(workflowStatus), () -> {
-            var matchingHistories = testDriver.workflowTestServices()
-                                             .workflowHistoryRepository()
-                                             .findAll()
+            var matchingHistories = FutureUtils.joinAndUnwrap(testDriver.workflowTestServices()
+                                                                         .workflowHistoryRepository()
+                                                                         .findAll())
                                              .stream()
                                              .filter(history -> history.state().workflowStatus() == workflowStatus)
                                              .toList();
             if (matchingHistories.isEmpty()) {
-            var actualStatuses = testDriver.workflowTestServices()
-                                               .workflowHistoryRepository()
-                                               .findAll()
+            var actualStatuses = FutureUtils.joinAndUnwrap(testDriver.workflowTestServices()
+                                                                       .workflowHistoryRepository()
+                                                                       .findAll())
                                                .stream()
                                                .map(history -> history.state().workflowStatus())
                                                .toList();

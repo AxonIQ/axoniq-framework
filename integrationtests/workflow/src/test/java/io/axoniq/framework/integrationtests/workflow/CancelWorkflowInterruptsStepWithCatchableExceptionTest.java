@@ -94,7 +94,7 @@ class CancelWorkflowInterruptsStepWithCatchableExceptionTest extends AbstractWor
         ).join();
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
-            var history = workflowHistoryRepository.findById(id);
+            var history = workflowHistoryRepository.findById(id).join();
             assertThat(history).isPresent();
             assertThat(history.get().state().workflowStatus()).isEqualTo(WorkflowStatus.CANCELLED);
         });
@@ -108,7 +108,7 @@ class CancelWorkflowInterruptsStepWithCatchableExceptionTest extends AbstractWor
 
         // Whole-workflow termination publishes no per-step terminal event: stepA stays at its last recorded
         // (STARTED) state, even though the body observed a catchable exception in-process.
-        var history = workflowHistoryRepository.findById(id).orElseThrow();
+        var history = workflowHistoryRepository.findById(id).join().orElseThrow();
         assertThat(history.state().getStep("stepA").status()).isEqualTo(StepStatus.STARTED);
     }
 

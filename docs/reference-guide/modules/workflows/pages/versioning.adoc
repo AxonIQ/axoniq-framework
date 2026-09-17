@@ -34,7 +34,7 @@ public void execute(SimpleWorkflowContext ctx) { /* ... */ }
 ----
 
 * `workflowVersion` is optional. The default is
-  `org.axonframework.messaging.core.MessageType.DEFAULT_VERSION` (`"0.0.1"`), matching Axon Framework
+  `io.axoniq.framework.workflow.runtime.api.execution.context.Version.DEFAULT_VERSION` (`"0.0.1"`), matching Axon Framework
   5's native event-versioning convention.
 * The value must be a parseable semver string (`MAJOR.MINOR.PATCH` with an optional pre-release
   suffix). Invalid strings are rejected at configuration time via `Version.validate(...)`.

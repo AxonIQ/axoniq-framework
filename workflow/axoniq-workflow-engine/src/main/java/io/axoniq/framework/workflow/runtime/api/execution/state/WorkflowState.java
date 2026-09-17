@@ -21,20 +21,21 @@ package io.axoniq.framework.workflow.runtime.api.execution.state;
 import org.jspecify.annotations.Nullable;
 
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
-import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.DescribableComponent;
-import org.axonframework.messaging.core.MessageType;
+import org.axonframework.messaging.core.VersionedType;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * Event sourced state of the workflow execution.
+ * State of a workflow execution.
+ * <p>
+ * A {@code WorkflowState} returned by the Workflow Manager is a detached state value. Internal execution state may use
+ * the same contract while changing as workflow events are applied.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
  */
-@Internal
 public interface WorkflowState extends DescribableComponent {
 
     /**
@@ -47,11 +48,11 @@ public interface WorkflowState extends DescribableComponent {
     /**
      * Returns the workflow definition identity, including its current definition version.
      * <p>
-     * Use {@link MessageType#version()} to obtain the definition version.
+     * Use {@link VersionedType#version()} to obtain the definition version.
      *
      * @return workflow definition identity
      */
-    MessageType workflowDefinitionId();
+    VersionedType workflowDefinitionId();
 
     /**
      * Retrieves a list of step names in the workflow execution.
@@ -66,6 +67,7 @@ public interface WorkflowState extends DescribableComponent {
      * @param stepName name of the step
      * @return workflow step
      */
+    @Nullable
     WorkflowStep getStep(String stepName);
 
     /**
@@ -114,6 +116,13 @@ public interface WorkflowState extends DescribableComponent {
      * @return {@code true} iff a migration step was recorded for this {@code changeId}
      */
     boolean hasVersionMigrationStep(String changeId);
+
+    /**
+     * Returns the recorded version migrations by change identifier.
+     *
+     * @return immutable map of recorded version migrations
+     */
+    Map<String, String> versionMigrations();
 
     /**
      * Guards against invoking any primitive when the workflow has already reached a terminal state. Rethrows the

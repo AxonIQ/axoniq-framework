@@ -105,8 +105,8 @@ class TransactionScopeWorkflowTest extends AbstractWorkflowIntegrationTestBase<S
 
         // The scheduled wake arrives; the instance completes and no transaction leaks.
         await().atMost(15, TimeUnit.SECONDS).untilAsserted(() -> {
-            assertThat(workflowHistoryRepository.findAll()).isNotEmpty();
-            assertThat(workflowHistoryRepository.findAll())
+            assertThat(workflowHistoryRepository.findAll().join()).isNotEmpty();
+            assertThat(workflowHistoryRepository.findAll().join())
                     .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
         await().atMost(5, TimeUnit.SECONDS).untilAsserted(() ->

@@ -28,13 +28,13 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResu
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
-import org.axonframework.messaging.core.MessageType;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
@@ -133,7 +133,7 @@ class VersionDelegateTest {
     }
 
     private void givenWorkflowDefinitionVersion(String version) {
-        when(state.workflowDefinitionId()).thenReturn(new MessageType("TestWorkflow", version));
+        when(state.workflowDefinitionId()).thenReturn(VersionedType.of("TestWorkflow", version));
     }
 
     @Test

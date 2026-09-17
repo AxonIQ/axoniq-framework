@@ -83,7 +83,7 @@ class ParallelExecutionsWorkflowTest extends AbstractWorkflowIntegrationTestBase
         testDriver.historyMatches(h -> h.workflowId().equals("customer-456")
                 && h.state().workflowStatus() == WorkflowStatus.COMPLETED);
 
-        var histories = workflowHistoryRepository.findAll();
+        var histories = workflowHistoryRepository.findAll().join();
         assertThat(histories)
                 .extracting(WorkflowHistory::workflowId)
                 .containsExactlyInAnyOrder("order-123", "customer-456");

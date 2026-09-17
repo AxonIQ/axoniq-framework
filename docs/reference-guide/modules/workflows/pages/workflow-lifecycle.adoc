@@ -201,6 +201,25 @@ As the log shows, the last event recorded for `shipOrder` and `notifyCustomer` i
 
 If the workflow body itself is blocked on the interrupted step (for example inside `awaitExecute(...)` or `.await()`), that call unblocks with a `StepInterruptedException`, which the body can catch (or its parent `StepFailedException`) to run compensation or cleanup. This is purely an in-body signal: it does not change what is recorded, the step's last event-log entry still stays `Started`.
 
+== External cancellation
+
+Use `WorkflowManager` when an application, operator, or support tool needs to request cancellation from outside the
+workflow. It targets a live workflow by a `WorkflowStateQuery` and returns a `CompletableFuture`:
+
+[source,java]
+----
+workflowManager.findOne(WorkflowStateQuery.byWorkflowId(orderId))
+               .requestWorkflowCancellation(null);
+----
+
+The result has the same workflow-level effect as `ctx.cancel()`: running steps are interrupted and the workflow
+records one `CANCELLED` terminal event. The difference is where the decision originates. `ctx.cancel()` is called by
+workflow logic, while `WorkflowManager` delivers an outside-in request to an existing live execution.
+
+The manager can also cancel one step or all running steps without terminating the workflow. It never sends cancellation
+requests to historic instances. See xref:workflow-manager.adoc[Managing Workflow Instances] for querying, state reads,
+and all cancellation operations.
+
 [[complete-with-running-steps]]
 === Normal completion with running steps
 

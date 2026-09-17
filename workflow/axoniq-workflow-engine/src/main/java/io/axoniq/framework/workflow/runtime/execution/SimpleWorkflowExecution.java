@@ -37,8 +37,8 @@ import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejectedException;
 import org.axonframework.eventsourcing.eventstore.ConsistencyMarker;
 import org.axonframework.messaging.core.Context;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.jspecify.annotations.Nullable;
@@ -162,7 +162,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                                                     "Workflow name must not be null");
 
         this.workflowName = configuredName.isEmpty() ? workflowId : configuredName;
-        var workflowDefinitionId = new MessageType(
+        var workflowDefinitionId = VersionedType.of(
                 new QualifiedName(configuredName),
                 workflowConfiguration.workflowVersion()
         );

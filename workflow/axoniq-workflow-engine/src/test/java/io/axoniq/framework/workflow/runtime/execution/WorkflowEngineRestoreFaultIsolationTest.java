@@ -25,8 +25,8 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecut
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowState;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
 import org.axonframework.common.configuration.ComponentNotFoundException;
@@ -207,7 +207,7 @@ class WorkflowEngineRestoreFaultIsolationTest {
     private WorkflowState restorable(String workflowId, String workflowName, String recordedVersion) {
         var state = mock(WorkflowState.class);
         when(state.workflowDefinitionId())
-                .thenReturn(new MessageType(new QualifiedName(workflowName), recordedVersion));
+                .thenReturn(VersionedType.of(new QualifiedName(workflowName), recordedVersion));
         when(state.workflowStatus()).thenReturn(WorkflowStatus.STARTED);
         when(state.payload()).thenReturn(Map.of("id", workflowId));
         statesById.put(workflowId, state);

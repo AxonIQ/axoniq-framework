@@ -104,7 +104,7 @@ class PublishWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWork
 
         // then: both workflows complete
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
-            var histories = workflowHistoryRepository.findAll();
+            var histories = workflowHistoryRepository.findAll().join();
             assertThat(histories).hasSize(2);
             assertThat(histories).allMatch(h -> h.state().workflowStatus() == WorkflowStatus.COMPLETED);
         });
@@ -149,7 +149,7 @@ class PublishWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWork
     }
 
     private WorkflowState stateOf(String workflowId) {
-        return workflowHistoryRepository.findAll()
+        return workflowHistoryRepository.findAll().join()
                                         .stream()
                                         .map(h -> h.state())
                                         .filter(s -> workflowId.equals(s.workflowId()))
@@ -198,13 +198,16 @@ class PublishWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWork
 
     @Event(namespace = "io.acme", name = "OrderPlaced")
     public record OrderPlaced(String orderId) {
+
     }
 
     @Event(namespace = "io.acme", name = "OrderApproved")
     public record OrderApproved(String orderId, String approvedBy) {
+
     }
 
     @Event(namespace = "io.acme", name = "ApprovalAnnounced")
     public record ApprovalAnnounced(String orderId) {
+
     }
 }

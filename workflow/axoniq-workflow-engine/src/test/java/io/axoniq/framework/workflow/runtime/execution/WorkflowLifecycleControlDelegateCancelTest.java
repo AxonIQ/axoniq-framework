@@ -28,8 +28,8 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStep;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
-import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
@@ -199,6 +199,12 @@ class WorkflowLifecycleControlDelegateCancelTest {
         when(workflowExecution.state()).thenReturn(state);
         var runningFuture = new CompletableFuture<Void>();
         runningSteps.register("step-a", runningFuture);
+        // The awaited durable record arrives: the step is terminal once awaitStateChange returns.
+        var cancelledStep = new WorkflowStep("step-a", StepStatus.CANCELLED, null, null, java.time.Instant.now(), null);
+        doAnswer(invocation -> {
+            when(state.getStep("step-a")).thenReturn(cancelledStep);
+            return null;
+        }).when(workflowExecution).awaitStateChange(any());
 
         boolean result = delegate.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
 
@@ -206,6 +212,38 @@ class WorkflowLifecycleControlDelegateCancelTest {
         assertThat(runningFuture).isCompletedExceptionally();
         verify(workflowExecution).awaitStateChange(any());
         verify(eventSink, never()).publish(any(ProcessingContext.class), any(EventMessage.class));
+    }
+
+    @Test
+    void cancelStepAnswersFalseWhenTheDriverIsInterruptedBeforeTheTerminalRecord() throws InterruptedException {
+        // A rejected append (another writer owns the instance) or a shutdown interrupts the driver while it awaits
+        // the terminal record. Nothing of ours is durable then, so the answer is false, not true.
+        var state = mock(WorkflowState.class);
+        var step = new WorkflowStep("step-a", StepStatus.STARTED, null, null, java.time.Instant.now(), null);
+        when(state.containsStep("step-a")).thenReturn(true);
+        when(state.getStep("step-a")).thenReturn(step);
+        when(workflowExecution.state()).thenReturn(state);
+        runningSteps.register("step-a", new CompletableFuture<>());
+        doThrow(new InterruptedException("driver interrupted")).when(workflowExecution).awaitStateChange(any());
+
+        boolean result = delegate.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
+
+        assertThat(result).isFalse();
+        assertThat(Thread.interrupted()).as("the interrupt flag is restored for the caller").isTrue();
+    }
+
+    @Test
+    void cancelStepAnswersFalseWhenTheStepIsStillNotTerminalAfterTheWait() throws InterruptedException {
+        var state = mock(WorkflowState.class);
+        var step = new WorkflowStep("step-a", StepStatus.STARTED, null, null, java.time.Instant.now(), null);
+        when(state.containsStep("step-a")).thenReturn(true);
+        when(state.getStep("step-a")).thenReturn(step);
+        when(workflowExecution.state()).thenReturn(state);
+        runningSteps.register("step-a", new CompletableFuture<>());
+
+        boolean result = delegate.cancelStep(cancelStep("step-a", null, eventNameCustomizer));
+
+        assertThat(result).isFalse();
     }
 
     @Test
@@ -243,7 +281,7 @@ class WorkflowLifecycleControlDelegateCancelTest {
     private EventSourcedWorkflowState workflowState(Map<WorkflowStatus, WorkflowStatusChangeListener> listeners) {
         return new EventSourcedWorkflowState("wf-1",
                                              Map.of(),
-                                             new MessageType(new QualifiedName("test-workflow"), "0.0.1"),
+                                             VersionedType.of(new QualifiedName("test-workflow"), "0.0.1"),
                                              workflowContext,
                                              listeners);
     }
