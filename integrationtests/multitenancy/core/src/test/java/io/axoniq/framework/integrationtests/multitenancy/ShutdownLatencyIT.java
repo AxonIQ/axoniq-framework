@@ -59,7 +59,6 @@ class ShutdownLatencyIT {
     @BeforeEach
     void setUp() {
         INFRASTRUCTURE.start();
-        INFRASTRUCTURE.purgeData();
         contextManager = INFRASTRUCTURE.getContextManager();
         contextManager.deleteAllCustomContexts();
         contextManager.createContext(tenantA);
@@ -73,7 +72,6 @@ class ShutdownLatencyIT {
         if (application != null) {
             application.shutdown();
         }
-        INFRASTRUCTURE.purgeData();
         contextManager.deleteAllCustomContexts();
         INFRASTRUCTURE.stop();
     }

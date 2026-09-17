@@ -19,16 +19,13 @@
 
 package io.axoniq.framework.messaging.multitenancy.deadletter;
 
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
-import org.axonframework.common.configuration.SearchScope;
-import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorConfiguration;
 
-import static org.axonframework.common.configuration.DecoratorDefinition.forType;
+import java.lang.reflect.InvocationTargetException;
 
 /**
  * Makes an enabled dead-letter queue configuration tenant-aware by routing its configured queue factory per tenant.
@@ -43,6 +40,10 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
 
     private static final String DEAD_LETTER_QUEUE_CONFIGURATION =
             "io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration";
+    private static final String DEAD_LETTER_ENHANCER_DELEGATE =
+            "io.axoniq.framework.messaging.multitenancy.deadletter.DeadLetterMultiTenancyConfigurationEnhancerDelegate";
+
+    private final ClassLoader classLoader;
 
     /**
      * The order at which dead-letter queue support is configured after the general and Axon Server multi-tenancy
@@ -50,33 +51,27 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
      */
     public static final int ENHANCER_ORDER = MultiTenancyConfigurationDefaults.ENHANCER_ORDER + 4;
 
-    private static final String EXP_MSG = "A TenantAwareSequencedDeadLetterQueueFactory must be configured when multi-tenancy and the dead-letter queue are enabled.";
+    /**
+     * Creates a new instance of the {@code DeadLetterMultiTenancyConfigurationEnhancer} that uses the class loader
+     * which loaded this class to check for the presence of the optional dead-letter queue module.
+     */
+    public DeadLetterMultiTenancyConfigurationEnhancer() {
+        this(DeadLetterMultiTenancyConfigurationEnhancer.class.getClassLoader());
+    }
+
+    /**
+     * Creates a new instance of the {@code DeadLetterMultiTenancyConfigurationEnhancer} that uses the supplied class
+     * loader to check for the presence of the optional dead-letter queue module.
+     *
+     * @param classLoader the class loader to use for checking the presence of the optional dead-letter queue module
+     */
+    DeadLetterMultiTenancyConfigurationEnhancer(ClassLoader classLoader) {
+        this.classLoader = classLoader;
+    }
 
     @Override
     public int order() {
         return ENHANCER_ORDER;
-    }
-
-    private static void registerDeadLetterQueueDecorator(ComponentRegistry componentRegistry) {
-        componentRegistry.registerDecorator(
-                forType(PooledStreamingEventProcessorConfiguration.class).with(
-                        (config, name, processorConfiguration) -> {
-                            DeadLetterQueueConfiguration dlqConfig =
-                                    processorConfiguration.extension(DeadLetterQueueConfiguration.class);
-                            if (dlqConfig != null && dlqConfig.isEnabled()) {
-                                TenantAwareSequencedDeadLetterQueueFactory tenantFactory =
-                                        config.getOptionalComponent(TenantAwareSequencedDeadLetterQueueFactory.class)
-                                              .orElseThrow(() -> new AxonConfigurationException(EXP_MSG));
-
-                                dlqConfig.factory(new TenantRoutingSequencedDeadLetterQueueFactory(
-                                        tenantFactory,
-                                        config.getComponent(TenantRoutingSequencedDeadLetterQueueRegistry.class)
-                                ));
-                            }
-                            return processorConfiguration;
-                        }
-                )
-        );
     }
 
     /**
@@ -96,12 +91,29 @@ public class DeadLetterMultiTenancyConfigurationEnhancer implements Configuratio
 
     @Override
     public void enhance(ComponentRegistry componentRegistry) {
-        if (!isDeadLetterQueuePresent(getClass().getClassLoader())) {
+        // Keep optional dead-letter queue types out of the ServiceLoader provider's linkage surface.
+        // The delegate is loaded reflectively only when the optional module is available.
+        if (!isDeadLetterQueuePresent(classLoader)) {
             return;
         }
-        componentRegistry.registerIfNotPresent(TenantRoutingSequencedDeadLetterQueueRegistry.class,
-                                               configuration -> new TenantRoutingSequencedDeadLetterQueueRegistry(),
-                                               SearchScope.ALL);
-        registerDeadLetterQueueDecorator(componentRegistry);
+        try {
+            Class<?> delegate = Class.forName(DEAD_LETTER_ENHANCER_DELEGATE, false, classLoader);
+            delegate.getDeclaredMethod("enhance", ComponentRegistry.class).invoke(null, componentRegistry);
+        } catch (ClassNotFoundException | LinkageError e) {
+            throw new AxonConfigurationException(
+                    "Failed to load tenant-aware dead-letter queue support delegate.", e
+            );
+        } catch (ReflectiveOperationException e) {
+            Throwable cause = e instanceof InvocationTargetException invocation
+                    ? invocation.getCause()
+                    : e;
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new AxonConfigurationException("Failed to configure tenant-aware dead-letter queue support.", cause);
+        }
     }
 }

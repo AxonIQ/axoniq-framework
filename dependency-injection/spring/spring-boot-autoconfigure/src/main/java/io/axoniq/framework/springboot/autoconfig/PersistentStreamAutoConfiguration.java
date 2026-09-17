@@ -23,7 +23,6 @@ import io.axoniq.framework.axonserver.connector.api.AxonServerConfiguration;
 import io.axoniq.framework.axonserver.connector.event.DefaultPersistentStreamEventSourceFactory;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamEventSourceFactory;
 import io.axoniq.framework.axonserver.connector.event.PersistentStreamScheduledExecutorBuilder;
-import io.axoniq.framework.messaging.eventhandling.deadletter.DeadLetterQueueConfiguration;
 import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.messaging.core.SubscribableEventSource;
 import org.axonframework.extension.spring.config.EventProcessorSettings;
@@ -50,7 +49,7 @@ import org.springframework.context.annotation.Bean;
  * @see PersistentStreamEventSourceFactory
  */
 @AutoConfiguration(
-        after = {AxonServerAutoConfiguration.class, DeadLetterQueueConfiguration.class},
+        after = {AxonServerAutoConfiguration.class, DeadLetterQueueAutoConfiguration.class},
         before = EventProcessingAutoConfiguration.class
 )
 public class PersistentStreamAutoConfiguration {
