@@ -168,6 +168,10 @@ public class WorkflowEventProcessingRegistrationEnhancer implements Configuratio
     private BiFunction<Configuration, PooledStreamingEventProcessorConfiguration,
             PooledStreamingEventProcessorConfiguration> processorCustomization() {
         return (cfg, processorConfiguration) -> withSegmentCount(processorConfiguration)
+                // Start at the head of the stream. A workflow reacts to events published after it was deployed.
+                // The pooled streaming default (first token) would start a workflow for every historical start
+                // event, which duplicates work still owned by the process it replaces.
+                .initialToken(source -> source.latestToken(null))
                 .eventCriteria(set -> set.isEmpty()
                         ? EventCriteria.havingAnyTag()
                         : EventCriteria.havingAnyTag().andBeingOneOfTypes(set))
