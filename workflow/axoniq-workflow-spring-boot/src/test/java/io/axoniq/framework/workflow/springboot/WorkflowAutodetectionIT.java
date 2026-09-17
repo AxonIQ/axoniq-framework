@@ -21,8 +21,7 @@ package io.axoniq.framework.workflow.springboot;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowConfigurationRegistry;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
@@ -62,7 +61,7 @@ public class WorkflowAutodetectionIT {
     private TestWorkflow testWorkflow;
 
     @Test
-    void should_autodetect_workflow() {
+    void autodetectsWorkflow() {
 
         var configurations = registry.getWorkflowsConfigurations(new QualifiedName("io.namespace.TestEvent"));
         assertThat(configurations).isNotNull();
@@ -79,9 +78,11 @@ public class WorkflowAutodetectionIT {
         ).isTrue();
         assertThat(conf.configuration().workflowContextFactory()).isInstanceOf(SimpleWorkflowContextFactory.class);
 
-        var ctx = mock(WorkflowExecutionOperations.class);
-        //noinspection unchecked,rawtypes
-        ((WorkflowDefinition) conf.configuration().workflowDefinition()).accept(ctx);
+        var ctx = mock(SimpleWorkflowContext.class);
+        @SuppressWarnings("unchecked")
+        WorkflowConfiguration<SimpleWorkflowContext> workflowConfiguration =
+                (WorkflowConfiguration<SimpleWorkflowContext>) conf.configuration();
+        workflowConfiguration.workflowDefinition().accept(ctx);
 
         assertThat(testWorkflow.executed).isTrue();
     }
