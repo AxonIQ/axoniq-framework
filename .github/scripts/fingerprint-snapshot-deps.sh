@@ -12,7 +12,17 @@ FINGERPRINT_FILE="axon-snapshot.fingerprint"
 LIST_FILE=".snapshot-deps.txt"
 
 echo "Resolving reactor dependencies (forcing a fresh SNAPSHOT check)..."
-./mvnw -B -U -ntp -q dependency:list -DoutputAbsoluteArtifactFilename=true -Dsort=true -DoutputFile="$LIST_FILE"
+# -fae: a PR that adds a new module depending on another new module in the same PR can't have
+# that dependency resolved here -- neither module has ever been built or published anywhere yet,
+# and this standalone goal (unlike the real build) doesn't compile/package sibling reactor
+# modules to satisfy it. -fae lets every module whose dependencies DO resolve still get listed
+# instead of aborting the whole run; the failure itself is non-fatal below, since this script only
+# improves cache precision and must never be able to fail the build on its own.
+if ! ./mvnw -B -U -ntp -fae -q dependency:list -DoutputAbsoluteArtifactFilename=true -Dsort=true -DoutputFile="$LIST_FILE"; then
+  echo "Warning: dependency:list failed to resolve one or more modules' dependencies" >&2
+  echo "(commonly a new module depending on another new, not-yet-published module added" >&2
+  echo "in the same reactor). Continuing with whichever modules resolved successfully." >&2
+fi
 
 FINGERPRINT_TMP=$(mktemp)
 MODULE_DIRS_TMP=$(mktemp)
@@ -23,6 +33,10 @@ trap 'rm -f "$FINGERPRINT_TMP" "$MODULE_DIRS_TMP"' EXIT
 # like _multitenancy_poc that happen to contain their own pom.xml files.
 find . -name "$LIST_FILE" -exec dirname {} \; > "$MODULE_DIRS_TMP"
 
+# The trailing "|| true": grep exits non-zero when zero lines match, which is the expected
+# outcome whenever this reactor has no external SNAPSHOT dependencies at all (e.g. axon-framework
+# pinned to a release) -- under pipefail that would otherwise abort the script before it reaches
+# the graceful empty-result handling below.
 find . -name "$LIST_FILE" -exec cat {} + \
   | sed -E 's/ -- module.*$//' \
   | grep -E ':[0-9][^:]*-SNAPSHOT:(compile|test|runtime|provided|system):' \
@@ -35,7 +49,7 @@ find . -name "$LIST_FILE" -exec cat {} + \
       base=$(basename "$artifact_path")
       hash=$(cd "$dir" && sha256sum -- "$base" | cut -d' ' -f1)
       echo "$base $hash"
-    done | sort > "$FINGERPRINT_TMP"
+    done | sort > "$FINGERPRINT_TMP" || true
 
 find . -name "$LIST_FILE" -delete
 
