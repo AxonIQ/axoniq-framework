@@ -83,7 +83,7 @@ jobs:
           set -o pipefail
           ./mvnw -B -U -ntp -Dstyle.color=always -fae -Possrh -Pintegration-test -Djacoco.skip=true clean verify \
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
-          -Dparallel=classes -DthreadCount=1 -DforkCount=2 2>&1 | tee build.log
+          -Dparallel=classes -DthreadCount=1 -DforkCount=2 -DforkedProcessTimeoutInSeconds=600 2>&1 | tee build.log
         env:
           AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
 
@@ -93,7 +93,7 @@ jobs:
           set -o pipefail
           ./mvnw -B -U -ntp -Dstyle.color=always -fae -Possrh -Dcoverage clean verify \
           -Dsurefire.rerunFailingTestsCount=5 -Dfailsafe.rerunFailingTestsCount=5 \
-          -Dparallel=classes -DthreadCount=1 -DforkCount=2 2>&1 | tee build.log
+          -Dparallel=classes -DthreadCount=1 -DforkCount=2 -DforkedProcessTimeoutInSeconds=600 2>&1 | tee build.log
         env:
           AXONIQ_LICENSE: ${{ secrets.AXON_SERVER_LICENSE }}
 
