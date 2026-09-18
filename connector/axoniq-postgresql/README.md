@@ -45,6 +45,9 @@ configuration.start();
 
 The constructor will create two tables with (for now) the fixed names `events` and 
 `consistency_tags`, with appropriate indices, as well as a sequence called `events_monotonic_seq`.
+This behavior is controlled by an optional `SchemaInitialization` constructor argument
+(`CREATE_IF_MISSING` by default, plus `VALIDATE` and `SKIP`), also configurable in Spring
+Boot through the `axon.postgresql.schema-initialization` property.
 
 For any other details concerning Axon, be sure to check [Axoniq Docs](https://docs.axoniq.io/home/).
 
