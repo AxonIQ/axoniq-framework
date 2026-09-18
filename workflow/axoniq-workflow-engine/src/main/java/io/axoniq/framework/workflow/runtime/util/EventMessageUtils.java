@@ -26,6 +26,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowError;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
+import org.axonframework.common.ClockUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.GenericMessage;
 import org.axonframework.messaging.core.MessageType;
@@ -70,11 +71,14 @@ public class EventMessageUtils {
                                              MessageType type,
                                              @Nullable Object payload,
                                              Metadata metadata) {
-        // Timestamp from the engine's Clock component, not the global ClockUtils: step deadlines are compared with
-        // that clock, and a fixture advances it. Both are the system clock in production.
-        var clock = context.processingContext().component(Clock.class);
-        return new GenericEventMessage(new GenericMessage(type, payload, metadata), clock::instant)
-                .withConverter(context.processingContext().component(EventConverter.class));
+        // Timestamp from the engine's Clock component: step deadlines are compared with that clock, and a fixture
+        // advances it. Both are the system clock in production. Without the component (a bare processing context in
+        // a unit test) the framework's default clock applies.
+        var processingContext = context.processingContext();
+        var clock = processingContext.component(Clock.class);
+        var timestamp = clock != null ? clock : ClockUtils.get();
+        return new GenericEventMessage(new GenericMessage(type, payload, metadata), timestamp::instant)
+                .withConverter(processingContext.component(EventConverter.class));
     }
 
     /**
