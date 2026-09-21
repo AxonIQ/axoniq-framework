@@ -4,6 +4,12 @@ on:
   pull_request:
     paths-ignore:
       - 'docs/**'
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull request number to attribute the build-status comment to'
+        required: true
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -152,7 +158,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           {
-            echo "### Build status ([run ${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}), commit ${{ github.event.pull_request.head.sha }})"
+            echo "### Build status ([run ${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}), commit ${{ github.event.pull_request.head.sha || github.sha }})"
             for dir in reports/build-report-jdk*/; do
               jdk="$(basename "$dir" | sed 's/build-report-jdk//')"
               echo
@@ -163,4 +169,4 @@ jobs:
               fi
             done
           } > combined-report.md
-          gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --edit-last --create-if-none --body-file combined-report.md
+          gh pr comment "${{ github.event.pull_request.number || inputs.pr_number }}" --repo "${{ github.repository }}" --edit-last --create-if-none --body-file combined-report.md
