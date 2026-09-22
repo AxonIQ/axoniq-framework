@@ -21,7 +21,9 @@ package io.axoniq.framework.springboot.autoconfig;
 
 import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
+import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults;
+import io.axoniq.framework.messaging.multitenancy.configuration.StaticTenantConnectPredicate;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.ConfigurationEnhancer;
 import org.slf4j.Logger;
@@ -30,9 +32,13 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.AnyNestedCondition;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
+import org.springframework.core.env.Environment;
+
+import java.util.Optional;
 
 /**
  * Spring Boot auto-configuration wiring multi-tenancy support into Spring Boot applications.
@@ -72,6 +78,37 @@ public class MultiTenancyAutoConfiguration {
      * multi-tenancy enhancer block: its siblings all order themselves at that value plus a positive offset.
      */
     private static final int DISABLE_ENHANCER_ORDER = MultiTenancyConfigurationDefaults.ENHANCER_ORDER - 1;
+    private static final String LEGACY_TENANTS_PROPERTY = "axon.axonserver.contexts";
+
+    /**
+     * Creates a predicate that accepts only the tenant identifiers configured through
+     * {@value StaticTenantConnectPredicate#TENANTS_PROPERTY}.
+     * <p>
+     * An application-provided {@link TenantConnectPredicate} takes precedence, allowing applications that need
+     * dynamic selection to retain full control over which contexts become tenants.
+     *
+     * @param environment the application environment containing the tenant identifiers
+     * @return a predicate accepting the configured tenant identifiers
+     */
+    @Bean
+    @Conditional(StaticTenantPropertyConfigured.class)
+    @ConditionalOnMissingBean(TenantConnectPredicate.class)
+    public TenantConnectPredicate staticTenantConnectPredicate(
+            Environment environment
+    ) {
+        String tenantIds = Optional.ofNullable(environment.getProperty(StaticTenantConnectPredicate.TENANTS_PROPERTY))
+                .or(() -> Optional.ofNullable(environment.getProperty(LEGACY_TENANTS_PROPERTY)))
+                .orElseThrow(() -> new IllegalStateException(
+                        "A static tenant property was detected, but no tenant identifiers could be read"));
+        if (environment.containsProperty(StaticTenantConnectPredicate.TENANTS_PROPERTY)
+                && environment.containsProperty(LEGACY_TENANTS_PROPERTY)) {
+            logger.warn("Both '{}' and deprecated '{}' are configured; using '{}'.",
+                        StaticTenantConnectPredicate.TENANTS_PROPERTY,
+                        LEGACY_TENANTS_PROPERTY,
+                        StaticTenantConnectPredicate.TENANTS_PROPERTY);
+        }
+        return StaticTenantConnectPredicate.from(tenantIds);
+    }
 
     /**
      * Switches multi-tenancy off, for either of the two independent reasons it should not apply: it is explicitly
@@ -130,5 +167,21 @@ public class MultiTenancyAutoConfiguration {
 
         @ConditionalOnProperty(name = "axon.axonserver.enabled", havingValue = "false")
         private static final class AxonServerDisabled {}
+    }
+
+    /**
+     * Matches when either the current or the deprecated static tenant property is configured.
+     */
+    static class StaticTenantPropertyConfigured extends AnyNestedCondition {
+
+        StaticTenantPropertyConfigured() {
+            super(ConfigurationPhase.REGISTER_BEAN);
+        }
+
+        @ConditionalOnProperty(StaticTenantConnectPredicate.TENANTS_PROPERTY)
+        private static final class CurrentPropertyConfigured {}
+
+        @ConditionalOnProperty(LEGACY_TENANTS_PROPERTY)
+        private static final class LegacyPropertyConfigured {}
     }
 }
