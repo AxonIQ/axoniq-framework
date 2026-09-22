@@ -370,6 +370,41 @@ Lifecycle listeners are called *after* the terminal event is published.
 They run in the context of the workflow execution and have access to the full workflow payload.
 ====
 
+== Method parameters
+
+Both the `@Workflow` method and annotation-based lifecycle listeners can declare additional parameters beyond
+the workflow context, resolved the same way every other Axon Framework annotated handler resolves its
+parameters:
+
+[source,java]
+----
+@WorkflowCompletedHandler
+public void onCompleted(WorkflowStatus status, SimpleWorkflowContext ctx, OrderFulfillmentWorkflow self) {
+    logger.info("Order {} fulfilled successfully! (workflow instance: {})", ctx.workflowPayload().get("orderId"), self);
+}
+----
+
+The following parameters are supported for workflow related handler methods:
+
+[cols="1,2"]
+|===
+|Parameter type |Resolved to
+
+|`WorkflowContext` (or your custom subtype)
+|The workflow context of the invocation in progress.
+
+|`WorkflowStatus`
+|The status that triggered the listener. Only available on lifecycle listener methods.
+Declaring it on the `@Workflow` method itself has no matching value, so that method won't be recognized as a handler.
+
+|The workflow instance's own type (or a supertype)
+|The workflow-annotated component instance itself, letting a listener call other methods or read fields on it.
+
+|Any type with a public constructor accepting your `WorkflowContext` type
+|Your `WorkflowContext`, wrapped in that type. Useful for giving a lifecycle listener the same convenience type
+(for example, `SimpleWorkflowContext`) the `@Workflow` method itself uses.
+|===
+
 == Event versioning
 
 Every event a workflow emits—started, step started/completed/failed/cancelled/retrying/retry-started/timed-out,
