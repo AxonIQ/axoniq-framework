@@ -1,5 +1,0 @@
-org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-  org.axonframework.extensions.multitenancy.autoconfig.MultiTenantPersistentStreamAutoConfiguration,\
-  org.axonframework.extensions.multitenancy.autoconfig.MultiTenancyAutoConfiguration,\
-  org.axonframework.extensions.multitenancy.autoconfig.MultiTenancyAxonServerAutoConfiguration
-

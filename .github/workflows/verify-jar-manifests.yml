@@ -1,0 +1,61 @@
+name: Verify JAR Manifests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 1 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  automatic-module-names:
+    name: Verify Automatic-Module-Name manifest entries
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: 'zulu'
+          java-version: 21
+          cache: "maven"
+
+      - name: Package JARs
+        run: ./mvnw -B -ntp -DskipTests -Djacoco.skip=true package
+
+      - name: Verify Automatic-Module-Name
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          excluded_jar_patterns=(
+            "*-tests.jar"
+            "*-sources.jar"
+            "*-javadoc.jar"
+            "*-integrationtests-*.jar"
+            "*/docs/_samples/target/axoniq-docs-samples-*.jar"
+          )
+
+          missing=0
+          while IFS= read -r jar; do
+            for excluded_pattern in "${excluded_jar_patterns[@]}"; do
+              case "$jar" in
+                $excluded_pattern)
+                  continue 2
+                  ;;
+              esac
+            done
+
+            if ! unzip -p "$jar" META-INF/MANIFEST.MF | grep -q '^Automatic-Module-Name:'; then
+              echo "Missing Automatic-Module-Name: $jar"
+              missing=1
+            fi
+          done < <(find . -path '*/target/*.jar' -type f | sort)
+
+          exit "$missing"

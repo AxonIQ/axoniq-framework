@@ -1,0 +1,303 @@
+= Waiting for Events
+:navtitle: Waiting for Events
+
+Many business processes need to pause and wait for something external—a payment confirmation, an approval decision, a callback from a third-party system.
+The `waitForEvent` / `awaitEvent` pair lets your workflow suspend until a matching event arrives.
+
+[NOTE]
+====
+`BaseWorkflowContext.waitForEvent(...)` is the canonical non-blocking primitive.
+`BaseWorkflowContext.awaitEvent(...)` blocks and returns the event payload map, while `SimpleWorkflowContext.awaitEvent(...)` adds a typed convenience overload on top of the same primitive.
+====
+
+[NOTE]
+====
+The events that `waitForEvent` and `awaitEvent` listen for are standard Axon Framework events.
+They can be published from anywhere—a command handler, an `EventGateway`, a REST controller, a webhook endpoint, or any other component that has access to the event bus.
+For example, a payment provider callback could publish a `PaymentConfirmed` event directly via `eventGateway.publish(...)`, and that will unblock the waiting workflow.
+Another workflow can publish it too, with xref:publishing-events.adoc[`awaitPublish`].
+====
+
+== The `awaitEvent` method
+
+After initiating payment, we need to wait for a `PaymentConfirmed` event before continuing:
+
+[source,java]
+----
+var confirmation = ctx.awaitEvent("awaitPayment",
+        PaymentConfirmed.class,                                       // <1>
+        associate(payloadProperty("orderId"),
+                  equalsTo(ctx.workflowPayload().get("orderId"))),     // <2>
+        step -> step.timeout(Duration.ofMinutes(15)));                 // <3>
+----
+
+<.> The event type to wait for.
+The engine subscribes to the event bus and watches for events of this type.
+<.> Association conditions that scope the wait to this workflow instance.
+<.> Maximum time to wait.
+After 15 minutes, the underlying wait step times out.
+
+When a matching event arrives, the workflow resumes and `awaitEvent` returns the deserialized event object.
+
+Here's what the event store looks like when a `PaymentConfirmed` event arrives before the timeout:
+
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="awaitEvent — happy path">
+1 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:00Z", "eventName": "PaymentConfirmed", "associations": ["payload:orderId=123"], "timeoutTime": "2026-03-25T10:15:00Z"}
+2 external PaymentConfirmed {"orderId": 123, "transactionId": "txn-456"}
+3 completed AwaitPaymentCompleted {"orderId": 123, "transactionId": "txn-456"}
+  </div>
+</div>
+++++
+
+The STARTED event records when the wait began, which event type is expected, the association DSL, and the
+calculated timeout instant.
+These fields make the outstanding wait fully inspectable and replayable.
+When the external `PaymentConfirmed` event arrives, it unblocks the workflow and the matched payload is recorded in the
+COMPLETED event.
+
+If no matching event arrives within 15 minutes:
+
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="awaitEvent — timeout">
+1 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:00Z", "eventName": "PaymentConfirmed", "associations": ["payload:orderId=123"], "timeoutTime": "2026-03-25T10:15:00Z"}
+2 timedout AwaitPaymentTimedOut {"timeout": "2026-03-25T10:15:00Z"}
+  </div>
+</div>
+++++
+
+== Filtering with associations
+
+There's a problem with the code above.
+Without filtering, _any_ `PaymentConfirmed` event would wake up _every_ waiting workflow.
+That's clearly not what we want.
+
+Associations let you correlate events to specific workflow instances:
+
+[source,java]
+----
+var confirmation = ctx.awaitEvent("awaitPayment",
+        PaymentConfirmed.class,
+        associate(                                 // <1>
+            payloadProperty("orderId"),            // <2>
+            equalsTo(ctx.workflowPayload().get("orderId"))  // <3>
+        ),
+        step -> step.timeout(Duration.ofMinutes(15)));
+----
+
+<.> `associate(...)` combines a value extractor and a matcher into a serialized association condition.
+<.> `payloadProperty("orderId")` extracts the `orderId` field from the incoming event's payload.
+<.> `equalsTo(...)` creates an equality matcher.
+Only `PaymentConfirmed` events whose `orderId` equals this workflow's `orderId` will match.
+
+The helper produces the canonical association form internally, for example `payload:orderId=123`.
+
+[[_association_dsl]]
+=== Association DSL
+
+Association conditions use this canonical form:
+
+[source,text]
+----
+<source>:<path><operator><value>
+----
+
+Examples:
+
+[source,text]
+----
+payload:paymentReference=123
+metadata:tenantId=acme
+message:timestamp>2026-01-01T12:00:00Z
+----
+
+Rules:
+
+- `source` identifies where the left-hand value comes from. `payload` is the first required qualifier.
+- `path` is source-specific lookup text, such as a payload property or metadata key. This maps to a value retriever.
+- `operator` is resolved through `ValueComparisonOperatorRegistry`.
+- `value` is stored in serialized text form.
+
+[NOTE]
+====
+Without associations, event matching is based solely on the event type.
+For production workflows, you will almost always want to use associations to ensure events reach the correct workflow instance.
+====
+
+== Timeouts
+
+When a `waitForEvent` step times out, it completes with `StepStatus.TIMED_OUT`.
+You can use this to implement fallback logic.
+
+Use `waitForEvent` (non-blocking) and check the result:
+
+[source,java]
+----
+var stepResult = ctx.waitForEvent("awaitPayment",
+        PaymentConfirmed.class,
+        associate(payloadProperty("orderId"),
+                  equalsTo(ctx.workflowPayload().get("orderId"))),
+        step -> step.timeout(Duration.ofMinutes(15)));
+if(stepResult.success()){
+    // handle success
+} else if (stepResult.timeout()) {
+    // handle timeout
+}
+----
+
+[NOTE]
+====
+If you need to branch explicitly on timeout, cancellation, or success, prefer non-blocking `waitForEvent(...)` and inspect the returned `WorkflowStepResult`.
+The blocking helpers are best when your workflow only needs the successful event payload and treats other outcomes as exceptional.
+====
+
+[TIP]
+====
+You can branch on the timeout outcome—cancel the order, retry payment, or escalate to manual review.
+The right strategy depends on your business requirements.
+====
+
+== Waiting for multiple events
+
+`awaitEvent` blocks until a single event arrives.
+If you need to wait for multiple events concurrently, use the non-blocking `waitForEvent` and combine results with a combinator:
+
+[source,java]
+----
+var payment = ctx.waitForEvent("awaitPayment",                       // <1>
+        PaymentConfirmed.class,
+        associate(payloadProperty("orderId"),
+                  equalsTo(ctx.workflowPayload().get("orderId"))),
+        step -> step.timeout(Duration.ofMinutes(15)));
+
+var approval = ctx.waitForEvent("awaitApproval",                     // <1>
+        ManagerApproved.class,
+        associate(payloadProperty("orderId"),
+                  equalsTo(ctx.workflowPayload().get("orderId"))),
+        step -> step.timeout(Duration.ofMinutes(30)));
+
+ctx.allMatch(WorkflowStepResult::isCompleted, payment, approval)   // <2>
+   .await();
+
+logger.info("Both payment and approval received — proceeding!");
+----
+<.> `waitForEvent` returns a `WorkflowStepResult` immediately without blocking—both waits start concurrently.
+<.> `allMatch` blocks until both events have arrived. See xref:step-orchestration.adoc[] for more on combinators.
+
+== Sleep—a simple delay
+
+Sometimes you just need to pause for a while.
+The `sleep` method provides a durable delay:
+
+[source,java]
+----
+ctx.sleep("cooldownPeriod", Duration.ofDays(10)); // <1>
+----
+
+<.> Pauses the workflow for 10 days.
+Under the hood, this is a `waitForEvent` with an event condition that never matches—so it always times out after the specified duration.
+
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="sleep — 10-day delay">
+1 started CooldownPeriodStarted {"startTime": "2026-03-25T10:00:00Z", "eventName": "Void", "associations": [], "timeoutTime": "2026-04-04T10:00:00Z"}
+2 timedout CooldownPeriodTimedOut {"timeout": "2026-04-04T10:00:00Z"}
+  </div>
+</div>
+++++
+
+`sleep` always produces a STARTED followed by a TIMED_OUT—that's by design, since the "event" it waits for never arrives.
+
+=== Non-blocking sleep
+
+`sleep(stepName, customizer)` returns a `WorkflowStepResult` immediately, allowing you to compose delays with other steps using combinators:
+
+[source,java]
+----
+var cooldown = ctx.sleep("cooldown", step -> step.timeout(Duration.ofMinutes(5)));
+var approval = ctx.waitForEvent("approval",
+        ManagerApproved.class,
+        associate(payloadProperty("orderId"),
+                  equalsTo(ctx.workflowPayload().get("orderId"))),
+        step -> step.timeout(Duration.ofHours(1)));
+
+// Proceed when either the cooldown finishes OR approval arrives
+ctx.anyMatch(WorkflowStepResult::isCompleted, cooldown, approval)
+   .await();
+----
+
+== Updated workflow
+
+Here's our workflow with the payment step added.
+Notice the order—we subscribe to the event *before* initiating payment, to avoid a race condition where the confirmation arrives before we're listening:
+
+[source,java]
+.src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
+----
+@Workflow(idProperty = "orderId", startOnEventClass = OrderPlacedEvent.class)
+public void execute(SimpleWorkflowContext ctx) {
+
+    var reservation = ctx.awaitExecute("reserveStock",
+            Map.of(),
+            (pc, input) -> Map.of("reserved", InventoryService.reserveStock()));
+    if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
+        ctx.fail(new RuntimeException("Stock unavailable"));
+        return;
+    }
+
+    // First: subscribe to the payment confirmation event (non-blocking)
+    var paymentConfirmation = ctx.waitForEvent("awaitPayment",       // <1>
+            PaymentConfirmed.class,
+            associate(payloadProperty("orderId"),
+                      equalsTo(ctx.workflowPayload().get("orderId"))),
+            step -> step.timeout(Duration.ofMinutes(15)));
+
+    // Then: initiate payment (non-blocking) — this triggers the external service
+    var paymentInitiation = ctx.execute("initiatePayment",      // <2>
+            ctx.workflowPayload(),
+            PaymentService::initiatePayment,
+            step -> step.timeout(Duration.ofSeconds(30)));
+
+    // Wait for both to complete
+    ctx.allMatch(WorkflowStepResult::isCompleted,                   // <3>
+                 paymentConfirmation, paymentInitiation).await();
+
+    logger.info("Payment initiated and confirmed for order {}",
+                ctx.workflowPayload().get("orderId"));
+}
+----
+
+<.> `waitForEvent` starts listening for `PaymentConfirmed` immediately and returns a `WorkflowStepResult` without blocking.
+<.> `execute` calls the payment service—this may trigger a third-party provider that eventually publishes a `PaymentConfirmed` event.
+<.> `allMatch` blocks until both the payment initiation completes and the confirmation event arrives.
+
+[TIP]
+====
+By subscribing to the event *before* calling the service that produces it, you guarantee no events are missed—even if the external service responds instantly.
+====
+
+Here's the full event store for this workflow:
+
+++++
+<div class="et-player" data-autoplay>
+  <div class="et-src" data-title="OrderFulfillmentWorkflow (123)">
+1 external OrderPlaced {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
+2 started OrderFulfillmentWorkflow#ExecuteStarted
+3 started ReserveStockStarted
+4 completed ReserveStockCompleted {"__reserveStock": true}
+5 started AwaitPaymentStarted {"startTime": "2026-03-25T10:00:05Z", "eventName": "PaymentConfirmed", "associations": ["payload:orderId=123"], "timeoutTime": "2026-03-25T10:15:05Z"}
+6 started InitiatePaymentStarted {"orderId": 123, "customerId": 456, "email": "joe@example.com", "amount": 99.95}
+7 completed InitiatePaymentCompleted
+8 external PaymentConfirmed {"orderId": 123, "transactionId": "txn-456"}
+9 completed AwaitPaymentCompleted {"orderId": 123, "transactionId": "txn-456"}
+10 completed OrderFulfillmentWorkflow#ExecuteCompleted
+  </div>
+</div>
+++++
+
+The event subscription (`AwaitPaymentStarted`) appears *before* `InitiatePaymentStarted`—no race condition.
+The external `PaymentConfirmed` event unblocks the workflow, and its payload is recorded in `AwaitPaymentCompleted`.
+
+Now that we can execute actions and wait for external events, let's dive deeper into xref:understanding-steps.adoc[all the options] you can configure—timeouts, error handling, event naming, payload reducers, and execution semantics.

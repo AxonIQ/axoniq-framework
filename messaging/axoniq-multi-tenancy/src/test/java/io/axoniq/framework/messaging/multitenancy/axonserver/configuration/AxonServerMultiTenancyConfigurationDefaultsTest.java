@@ -95,7 +95,11 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         // when
         AxonConfiguration configuration =
                 MessagingConfigurer.create()
-                                   .componentRegistry(MultiTenancyUtils::disable)
+                                   .componentRegistry(registry -> {
+                                       registry.registerComponent(AxonServerConnectionManager.class,
+                                                                  config -> stubConnectionManager());
+                                       MultiTenancyUtils.disable(registry);
+                                   })
                                    .build();
 
         // then none of the Axon Server-backed multi-tenancy defaults were registered
@@ -178,6 +182,10 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         void acceptsTheDefaultEventSourcingSetupAndYieldsTheRoutingEngine() {
             AxonConfiguration defaultSetup =
                     EventSourcingConfigurer.create()
+                                           .componentRegistry(registry -> registry.registerComponent(
+                                                   AxonServerConnectionManager.class,
+                                                   config -> stubConnectionManager()
+                                           ))
                                            .build();
 
             assertThat(defaultSetup.getComponent(EventStorageEngine.class))
@@ -300,7 +308,9 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
             configuration = MessagingConfigurer.create()
                                                .componentRegistry(registry -> registry.registerComponent(
                                                        TenantComponentProvider.class,
-                                                       config -> componentProvider))
+                                                       config -> componentProvider)
+                                                                 .registerComponent(AxonServerConnectionManager.class,
+                                                                                    config -> stubConnectionManager()))
                                                .build();
         }
 
@@ -446,9 +456,8 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         }
 
         @Test
-        void registersTheDefaultMultiTenantAxonServerQueryBusConnector() {
-            assertThat(configuration.getComponent(QueryBusConnector.class))
-                    .extracting("delegate")
+        void registersTheDefaultMultiTenantAxonServerQueryBusConnector() throws Exception {
+            assertThat(queryBusConnectorDelegate(configuration))
                     .isInstanceOf(MultiTenantAxonServerQueryBusConnector.class);
         }
     }
@@ -555,7 +564,9 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
                                        .componentRegistry(registry -> registry
                                                .registerComponent(TenantProvider.class, config -> tenantProvider)
                                                .registerComponent(TenantEventStorageEngineFactory.class,
-                                                                  config -> replacement))
+                                                                  config -> replacement)
+                                               .registerComponent(AxonServerConnectionManager.class,
+                                                                  config -> stubConnectionManager()))
                                        .build();
             replacementConfiguration.start();
             try {
@@ -609,21 +620,24 @@ class AxonServerMultiTenancyConfigurationDefaultsTest {
         return multiTenantDelegate(configuration.getComponent(CommandBusConnector.class));
     }
 
-    private static MultiTenantAwareComponent queryBusConnectorDelegate(AxonConfiguration configuration)
-            throws Exception {
+    private static MultiTenantAwareComponent queryBusConnectorDelegate(
+            AxonConfiguration configuration
+    ) throws Exception {
         return multiTenantDelegate(configuration.getComponent(QueryBusConnector.class));
     }
 
     private static MultiTenantAwareComponent multiTenantDelegate(Object connector) throws Exception {
-        Field delegateField = delegateField(connector.getClass());
-        if (delegateField == null) {
-            // No decorator in front of it (e.g. PayloadConvertingCommandBusConnector or
-            // PayloadConvertingQueryBusConnector, wired by the AxonServerConnector module's own enhancer): the
-            // resolved component already is the multi-tenant connector itself.
-            return (MultiTenantAwareComponent) connector;
+        Object current = connector;
+        while (!(current instanceof MultiTenantAwareComponent)) {
+            Field delegateField = delegateField(current.getClass());
+            if (delegateField == null) {
+                throw new IllegalStateException(
+                        "No MultiTenantAwareComponent found in the decorator chain starting at " + connector);
+            }
+            delegateField.setAccessible(true);
+            current = delegateField.get(current);
         }
-        delegateField.setAccessible(true);
-        return (MultiTenantAwareComponent) delegateField.get(connector);
+        return (MultiTenantAwareComponent) current;
     }
 
     // The PayloadConvertingCommandBusConnector decorator declares "delegate" on a superclass, not on itself.

@@ -60,6 +60,12 @@
             <artifactId>axoniq-distributed-messaging</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-dead-letter</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
 
         <!-- Core Axon Framework -->
         <dependency>
@@ -111,7 +117,7 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Automatic-Module-Name>io.axoniq.framework.multitenancy</Automatic-Module-Name>
+                            <Automatic-Module-Name>io.axoniq.framework.messaging.multitenancy</Automatic-Module-Name>
                         </manifestEntries>
                     </archive>
                 </configuration>

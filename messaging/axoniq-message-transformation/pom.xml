@@ -78,7 +78,7 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Automatic-Module-Name>io.axoniq.framework.messagetransformation</Automatic-Module-Name>
+                            <Automatic-Module-Name>io.axoniq.framework.messaging.transformation</Automatic-Module-Name>
                         </manifestEntries>
                     </archive>
                 </configuration>

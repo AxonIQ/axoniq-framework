@@ -120,8 +120,8 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
             return connection.commandChannel()
                              .sendCommand(CommandConverter.convertCommandMessage(command, clientId, componentName))
                              .thenCompose(commandResponse -> CommandConverter.convertCommandResponse(
-                                     commandResponse,
-                                     converter))
+                                     commandResponse, converter, command.type()
+                             ))
                              .whenComplete((commandResponse, throwable) -> commandInTransit.end());
         }
     }
@@ -151,8 +151,8 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
         logger.debug("Received incoming command [{}]", command.getName());
         String commandIdentifier = command.getMessageIdentifier();
         try {
-            CompletableFuture<CommandResponse> result = new CompletableFuture<CommandResponse>()
-                    .whenComplete((ignored, ignoredThrowable) -> commandsInProgress.remove(commandIdentifier));
+            CompletableFuture<CommandResponse> result = new CompletableFuture<>();
+            result.whenComplete((ignored, ignoredThrowable) -> commandsInProgress.remove(commandIdentifier));
             commandsInProgress.put(commandIdentifier, result);
 
             requireNonNull(incomingHandler, "incomingHandler not configured")
@@ -233,11 +233,14 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
         return new CommandBusConnector.ResultCallback() {
 
             @Override
-            public void onSuccess(@Nullable CommandResultMessage resultMessage) {
-                logger.debug("Command [{}] completed successfully with result [{}]",
-                             command.getName(),
-                             resultMessage);
-                result.complete(CommandConverter.convertResultMessage(resultMessage, command.getMessageIdentifier()));
+            public void onSuccess(CommandResultMessage resultMessage) {
+                logger.debug("Command [{}] completed successfully with result [{}]", command.getName(), resultMessage);
+                try {
+                    result.complete(CommandConverter.convertResultMessage(resultMessage, command.getMessageIdentifier()));
+                } catch (Exception e) {
+                    logger.error("Error converting successful result of command [{}]", command.getName(), e);
+                    result.completeExceptionally(e);
+                }
             }
 
             @Override
@@ -245,9 +248,14 @@ public class AxonServerCommandBusConnector implements CommandBusConnector, Conne
                 logger.info("Command [{}] raised an exception [{}]",
                             command.getName(),
                             cause.getMessage());
-                result.complete(CommandConverter.convertErrorResponse(
-                        clientId, command.getMessageIdentifier(), cause, converter
-                ));
+                try {
+                    result.complete(CommandConverter.convertErrorResponse(
+                            clientId, command.getMessageIdentifier(), cause, converter
+                    ));
+                } catch (Exception e) {
+                    logger.error("Error converting error response of command [{}]", command.getName(), e);
+                    result.completeExceptionally(e);
+                }
             }
         };
     }

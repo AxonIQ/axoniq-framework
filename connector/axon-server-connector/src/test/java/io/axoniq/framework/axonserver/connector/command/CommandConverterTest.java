@@ -59,6 +59,7 @@ class CommandConverterTest {
     private final byte[] payload = stringPayload.getBytes();
     private final String clientId = "clientId";
     private final String componentName = "componentName";
+    private final MessageType fallbackResultType = new MessageType("CommandType", "1");
     private Converter converter;
 
     @BeforeEach
@@ -151,7 +152,7 @@ class CommandConverterTest {
                                           .build();
 
             // when
-            var future = CommandConverter.convertCommandResponse(response, converter);
+            var future = CommandConverter.convertCommandResponse(response, converter, fallbackResultType);
 
             // then
             var resultMessage = future.orTimeout(1, TimeUnit.SECONDS).join();
@@ -177,7 +178,7 @@ class CommandConverterTest {
                                           .build();
 
             // when
-            var resultMessage = CommandConverter.convertCommandResponse(response, converter)
+            var resultMessage = CommandConverter.convertCommandResponse(response, converter, fallbackResultType)
                                                 .orTimeout(1, TimeUnit.SECONDS)
                                                 .join();
 
@@ -186,17 +187,21 @@ class CommandConverterTest {
         }
 
         @Test
-        void convertsCommandResponseWithoutPayloadTypeToEmptyResult() {
+        void convertsCommandResponseWithoutPayloadTypeToEmptyResultCarryingFallbackType() {
             // given a response without payload, an empty payload type marks an empty result
             var response = CommandResponse.newBuilder()
                                           .setMessageIdentifier(messageIdentifier)
                                           .build();
 
             // when
-            var future = CommandConverter.convertCommandResponse(response, converter);
+            var future = CommandConverter.convertCommandResponse(response, converter, fallbackResultType);
 
             // then
-            assertThat(future).succeedsWithin(Duration.ofSeconds(1)).isNull();
+            assertThat(future).succeedsWithin(Duration.ofSeconds(1))
+                              .satisfies(resultMessage -> {
+                                  assertThat(resultMessage.payload()).isNull();
+                                  assertThat(resultMessage.type()).isEqualTo(fallbackResultType);
+                              });
         }
 
         @Test
@@ -209,7 +214,7 @@ class CommandConverterTest {
                                           .build();
 
             // when
-            var future = CommandConverter.convertCommandResponse(response, converter);
+            var future = CommandConverter.convertCommandResponse(response, converter, fallbackResultType);
 
             // then
             assertThat(future).failsWithin(Duration.ofSeconds(1))
@@ -233,7 +238,7 @@ class CommandConverterTest {
                                           .build();
 
             // when
-            var result = CommandConverter.convertCommandResponse(response, converter);
+            var result = CommandConverter.convertCommandResponse(response, converter, fallbackResultType);
 
             // then
             assertThat(result).failsWithin(Duration.ofSeconds(1));
@@ -288,7 +293,7 @@ class CommandConverterTest {
 
             // when the error response produced on the send side is parsed again on the receive side
             var errorResponse = CommandConverter.convertErrorResponse(clientId, messageIdentifier, cause, converter);
-            var future = CommandConverter.convertCommandResponse(errorResponse, converter);
+            var future = CommandConverter.convertCommandResponse(errorResponse, converter, fallbackResultType);
 
             // then the original details are recovered through the round trip
             assertThat(future).failsWithin(Duration.ofSeconds(1));
@@ -384,14 +389,10 @@ class CommandConverterTest {
         }
 
         @Test
-        void convertsNullResultMessageToEmptyCommandResponse() {
-            // when
-            var response = CommandConverter.convertResultMessage(null, "req-1");
-
-            // then
-            assertThat(response.getRequestIdentifier()).isEqualTo("req-1");
-            assertThat(response.getMessageIdentifier()).isNotBlank();
-            assertThat(response.hasPayload()).isFalse();
+        void throwsNullPointExceptionForNullResultMessage() {
+            // when/then
+            assertThatThrownBy(() -> CommandConverter.convertResultMessage(null, "req-1"))
+                    .isInstanceOf(NullPointerException.class);
         }
 
         @Test

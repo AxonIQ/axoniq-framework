@@ -59,10 +59,12 @@
         <c3p0.version>0.9.1.2</c3p0.version>
         <hikari.version>7.1.0</hikari.version>
         <hsqldb.version>2.7.4</hsqldb.version>
-        <hibernate-core.version>7.4.5.Final</hibernate-core.version>
+        <hibernate-core.version>7.4.7.Final</hibernate-core.version>
         <mysql-connector-java.version>26.7.0</mysql-connector-java.version>
         <postgresql.version>42.7.13</postgresql.version>
         <ojdbc.version>23.26.1.0.0</ojdbc.version>
+        <!-- gRPC -->
+        <protobuf-java.version>4.36.1</protobuf-java.version>
         <!-- Jakarta -->
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <jakarta.el.version>6.0.1</jakarta.el.version>
@@ -73,22 +75,22 @@
         <jspecify.version>1.0.1</jspecify.version>
         <!-- Logging -->
         <log4j.version>2.26.1</log4j.version>
-        <slf4j.version>2.0.18</slf4j.version>
+        <slf4j.version>2.0.19</slf4j.version>
         <!-- Metrics -->
         <dropwizard.metrics.version>5.0.6</dropwizard.metrics.version>
         <micrometer.version>1.16.4</micrometer.version>
         <!-- Tracing -->
         <opentelemetry.version>1.65.0</opentelemetry.version>
-        <micrometer-tracing.version>1.7.0</micrometer-tracing.version>
+        <micrometer-tracing.version>1.7.1</micrometer-tracing.version>
         <context-propagation.version>1.2.1</context-propagation.version>
         <!-- Other -->
-        <byte-buddy.version>1.18.12</byte-buddy.version>
+        <byte-buddy.version>1.18.13</byte-buddy.version>
         <commons-io.version>2.22.0</commons-io.version>
         <findbugs-jsr305.version>3.0.2</findbugs-jsr305.version>
-        <javassist.version>3.32.0-GA</javassist.version>
+        <javassist.version>3.33.0-GA</javassist.version>
         <eaio-uuid.version>3.2</eaio-uuid.version>
         <!-- Reactive -->
-        <projectreactor.version>3.8.6</projectreactor.version>
+        <projectreactor.version>3.8.7</projectreactor.version>
         <reactive.streams.spec.version>1.0.4</reactive.streams.spec.version>
         <!-- Conversion -->
         <avro.version>1.12.2</avro.version>
@@ -106,7 +108,7 @@
         <assertj.version>3.27.7</assertj.version>
         <archunit.version>1.5.0</archunit.version>
         <awaitility.version>4.3.0</awaitility.version>
-        <equalsverifier.version>4.5</equalsverifier.version>
+        <equalsverifier.version>4.5.2</equalsverifier.version>
         <hamcrest.version>3.0</hamcrest.version>
         <junit.jupiter.version>6.1.3</junit.jupiter.version>
         <mockito.version>5.23.0</mockito.version>
@@ -116,36 +118,11 @@
 
         <!-- Maven plugins -->
         <checkstyle-maven-plugin.version>3.6.0</checkstyle-maven-plugin.version>
-        <checkstyle.version>14.0.0</checkstyle.version>
+        <checkstyle.version>14.1.0</checkstyle.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
-            <!-- OpenTelemetry BOM (manages opentelemetry-api / -sdk / -exporter-otlp versions) -->
-            <dependency>
-                <groupId>io.opentelemetry</groupId>
-                <artifactId>opentelemetry-bom</artifactId>
-                <version>${opentelemetry.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-
-            <!-- Micrometer Tracing BOM (manages micrometer-tracing / -bridge-otel / -test versions) -->
-            <dependency>
-                <groupId>io.micrometer</groupId>
-                <artifactId>micrometer-tracing-bom</artifactId>
-                <version>${micrometer-tracing.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-
-            <!-- Micrometer Context Propagation (ThreadLocal <-> Reactor/Context bridge; not in the tracing BOM) -->
-            <dependency>
-                <groupId>io.micrometer</groupId>
-                <artifactId>context-propagation</artifactId>
-                <version>${context-propagation.version}</version>
-            </dependency>
-
             <!-- Axon Framework -->
             <dependency>
                 <groupId>org.axonframework</groupId>
@@ -280,11 +257,46 @@
                 <version>${axoniq-entitlement-manager.version}</version>
             </dependency>
 
-            <!-- Java -->
+            <!-- Annotation -->
             <dependency>
                 <groupId>org.jspecify</groupId>
                 <artifactId>jspecify</artifactId>
                 <version>${jspecify.version}</version>
+            </dependency>
+
+            <!-- Conversion -->
+            <dependency>
+                <groupId>org.apache.avro</groupId>
+                <artifactId>avro</artifactId>
+                <version>${avro.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.dom4j</groupId>
+                <artifactId>dom4j</artifactId>
+                <version>${dom4j.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.code.gson</groupId>
+                <artifactId>gson</artifactId>
+                <version>${gson.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson2.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>tools.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <!-- Database -->
@@ -293,21 +305,25 @@
                 <artifactId>c3p0</artifactId>
                 <version>${c3p0.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>org.hibernate.orm</groupId>
                 <artifactId>hibernate-core</artifactId>
                 <version>${hibernate-core.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>com.zaxxer</groupId>
                 <artifactId>HikariCP</artifactId>
                 <version>${hikari.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>org.hsqldb</groupId>
                 <artifactId>hsqldb</artifactId>
                 <version>${hsqldb.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>com.mysql</groupId>
                 <artifactId>mysql-connector-j</artifactId>
@@ -319,22 +335,34 @@
                     </exclusion>
                 </exclusions>
             </dependency>
+
             <dependency>
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
                 <version>${postgresql.version}</version>
             </dependency>
+
+            <!-- gRPC -->
+            <!-- Pinned so transitive versions don't overtake the version Axon Server generated class used. -->
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>${protobuf-java.version}</version>
+            </dependency>
+
             <!-- Jakarta -->
             <dependency>
                 <groupId>jakarta.annotation</groupId>
                 <artifactId>jakarta.annotation-api</artifactId>
                 <version>${jakarta.annotation.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>jakarta.validation</groupId>
                 <artifactId>jakarta.validation-api</artifactId>
                 <version>${jakarta.validation.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>org.glassfish.expressly</groupId>
                 <artifactId>expressly</artifactId>
@@ -345,11 +373,13 @@
                 <artifactId>jakarta.el-api</artifactId>
                 <version>${jakarta.el.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>jakarta.inject</groupId>
                 <artifactId>jakarta.inject-api</artifactId>
                 <version>${jakarta.inject.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>jakarta.persistence</groupId>
                 <artifactId>jakarta.persistence-api</artifactId>
@@ -362,32 +392,38 @@
                 <artifactId>slf4j-api</artifactId>
                 <version>${slf4j.version}</version>
             </dependency>
+
             <!-- Other -->
             <dependency>
                 <groupId>net.bytebuddy</groupId>
                 <artifactId>byte-buddy</artifactId>
                 <version>${byte-buddy.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>net.bytebuddy</groupId>
                 <artifactId>byte-buddy-agent</artifactId>
                 <version>${byte-buddy.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>commons-io</groupId>
                 <artifactId>commons-io</artifactId>
                 <version>${commons-io.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>org.javassist</groupId>
                 <artifactId>javassist</artifactId>
                 <version>${javassist.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>com.google.code.findbugs</groupId>
                 <artifactId>jsr305</artifactId>
                 <version>${findbugs-jsr305.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>com.eaio.uuid</groupId>
                 <artifactId>uuid</artifactId>
@@ -400,47 +436,18 @@
                 <artifactId>reactive-streams</artifactId>
                 <version>${reactive.streams.spec.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-core</artifactId>
                 <version>${projectreactor.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-test</artifactId>
                 <version>${projectreactor.version}</version>
                 <scope>test</scope>
-            </dependency>
-
-            <!-- Conversion -->
-            <dependency>
-                <groupId>org.apache.avro</groupId>
-                <artifactId>avro</artifactId>
-                <version>${avro.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.dom4j</groupId>
-                <artifactId>dom4j</artifactId>
-                <version>${dom4j.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.google.code.gson</groupId>
-                <artifactId>gson</artifactId>
-                <version>${gson.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.fasterxml.jackson</groupId>
-                <artifactId>jackson-bom</artifactId>
-                <version>${jackson2.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>tools.jackson</groupId>
-                <artifactId>jackson-bom</artifactId>
-                <version>${jackson.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
             </dependency>
 
             <!-- Testing -->
@@ -451,23 +458,25 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
             <dependency>
                 <groupId>org.assertj</groupId>
                 <artifactId>assertj-core</artifactId>
                 <version>${assertj.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>org.awaitility</groupId>
                 <artifactId>awaitility</artifactId>
                 <version>${awaitility.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>nl.jqno.equalsverifier</groupId>
                 <artifactId>equalsverifier</artifactId>
                 <version>${equalsverifier.version}</version>
             </dependency>
 
-            <!-- Testing -->
             <dependency>
                 <groupId>org.mockito</groupId>
                 <artifactId>mockito-core</artifactId>
@@ -478,6 +487,7 @@
                 <artifactId>mockito-junit-jupiter</artifactId>
                 <version>${mockito.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
@@ -485,11 +495,36 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
             <dependency>
                 <groupId>com.tngtech.archunit</groupId>
                 <artifactId>archunit-junit5</artifactId>
                 <version>${archunit.version}</version>
             </dependency>
+
+            <!-- Tracing -->
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-bom</artifactId>
+                <version>${opentelemetry.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-tracing-bom</artifactId>
+                <version>${micrometer-tracing.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>context-propagation</artifactId>
+                <version>${context-propagation.version}</version>
+            </dependency>
+
             <!-- Validation -->
             <dependency>
                 <groupId>org.hibernate.validator</groupId>
@@ -505,6 +540,7 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -512,6 +548,7 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
             <dependency>
                 <groupId>org.springframework.data</groupId>
                 <artifactId>spring-data-bom</artifactId>
@@ -519,6 +556,7 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
             <dependency>
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-bom</artifactId>
@@ -634,6 +672,35 @@
                         </dependency>
                     </dependencies>
                 </plugin>
+                <plugin>
+                    <!-- KAPT is optional and has to be configured in modules using it -->
+                    <groupId>org.jetbrains.kotlin</groupId>
+                    <artifactId>kotlin-maven-plugin</artifactId>
+                    <version>${kotlin.version}</version>
+                    <extensions>true</extensions>
+
+                    <configuration>
+                        <jvmTarget>${java.version}</jvmTarget>
+                        <compilerPlugins>
+                            <plugin>no-arg</plugin>
+                            <plugin>all-open</plugin>
+                            <plugin>spring</plugin>
+                        </compilerPlugins>
+                    </configuration>
+
+                    <dependencies>
+                        <dependency>
+                            <groupId>org.jetbrains.kotlin</groupId>
+                            <artifactId>kotlin-maven-allopen</artifactId>
+                            <version>${kotlin.version}</version>
+                        </dependency>
+                        <dependency>
+                            <groupId>org.jetbrains.kotlin</groupId>
+                            <artifactId>kotlin-maven-noarg</artifactId>
+                            <version>${kotlin.version}</version>
+                        </dependency>
+                    </dependencies>
+                </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
@@ -673,18 +740,6 @@
                         <log4j.version>${log4j.version}</log4j.version>
                         <test.forkNumber>$${surefire.forkNumber}</test.forkNumber>
                     </systemPropertyVariables>
-                    <includes>
-                        <include>**/*Test.java</include>
-                        <include>**/*Tests.java</include>
-                        <include>**/*Test_*.java</include>
-                        <include>**/*Tests_*.java</include>
-                    </includes>
-                    <excludes>
-                        <exclude>**/*IntegrationTest.java</exclude>
-                        <exclude>**/*IntegrationTests.java</exclude>
-                        <exclude>**/*IntegrationTest_*.java</exclude>
-                        <exclude>**/*IntegrationTests_*.java</exclude>
-                    </excludes>
                 </configuration>
             </plugin>
             <!-- package -->
@@ -806,22 +861,6 @@
                                     <systemPropertyVariables>
                                         <test.forkNumber>${surefire.forkNumber}</test.forkNumber>
                                     </systemPropertyVariables>
-                                    <includes>
-                                        <include>**/*IntegrationTest.java</include>
-                                        <include>**/*IntegrationTests.java</include>
-                                        <include>**/*IntegrationTest_*.java</include>
-                                        <include>**/*IntegrationTests_*.java</include>
-                                        <!-- these are the defaults -->
-                                        <include>**/IT*.java</include>
-                                        <include>**/*IT.java</include>
-                                        <include>**/*ITCase.java</include>
-                                    </includes>
-                                    <excludes>
-                                        <exclude>**/*Test.java</exclude>
-                                        <exclude>**/*Tests.java</exclude>
-                                        <exclude>**/*Test_*.java</exclude>
-                                        <exclude>**/*Tests_*.java</exclude>
-                                    </excludes>
                                 </configuration>
                             </execution>
 
