@@ -22,7 +22,6 @@ import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import org.axonframework.common.annotation.AnnotationUtils;
 import org.axonframework.common.annotation.Internal;
-import org.axonframework.messaging.commandhandling.CommandMessage;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.annotation.HandlerDefinition;
 import org.axonframework.messaging.core.annotation.MessageHandlingMember;
@@ -37,7 +36,7 @@ import java.util.function.Function;
  * {@link HandlerDefinition} recognizing {@link Workflow}-annotated methods, building a
  * {@link MethodInvokingMessageHandlingMember} for each.
  * <p>
- * A {@code @Workflow} body is assigned {@link WorkflowCommandMessage} as its message type and {@link WorkflowContext}
+ * A {@code @Workflow} body is assigned {@link WorkflowTriggerMessage} as its message type and {@link WorkflowContext}
  * as its expected payload type, since the synthesized command that invokes it always carries the workflow context as
  * its payload. The body responds to an internally synthesized request to resume/run the workflow, never to the event
  * that originally triggered it.
@@ -58,7 +57,7 @@ public class AnnotatedWorkflowHandlerDefinition implements HandlerDefinition {
         return AnnotationUtils.findAnnotationAttributes(method, Workflow.class)
                               .map(attr -> new MethodInvokingMessageHandlingMember<>(
                                       method,
-                                      WorkflowCommandMessage.class,
+                                      WorkflowTriggerMessage.class,
                                       WorkflowContext.class,
                                       parameterResolverFactory,
                                       messageStreamResolver
