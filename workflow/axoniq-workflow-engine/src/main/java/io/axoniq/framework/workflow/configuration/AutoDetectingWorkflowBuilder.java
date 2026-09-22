@@ -189,17 +189,17 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
         validateWorkflowDefinition(workflowName, workflowVersion);
 
         MessageType messageType = new MessageType(new QualifiedName(workflowName), workflowVersion);
-        MessageHandlingMember<Object> member = findMember(inspector, instance, WorkflowCommandMessage.class, method);
+        MessageHandlingMember<Object> member = findMember(inspector, instance, WorkflowTriggerMessage.class, method);
 
         WorkflowDefinition<C> workflowDefinition = workflowContext -> {
-            WorkflowCommandMessage command = new WorkflowCommandMessage(messageType, workflowContext);
+            WorkflowTriggerMessage trigger = new WorkflowTriggerMessage(messageType, workflowContext);
             ProcessingContext processingContext = workflowContext.processingContext()
                                                                  .withResource(WORKFLOW_CONTEXT_RESOURCE_KEY,
                                                                                workflowContext)
                                                                  .withResource(WORKFLOW_INSTANCE_RESOURCE_KEY,
                                                                                instance);
             CompletableFuture<?> future = inspector.chainedInterceptor(instanceType)
-                                                   .handle(command, processingContext, instance, member)
+                                                   .handle(trigger, processingContext, instance, member)
                                                    .first()
                                                    .asCompletableFuture();
             FutureResolver.resolve(processingContext, future);

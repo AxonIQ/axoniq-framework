@@ -29,7 +29,7 @@ matching how the rest of the framework works instead of approximating it.
 
 The `@Workflow` body's public seam stays untouched: `WorkflowDefinition<C>` remains a plain
 `Consumer<C>`. Internally, each invocation is bridged into the handler pipeline by synthesizing a
-`WorkflowCommandMessage` — a dedicated `CommandMessage` subtype carrying the `WorkflowContext` as
+`WorkflowTriggerMessage` — a dedicated `Message` subtype carrying the `WorkflowContext` as
 its payload, never dispatched on a real bus — and routing it through the enhanced
 `MessageHandlingMember`. The resulting future is resolved promptly (with a timeout) rather than
 kept open for the workflow's lifetime, so the body keeps its "handled once per invocation, no

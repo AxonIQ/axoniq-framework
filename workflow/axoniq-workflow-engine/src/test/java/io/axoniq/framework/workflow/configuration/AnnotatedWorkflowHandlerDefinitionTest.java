@@ -45,7 +45,7 @@ class AnnotatedWorkflowHandlerDefinitionTest {
             new WorkflowMethodParameterResolverFactory();
 
     @Test
-    void recognizesAWorkflowAnnotatedMethodAsAWorkflowCommandMessageHandler() {
+    void recognizesAWorkflowAnnotatedMethodAsAWorkflowTriggerMessageHandler() {
         // given / when...
         Optional<MessageHandlingMember<SampleWorkflow>> optionalMember =
                 testSubject.createHandler(SampleWorkflow.class,
@@ -54,7 +54,7 @@ class AnnotatedWorkflowHandlerDefinitionTest {
                                           result -> MessageStream.empty());
         // then...
         assertThat(optionalMember).isPresent();
-        assertThat(optionalMember.get().canHandleMessageType(WorkflowCommandMessage.class)).isTrue();
+        assertThat(optionalMember.get().canHandleMessageType(WorkflowTriggerMessage.class)).isTrue();
         assertThat(optionalMember.get().canHandleMessageType(CommandMessage.class)).isFalse();
         assertThat(optionalMember.get().canHandleMessageType(EventMessage.class)).isFalse();
     }
