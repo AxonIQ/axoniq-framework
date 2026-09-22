@@ -18,6 +18,8 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowStatusChangedHandler;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.messaging.core.annotation.ParameterResolver;
@@ -112,6 +114,15 @@ class WorkflowMethodParameterResolverFactoryTest {
         assertThat(testSubject.createInstance(methodNamed("unrelated"), parametersOf("unrelated"), 0)).isNull();
     }
 
+    @Test
+    void returnsNullForAnObjectTypedParameterOnANonWorkflowMethod() {
+        // Without the isWorkflowAnnotated(...) gate, an Object-typed parameter would be trivially assignable from
+        // any declaring class and get hijacked by the declaring-instance resolver, even on unrelated methods.
+        assertThat(testSubject.createInstance(
+                methodNamed("unrelatedWithObjectParameter"), parametersOf("unrelatedWithObjectParameter"), 0
+        )).isNull();
+    }
+
     private static java.lang.reflect.Parameter[] parametersOf(String name) {
         return methodNamed(name).getParameters();
     }
@@ -126,16 +137,22 @@ class WorkflowMethodParameterResolverFactoryTest {
     @SuppressWarnings("unused")
     static class SampleWorkflow {
 
+        @Workflow
         void body(TestWorkflowContext context) {
         }
 
+        @WorkflowStatusChangedHandler(workflowStatus = WorkflowStatus.COMPLETED)
         void onStatusChanged(WorkflowStatus status, SampleWorkflow instance) {
         }
 
+        @Workflow
         void wrapped(ContextWrapper wrapper) {
         }
 
         void unrelated(String notAWorkflowType) {
+        }
+
+        void unrelatedWithObjectParameter(Object notAWorkflowParameter) {
         }
     }
 

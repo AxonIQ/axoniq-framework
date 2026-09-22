@@ -18,8 +18,11 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.runtime.api.annotation.WorkflowStatusChangedHandler;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import org.axonframework.common.annotation.AnnotationUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.messaging.core.Context;
 import org.axonframework.messaging.core.annotation.ParameterResolver;
@@ -62,6 +65,9 @@ public class WorkflowMethodParameterResolverFactory implements ParameterResolver
     @Nullable
     @Override
     public ParameterResolver<?> createInstance(Executable executable, Parameter[] parameters, int parameterIndex) {
+        if (!isWorkflowAnnotated(executable)) {
+            return null;
+        }
         Class<?> parameterType = parameters[parameterIndex].getType();
         if (WorkflowStatus.class.isAssignableFrom(parameterType)) {
             return new ResourceParameterResolver<>(WORKFLOW_STATUS_RESOURCE_KEY);
@@ -72,10 +78,26 @@ public class WorkflowMethodParameterResolverFactory implements ParameterResolver
         if (parameterType.isAssignableFrom(executable.getDeclaringClass())) {
             return new ResourceParameterResolver<>(WORKFLOW_INSTANCE_RESOURCE_KEY);
         }
-        if (AutoDetectionUtils.isWrapper(parameterType)) {
-            return new WrapperParameterResolver(parameterType);
+        if (AutoDetectionUtils.isWorkflowContextWrapper(parameterType)) {
+            return new WorkflowContextWrapperParameterResolver(parameterType);
         }
         return null;
+    }
+
+    /**
+     * Checks whether {@code executable} is a {@link Workflow} body method or a
+     * {@link WorkflowStatusChangedHandler}-meta-annotated lifecycle method.
+     * <p>
+     * Without this check, {@link #createInstance(Executable, Parameter[], int)} would resolve parameters for
+     * <em>any</em> executable in the application, since, for example, an {@code Object}-typed parameter is trivially
+     * assignable from any declaring class.
+     *
+     * @param executable the executable to check
+     * @return {@code true} if {@code executable} is workflow-related, {@code false} otherwise
+     */
+    private static boolean isWorkflowAnnotated(Executable executable) {
+        return AnnotationUtils.findAnnotationAttributes(executable, Workflow.class).isPresent()
+                || AnnotationUtils.findAnnotationAttributes(executable, WorkflowStatusChangedHandler.class).isPresent();
     }
 
     private record ResourceParameterResolver<T>(Context.ResourceKey<T> key) implements ParameterResolver<T> {
@@ -91,7 +113,7 @@ public class WorkflowMethodParameterResolverFactory implements ParameterResolver
         }
     }
 
-    private record WrapperParameterResolver(Class<?> wrapperType) implements ParameterResolver<Object> {
+    private record WorkflowContextWrapperParameterResolver(Class<?> wrapperType) implements ParameterResolver<Object> {
 
         @Override
         public CompletableFuture<Object> resolveParameterValue(ProcessingContext context) {

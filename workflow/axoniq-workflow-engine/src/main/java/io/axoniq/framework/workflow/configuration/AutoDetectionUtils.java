@@ -349,7 +349,7 @@ public final class AutoDetectionUtils {
     static Class<? extends WorkflowContext> findWorkflowContextType(Method method) {
         Class<?>[] parameterTypes = method.getParameterTypes();
         return Stream.of(parameterTypes)
-                     .filter(type -> WorkflowContext.class.isAssignableFrom(type) || isWrapper(type))
+                     .filter(type -> WorkflowContext.class.isAssignableFrom(type) || isWorkflowContextWrapper(type))
                      .map(p -> {
                          if (WorkflowContext.class.isAssignableFrom(p)) {
                              //noinspection unchecked
@@ -372,7 +372,7 @@ public final class AutoDetectionUtils {
                      .orElse(null);
     }
 
-    static boolean isWrapper(Class<?> type) {
+    static boolean isWorkflowContextWrapper(Class<?> type) {
         try {
             return Arrays.stream(type.getConstructors())
                          .anyMatch(c -> c.getParameterCount() == 1
