@@ -42,7 +42,7 @@ import java.util.function.Function;
  * This {@code HandlerDefinition} should <b>not</b> be registered on the
  * {@link org.axonframework.common.configuration.ComponentRegistry}, as otherwise {@code @WorkflowStatusChangedHandler}
  * annotated handlers paired in a (e.g.) {@link org.axonframework.messaging.eventhandling.EventHandlingComponent} would
- * be registers as regular event handlers. Hence, this {@code HandlerDefinition} is only used by the
+ * be registered as regular event handlers. Hence, this {@code HandlerDefinition} is only used by the
  * {@link AutoDetectingWorkflowBuilder workflow autodetection logic}.
  *
  * @author Steven van Beelen

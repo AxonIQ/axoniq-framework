@@ -27,6 +27,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatus
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
+import org.axonframework.common.AxonConfigurationException;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.configuration.ComponentBuilder;
 import org.axonframework.common.configuration.Configuration;
@@ -158,7 +159,7 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
                         .filter(member -> member.unwrap(Executable.class).map(method::equals).orElse(false))
                         .findFirst()
                         .map(AutoDetectingWorkflowBuilder::cast)
-                        .orElseThrow(() -> new IllegalStateException(
+                        .orElseThrow(() -> new AxonConfigurationException(
                                 "No enhanced handler member could be built for " + method
                         ));
     }

@@ -33,7 +33,7 @@ import org.axonframework.messaging.eventhandling.EventMessage;
 public interface WorkflowStatusChangeListener {
 
     /**
-     * Handler reacting on a {@link WorkflowStatus workflow status} change, including the entire {@code event} and it's
+     * Handler reacting on a {@link WorkflowStatus workflow status} change, including the entire {@code event} and its
      * {@code processingContext} which contain the status changed event.
      *
      * @param status            the workflow status change this handler reacts to
