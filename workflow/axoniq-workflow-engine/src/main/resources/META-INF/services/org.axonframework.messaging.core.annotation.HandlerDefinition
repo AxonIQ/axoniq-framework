@@ -16,4 +16,4 @@
 # For licensing information and to register, visit:
 #  https://www.axoniq.io/pricing
 #
-io.axoniq.framework.workflow.configuration.AnnotatedWorkflowDefinition
+io.axoniq.framework.workflow.configuration.AnnotatedWorkflowHandlerDefinition

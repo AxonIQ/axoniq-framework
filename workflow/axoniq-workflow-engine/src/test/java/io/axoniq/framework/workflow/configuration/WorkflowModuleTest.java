@@ -102,7 +102,7 @@ class WorkflowModuleTest {
         when(configuration.getComponent(ParameterResolverFactory.class))
                 .thenReturn(new WorkflowMethodParameterResolverFactory());
         when(configuration.getComponent(HandlerDefinition.class)).thenReturn(MultiHandlerDefinition.ordered(
-                new AnnotatedWorkflowDefinition(), new AnnotatedMessageHandlingMemberDefinition()
+                new AnnotatedWorkflowHandlerDefinition(), new AnnotatedMessageHandlingMemberDefinition()
         ));
     }
 

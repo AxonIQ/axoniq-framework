@@ -46,7 +46,7 @@ import java.util.function.Function;
  * @since 5.4.0
  */
 @Internal
-public class AnnotatedWorkflowDefinition implements HandlerDefinition {
+public class AnnotatedWorkflowHandlerDefinition implements HandlerDefinition {
 
     @Override
     public <T> Optional<MessageHandlingMember<T>> createHandler(

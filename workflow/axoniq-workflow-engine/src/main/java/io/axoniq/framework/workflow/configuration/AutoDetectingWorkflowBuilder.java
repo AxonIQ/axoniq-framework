@@ -118,7 +118,7 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
      * {@code instance}'s class.
      * <p>
      * Composes the {@link Configuration}'s {@link HandlerEnhancerDefinition} chain with the {@link Configuration}'s
-     * {@link HandlerDefinition} component — which, since {@link AnnotatedWorkflowDefinition} is classpath-discovered
+     * {@link HandlerDefinition} component — which, since {@link AnnotatedWorkflowHandlerDefinition} is classpath-discovered
      * (see {@code META-INF/services}), already recognizes {@code @Workflow} methods, on top of the framework's default
      * recognizers (including {@code AnnotatedMessageHandlingMemberDefinition}, needed so that
      * {@code @MessageHandlerInterceptor} methods declared on the same class are recognized and chained) — with

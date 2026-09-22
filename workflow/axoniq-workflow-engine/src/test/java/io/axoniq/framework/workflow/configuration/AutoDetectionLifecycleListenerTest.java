@@ -64,7 +64,7 @@ class AutoDetectionLifecycleListenerTest {
                         return original;
                     }
                 },
-                new AnnotatedWorkflowDefinition(),
+                new AnnotatedWorkflowHandlerDefinition(),
                 new AnnotatedWorkflowStatusChangedHandlerDefinition(),
                 new AnnotatedMessageHandlingMemberDefinition()
         );
