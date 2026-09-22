@@ -33,13 +33,13 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Test class validating the {@link AnnotatedWorkflowDefinition}.
+ * Test class validating the {@link AnnotatedWorkflowHandlerDefinition}.
  *
  * @author Steven van Beelen
  */
-class AnnotatedWorkflowDefinitionTest {
+class AnnotatedWorkflowHandlerDefinitionTest {
 
-    private final AnnotatedWorkflowDefinition testSubject = new AnnotatedWorkflowDefinition();
+    private final AnnotatedWorkflowHandlerDefinition testSubject = new AnnotatedWorkflowHandlerDefinition();
 
     private final WorkflowMethodParameterResolverFactory parameterResolverFactory =
             new WorkflowMethodParameterResolverFactory();

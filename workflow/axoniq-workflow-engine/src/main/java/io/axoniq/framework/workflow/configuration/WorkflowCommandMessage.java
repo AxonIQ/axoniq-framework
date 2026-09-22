@@ -29,7 +29,7 @@ import org.axonframework.messaging.core.MessageType;
  * <p>
  * Deliberately not a plain {@code CommandMessage}, as that would make
  * {@link io.axoniq.framework.workflow.runtime.api.annotation.Workflow} annotated handlers that are discovered with the
- * {@link AnnotatedWorkflowDefinition} seem like plain command handlers otherwise, which would register them with the
+ * {@link AnnotatedWorkflowHandlerDefinition} seem like plain command handlers otherwise, which would register them with the
  * {@link org.axonframework.messaging.commandhandling.CommandBus}.
  *
  * @author Steven van Beelen
