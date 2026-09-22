@@ -32,14 +32,20 @@ import io.axoniq.framework.messaging.queryhandling.distributed.QueryBusConnector
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.configuration.ComponentRegistry;
 import org.axonframework.common.configuration.Configuration;
+import org.axonframework.common.configuration.DecoratingComponent;
+import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.configuration.EventSourcingConfigurer;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.SnapshotCapableEventStorageEngine;
+import org.axonframework.eventsourcing.snapshot.api.Snapshot;
 import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
 
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -114,14 +120,16 @@ class AxonServerConfigurationEnhancerTest {
     void engineSurvivesUndecoratedWhenASnapshotStoreDecoratorIsRegistered() {
         // given the exact decoration SnapshotSourcingConfigurationEnhancer applies in the framework: decorate
         // EventStorageEngine.class with SnapshotCapableEventStorageEngine.decorate(engine, snapshotStore), using
-        // whatever SnapshotStore.class resolves to -- plus a SnapshotStore decorator, simulating e.g. tracing
+        // whatever SnapshotStore.class resolves to -- plus a SnapshotStore decorator, simulating a real tracing-style
+        // wrapper (DecoratingSnapshotStore below) by exposing its delegate through DecoratingComponent, the same way
+        // TracingSnapshotStore does in production
         Configuration result = EventSourcingConfigurer.create()
                                                       .componentRegistry(ComponentRegistry::disableEnhancerScanning)
                                                       .componentRegistry(cr -> testSubject.enhance(cr))
                                                       .componentRegistry(cr -> cr.registerDecorator(
                                                               SnapshotStore.class,
                                                               0,
-                                                              (config, name, delegate) -> Mockito.spy(delegate)
+                                                              (config, name, delegate) -> new DecoratingSnapshotStore(delegate)
                                                       ))
                                                       .componentRegistry(cr -> cr.registerDecorator(
                                                               EventStorageEngine.class,
@@ -138,6 +146,38 @@ class AxonServerConfigurationEnhancerTest {
         // SnapshotCapableEventStorageEngine -- otherwise the single-round-trip optimization silently reverts to two
         // round trips, since SnapshotCapableEventStorageEngine#source never delegates a Snapshot-strategy condition
         assertThat(result.getComponent(EventStorageEngine.class)).isInstanceOf(AxonServerEventStorageEngine.class);
+    }
+
+    /** Mirrors a hand-written {@code TracingSnapshotStore}: wraps a delegate, exposing it via {@code DecoratingComponent}. */
+    private static class DecoratingSnapshotStore implements SnapshotStore, DecoratingComponent {
+
+        private final SnapshotStore delegate;
+
+        DecoratingSnapshotStore(SnapshotStore delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
+                                             ProcessingContext context) {
+            return delegate.store(qualifiedName, identifier, snapshot, context);
+        }
+
+        @Override
+        public CompletableFuture<Snapshot> load(QualifiedName qualifiedName, Object identifier,
+                                                ProcessingContext context) {
+            return delegate.load(qualifiedName, identifier, context);
+        }
+
+        @Override
+        public Object decoratedDelegate() {
+            return delegate;
+        }
+
+        @Override
+        public void describeTo(ComponentDescriptor descriptor) {
+            descriptor.describeWrapperOf(delegate);
+        }
     }
 
     @Test
