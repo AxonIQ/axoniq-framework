@@ -49,10 +49,12 @@ import org.axonframework.messaging.core.annotation.HandlerDefinition;
 import org.axonframework.messaging.core.annotation.HandlerEnhancerDefinition;
 import org.axonframework.messaging.core.annotation.MessageHandlingMember;
 import org.axonframework.messaging.core.annotation.MultiHandlerDefinition;
+import org.axonframework.messaging.core.annotation.MultiParameterResolverFactory;
 import org.axonframework.messaging.core.annotation.ParameterResolverFactory;
 import org.axonframework.messaging.core.annotation.UnsupportedHandlerException;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.core.unitofwork.StubProcessingContext;
+import org.axonframework.messaging.core.unitofwork.annotation.ProcessingContextParameterResolverFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.junit.jupiter.api.*;
 import org.mockito.*;
@@ -320,6 +322,64 @@ class WorkflowModuleTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void autodetectedWorkflowBodyResolvesFrameworkNativeProcessingContextParameter() {
+        // The workflow-specific factory composes with the framework's own resolvers rather than replacing
+        // them, exactly as AutoDetectingWorkflowBuilder's real ParameterResolverFactory component does.
+        when(configuration.getComponent(ParameterResolverFactory.class)).thenReturn(
+                MultiParameterResolverFactory.ordered(
+                        new WorkflowMethodParameterResolverFactory(),
+                        new ProcessingContextParameterResolverFactory()
+                ));
+
+        ProcessingContextInjectingWorkflow workflow = new ProcessingContextInjectingWorkflow();
+        WorkflowContextFactory<TestWorkflowContext> ctxFactory = mock(WorkflowContextFactory.class);
+        module.workflowContextFactory(c -> ctxFactory)
+              .definition(dsl -> dsl.autodetected(c -> workflow));
+
+        module.registerWorkflowDefinitions(configuration);
+
+        ArgumentCaptor<WorkflowConfiguration<TestWorkflowContext>> configCaptor = ArgumentCaptor.forClass(
+                WorkflowConfiguration.class);
+        verify(registry).register(any(EventCondition.class), configCaptor.capture());
+        WorkflowConfiguration<TestWorkflowContext> config = configCaptor.getValue();
+
+        TestWorkflowContext context = mock(TestWorkflowContext.class);
+        when(context.processingContext()).thenReturn(processingContextWithFutureResolver());
+
+        config.workflowDefinition().accept(context);
+
+        assertThat(workflow.capturedProcessingContext).isNotNull();
+        assertThat(workflow.capturedProcessingContext.containsResource(
+                WorkflowMethodParameterResolverFactory.WORKFLOW_CONTEXT_RESOURCE_KEY)).isTrue();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void autodetectedWorkflowBodyResolvesDeclaringInstanceAndWrapperTypeParameters() {
+        ParameterInjectionWorkflow workflow = new ParameterInjectionWorkflow();
+        WorkflowContextFactory<TestWorkflowContext> ctxFactory = mock(WorkflowContextFactory.class);
+        module.workflowContextFactory(c -> ctxFactory)
+              .definition(dsl -> dsl.autodetected(c -> workflow));
+
+        module.registerWorkflowDefinitions(configuration);
+
+        ArgumentCaptor<WorkflowConfiguration<TestWorkflowContext>> configCaptor = ArgumentCaptor.forClass(
+                WorkflowConfiguration.class);
+        verify(registry).register(any(EventCondition.class), configCaptor.capture());
+        WorkflowConfiguration<TestWorkflowContext> config = configCaptor.getValue();
+
+        TestWorkflowContext context = mock(TestWorkflowContext.class);
+        when(context.processingContext()).thenReturn(processingContextWithFutureResolver());
+
+        config.workflowDefinition().accept(context);
+
+        assertThat(workflow.capturedInstance).isSameAs(workflow);
+        assertThat(workflow.capturedWrapper).isNotNull();
+        assertThat(workflow.capturedWrapper.context()).isSameAs(context);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void autodetectedWorkflowWithAnUnresolvableParameterFailsAtConfigurationTime() {
         UnresolvableParameterWorkflow workflow = new UnresolvableParameterWorkflow();
         WorkflowContextFactory<TestWorkflowContext> ctxFactory = mock(WorkflowContextFactory.class);
@@ -361,6 +421,32 @@ class WorkflowModuleTest {
     }
 
     public static class SomeUnrelatedType {
+
+    }
+
+    public static class ProcessingContextInjectingWorkflow {
+
+        volatile ProcessingContext capturedProcessingContext;
+
+        @Workflow(workflowName = "processingContextWorkflow", startOnEventName = "java.lang.String", idProperty = "id")
+        public void run(TestWorkflowContext context, ProcessingContext processingContext) {
+            this.capturedProcessingContext = processingContext;
+        }
+    }
+
+    public static class ParameterInjectionWorkflow {
+
+        volatile ParameterInjectionWorkflow capturedInstance;
+        volatile ContextWrapper capturedWrapper;
+
+        @Workflow(workflowName = "parameterInjectionWorkflow", startOnEventName = "java.lang.String", idProperty = "id")
+        public void run(TestWorkflowContext context, ParameterInjectionWorkflow self, ContextWrapper wrapper) {
+            this.capturedInstance = self;
+            this.capturedWrapper = wrapper;
+        }
+    }
+
+    public record ContextWrapper(WorkflowContext context) {
 
     }
 
