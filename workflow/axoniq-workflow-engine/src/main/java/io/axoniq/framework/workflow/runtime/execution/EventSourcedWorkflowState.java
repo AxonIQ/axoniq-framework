@@ -35,6 +35,9 @@ import org.jspecify.annotations.Nullable;
 import org.axonframework.common.TypeReference;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
+import java.time.Instant;
+import org.axonframework.messaging.core.Context;
+import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.Metadata;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
@@ -184,6 +187,88 @@ public class EventSourcedWorkflowState implements WorkflowState {
         this.versions.putAll(sourcedState.versions);
         this.status = sourcedState.status;
         this.terminationCause = sourcedState.terminationCause;
+    }
+
+    /**
+     * Plain-values form of this state so a converter can round-trip it as a snapshot: no contexts, no listeners,
+     * throwables reduced to their message. Step results keep whatever shape the converter gives them back.
+     */
+    public record Memento(String workflowId,
+                          Map<String, @Nullable Object> payload,
+                          String definitionName,
+                          String definitionVersion,
+                          Map<String, StepMemento> steps,
+                          Map<String, String> versions,
+                          String status,
+                          @Nullable String terminationCause) {
+
+        public record StepMemento(String stepName,
+                                  String status,
+                                  @Nullable Object result,
+                                  @Nullable byte[] resultBytes,
+                                  @Nullable String error,
+                                  Instant timestamp) {
+
+            static StepMemento of(WorkflowStep step) {
+                // A sourced step keeps the event payload as serialized bytes; keep them bytes, or the converter
+                // hands back a string where later steps expect the original payload.
+                boolean bytes = step.result() instanceof byte[];
+                return new StepMemento(step.stepName(),
+                                       step.status().name(),
+                                       bytes ? null : step.result(),
+                                       bytes ? (byte[]) step.result() : null,
+                                       step.error() == null ? null : String.valueOf(step.error().getMessage()),
+                                       step.timestamp());
+            }
+
+            @Nullable
+            Object restoredResult() {
+                return resultBytes != null ? resultBytes : result;
+            }
+        }
+    }
+
+    /**
+     * Snapshot form of this state, see {@link Memento}.
+     *
+     * @return the plain-values form of this state
+     */
+    public Memento toMemento() {
+        Map<String, Memento.StepMemento> stepMementos = new HashMap<>();
+        steps.forEach((name, step) -> stepMementos.put(name, Memento.StepMemento.of(step)));
+        return new Memento(workflowId,
+                           new HashMap<>(payload),
+                           workflowDefinition.name(),
+                           workflowDefinition.version(),
+                           stepMementos,
+                           new HashMap<>(versions),
+                           status.name(),
+                           terminationCause == null ? null : String.valueOf(terminationCause.getMessage()));
+    }
+
+    /**
+     * Rebuilds a state from its snapshot form, see {@link Memento}.
+     *
+     * @param memento the plain-values form
+     * @return the state, without listeners or step contexts
+     */
+    public static EventSourcedWorkflowState fromMemento(Memento memento) {
+        var state = new EventSourcedWorkflowState(memento.workflowId(),
+                                                  new HashMap<>(memento.payload()),
+                                                  VersionedType.of(memento.definitionName(),
+                                                                   memento.definitionVersion()));
+        memento.steps().forEach((name, step) -> state.steps.put(name, new WorkflowStep(
+                step.stepName(),
+                StepStatus.valueOf(step.status()),
+                step.restoredResult(),
+                step.error() == null ? null : new RuntimeException(step.error()),
+                step.timestamp(),
+                Context.empty())));
+        state.versions.putAll(memento.versions());
+        state.status = WorkflowStatus.valueOf(memento.status());
+        state.terminationCause = memento.terminationCause() == null
+                ? null : new RuntimeException(memento.terminationCause());
+        return state;
     }
 
     @Override

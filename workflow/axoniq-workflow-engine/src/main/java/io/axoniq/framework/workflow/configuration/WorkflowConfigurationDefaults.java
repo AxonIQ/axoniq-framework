@@ -48,6 +48,8 @@ import io.axoniq.framework.workflow.runtime.util.DefaultTimeoutFutureResolver;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
 import org.jspecify.annotations.Nullable;
 import org.axonframework.common.ClockUtils;
+import org.axonframework.eventsourcing.configuration.EventSourcedEntityModule;
+import org.axonframework.eventsourcing.snapshot.api.SnapshotPolicy;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.annotation.RegistrationScope;
 import org.axonframework.common.configuration.ComponentDefinition;
@@ -213,21 +215,21 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
     }
 
     void registerRunningWorkflowsModule(ComponentRegistry componentRegistry) {
-        componentRegistry.registerModule(
+        componentRegistry.registerModule(withSnapshotPolicy(
                 declarative(String.class, EventSourcedRunningWorkflows.class)
                         .messagingModel((c, model) -> model.entityEvolver((entity, event, context) -> {
                             entity.evolve(event.metadata());
                             return entity;
                         }).build())
                         .entityFactory(c -> (identifier, firstEvent, context) -> new EventSourcedRunningWorkflows())
-                        .criteriaResolver(c -> (identifier, context) -> EventSourcedRunningWorkflows.criteriaBuilder())
+                        .criteriaResolver(c -> (identifier, context) -> EventSourcedRunningWorkflows.criteriaBuilder()))
                         // FIXME Register snapshot configuration eventually, see #245
                         .build());
         componentRegistry.registerIfNotPresent(Clock.class, cfg -> ClockUtils.get());
     }
 
     void registerWorkflowStateModule(ComponentRegistry componentRegistry) {
-        componentRegistry.registerModule(
+        componentRegistry.registerModule(withSnapshotPolicy(
                 declarative(String.class, EventSourcedWorkflowState.class)
                         .messagingModel((c, model) -> model.entityEvolver((entity, event, context) ->
                                                                                   EventSourcedWorkflowState.requireEventSourcedState(
@@ -240,9 +242,19 @@ public class WorkflowConfigurationDefaults implements ConfigurationEnhancer {
                                                 "Workflow state for '%s' cannot be created without workflowDefinitionId metadata.".formatted(
                                                         identifier)))))
                         .criteriaResolver(c -> (identifier, context) -> EventSourcedWorkflowState.criteriaBuilder(
-                                identifier))
+                                identifier)))
                         // FIXME Register snapshot configuration eventually, see #245
                         .build());
+    }
+
+    /**
+     * Perf-probe toggle: with {@code -Daxoniq.workflow.snapshots.afterEvents=N} both workflow entities snapshot after a
+     * load that evolved at least N events. Requires a {@code SnapshotStore} component. Absent property: no snapshots.
+     */
+    private static <ID, E> EventSourcedEntityModule.OptionalPhase<ID, E> withSnapshotPolicy(
+            EventSourcedEntityModule.OptionalPhase<ID, E> module) {
+        Integer afterEvents = Integer.getInteger("axoniq.workflow.snapshots.afterEvents");
+        return afterEvents == null ? module : module.snapshotPolicy(SnapshotPolicy.afterEvents(afterEvents));
     }
 
     void registerWorkflowEngineExecutor(ComponentRegistry componentRegistry) {

@@ -7,6 +7,7 @@ import io.axoniq.framework.integrationtests.workflow.S4RestoreSeedTest.ReleasePa
 import io.axoniq.framework.integrationtests.workflow.S4RestoreSeedTest.StartParking;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedRunningWorkflows;
+import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTags;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
@@ -16,6 +17,13 @@ import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
+import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
+import org.axonframework.common.infra.ComponentDescriptor;
+import org.axonframework.conversion.jackson.JacksonConverter;
+import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.messaging.core.QualifiedName;
+import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.GenericEventMessage;
@@ -23,6 +31,7 @@ import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.axonframework.messaging.eventstreaming.Tag;
 import org.awaitility.core.ConditionTimeoutException;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -37,6 +46,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -68,6 +78,84 @@ class WorkflowScalingPerfTest {
     private static final Path OUT = Path.of(System.getProperty("perf.out", "target/perf-results.csv"));
     private static final Duration RESTORE_CEILING = Duration.ofSeconds(
             Long.getLong("perf.restoreCeilingSeconds", 120));
+    /**
+     * With {@code -Dperf.snapshots=true} (and {@code -Daxoniq.workflow.snapshots.afterEvents=N} for the engine) every
+     * size shares one in-memory snapshot store across its nodes. Snapshots are taken while sourcing, so the first
+     * successor pays for creating them; the recorded failover restore is then the one of a second successor.
+     */
+    private static final boolean SNAPSHOTS = Boolean.getBoolean("perf.snapshots");
+
+    /**
+     * Both entities snapshot into Axon Server through {@link AxonServerSnapshotStore}. The workflow state travels as
+     * its {@link EventSourcedWorkflowState.Memento}, the running-workflow list as itself; both are rebuilt on load so
+     * the framework's lifecycle handler receives entity instances.
+     */
+    static final class ServerSnapshots implements SnapshotStore {
+
+        private final SnapshotStore axonServer;
+        private final JacksonConverter converter = new JacksonConverter();
+        private final QualifiedName listName = new QualifiedName(EventSourcedRunningWorkflows.class);
+
+        ServerSnapshots() {
+            this.axonServer = new AxonServerSnapshotStore(DcbFencingBackends.axonServerConnection(), converter);
+        }
+
+        @Override
+        public CompletableFuture<Void> store(QualifiedName name, Object id, Snapshot snapshot,
+                                             @Nullable ProcessingContext context) {
+            Object payload = snapshot.payload() instanceof EventSourcedWorkflowState state
+                    ? state.toMemento() : snapshot.payload();
+            return axonServer.store(name, id, snapshot.payload(payload), context);
+        }
+
+        @Override
+        public CompletableFuture<Snapshot> load(QualifiedName name, Object id, @Nullable ProcessingContext context) {
+            return axonServer.load(name, id, context).thenApply(snapshot -> {
+                if (snapshot == null) {
+                    return null;
+                }
+                byte[] bytes = (byte[]) snapshot.payload();
+                Object entity = name.equals(listName)
+                        ? converter.convert(bytes, EventSourcedRunningWorkflows.class)
+                        : EventSourcedWorkflowState.fromMemento(
+                                converter.convert(bytes, EventSourcedWorkflowState.Memento.class));
+                return snapshot.payload(entity);
+            });
+        }
+
+        /** Whether Axon Server holds a snapshot for the entity, read back through the same gRPC API. */
+        boolean inServer(Class<?> entityType, Object id) {
+            return axonServer.load(new QualifiedName(entityType), id, null)
+                             .orTimeout(30, TimeUnit.SECONDS).join() != null;
+        }
+
+        @Override
+        public void describeTo(ComponentDescriptor descriptor) {
+            descriptor.describeProperty("delegate", axonServer);
+        }
+    }
+
+    private static @Nullable ServerSnapshots snapshotStore() {
+        return SNAPSHOTS ? new ServerSnapshots() : null;
+    }
+
+    /**
+     * Restores a node over the store and times it. In snapshot mode the first successor only creates the snapshots
+     * (recorded as {@code first_restore_ms}); the timed restore is the one of the next successor. Returns the node to
+     * continue with; the caller closes it.
+     */
+    private static Node restoredNode(String sweep, long size, EventStorageEngine store, InMemoryTokenStore tokens,
+                                     @Nullable ServerSnapshots snapshots, int n, long[] restoreMsOut) {
+        if (SNAPSHOTS) {
+            try (var warm = startNode(store, MODULE, new ParkingWorkflow(), tokens, snapshots)) {
+                record(sweep, size, "first_restore_ms",
+                       timedOrCeiling(sweep, size, "first_restore_ms", warm, () -> awaitRunning(warm, n)), n);
+            }
+        }
+        var node = startNode(store, MODULE, new ParkingWorkflow(), tokens, snapshots);
+        restoreMsOut[0] = timedOrCeiling(sweep, size, "failover_restore_ms", node, () -> awaitRunning(node, n));
+        return node;
+    }
 
     private static int[] sizes(String property, String defaults) {
         return Arrays.stream(System.getProperty(property, defaults).split(","))
@@ -85,11 +173,12 @@ class WorkflowScalingPerfTest {
             var store = DcbFencingBackends.freshStore(Backend.AXON_SERVER);
             List<String> ids = IntStream.range(0, n).mapToObj(i -> "a-" + n + "-" + i).toList();
             var tokens = new InMemoryTokenStore();
+            var snapshots = snapshotStore();
             long heapBefore = usedHeap();
 
             long startMs;
             long heapWithRunning;
-            try (var node = startNode(store, MODULE, new ParkingWorkflow(), tokens)) {
+            try (var node = startNode(store, MODULE, new ParkingWorkflow(), tokens, snapshots)) {
                 startMs = timed(() -> {
                     publishParallel(node, ids.stream().map(id -> (Object) new StartParking(id, 0)).toList());
                     awaitParked(node, store, n);
@@ -102,17 +191,20 @@ class WorkflowScalingPerfTest {
             record("running", n, "raw_source_one_instance_ms",
                    timed(() -> sourceCount(store, EventCriteria.havingTags(workflowTag(ids.get(n / 2))))), n);
 
-            long restoreMs;
+            long[] restoreMs = new long[1];
             long releaseMs;
-            try (var node = startNode(store, MODULE, new ParkingWorkflow(), tokens)) {
-                restoreMs = timedOrCeiling("running", n, "failover_restore_ms", node, () -> awaitRunning(node, n));
+            try (var node = restoredNode("running", n, store, tokens, snapshots, n, restoreMs)) {
                 releaseMs = timedOrCeiling("running", n, "release_all_ms", node, () -> {
                     publishParallel(node, ids.stream().map(id -> (Object) new ReleaseParked(id)).toList());
                     await().atMost(RESTORE_CEILING).pollInterval(Duration.ofMillis(200))
                            .untilAsserted(() -> assertThat(node.runningWorkflowIds()).isEmpty());
                 });
             }
-            record("running", n, "failover_restore_ms", restoreMs, n);
+            record("running", n, "failover_restore_ms", restoreMs[0], n);
+            if (snapshots != null) {
+                record("running", n, "list_snapshot_in_server",
+                       snapshots.inServer(EventSourcedRunningWorkflows.class, EventSourcedRunningWorkflows.ENTITY_ID) ? 1 : 0, n);
+            }
             record("running", n, "release_all_ms", releaseMs, n);
         }
     }
@@ -132,23 +224,26 @@ class WorkflowScalingPerfTest {
 
             List<String> ids = IntStream.range(0, running).mapToObj(i -> "b-" + completed + "-" + i).toList();
             var tokens = new InMemoryTokenStore();
-            try (var node = startNode(store, MODULE, new ParkingWorkflow(), tokens)) {
+            var snapshots = snapshotStore();
+            try (var node = startNode(store, MODULE, new ParkingWorkflow(), tokens, snapshots)) {
                 publishParallel(node, ids.stream().map(id -> (Object) new StartParking(id, 0)).toList());
                 awaitParked(node, store, running);
             }
             record("history", completed, "raw_source_running_list_ms",
                    timed(() -> sourceCount(store, lifecycleCriteria())), 2L * completed + running);
 
-            long restoreMs;
-            try (var node = startNode(store, MODULE, new ParkingWorkflow(), tokens)) {
-                restoreMs = timedOrCeiling("history", completed, "failover_restore_ms", node,
-                                           () -> awaitRunning(node, running));
-                if (restoreMs >= 0) {
+            long[] restoreMs = new long[1];
+            try (var node = restoredNode("history", completed, store, tokens, snapshots, running, restoreMs)) {
+                if (restoreMs[0] >= 0) {
                     publishParallel(node, ids.stream().map(id -> (Object) new ReleaseParked(id)).toList());
                     await().atMost(RESTORE_CEILING).untilAsserted(() -> assertThat(node.runningWorkflowIds()).isEmpty());
                 }
             }
-            record("history", completed, "failover_restore_ms", restoreMs, running);
+            record("history", completed, "failover_restore_ms", restoreMs[0], running);
+            if (snapshots != null) {
+                record("history", completed, "list_snapshot_in_server",
+                       snapshots.inServer(EventSourcedRunningWorkflows.class, EventSourcedRunningWorkflows.ENTITY_ID) ? 1 : 0, running);
+            }
         }
     }
 
@@ -163,9 +258,10 @@ class WorkflowScalingPerfTest {
             var store = DcbFencingBackends.freshStore(Backend.AXON_SERVER);
             String id = "c-" + steps;
             var tokens = new InMemoryTokenStore();
+            var snapshots = snapshotStore();
 
             long executeMs;
-            try (var node = startNode(store, MODULE, new ParkingWorkflow(), tokens)) {
+            try (var node = startNode(store, MODULE, new ParkingWorkflow(), tokens, snapshots)) {
                 executeMs = timed(() -> {
                     node.publish(new StartParking(id, steps));
                     awaitParked(node, store, 1);
@@ -177,16 +273,19 @@ class WorkflowScalingPerfTest {
             record("steps", steps, "raw_source_one_instance_ms",
                    timed(() -> sourceCount(store, EventCriteria.havingTags(workflowTag(id)))), events);
 
-            long restoreMs;
+            long[] restoreMs = new long[1];
             long firstAppendMs;
-            try (var node = startNode(store, MODULE, new ParkingWorkflow(), tokens)) {
-                restoreMs = timedOrCeiling("steps", steps, "failover_restore_ms", node, () -> awaitRunning(node, 1));
-                firstAppendMs = restoreMs < 0 ? -1 : timedOrCeiling("steps", steps, "release_after_restore_ms", node, () -> {
+            try (var node = restoredNode("steps", steps, store, tokens, snapshots, 1, restoreMs)) {
+                firstAppendMs = restoreMs[0] < 0 ? -1 : timedOrCeiling("steps", steps, "release_after_restore_ms", node, () -> {
                     node.publish(new ReleaseParked(id));
                     await().atMost(RESTORE_CEILING).untilAsserted(() -> assertThat(node.runningWorkflowIds()).isEmpty());
                 });
             }
-            record("steps", steps, "failover_restore_ms", restoreMs, events);
+            record("steps", steps, "failover_restore_ms", restoreMs[0], events);
+            if (snapshots != null) {
+                record("steps", steps, "state_snapshot_in_server",
+                       snapshots.inServer(EventSourcedWorkflowState.class, id) ? 1 : 0, events);
+            }
             record("steps", steps, "release_after_restore_ms", firstAppendMs, events);
         }
     }

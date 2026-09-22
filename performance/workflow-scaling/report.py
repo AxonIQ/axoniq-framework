@@ -3,18 +3,22 @@
 import csv, json, sys
 from collections import defaultdict
 
-src = sys.argv[1]
-dst = sys.argv[2]
-meta_json = sys.argv[3] if len(sys.argv) > 3 else "{}"
-meta = json.loads(meta_json)
+# usage: report.py base.csv snap.csv out.html meta.json template.html narrative.js
+base_src, snap_src, dst = sys.argv[1], sys.argv[2], sys.argv[3]
+meta = json.loads(sys.argv[4])
+tpl, nar = sys.argv[5], sys.argv[6]
 
-data = defaultdict(lambda: defaultdict(dict))   # sweep -> size -> metric -> value
-events = defaultdict(dict)                       # sweep -> size -> events
-with open(src) as f:
-    for row in csv.DictReader(f):
-        s, n, m, v, e = row["sweep"], int(row["size"]), row["metric"], int(row["value"]), int(row["events"])
-        data[s][n][m] = v
-        events[s][n] = max(events[s].get(n, 0), e)
+def load(src):
+    data = defaultdict(lambda: defaultdict(dict))   # sweep -> size -> metric -> value
+    events = defaultdict(dict)                       # sweep -> size -> events
+    with open(src) as f:
+        for row in csv.DictReader(f):
+            s, n, m, v, e = row["sweep"], int(row["size"]), row["metric"], int(row["value"]), int(row["events"])
+            data[s][n][m] = v
+            events[s][n] = max(events[s].get(n, 0), e)
+    return data, events
+
+data, events = load(base_src)
 
 def series(sweep, metric, per=None):
     out = []
@@ -36,7 +40,8 @@ def table(sweep, cols):
         rows.append([n] + [data[sweep][n].get(c) for c, _ in cols])
     return rows
 
-payload = {
+def build(data, events):
+  return {
     "running": {
         "start": series("running", "start_all_ms"),
         "start_per": series("running", "start_all_ms", "size"),
@@ -68,11 +73,15 @@ payload = {
         "table": table("steps", [("events_in_instance", ""), ("execute_steps_ms", ""), ("raw_source_one_instance_ms", ""),
                                  ("failover_restore_ms", ""), ("release_after_restore_ms", "")]),
     },
-    "meta": meta,
-}
+  }
 
-html = open(sys.argv[4]).read() if len(sys.argv) > 4 else ""
+base = build(data, events)
+data, events = load(snap_src)
+snap = build(data, events)
+payload = {"base": base, "snap": snap, "meta": meta}
+
+html = open(tpl).read()
 html = html.replace("/*__DATA__*/", "const DATA = " + json.dumps(payload) + ";")
-html = html.replace("/*__NARRATIVE__*/", open(sys.argv[5]).read())
+html = html.replace("/*__NARRATIVE__*/", open(nar).read())
 open(dst, "w").write(html)
 print("wrote", dst)

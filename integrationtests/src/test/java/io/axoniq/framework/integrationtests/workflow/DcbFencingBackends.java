@@ -37,6 +37,7 @@ import org.axonframework.eventsourcing.eventstore.GenericTaggedEventMessage;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.eventsourcing.eventstore.TerminalEventMessage;
 import org.axonframework.eventsourcing.eventstore.inmemory.InMemoryEventStorageEngine;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageTypeResolver;
 import org.axonframework.messaging.eventhandling.EventMessage;
@@ -102,6 +103,14 @@ final class DcbFencingBackends {
             case AXON_SERVER -> freshAxonServerStore();
             case POSTGRES -> freshPostgresStore();
         };
+    }
+
+    /** The shared Axon Server connection, for components that talk to the server directly (snapshot store). */
+    static synchronized AxonServerConnection axonServerConnection() {
+        if (axonServerConnection == null) {
+            freshAxonServerStore();
+        }
+        return axonServerConnection;
     }
 
     /** Host and gRPC port of the shared Axon Server container, starting it if needed (S5 multi-JVM rig). */
@@ -279,11 +288,26 @@ final class DcbFencingBackends {
                           String moduleName,
                           Object workflow,
                           @Nullable TokenStore sharedTokenStore) {
+        return startNode(store, moduleName, workflow, sharedTokenStore, null);
+    }
+
+    /**
+     * As above, plus a snapshot store that outlives the node. The framework decorates the event storage engine with
+     * snapshot-capable sourcing when a {@code SnapshotStore} component is present.
+     */
+    static Node startNode(EventStorageEngine store,
+                          String moduleName,
+                          Object workflow,
+                          @Nullable TokenStore sharedTokenStore,
+                          @Nullable SnapshotStore sharedSnapshotStore) {
         var pgDataSource = PG_SOURCES.get(store);
         var configurer = WorkflowConfigurer.create();
         configurer.componentRegistry(MultiTenancyUtils::disable);
         if (sharedTokenStore != null) {
             configurer.componentRegistry(cr -> cr.registerComponent(TokenStore.class, cfg -> sharedTokenStore));
+        }
+        if (sharedSnapshotStore != null) {
+            configurer.componentRegistry(cr -> cr.registerComponent(SnapshotStore.class, cfg -> sharedSnapshotStore));
         }
         if (pgDataSource != null) {
             configurer.componentRegistry(cr -> cr.registerComponent(

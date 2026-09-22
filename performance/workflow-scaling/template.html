@@ -227,6 +227,17 @@
   .fix dt { color: var(--ink-3); font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding-top: 3px; }
   .fix dd { margin: 0; color: var(--ink-2); max-width: 78ch; }
   .fix dd b { color: var(--ink); font-weight: 600; }
+  .modebar { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; margin-top: 28px; }
+  .toggle { display: inline-flex; border: 1px solid var(--rule); background: var(--surface); padding: 3px; gap: 3px; }
+  .toggle button { font: inherit; font-size: 13.5px; font-weight: 500; color: var(--ink-2); background: transparent; border: 0; padding: 7px 14px; cursor: pointer; }
+  .toggle button.on { background: var(--ink); color: var(--bg); }
+  .toggle button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .modenote { font-size: 13.5px; color: var(--ink-2); }
+  .modenote b { color: var(--ink); }
+  .compare { margin-top: 18px; background: var(--surface); border: 1px solid var(--rule); padding: 18px 22px 16px; }
+  .compare p.how { font-size: 12.5px; color: var(--ink-3); margin-top: 10px; }
+  td.better { color: var(--good); font-weight: 600; }
+  td.same { color: var(--ink-3); }
   .whatif p.how { font-size: 12.5px; color: var(--ink-3); }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
@@ -239,6 +250,19 @@
     <div class="facts" id="facts"></div>
   </header>
 
+
+  <div class="modebar">
+    <div class="toggle" role="tablist" aria-label="Snapshot mode">
+      <button type="button" data-mode="base" class="on">Without snapshots</button>
+      <button type="button" data-mode="snap">With snapshots</button>
+    </div>
+    <div class="modenote" id="modenote"></div>
+  </div>
+  <div class="compare">
+    <div class="eyebrow">Snapshots: before vs after / same store, same sizes</div>
+    <div class="tablewrap" style="margin-top:10px"><table id="t-compare"></table></div>
+    <p class="how" id="compare-note"></p>
+  </div>
 
   <div class="whatif" id="whatif">
     <div class="eyebrow"><span>What if / drag the sliders</span><span id="wi-scope"></span></div>
@@ -519,7 +543,9 @@ function lineChart(id, datasets, opts) {
       },
     }],
   };
-  return new Chart(ctx, cfg);
+  const chart = new Chart(ctx, cfg);
+  CHARTS.push(chart);
+  return chart;
 }
 
 const pts = (arr, f = (v) => v) => arr.filter(p => p.y >= 0).map(p => ({ x: p.x, y: f(p.y) }));
@@ -534,8 +560,13 @@ function renderTable(id, header, rows, flags) {
     }).join("") + "</tr>").join("") + "</tbody>";
 }
 
+let MODE = "base";
+const CHARTS = [];
 function render() {
-  const R = DATA.running, H = DATA.history, S = DATA.steps;
+  CHARTS.splice(0).forEach(c => c.destroy());
+  const D = DATA[MODE];
+  D.meta = { ...DATA.meta, mode: MODE };
+  const R = D.running, H = D.history, S = D.steps;
   const s1 = css("--s1"), s2 = css("--s2"), s3 = css("--s3");
 
   // Sweep A
@@ -587,8 +618,11 @@ function render() {
     S.table.map(r => [r[0], r[1], r[2], r[0] > 0 ? r[2] / r[0] : null, r[3], r[4], r[5]]),
     (r, i, c) => (i >= 5 && typeof c === "number" && c < 0) ? "fail" : "");
 
-  NARRATIVE(DATA);
-  WHATIF(DATA);
+  NARRATIVE(D, DATA.base, DATA.snap);
+  WHATIF(D);
+  document.querySelectorAll(".toggle button").forEach(b => b.classList.toggle("on", b.dataset.mode === MODE));
 }
+document.querySelectorAll(".toggle button").forEach(b => b.addEventListener("click", () => { MODE = b.dataset.mode; render(); }));
+COMPARE(DATA.base, DATA.snap, DATA.meta);
 render();
 </script>

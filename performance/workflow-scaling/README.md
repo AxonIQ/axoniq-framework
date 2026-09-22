@@ -7,8 +7,10 @@ Scaling probe of the workflow engine against a real Axon Server DCB event store,
 2. **Running-workflow list.** Fixed 10 running, growing count of finished workflows in the store.
 3. **One instance's history.** One workflow with a growing number of execute steps.
 
-`report.html` is the interactive report: sliders on top, measured sweeps and ranked bottlenecks below.
-Open it in a browser. `results.csv` holds the raw rows (`sweep,size,metric,value,events`).
+`report.html` is the interactive report: a Without / With Snapshots toggle and a before-vs-after strip on
+top, sliders below, then the measured sweeps and ranked bottlenecks. Open it in a browser.
+`results.csv` holds the raw rows without snapshots, `results-snapshots.csv` the rows with snapshots
+(`sweep,size,metric,value,events`).
 
 ## Headline
 
@@ -20,6 +22,31 @@ Open it in a browser. `results.csv` holds the raw rows (`sweep,size,metric,value
 
 Not a bottleneck: Axon Server tag reads (2M events in 13 s, 10k events in 49 ms), memory (about
 21 KB per parked instance), live step latency (flat at about 23 ms).
+
+## With snapshots
+
+Second run with both entities snapshotting into Axon Server (`AxonServerSnapshotStore`, policy
+`afterEvents(500)`), confirmed by reading each snapshot back through the gRPC API
+(`list_snapshot_in_server`, `state_snapshot_in_server` rows).
+
+| case | without | with |
+|---|---|---|
+| failover restore, 50,000 finished workflows, 10 running | 12.5 s | 0.1 s |
+| restore 1 instance with 10,002 events | 20.4 s | 0.2 s |
+| restore 10,000 parked instances (3 events each) | 1.6 s | 1.1 s |
+| release 10,000 parked instances (fan-out) | 47 s | 45 s |
+
+Enabling it on this branch, test-only wiring:
+
+- engine: `WorkflowConfigurationDefaults` registers a `SnapshotPolicy` on both entities when
+  `-Daxoniq.workflow.snapshots.afterEvents=N` is set; `EventSourcedRunningWorkflows` got bean accessors,
+  `EventSourcedWorkflowState` a plain-values `Memento` with `toMemento()` / `fromMemento()`.
+- test: `-Dperf.snapshots=true` shares an Axon Server backed `SnapshotStore` across the failover nodes
+  (`WorkflowScalingPerfTest.ServerSnapshots`) and records the restore of a second successor, since
+  snapshots are created while sourcing.
+
+The production version of this feature is being built separately from `main`
+(branch `feature/workflow-snapshots`). The wiring here exists only to measure.
 
 ## Harness
 
@@ -50,4 +77,5 @@ Twelve pre-existing workflow integration tests on `poc/tla_dst` do not compile: 
 `WorkflowHistoryRepository` API that the workflow manager backport made async. Move them aside or
 add `.join()` before running anything in `integrationtests`. The perf test itself compiles.
 
-Sweep 3 was measured with a fresh token store per restart. Sweeps 1 and 2 carried the token over.
+Sweep 3 without snapshots was measured with a fresh token store per restart. Everything else carried
+the token over.
