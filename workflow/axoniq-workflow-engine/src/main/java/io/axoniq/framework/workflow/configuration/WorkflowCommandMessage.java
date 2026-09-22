@@ -25,7 +25,7 @@ import org.axonframework.messaging.core.MessageType;
 
 /**
  * {@link CommandMessage} implementation uniquely identifying a synthesized request to resume/run a {@code @Workflow}
- * body, with it's {@link #payload() payload} being the {@link WorkflowContext} of the workflow instance.
+ * body, with its {@link #payload() payload} being the {@link WorkflowContext} of the workflow instance.
  * <p>
  * Deliberately not a plain {@code CommandMessage}, as that would make
  * {@link io.axoniq.framework.workflow.runtime.api.annotation.Workflow} annotated handlers that are discovered with the

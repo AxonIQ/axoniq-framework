@@ -51,11 +51,7 @@ public class WorkflowDefinitionLookupUtilsHandlerBeanTest {
 
     @Test
     void shouldDetectWorkflowWorkflowBeanDefinitions() {
-        // We look for any workflow context type or a specific one.
-        // SpringUtils.handlerBeans takes a Class<? extends WorkflowContext> as a first argument.
-        var handlerBeans = WorkflowDefinitionLookupUtils.workflowBeanDefinitions(
-                beanFactory,
-                                                                                 false);
+        var handlerBeans = WorkflowDefinitionLookupUtils.workflowBeanDefinitions(beanFactory, false);
 
         assertThat(handlerBeans).hasSize(2);
         assertThat(handlerBeans).containsOnlyKeys(MyWorkflowContext.class, OtherWorkflowContext.class);

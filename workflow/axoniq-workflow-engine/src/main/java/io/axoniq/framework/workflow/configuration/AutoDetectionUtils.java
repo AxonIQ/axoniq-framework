@@ -228,6 +228,7 @@ public final class AutoDetectionUtils {
             Map<String, @Nullable Object> attributes
     ) {
         return c -> {
+            @SuppressWarnings("unchecked")
             Class<? extends WorkflowIdProvider> providerClass = getOrDefault(
                     (Class<? extends WorkflowIdProvider>) attributes.get(ATTR_ID_PROPERTY_PROVIDER),
                     PayloadPropertyWorkflowIdProvider.class
