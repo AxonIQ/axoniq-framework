@@ -29,7 +29,6 @@ import io.axoniq.framework.axonserver.connector.shared.ErrorCode;
 import io.axoniq.framework.axonserver.connector.shared.ExceptionConverter;
 import io.axoniq.framework.axonserver.connector.shared.MetadataConverter;
 import io.axoniq.framework.axonserver.connector.util.ProcessingInstructionUtils;
-import org.axonframework.common.FutureUtils;
 import org.axonframework.common.StringUtils;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.conversion.Converter;
@@ -60,7 +59,8 @@ import static org.axonframework.common.ObjectUtils.getOrDefault;
  * {@link AxonServerCommandBusConnector}.
  * <p>
  * The operations {@link #convertCommandMessage(CommandMessage, String, String) convert}
- * {@link CommandMessage CommandMessages} and {@link #convertCommandResponse(CommandResponse, Converter) convert}
+ * {@link CommandMessage CommandMessages} and
+ * {@link #convertCommandResponse(CommandResponse, Converter, MessageType) convert}
  * {@link CommandResponse CommandResponses} are used during dispatching. The operations
  * {@link #convertCommand(Command, Converter) convert} {@link Command Commands} and
  * {@link #convertResultMessage(CommandResultMessage, String) convert} result messages are used during handling.
@@ -119,14 +119,21 @@ public final class CommandConverter {
      * {@link CompletableFuture} for convenience when dealing with {@link CommandResponse CommandResponses} during
      * {@link AxonServerCommandBusConnector#dispatch(CommandMessage, ProcessingContext) dispatching}.
      *
-     * @param commandResponse the command response to convert to a {@link CommandResultMessage}
-     * @param converter       the converter to use for payload conversion in the resulting {@link CommandResultMessage}
+     * @param commandResponse    the command response to convert to a {@link CommandResultMessage}
+     * @param converter          the converter to use for payload conversion in the resulting
+     *                           {@link CommandResultMessage}
+     * @param fallbackResultType the {@link MessageType} to use for the resulting {@link CommandResultMessage} when the
+     *                           response carries no payload; typically the dispatched {@link CommandMessage}'s own
+     *                           {@link CommandMessage#type() type}, as there is no result-specific type to derive one
+     *                           from
      * @return the {@code commandResponse} converted to a {@link CommandResultMessage}, wrapped in a
-     * {@link CompletableFuture} for convenience
+     * {@link CompletableFuture} for convenience. The resulting {@link CommandResultMessage} carries a {@code null}
+     * payload when the response carries none; the future completes exceptionally when the response holds an error
      */
     public static CompletableFuture<CommandResultMessage> convertCommandResponse(
             CommandResponse commandResponse,
-            @Nullable Converter converter
+            @Nullable Converter converter,
+            MessageType fallbackResultType
     ) {
         SerializedObject commandResponsePayload = commandResponse.getPayload();
         if (commandResponse.hasErrorMessage()) {
@@ -139,7 +146,9 @@ public final class CommandConverter {
         }
 
         if (commandResponsePayload.getType().isEmpty()) {
-            return FutureUtils.emptyCompletedFuture();
+            return CompletableFuture.completedFuture(
+                    new GenericCommandResultMessage(fallbackResultType, (Object) null)
+            );
         }
 
         String revision = revisionOrDefault(commandResponsePayload);
@@ -152,7 +161,6 @@ public final class CommandConverter {
                 metadata
         )).withConverter(converter));
     }
-
 
     /**
      * Converts the given {@code command} into a {@link CommandMessage} for handling in
@@ -183,24 +191,14 @@ public final class CommandConverter {
     /**
      * Converts the given {@code resultMessage}, when present, into a {@link CommandResponse}, using the given
      * {@code requestIdentifier} to correlate the {@link Command} that led to this {@link CommandResponse}.
-     * <p>
-     * Whenever the {@code resultMessage} is {@code null}, an empty {@code CommandResponse} is constructed instead for
-     * returning a result from handling of a
-     * {@link AxonServerCommandBusConnector#subscribe(QualifiedName, int) subscribed} command handler.
      *
-     * @param resultMessage     the result message to convert to a {@link CommandResponse}, when present
+     * @param resultMessage     the result message to convert to a {@link CommandResponse}
      * @param requestIdentifier the identifier correlating the {@link CommandResponse} to the {@link Command} that led
      *                          to the response
      * @return a {@link CommandResponse} based on the given {@code resultMessage} and {@code requestIdentifier}
      */
-    public static CommandResponse convertResultMessage(@Nullable CommandResultMessage resultMessage,
+    public static CommandResponse convertResultMessage(CommandResultMessage resultMessage,
                                                        String requestIdentifier) {
-        if (resultMessage == null) {
-            return CommandResponse.newBuilder()
-                                  .setMessageIdentifier(UUID.randomUUID().toString())
-                                  .setRequestIdentifier(requestIdentifier)
-                                  .build();
-        }
         Object payload = resultMessage.payload();
         String messageId = getOrDefault(resultMessage.identifier(), UUID.randomUUID().toString());
         CommandResponse.Builder responseBuilder =

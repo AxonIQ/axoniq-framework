@@ -1,0 +1,72 @@
+= Managing Workflow Instances
+:navtitle: Workflow Manager
+
+`WorkflowManager` is the outside-in API for inspecting workflow instances and requesting cancellation from application
+code, support tooling, or administration services. Use `WorkflowContext` inside a workflow definition. Use
+`WorkflowManager` when the caller is outside the workflow.
+
+== Retrieve the manager instance
+
+The default workflow configuration registers `WorkflowManager` as a component:
+
+[source,java]
+----
+include::example$workflows/workflowmanager/WorkflowManagerExamples.java[tag=retrieve-manager,indent=0]
+----
+
+== Find an instance and read its state
+
+Build a `WorkflowStateQuery` with explicit state restrictions. The finder returns a lazy result immediately. Resolve
+the detached `WorkflowState` asynchronously.
+
+[source,java]
+----
+include::example$workflows/workflowmanager/WorkflowManagerExamples.java[tag=find-one,indent=0]
+----
+
+No matching instance completes with `null`. For a query matching more than one instance, calling `join()` throws a
+`CompletionException` whose cause is `NonUniqueWorkflowInstanceMatchException`. Use a workflow ID whenever the caller
+already knows it.
+
+The result of `findOne` is a `WorkflowInstances.Single`, which is also a zero-or-one `WorkflowInstances` collection.
+Use `singleState()` for direct zero-or-one state resolution. `instances()` and `size()` remain available when code handles single
+and multiple searches uniformly; for a single result, `size()` completes with zero or one.
+
+The detached state has copied structural state such as its payload map and steps. It is safe to retain while the live workflow
+continues to change. Application objects stored in payload values are not generically deep-copied.
+
+== Find several instances
+
+Use the same query type for one or many instances. The query is composed from named state restrictions and combines
+them with logical AND. A workflow-definition restriction uses `VersionedType`, which identifies the workflow
+definition by qualified name and version; it is distinct from the `MessageType` of a lifecycle event envelope.
+
+[source,java]
+----
+include::example$workflows/workflowmanager/WorkflowManagerExamples.java[tag=find-many,indent=0]
+----
+
+`instances()` follows the Reactive Streams demand protocol. Each emitted `WorkflowInstance` is a lazy handle, so call
+`state()` on it to obtain its state. The manager does not provide a `Predicate`-based finder. The named restrictions
+in `WorkflowStateQuery` allow live and history repositories to execute the same search efficiently. A
+`WorkflowInstances` result includes matching live executions and historic workflow instances. When a workflow is
+available from both sources, the live execution represents that workflow in the result.
+
+== Request cancellation
+
+Cancellation requests are asynchronous and apply only to live workflow executions. Historic instances can appear in a
+`WorkflowInstances` result and their state can be read, but they do not receive cancellation requests. Use the manager
+for a request made by an external caller; use `ctx.cancel()` or `ctx.cancelStep(...)` when workflow logic itself
+decides to stop.
+
+[source,java]
+----
+include::example$workflows/workflowmanager/WorkflowManagerExamples.java[tag=request-cancellation,indent=0]
+----
+
+Requesting cancellation of a single step records that step as cancelled and lets the workflow observe a
+`StepCancellationException`. Cancelling all steps does not itself terminate the workflow. Requesting workflow
+cancellation interrupts running steps and records the workflow as `CANCELLED`.
+
+For the workflow and step-level termination effects, see xref:workflow-lifecycle.adoc[Workflow Lifecycle] and
+xref:understanding-steps.adoc#cancelling-a-step[Cancelling a Step].

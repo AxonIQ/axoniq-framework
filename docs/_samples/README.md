@@ -22,6 +22,7 @@ Axon Framework 4 "before" migration snippets) keep their code inline and are out
 - `reference-guide/modules/distributed-messaging`
 - `reference-guide/modules/connector`
 - `reference-guide/modules/snapshotting`
+- `reference-guide/modules/workflows`
 
 ## How a page includes a sample
 

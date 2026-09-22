@@ -19,4 +19,5 @@
 
 io.axoniq.framework.messaging.multitenancy.configuration.MultiTenancyConfigurationDefaults
 io.axoniq.framework.messaging.multitenancy.axonserver.configuration.AxonServerMultiTenancyConfigurationDefaults
+io.axoniq.framework.messaging.multitenancy.deadletter.DeadLetterMultiTenancyConfigurationEnhancer
 io.axoniq.framework.messaging.multitenancy.annotation.TenantComponentParameterResolverFactoryConfigurationEnhancer

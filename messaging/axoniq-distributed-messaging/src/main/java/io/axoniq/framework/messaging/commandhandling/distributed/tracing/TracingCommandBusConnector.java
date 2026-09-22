@@ -135,7 +135,7 @@ public final class TracingCommandBusConnector implements CommandBusConnector {
             try {
                 delegate.handle(propagated, new ResultCallback() {
                     @Override
-                    public void onSuccess(@Nullable CommandResultMessage resultMessage) {
+                    public void onSuccess(CommandResultMessage resultMessage) {
                         try {
                             callback.onSuccess(resultMessage);
                         } finally {

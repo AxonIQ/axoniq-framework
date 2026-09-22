@@ -131,7 +131,7 @@ class MultiTenantAxonServerQueryBusConnectorTest {
             assertThat(result).isNotNull();
             assertThat(connection1.recordingQueryChannel().sentQueries()).isEmpty();
             assertThat(connection2.recordingQueryChannel().sentQueries()).hasSize(1);
-            assertThat(connection2.recordingQueryChannel().sentQueries().get(0).getMessageIdentifier())
+            assertThat(connection2.recordingQueryChannel().sentQueries().getFirst().getMessageIdentifier())
                     .isEqualTo(query.identifier());
         }
 
@@ -554,6 +554,40 @@ class MultiTenantAxonServerQueryBusConnectorTest {
 
             // then
             assertThat(secondCancel).isFalse();
+        }
+
+        @Test
+        void cancellingRegistrationTerminatesActiveSubscriptionQueryStreamsForThatTenant() {
+            // given
+            TestTenantProvider tenantProvider = new TestTenantProvider(List.of(TENANT_1, TENANT_2));
+            RecordingConnection connection1 = new RecordingConnection();
+            RecordingConnection connection2 = new RecordingConnection();
+            MultiTenantAxonServerQueryBusConnector testSubject = createSubject(
+                    tenantProvider,
+                    Map.of(TENANT_1.tenantId(), connection1,
+                           TENANT_2.tenantId(), connection2)
+            );
+            Registration registration = testSubject.registerTenant(TENANT_1);
+
+            MessageStream<QueryResponseMessage> tenantOneStream =
+                    testSubject.subscriptionQuery(queryFor(TENANT_1.tenantId()), null, 64);
+            MessageStream<QueryResponseMessage> tenantTwoStream =
+                    testSubject.subscriptionQuery(queryFor(TENANT_2.tenantId()), null, 64);
+
+            // when
+            boolean cancelled = registration.cancel();
+
+            // then
+            assertThat(cancelled).isTrue();
+            assertThat(tenantOneStream.hasNextAvailable()).isFalse();
+            assertThat(tenantOneStream.error())
+                    .hasValueSatisfying(error -> assertThat(error)
+                            .isInstanceOf(IllegalStateException.class)
+                            .hasMessageContaining(TENANT_1.tenantId()));
+            assertThat(tenantOneStream.isCompleted()).isTrue();
+
+            assertThat(tenantTwoStream.error()).isEmpty();
+            assertThat(tenantTwoStream.isCompleted()).isFalse();
         }
     }
 

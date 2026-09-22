@@ -23,6 +23,7 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantComponentProvider;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.MultiTenantAwareComponent;
 import io.axoniq.framework.messaging.multitenancy.api.TenantProvider;
+import io.axoniq.framework.messaging.multitenancy.deadletter.TenantRoutingSequencedDeadLetterQueueRegistry;
 import io.axoniq.framework.messaging.multitenancy.eventsourcing.TenantEventStorageEngineFactory;
 import io.axoniq.framework.messaging.multitenancy.util.StubTenantProvider;
 import org.axonframework.common.configuration.Configuration;
@@ -144,6 +145,20 @@ class TenantComponentProviderSubscriberTest {
 
         // then
         assertThat(tenantProvider.subscribedComponents()).contains(tenantAwareFactory);
+    }
+
+    @Test
+    void subscribesTheTenantRoutingDeadLetterQueueRegistryWhenItIsRegistered() {
+        // given
+        TenantRoutingSequencedDeadLetterQueueRegistry registry = new TenantRoutingSequencedDeadLetterQueueRegistry();
+        when(configuration.hasComponent(TenantRoutingSequencedDeadLetterQueueRegistry.class)).thenReturn(true);
+        when(configuration.getComponent(TenantRoutingSequencedDeadLetterQueueRegistry.class)).thenReturn(registry);
+
+        // when
+        testSubject.subscribeComponents();
+
+        // then
+        assertThat(tenantProvider.subscribedComponents()).contains(registry);
     }
 
     private static final class CourseRepository implements AutoCloseable {

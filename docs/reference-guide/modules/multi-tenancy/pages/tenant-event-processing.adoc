@@ -16,6 +16,8 @@ There are two ways to stream a tenant's events, and the event handler you write 
 
 A subscribing event processor is not wired to the per-tenant stores at all. <<Subscribing event processors>> explains how it behaves in a multi-tenant application.
 
+For a persistent dead-letter queue on a tenant-aware processor, see xref:multi-tenancy:tenant-dead-letter-queue.adoc[Tenant-aware dead-letter queues].
+
 [#handling-events-per-tenant]
 == Handling events per tenant
 

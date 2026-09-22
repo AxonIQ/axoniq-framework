@@ -25,6 +25,7 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.StorageEngineBackedEventStore;
 import org.axonframework.eventsourcing.eventstore.jpa.AggregateBasedJpaEventStorageEngine;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -69,9 +70,10 @@ class JpaEventStoreAutoConfigurationWithoutAxonServerTest {
                 .withUserConfiguration(EmptyTestContext.class)
                 .run(context -> {
                     assertThat(context).hasSingleBean(EventStore.class);
-                    assertThat(context).getBean(EventStorageEngine.class)
-                                       .extracting("delegate")
-                                       .isInstanceOf(AxonServerEventStorageEngine.class);
+                    // AxonServerEventStorageEngine is also a SnapshotStore, so the same bean is exposed under both
+                    assertThat(context.getBean(EventStorageEngine.class.getName(), EventStorageEngine.class))
+                            .isInstanceOf(AxonServerEventStorageEngine.class)
+                            .isSameAs(context.getBean(SnapshotStore.class.getName(), SnapshotStore.class));
                 });
     }
 

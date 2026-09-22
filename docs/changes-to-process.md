@@ -513,6 +513,7 @@ The following files in `axon-5/` describe the API changes:
 - Updated `SequencedDeadLetterProcessor` API to async (`CompletableFuture<Boolean>`)
 - Updated dead-letter retrieval to use `Configuration.getModuleConfiguration()` + `getComponents()`
 - Added `context` attribute to dead-letter attributes table
+- Documented tenant-aware dead-letter replay through `ProcessingContext`
 - Updated `diagnostics` type from `MetaData` to `Metadata`
 - Updated `EnqueuePolicy` examples with AF5 API (`payload()` instead of `getPayload()`)
 - Removed MongoDB implementation reference (not yet available in AF5)

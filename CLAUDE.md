@@ -76,9 +76,13 @@ Maven wrapper is used (`./mvnw`). Key commands:
     - Do not add @DisplayName for test methods, try to make method names self-explanatory and add meaningful comments in given-when-then sections if needed
     - **Never add `@since` tags to test classes or test methods.** `@since` documents when a *published API element* became available to consumers; tests are not published, so the tag carries no information and only goes stale. `@author` on a test class is fine.
 
-Test naming conventions:
-- **Unit tests** (Surefire): `*Test.java`, `*Tests.java`, `*Test_*.java`, `*Tests_*.java`
-- **Integration tests** (Failsafe): `*IntegrationTest.java`, `*IntegrationTests.java`, `IT*.java`, `*IT.java`, `*ITCase.java`
+Test naming conventions (plain Surefire/Failsafe defaults, no custom include/exclude overrides):
+- **Unit tests** (Surefire): `Test*.java`, `*Test.java`, `*Tests.java`, `*TestCase.java`
+- **Integration tests** (Failsafe): `IT*.java`, `*IT.java`, `*ITCase.java`
+
+A class ending in `*IntegrationTest.java` matches the Surefire pattern above (it ends in `Test.java`), so it would
+run as a fast unit test on every build instead of being gated behind `-Pintegration-test` -- name integration tests
+`*IT.java` instead.
 
 ## Module Dependency Hierarchy
 

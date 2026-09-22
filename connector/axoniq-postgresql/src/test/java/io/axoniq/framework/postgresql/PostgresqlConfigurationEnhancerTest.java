@@ -35,6 +35,7 @@ import javax.sql.DataSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 /**
@@ -108,6 +109,39 @@ class PostgresqlConfigurationEnhancerTest {
 
         // then
         assertThat(snapshotStore).isSameAs(engine);
+    }
+
+    @Test
+    void enhanceHonorsAPreRegisteredSchemaInitialization() throws SQLException {
+        // given — VALIDATE is pre-registered, and the mocked result set reports an incomplete schema
+        // (its next()/getBoolean(1) default to false), so the engine's construction must fail fast
+        // instead of falling back to the enhancer's own CREATE_IF_MISSING default.
+        Statement mockedStatement = mock(Statement.class);
+        Connection mockedConnection = mock(Connection.class);
+        DataSource mockedDataSource = mock(DataSource.class);
+        ResultSet mockedResultSet = mock(ResultSet.class);
+        when(mockedDataSource.getConnection()).thenReturn(mockedConnection);
+        when(mockedConnection.createStatement()).thenReturn(mockedStatement);
+        when(mockedStatement.executeQuery(anyString())).thenReturn(mockedResultSet);
+        when(mockedResultSet.next()).thenReturn(true);
+        when(mockedResultSet.getBoolean(1)).thenReturn(false);
+
+        assertThatThrownBy(() ->
+            EventSourcingConfigurer.create()
+                                   .componentRegistry(ComponentRegistry::disableEnhancerScanning)
+                                   .componentRegistry(cr -> cr.registerComponent(
+                                           DataSource.class, c -> mockedDataSource
+                                   ))
+                                   .componentRegistry(cr -> cr.registerComponent(
+                                           EntitlementManager.class, c -> mock(EntitlementManager.class)
+                                   ))
+                                   .componentRegistry(cr -> cr.registerComponent(
+                                           SchemaInitialization.class, c -> SchemaInitialization.VALIDATE
+                                   ))
+                                   .componentRegistry(cr -> testSubject.enhance(cr))
+                                   .build()
+                                   .getComponent(EventStorageEngine.class)
+        ).isInstanceOf(IllegalStateException.class);
     }
 
     @Test

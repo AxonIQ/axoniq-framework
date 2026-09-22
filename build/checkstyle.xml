@@ -28,11 +28,14 @@
 
     <module name="TreeWalker">
         <!-- Enforce JSpecify as the single nullness annotation system. -->
-        <!-- TODO: Once we are SpringBoot 4 native, we can also make springframework/Nullable illegal. -->
+        <!-- TODO: Once we are SpringBoot 4 native, we can also make org.springframework.lang.Nullable illegal. -->
+        <!-- TODO: eventually also make org.jspecify.annotations.NonNull illegal and work with @NullMarked on package level only. -->
         <module name="IllegalImport">
             <property name="illegalClasses"
                       value="jakarta.annotation.Nonnull,
                              jakarta.annotation.Nullable,
+                             javax.annotation.Nonnull,
+                             javax.annotation.Nullable,
                              org.jetbrains.annotations.NotNull,
                              org.jetbrains.annotations.Nullable,
                              org.springframework.lang.NonNull"

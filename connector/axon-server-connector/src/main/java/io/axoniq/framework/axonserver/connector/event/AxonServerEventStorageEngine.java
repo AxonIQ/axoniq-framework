@@ -19,16 +19,22 @@
 
 package io.axoniq.framework.axonserver.connector.event;
 
+import com.google.protobuf.ByteString;
 import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.ResultStream;
 import io.axoniq.axonserver.connector.event.DcbEventChannel;
 import io.axoniq.axonserver.grpc.event.dcb.AppendEventsResponse;
+import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceEventsResponse;
+import io.axoniq.axonserver.grpc.event.dcb.SnapshottedSourceRequest;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.SourceEventsResponse;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsRequest;
 import io.axoniq.axonserver.grpc.event.dcb.StreamEventsResponse;
+import io.axoniq.framework.axonserver.connector.snapshot.AxonServerSnapshotStore;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import org.axonframework.common.ExceptionUtils;
+import org.axonframework.common.FutureUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
 import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejectedException;
@@ -38,10 +44,17 @@ import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.EventStoreException;
 import org.axonframework.eventsourcing.eventstore.EventTypeResolver;
 import org.axonframework.eventsourcing.eventstore.GlobalIndexConsistencyMarker;
+import org.axonframework.eventsourcing.eventstore.Position;
+import org.axonframework.eventsourcing.eventstore.SnapshotEventMessage;
 import org.axonframework.eventsourcing.eventstore.SourcingCondition;
+import org.axonframework.eventsourcing.eventstore.SourcingStrategy;
 import org.axonframework.eventsourcing.eventstore.TaggedEventMessage;
+import org.axonframework.eventsourcing.snapshot.api.Snapshot;
+import org.axonframework.eventsourcing.snapshot.store.SnapshotStore;
+import org.axonframework.messaging.core.DelayedMessageStream;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.Metadata;
+import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -57,23 +70,32 @@ import java.lang.invoke.MethodHandles;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
- * An {@link EventStorageEngine} implementation using Axon Server through the {@code axonserver-connector-java}
- * project.
+ * An {@link EventStorageEngine} and {@link SnapshotStore} implementation using Axon Server through the
+ * {@code axonserver-connector-java} project.
+ * <p>
+ * As it's both an {@code EventStorageEngine} and {@code SnapshotStore},
+ * {@link #source(SourcingCondition, ProcessingContext)} operations will be optimized to carry the snapshot when present
+ * as the first entry of the resulting {@link MessageStream}.
  *
  * @author Steven van Beelen
  * @since 5.0.0
  */
-public class AxonServerEventStorageEngine implements EventStorageEngine {
+public class AxonServerEventStorageEngine implements EventStorageEngine, SnapshotStore {
 
     private static final Logger logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     private final AxonServerConnection connection;
     private final TaggedEventConverter converter;
+    private final AxonServerSnapshotStore snapshotStore;
+
+    private final AtomicBoolean snapshottedSourceSupported = new AtomicBoolean(true);
 
     /**
      * Constructs an {@code AxonServerEventStorageEngine} with the given {@code connection} and {@code converter}, using
@@ -104,7 +126,9 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
                                         EventConverter converter,
                                         EventTypeResolver eventTypeResolver) {
         this.connection = Objects.requireNonNull(connection, "The Axon Server connection cannot be null.");
+        Objects.requireNonNull(converter, "The EventConverter cannot be null.");
         this.converter = new TaggedEventConverter(converter, eventTypeResolver);
+        this.snapshotStore = new AxonServerSnapshotStore(connection, converter);
     }
 
     @Override
@@ -137,9 +161,134 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
             logger.debug("Start sourcing events with condition [{}].", condition);
         }
 
+        if (condition.strategy() instanceof SourcingStrategy.Snapshot snapshotStrategy) {
+            return snapshotStrategy.maximumPosition() == null
+                    ? sourceWithSnapshot(condition, snapshotStrategy, context)
+                    : sourceWithBoundedSnapshot(condition, snapshotStrategy, context);
+        }
+
+        return sourceEvents(condition);
+    }
+
+    private MessageStream<EventMessage> sourceWithSnapshot(SourcingCondition condition,
+                                                           SourcingStrategy.Snapshot snapshotStrategy,
+                                                           @Nullable ProcessingContext context) {
+        if (!snapshottedSourceSupported.get()) {
+            return sourceWithBoundedSnapshot(condition, snapshotStrategy, context);
+        }
+
+        ByteString snapshotKey = snapshotStore.snapshotKey(
+                snapshotStrategy.qualifiedName(), snapshotStrategy.identifier()
+        );
+        SnapshottedSourceRequest sourcingRequest =
+                ConditionConverter.convertSnapshottedSourcingCondition(condition, snapshotKey);
+        ResultStream<SnapshottedSourceEventsResponse> sourcingStream = eventChannel().source(sourcingRequest);
+        return DelayedMessageStream.create(
+                awaitSnapshottedSourceOrFallBack(sourcingStream, condition, snapshotStrategy, context)
+        );
+    }
+
+    /**
+     * Awaits the first signal (an item, an error, or completion) from the given {@code sourcingStream}, before deciding
+     * what to hand back to the caller, to not break if Axon Server doesn't support source-with-snapshot.
+     * <p>
+     * The {@code SnapshottedDcbEventStore/Source} RPC this stream is backed by only exists on Axon Server versions
+     * supporting DCB snapshotting. Against an older Axon Server,
+     * {@link DcbEventChannel#source(SnapshottedSourceRequest)} still returns a {@code ResultStream} immediately. The
+     * {@code UNIMPLEMENTED} failure only arrives later, asynchronously, as an error on that stream. When that happens,
+     * the given {@code sourcingStream} is closed and this method falls back to {@link #sourceWithBoundedSnapshot}.
+     * The snapshot itself is still fetched, through the older, separate {@link #load} RPC, and prepended to the
+     * events sourced after it. Only when that separate load also fails, or finds nothing, does sourcing fall back
+     * further to full reconstruction from {@link Position#START}. This keeps snapshots in play against an Axon
+     * Server that predates the single-round-trip RPC, rather than disabling them for as long as that server is used.
+     * <p>
+     * TODO - Ideally this is covered by having a "supported handshake" call between Axon Framework and Axon Server,
+     * as documented in https://github.com/AxonIQ/axoniq-framework/issues/100.
+     *
+     * @param sourcingStream   the {@code ResultStream} to await the first signal of
+     * @param condition        the {@code SourcingCondition} to fall back to plain sourcing with, if needed
+     * @param snapshotStrategy the {@code Snapshot} strategy to fall back to loading separately with, if needed
+     * @param context          the {@code ProcessingContext} to fall back to loading separately with, if needed
+     * @return a {@code CompletableFuture} resolving to the {@code MessageStream} to use for this sourcing operation
+     */
+    private CompletableFuture<MessageStream<EventMessage>> awaitSnapshottedSourceOrFallBack(
+            ResultStream<SnapshottedSourceEventsResponse> sourcingStream,
+            SourcingCondition condition,
+            SourcingStrategy.Snapshot snapshotStrategy,
+            @Nullable ProcessingContext context
+    ) {
+        CompletableFuture<MessageStream<EventMessage>> result = new CompletableFuture<>();
+        // Guards against the onAvailable callback and the inline check below racing and both acting on the outcome.
+        AtomicBoolean decided = new AtomicBoolean();
+        Runnable sourceWithOrWithoutSnapshotDecider = () -> {
+            if (decided.get()) {
+                return;
+            }
+            Optional<Throwable> error = sourcingStream.getError();
+            boolean unimplemented = error.isPresent() && isUnimplemented(error.get());
+            boolean readyToDecide = error.isPresent() || sourcingStream.peek() != null || sourcingStream.isClosed();
+            if (!readyToDecide || !decided.compareAndSet(false, true)) {
+                return;
+            }
+            if (unimplemented) {
+                if (snapshottedSourceSupported.compareAndSet(true, false)) {
+                    logger.warn("Axon Server does not support sourcing with snapshots in a single round trip. "
+                                        + "Falling back to loading the snapshot separately. "
+                                        + "Upgrade Axon Server to make use of this optimization.");
+                }
+                sourcingStream.close();
+                result.complete(sourceWithBoundedSnapshot(condition, snapshotStrategy, context));
+            } else {
+                result.complete(new SnapshottedSourcingEventMessageStream(sourcingStream, converter));
+            }
+        };
+        sourcingStream.onAvailable(sourceWithOrWithoutSnapshotDecider);
+        sourceWithOrWithoutSnapshotDecider.run();
+        return result;
+    }
+
+    private static boolean isUnimplemented(Throwable error) {
+        Throwable unwrapped = FutureUtils.unwrap(error);
+        return unwrapped instanceof StatusRuntimeException sre
+                && sre.getStatus().getCode() == Status.Code.UNIMPLEMENTED;
+    }
+
+    private MessageStream<EventMessage> sourceWithBoundedSnapshot(SourcingCondition condition,
+                                                                  SourcingStrategy.Snapshot snapshotStrategy,
+                                                                  @Nullable ProcessingContext context) {
+        Position maximumPosition = snapshotStrategy.maximumPosition();
+        return DelayedMessageStream.create(
+                load(snapshotStrategy.qualifiedName(), snapshotStrategy.identifier(), context)
+                        .thenApply(snapshot -> buildBoundedSnapshotStream(snapshot, condition, maximumPosition))
+                        .exceptionally(e -> {
+                            logger.warn("Snapshot loading failed, falling back to full reconstruction for [{}] "
+                                                + "with identifier [{}].",
+                                        snapshotStrategy.qualifiedName(), snapshotStrategy.identifier(), e);
+                            return sourceEvents(SourcingCondition.conditionFor(Position.START, condition.criteria()));
+                        })
+        );
+    }
+
+    private MessageStream<EventMessage> buildBoundedSnapshotStream(@Nullable Snapshot snapshot,
+                                                                   SourcingCondition condition,
+                                                                   @Nullable Position maximumPosition) {
+        if (snapshot == null || isAfter(snapshot.position(), maximumPosition)) {
+            return sourceEvents(SourcingCondition.conditionFor(Position.START, condition.criteria()));
+        }
+        return MessageStream.<EventMessage>just(new SnapshotEventMessage(snapshot))
+                            .concatWith(sourceEvents(
+                                    SourcingCondition.conditionFor(snapshot.position(), condition.criteria())
+                            ));
+    }
+
+    private MessageStream<EventMessage> sourceEvents(SourcingCondition condition) {
         SourceEventsRequest sourcingRequest = ConditionConverter.convertSourcingCondition(condition);
         ResultStream<SourceEventsResponse> sourcingStream = eventChannel().source(sourcingRequest);
         return new SourcingEventMessageStream(sourcingStream, converter);
+    }
+
+    private static boolean isAfter(Position position, @Nullable Position maximumPosition) {
+        return maximumPosition != null && !position.min(maximumPosition).equals(position);
     }
 
     @Override
@@ -188,9 +337,22 @@ public class AxonServerEventStorageEngine implements EventStorageEngine {
     }
 
     @Override
+    public CompletableFuture<Void> store(QualifiedName qualifiedName, Object identifier, Snapshot snapshot,
+                                         @Nullable ProcessingContext context) {
+        return snapshotStore.store(qualifiedName, identifier, snapshot, context);
+    }
+
+    @Override
+    public CompletableFuture<@Nullable Snapshot> load(QualifiedName qualifiedName, Object identifier,
+                                                      @Nullable ProcessingContext context) {
+        return snapshotStore.load(qualifiedName, identifier, context);
+    }
+
+    @Override
     public void describeTo(ComponentDescriptor descriptor) {
         descriptor.describeProperty("connection", connection);
         descriptor.describeProperty("converter", converter);
+        descriptor.describeProperty("snapshotStore", snapshotStore);
     }
 
     private record AxonServerAppendTransaction(

@@ -1,0 +1,7 @@
+= Axoniq Workflow Engine Minor Releases
+:navtitle: Minor Releases
+
+Any patch release made for an Axon project is tailored towards resolving bugs. This page aims to provide a dedicated overview of patch releases for Axoniq Workflow Engine features.
+
+[#release_0_1]
+== Release 0.1

@@ -95,7 +95,9 @@ class PostgresqlEventStorageEngineTest extends StorageEngineTestSuite<Postgresql
         createdDataSources.add(ds);
         dataSource = ds;
 
-        return new PostgresqlEventStorageEngine(dataSource, CONVERTER, entitlementManager);
+        return new PostgresqlEventStorageEngine(
+                dataSource, CONVERTER, SchemaInitialization.CREATE_IF_MISSING, entitlementManager
+        );
     }
 
     @Override
