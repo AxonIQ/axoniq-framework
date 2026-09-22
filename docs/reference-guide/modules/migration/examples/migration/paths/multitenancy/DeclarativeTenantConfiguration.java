@@ -26,12 +26,13 @@ import io.axoniq.framework.messaging.multitenancy.api.TenantConnectPredicate;
 import io.axoniq.framework.messaging.multitenancy.api.TenantDescriptor;
 import io.axoniq.framework.messaging.multitenancy.api.TenantNotResolvedException;
 import io.axoniq.framework.messaging.multitenancy.api.TenantResolver;
+import io.axoniq.framework.messaging.multitenancy.configuration.StaticTenantConnectPredicate;
 import org.axonframework.messaging.core.Message;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
 
 import java.util.Collection;
 import java.util.Map;
-import java.util.Set;
+import java.util.Properties;
 import javax.sql.DataSource;
 
 /**
@@ -55,11 +56,14 @@ public class DeclarativeTenantConfiguration {
     // end::predicate-by-convention[]
 
     // tag::predicate-from-fixed-set[]
-    public void registerFixedTenantSet(MessagingConfigurer configurer) {
-        Set<String> tenantContexts = Set.of("tenant-a", "tenant-b", "tenant-c");
+    public void registerFixedTenantSet(MessagingConfigurer configurer, Properties properties) {
+        if (!properties.containsKey("axoniq.multitenancy.tenants")) {
+            return;
+        }
         configurer.componentRegistry(registry -> registry.registerComponent(
                 TenantConnectPredicate.class,
-                config -> tenant -> tenantContexts.contains(tenant.tenantId())));
+                config -> StaticTenantConnectPredicate.from(
+                        properties.getProperty("axoniq.multitenancy.tenants"))));
     }
     // end::predicate-from-fixed-set[]
 
