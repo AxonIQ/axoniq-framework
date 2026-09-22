@@ -6,6 +6,7 @@ import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.AxonServerConnectionFactory;
 import io.axoniq.axonserver.connector.impl.ServerAddress;
 import io.axoniq.framework.axonserver.connector.event.AxonServerEventStorageEngine;
+import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.postgresql.PostgresqlEventStorageEngine;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
 import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
@@ -53,6 +54,7 @@ import org.axonframework.messaging.core.unitofwork.ProcessingLifecycle;
 import org.axonframework.messaging.core.unitofwork.transaction.Transaction;
 import org.axonframework.messaging.core.unitofwork.transaction.TransactionManager;
 import org.axonframework.messaging.core.unitofwork.transaction.jdbc.JdbcTransactionalExecutorProvider;
+import org.jspecify.annotations.Nullable;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import javax.sql.DataSource;
@@ -266,8 +268,23 @@ final class DcbFencingBackends {
 
     /** Same wiring as ConcurrentWriterFencingTest#startNode, parameterized by store and workflow instance. */
     static Node startNode(EventStorageEngine store, String moduleName, Object workflow) {
+        return startNode(store, moduleName, workflow, null);
+    }
+
+    /**
+     * As {@link #startNode(EventStorageEngine, String, Object)}, with a token store that outlives the node. Passing the
+     * same instance to a successor node models a failover that carries the processor tokens over instead of replaying.
+     */
+    static Node startNode(EventStorageEngine store,
+                          String moduleName,
+                          Object workflow,
+                          @Nullable TokenStore sharedTokenStore) {
         var pgDataSource = PG_SOURCES.get(store);
         var configurer = WorkflowConfigurer.create();
+        configurer.componentRegistry(MultiTenancyUtils::disable);
+        if (sharedTokenStore != null) {
+            configurer.componentRegistry(cr -> cr.registerComponent(TokenStore.class, cfg -> sharedTokenStore));
+        }
         if (pgDataSource != null) {
             configurer.componentRegistry(cr -> cr.registerComponent(
                     TransactionManager.class, cfg -> jdbcTransactionManager(pgDataSource)));

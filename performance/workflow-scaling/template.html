@@ -1,0 +1,594 @@
+<title>Workflow Engine Scaling on Axon Server</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --ink: #16191f;
+    --ink-2: #5a606b;
+    --ink-3: #8a909a;
+    --rule: #dfe2e7;
+    --rule-soft: #eceef2;
+    --accent: #2a78d6;
+    --s1: #2a78d6;
+    --s2: #eb6834;
+    --s3: #1baf7a;
+    --crit: #e34948;
+    --crit-bg: #fdecec;
+    --warn: #b56a00;
+    --warn-bg: #fff4e0;
+    --good: #1a7f3b;
+    --good-bg: #e6f5ea;
+    --grid: rgba(22, 25, 31, 0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #15171b;
+      --surface: #1d2025;
+      --ink: #f1f2f4;
+      --ink-2: #aab0ba;
+      --ink-3: #7c8390;
+      --rule: #32363e;
+      --rule-soft: #272a31;
+      --accent: #3987e5;
+      --s1: #3987e5;
+      --s2: #d95926;
+      --s3: #199e70;
+      --crit: #e66767;
+      --crit-bg: #3a2222;
+      --warn: #e0a044;
+      --warn-bg: #3a2f1b;
+      --good: #4cc26f;
+      --good-bg: #1d3325;
+      --grid: rgba(241, 242, 244, 0.1);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #15171b;
+    --surface: #1d2025;
+    --ink: #f1f2f4;
+    --ink-2: #aab0ba;
+    --ink-3: #7c8390;
+    --rule: #32363e;
+    --rule-soft: #272a31;
+    --accent: #3987e5;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --crit: #e66767;
+    --crit-bg: #3a2222;
+    --warn: #e0a044;
+    --warn-bg: #3a2f1b;
+    --good: #4cc26f;
+    --good-bg: #1d3325;
+    --grid: rgba(241, 242, 244, 0.1);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1, h2, h3 {
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", "Arial Narrow", sans-serif;
+    font-weight: 600;
+    text-wrap: balance;
+    margin: 0;
+    line-height: 1.15;
+  }
+  h1 { font-size: 38px; letter-spacing: -0.01em; }
+  h2 { font-size: 26px; margin-top: 8px; }
+  h3 { font-size: 17px; font-weight: 500; color: var(--ink-2); }
+  p { max-width: 68ch; margin: 0; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  header { display: grid; gap: 14px; padding-bottom: 28px; border-bottom: 1px solid var(--rule); }
+  header p.lede { font-size: 17px; color: var(--ink-2); max-width: 70ch; }
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0 28px;
+    margin-top: 6px;
+    font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+    font-size: 12.5px;
+    color: var(--ink-2);
+  }
+  .facts div { padding: 8px 0; border-top: 1px solid var(--rule-soft); }
+  .facts span { display: block; color: var(--ink-3); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+  .verdicts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin: 28px 0 8px; }
+  .verdict {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    padding: 16px 18px 18px;
+    display: grid;
+    gap: 6px;
+    align-content: start;
+  }
+  .verdict .eyebrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pill { white-space: nowrap; }
+  .verdict .num {
+    font-family: "IBM Plex Sans Condensed", sans-serif;
+    font-size: 34px;
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .verdict .num small { font-size: 15px; font-weight: 500; color: var(--ink-2); margin-left: 4px; }
+  .verdict p { font-size: 13.5px; color: var(--ink-2); }
+  .pill {
+    display: inline-block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    text-transform: uppercase;
+  }
+  .pill.crit { color: var(--crit); background: var(--crit-bg); }
+  .pill.warn { color: var(--warn); background: var(--warn-bg); }
+  .pill.good { color: var(--good); background: var(--good-bg); }
+
+  section { padding: 40px 0 8px; border-top: 1px solid var(--rule); margin-top: 32px; }
+  section .head { display: grid; gap: 8px; margin-bottom: 22px; }
+  section .head p.finding { font-size: 16.5px; color: var(--ink); max-width: 74ch; }
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 18px; }
+  @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
+  figure {
+    margin: 0;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    padding: 16px 16px 10px;
+    display: grid;
+    gap: 6px;
+  }
+  figure figcaption { font-weight: 500; font-size: 14px; }
+  figure figcaption small { display: block; font-weight: 400; color: var(--ink-3); font-size: 12.5px; }
+  figure .plot { position: relative; height: 280px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--ink-2); padding-top: 4px; }
+  .legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+  .legend i.dash { background: repeating-linear-gradient(90deg, var(--crit) 0 4px, transparent 4px 7px); height: 2px; }
+  .note { font-size: 13.5px; color: var(--ink-2); margin-top: 18px; max-width: 74ch; }
+  .note b { color: var(--ink); font-weight: 600; }
+  ul.pts { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 6px; }
+  ul.pts li { max-width: 74ch; }
+  ul.pts li::marker { color: var(--ink-3); }
+  .fix dd ul.pts { margin-top: 0; }
+  section .head p.finding { font-size: 15.5px; }
+  section .head p.finding > b:first-child { font-size: 16.5px; }
+
+  .tablewrap { overflow-x: auto; margin-top: 22px; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 13.5px;
+    font-variant-numeric: tabular-nums;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+  }
+  th, td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--rule-soft); white-space: nowrap; }
+  th { font-weight: 500; color: var(--ink-2); font-size: 12px; letter-spacing: 0.02em; background: var(--bg); }
+  th:first-child, td:first-child { text-align: left; font-family: "IBM Plex Mono", monospace; }
+  td.fail { color: var(--crit); font-weight: 600; }
+  td.hot { color: var(--warn); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+
+  .mech { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; margin-top: 8px; }
+  .mech div { background: var(--surface); border: 1px solid var(--rule); padding: 16px 18px; display: grid; gap: 8px; align-content: start; }
+  .mech h3 { color: var(--ink); font-family: "IBM Plex Sans", sans-serif; font-size: 15px; font-weight: 600; }
+  .mech p { font-size: 13.5px; color: var(--ink-2); }
+  code { font-family: "IBM Plex Mono", monospace; font-size: 0.92em; background: var(--rule-soft); padding: 1px 5px; border-radius: 3px; }
+  ol.next { margin: 8px 0 0; padding-left: 22px; max-width: 74ch; display: grid; gap: 8px; }
+  ol.next li::marker { font-family: "IBM Plex Mono", monospace; color: var(--ink-3); }
+  a { color: var(--accent); }
+
+  /* what-if panel */
+  .whatif { margin-top: 28px; background: var(--surface); border: 1px solid var(--rule); padding: 22px 22px 20px; display: grid; gap: 18px; }
+  .whatif .eyebrow { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px 28px; }
+  .slider { display: grid; gap: 6px; }
+  .slider label { display: flex; justify-content: space-between; align-items: baseline; font-size: 13.5px; color: var(--ink-2); }
+  .slider label output { font-family: "IBM Plex Mono", monospace; font-size: 15px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .slider input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+  .slider small { color: var(--ink-3); font-size: 12px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .stat { border-top: 2px solid var(--rule); padding-top: 8px; display: grid; gap: 2px; align-content: start; }
+  .stat .k { font-size: 12px; color: var(--ink-3); letter-spacing: 0.02em; }
+  .stat .v { font-family: "IBM Plex Sans Condensed", sans-serif; font-weight: 600; font-size: 26px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat .v small { font-size: 13px; font-weight: 500; color: var(--ink-2); margin-left: 3px; font-family: "IBM Plex Sans", sans-serif; }
+  .stat .d { font-size: 12px; color: var(--ink-2); }
+  .stat.crit { border-top-color: var(--crit); } .stat.crit .v { color: var(--crit); }
+  .stat.warn { border-top-color: var(--warn); } .stat.warn .v { color: var(--warn); }
+  .stat.good { border-top-color: var(--good); }
+  .tag { display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); border: 1px solid var(--rule); padding: 0 5px; border-radius: 3px; margin-left: 6px; vertical-align: middle; }
+  .verdictline { font-size: 15px; color: var(--ink); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .bottleneck { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13.5px; padding: 12px 14px; background: var(--bg); border-left: 3px solid var(--warn); }
+  .bottleneck .k { color: var(--ink-3); font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding-top: 3px; }
+  .bottleneck .v { color: var(--ink); }
+  .bottleneck .v b { font-weight: 600; }
+  .fixes { display: grid; gap: 14px; margin-top: 8px; }
+  .fix { background: var(--surface); border: 1px solid var(--rule); display: grid; grid-template-columns: 56px 1fr; }
+  .fix .rank { font-family: "IBM Plex Sans Condensed", sans-serif; font-weight: 600; font-size: 28px; color: var(--ink-3); display: grid; place-items: center; border-right: 1px solid var(--rule-soft); }
+  .fix .body { padding: 14px 18px 16px; display: grid; gap: 8px; }
+  .fix h3 { color: var(--ink); font-family: "IBM Plex Sans", sans-serif; font-size: 16px; font-weight: 600; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .fix dl { margin: 0; display: grid; grid-template-columns: 96px 1fr; gap: 6px 14px; font-size: 13.5px; }
+  .fix dt { color: var(--ink-3); font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding-top: 3px; }
+  .fix dd { margin: 0; color: var(--ink-2); max-width: 78ch; }
+  .fix dd b { color: var(--ink); font-weight: 600; }
+  .whatif p.how { font-size: 12.5px; color: var(--ink-3); }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">Perf probe / workflow engine / Axon Server DCB store</div>
+    <h1>Workflow Engine Scaling on Axon Server</h1>
+    <p class="lede" id="lede"></p>
+    <div class="facts" id="facts"></div>
+  </header>
+
+
+  <div class="whatif" id="whatif">
+    <div class="eyebrow"><span>What if / drag the sliders</span><span id="wi-scope"></span></div>
+    <div class="sliders">
+      <div class="slider">
+        <label>Running workflow instances on the node <output id="o-n"></output></label>
+        <input type="range" id="s-n" min="0" max="1000" value="500">
+        <small>alive and waiting for an event, 100 to 50,000</small>
+      </div>
+      <div class="slider">
+        <label>Execute steps per workflow <output id="o-steps"></output></label>
+        <input type="range" id="s-steps" min="0" max="1000" value="300">
+        <small>each step writes 2 events, 0 to 10,000 steps</small>
+      </div>
+      <div class="slider">
+        <label>Finished workflows in the store, ever <output id="o-done"></output></label>
+        <input type="range" id="s-done" min="0" max="1000" value="400">
+        <small>every one leaves 2 lifecycle events behind, 0 to 5,000,000</small>
+      </div>
+    </div>
+    <div class="verdictline" id="wi-verdict"></div>
+    <div class="bottleneck" id="wi-bottleneck"></div>
+    <div class="stats" id="wi-stats"></div>
+    <p class="how"><b>How to read it.</b> Values come from the measured curves below. Between points: interpolated. Past the last point: marked extrapolated. Failover restore = list replay + the slower of the 2 instance restores.</p>
+  </div>
+
+  <div class="head" style="margin-top:36px"><div class="eyebrow">Measured verdicts</div></div>
+  <div class="verdicts" id="verdicts"></div>
+
+  <section id="sec-running">
+    <div class="head">
+      <div class="eyebrow">Sweep A / running instances</div>
+      <h2>How many running workflows before it gets ugly</h2>
+      <p class="finding" id="finding-running"></p>
+    </div>
+    <div class="charts">
+      <figure>
+        <figcaption>Wall-clock per phase <small>seconds for N instances. Dashed line = 30 s restore timeout</small></figcaption>
+        <div class="plot"><canvas id="c-running-total"></canvas></div>
+        <div class="legend"><span><i style="background:var(--s1)"></i>start N</span><span><i style="background:var(--s2)"></i>failover restore</span><span><i style="background:var(--s3)"></i>release all</span><span><i class="dash"></i>restore timeout</span></div>
+      </figure>
+      <figure>
+        <figcaption>Cost per instance <small>ms per workflow. Flat = linear. Rising = worse than linear</small></figcaption>
+        <div class="plot"><canvas id="c-running-per"></canvas></div>
+        <div class="legend"><span><i style="background:var(--s1)"></i>start</span><span><i style="background:var(--s2)"></i>restore</span><span><i style="background:var(--s3)"></i>release</span></div>
+      </figure>
+      <figure>
+        <figcaption>Heap per parked instance <small>KB after GC. Below 1,000 the node's fixed overhead skews the average</small></figcaption>
+        <div class="plot"><canvas id="c-running-heap"></canvas></div>
+      </figure>
+      <figure>
+        <figcaption>Raw store reads at that size <small>ms, no engine involved</small></figcaption>
+        <div class="plot"><canvas id="c-running-raw"></canvas></div>
+        <div class="legend"><span><i style="background:var(--s1)"></i>running list (lifecycle tag)</span><span><i style="background:var(--s2)"></i>one instance (workflowId tag)</span></div>
+      </figure>
+    </div>
+    <p class="note" id="note-running"></p>
+    <div class="tablewrap"><table id="t-running"></table></div>
+    <div class="head" style="margin-top:36px"><h3 style="color:var(--ink);font-family:'IBM Plex Sans',sans-serif;font-weight:600">What the fan-out costs a single event</h3>
+      <p class="note" style="margin-top:0" id="note-fanout"></p></div>
+    <div class="tablewrap" style="margin-top:12px"><table id="t-fanout"></table></div>
+  </section>
+
+  <section id="sec-history">
+    <div class="head">
+      <div class="eyebrow">Sweep B / running-workflow list</div>
+      <h2>Loading the running-workflow list on failover</h2>
+      <p class="finding" id="finding-history"></p>
+    </div>
+    <div class="charts">
+      <figure>
+        <figcaption>Failover restore time vs completed workflows in the store <small>seconds. 10 instances running in every run. Dashed line = 30 s restore timeout</small></figcaption>
+        <div class="plot"><canvas id="c-history-total"></canvas></div>
+        <div class="legend"><span><i style="background:var(--s2)"></i>failover restore (engine)</span><span><i style="background:var(--s1)"></i>raw running-list read</span><span><i class="dash"></i>restore timeout</span></div>
+      </figure>
+      <figure>
+        <figcaption>Read throughput of the lifecycle replay <small>thousand events per second, raw read</small></figcaption>
+        <div class="plot"><canvas id="c-history-rate"></canvas></div>
+      </figure>
+    </div>
+    <p class="note" id="note-history"></p>
+    <div class="tablewrap"><table id="t-history"></table></div>
+  </section>
+
+  <section id="sec-steps">
+    <div class="head">
+      <div class="eyebrow">Sweep C / one instance, long history</div>
+      <h2>Loading one workflow's state on failover</h2>
+      <p class="finding" id="finding-steps"></p>
+    </div>
+    <div class="charts">
+      <figure>
+        <figcaption>Failover restore of one instance vs its event count <small>ms. Engine restore vs the raw read under it</small></figcaption>
+        <div class="plot"><canvas id="c-steps-restore"></canvas></div>
+        <div class="legend"><span><i style="background:var(--s2)"></i>failover restore (engine)</span><span><i style="background:var(--s1)"></i>raw instance read</span><span><i style="background:var(--s3)"></i>first append after restore</span></div>
+      </figure>
+      <figure>
+        <figcaption>Step latency as the instance's own history grows <small>ms per execute step, live</small></figcaption>
+        <div class="plot"><canvas id="c-steps-per"></canvas></div>
+      </figure>
+    </div>
+    <p class="note" id="note-steps"></p>
+    <div class="tablewrap"><table id="t-steps"></table></div>
+  </section>
+
+  <section id="sec-why">
+    <div class="head">
+      <div class="eyebrow">Mechanism</div>
+      <h2>Why the curves look like this</h2>
+    </div>
+    <div class="fixes" id="fixes"></div>
+    <div class="head" style="margin-top:36px"><h2 style="font-size:22px">Not a bottleneck</h2></div>
+    <div class="mech" id="mech"></div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+/*__DATA__*/
+/*__NARRATIVE__*/
+
+
+// ---------- what-if model, fitted from DATA at load ----------
+function WHATIF(D) {
+  const R = D.running, H = D.history, S = D.steps;
+  const nf = (v, d = 0) => Number(v).toLocaleString("en-US", { maximumFractionDigits: d });
+  const secs = (ms) => ms >= 1000 ? nf(ms / 1000, ms >= 10000 ? 0 : 1) + " s" : nf(ms) + " ms";
+  const bytes = (b) => b >= 1 << 30 ? nf(b / (1 << 30), 2) + " GB" : b >= 1 << 20 ? nf(b / (1 << 20), b >= 100 << 20 ? 0 : 1) + " MB" : nf(b / 1024) + " KB";
+
+  // log-log interpolation; extrapolates from the last two points; returns {y, extra}
+  function interp(series, x) {
+    const pts = series.filter(p => p.x > 0 && p.y >= 0).sort((a, b) => a.x - b.x);
+    if (!pts.length) return { y: NaN, extra: true };
+    if (x <= pts[0].x) return { y: pts[0].y, extra: x < pts[0].x };
+    for (let i = 1; i < pts.length; i++) {
+      if (x <= pts[i].x) return { y: loglog(pts[i - 1], pts[i], x), extra: false };
+    }
+    return { y: loglog(pts[pts.length - 2], pts[pts.length - 1], x), extra: true };
+  }
+  function loglog(a, b, x) {
+    if (a.y <= 0 || b.y <= 0) { const t = (x - a.x) / (b.x - a.x); return a.y + t * (b.y - a.y); }
+    const k = Math.log(b.y / a.y) / Math.log(b.x / a.x);
+    return a.y * Math.pow(x / a.x, k);
+  }
+  const lastX = (series) => Math.max(...series.map(p => p.x));
+
+  // fixed costs from the measurements
+  const heapPer = R.heap.filter(p => p.x >= 1000).reduce((s, p) => s + p.y, 0) / Math.max(1, R.heap.filter(p => p.x >= 1000).length);
+  const nodeBase = Math.max(0, (R.heap[0].y - heapPer) * R.heap[0].x);       // fixed node overhead hidden in the smallest average
+  const quad = R.release.filter(p => p.y > 5000 && p.x >= 5000);
+  const perDeliveryNs = quad.length ? Math.min(...quad.map(p => p.y * 1e6 / (p.x * p.x))) : 470;
+  const msPerStep = S.execute_per.filter(p => p.x >= 100).reduce((s, p) => s + p.y, 0) / Math.max(1, S.execute_per.filter(p => p.x >= 100).length);
+  const listMsPerDone = (() => { const p = H.restore.filter(q => q.x > 0 && q.y > 0).sort((a, b) => b.x - a.x)[0]; return p ? p.y / p.x : 0.19; })();
+  const listBase = H.restore.find(p => p.x === 0)?.y ?? 100;
+  const stepsEvents = (steps) => 2 + 2 * steps;
+  const restoreByEvents = S.restore.map((p, i) => ({ x: S.events[i].y, y: p.y }));
+  const rawByEvents = S.raw_one.map((p, i) => ({ x: S.events[i].y, y: p.y }));
+
+  const logSlider = (el, min, max) => {
+    const raw = min * Math.pow(max / min, el.value / 1000);
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    return Math.round(raw / mag * 2) / 2 * mag;   // snap to 1, 1.5, 2, ... x 10^k
+  };
+  const el = (id) => document.getElementById(id);
+
+  function update() {
+    const N = logSlider(el("s-n"), 100, 50000);
+    const steps = el("s-steps").value == 0 ? 0 : logSlider(el("s-steps"), 1, 10000);
+    const done = el("s-done").value == 0 ? 0 : logSlider(el("s-done"), 1000, 5000000);
+    el("o-n").textContent = nf(N);
+    el("o-steps").textContent = nf(steps);
+    el("o-done").textContent = nf(done);
+
+    const events = stepsEvents(steps);
+    const totalHeap = nodeBase + N * heapPer;
+    const lagMs = perDeliveryNs * N / 1e6;
+    const maxEps = 1000 / lagMs;
+    const start = interp(R.start, N);
+    const restoreN = interp(R.restore, N);
+    const restoreEv = events <= 2 ? { y: restoreByEvents[0].y, extra: false } : interp(restoreByEvents, events);
+    const rawEv = events <= 2 ? { y: rawByEvents[0].y, extra: false } : interp(rawByEvents, events);
+    const listMs = listBase + done * listMsPerDone;
+    const listExtra = done > lastX(H.restore);
+    const failover = listMs + Math.max(restoreN.y, restoreEv.y);
+    const failExtra = listExtra || restoreN.extra || restoreEv.extra;
+    const runSteps = steps * msPerStep;
+
+    const over = failover > 30000, near = failover > 15000;
+    el("wi-verdict").innerHTML =
+      `<span class="pill ${over ? "crit" : near ? "warn" : "good"}">${over ? "failover breaks the 30 s claim timeout" : near ? "failover within 2x of the timeout" : "failover under the 30 s timeout"}</span>` +
+      `<span>Failover of this node restores in about <b>${secs(failover)}</b>${failExtra ? '<span class="tag">extrapolated</span>' : ""}. Each business event waits about <b>${nf(lagMs, lagMs < 1 ? 2 : 1)} ms</b> on fan-out.</span>`;
+    const terms = [
+      { key: "list", cost: listMs, share: listMs / failover, ok: listMs < 5000,
+        name: "running-workflow list replay", why: `${nf(2 * done)} lifecycle events replayed by each of the 16 segments on every claim, no snapshot`,
+        fix: "snapshot the list, or load it once per node and share it across segments (fix 1 below)" },
+      { key: "inst", cost: restoreEv.y, share: restoreEv.y / failover, ok: restoreEv.y < 1000,
+        name: "per-instance replay past 1,000 events", why: `${nf(events)} events replayed through the 1,000-slot task queue`,
+        fix: "make replay bypass the task queue and snapshot long-running instances (fix 3 and 4 below)" },
+      { key: "fan", cost: lagMs * 1000, share: 0, ok: lagMs < 1,
+        name: "live fan-out of every event to all instances", why: `${nf(N)} deliveries per business event on the processor thread, about ${nf(lagMs, 1)} ms lag and a cap of ${nf(maxEps)} events/s`,
+        fix: "route by association index instead of broadcasting (fix 2 below)" },
+    ];
+    const restoreTerm = [terms[0], terms[1]].sort((a, b) => b.cost - a.cost)[0];
+    const top = (lagMs >= 5 && !over) ? terms[2] : (over || near) ? restoreTerm : (lagMs >= 1 ? terms[2] : (restoreTerm.ok ? null : restoreTerm));
+    el("wi-bottleneck").style.borderLeftColor = top ? (over || lagMs >= 5 ? css("--crit") : css("--warn")) : css("--good");
+    el("wi-bottleneck").innerHTML = top
+      ? `<div class="k">bottleneck</div><div class="v"><b>${top.name}</b>: ${top.why}.</div><div class="k">fix</div><div class="v">${top.fix}</div>`
+      : `<div class="k">bottleneck</div><div class="v">none at this size; the node is bounded by Axon Server round trips (${nf(msPerStep)} ms per step).</div><div class="k">watch</div><div class="v">the list replay reaches the 30 s timeout around ${nf(Math.round((30000 - listBase) / listMsPerDone / 1000) * 1000)} finished workflows</div>`;
+    el("wi-scope").textContent = `${nf(N)} instances / ${nf(events)} events each / ${nf(2 * done)} lifecycle events in the store`;
+
+    const tile = (k, v, unit, d, cls, extra) =>
+      `<div class="stat ${cls || ""}"><div class="k">${k}</div><div class="v">${v}<small>${unit}</small>${extra ? '<span class="tag">extrap.</span>' : ""}</div><div class="d">${d}</div></div>`;
+    el("wi-stats").innerHTML =
+      tile("Heap per running instance", bytes(heapPer), "", "virtual thread, 1,000-slot queue, evolved state") +
+      tile("Total heap for the instances", bytes(totalHeap), "", `${nf(N)} instances plus about ${bytes(nodeBase)} node overhead`, totalHeap > 4 * (1 << 30) ? "warn" : "") +
+      tile("Fan-out lag per event", nf(lagMs, lagMs < 1 ? 2 : 1), "ms", `every event is offered to all ${nf(N)} instances`, lagMs >= 5 ? "crit" : lagMs >= 1 ? "warn" : "good", N > lastX(R.release)) +
+      tile("Node event throughput cap", nf(maxEps), "events/s", "processor thread, batch size 1", maxEps < 500 ? "crit" : maxEps < 2000 ? "warn" : "good", N > lastX(R.release)) +
+      tile("Start all instances", secs(start.y), "", `${nf(start.y / N, 2)} ms per instance`, "", start.extra) +
+      tile("Live step latency", nf(msPerStep, 0), "ms/step", `${secs(runSteps)} to run ${nf(steps)} steps, flat with history`) +
+      tile("Raw read of one instance", secs(rawEv.y), "", `${nf(events)} events from Axon Server by tag`, "", rawEv.extra) +
+      tile("Restore one instance", secs(restoreEv.y), "", events > 1002 ? "past the 1,000-event replay cliff" : "under the 1,000-event replay cliff", restoreEv.y > 5000 ? "warn" : "", restoreEv.extra) +
+      tile("Restore all N instances", secs(restoreN.y), "", "tiny history each, all in parallel", "", restoreN.extra) +
+      tile("Running-list replay", secs(listMs), "", `${nf(2 * done)} lifecycle events, replayed by every segment`, listMs > 30000 ? "crit" : listMs > 10000 ? "warn" : "", listExtra) +
+      tile("Failover restore, total", secs(failover), "", "list replay + slowest instance restore", over ? "crit" : near ? "warn" : "good", failExtra) +
+      tile("Events written per workflow", nf(events), "", `2 lifecycle + 2 per step`);
+  }
+  ["s-n", "s-steps", "s-done"].forEach(id => el(id).addEventListener("input", update));
+  update();
+}
+
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmt = (v, d = 0) => v == null ? "n/a" : (v < 0 ? "timed out" : Number(v).toLocaleString("en-US", { maximumFractionDigits: d }));
+const sec = (ms) => ms == null || ms < 0 ? ms : ms / 1000;
+
+function lineChart(id, datasets, opts) {
+  const ctx = document.getElementById(id);
+  const ink2 = css("--ink-2"), grid = css("--grid");
+  const cfg = {
+    type: "line",
+    data: { datasets: datasets.map(d => ({
+      borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, tension: 0, fill: false,
+      pointBackgroundColor: d.borderColor, pointBorderColor: css("--surface"), pointBorderWidth: 1.5,
+      ...d,
+    })) },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: "nearest", axis: "x", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: css("--ink"), titleColor: css("--bg"), bodyColor: css("--bg"),
+          callbacks: {
+            title: (items) => (opts.xLabel || "N") + " " + fmt(items[0].parsed.x),
+            label: (item) => " " + item.dataset.label + ": " + fmt(item.parsed.y, opts.yDigits ?? 1) + (opts.yUnit ? " " + opts.yUnit : ""),
+          },
+        },
+        annotationLine: opts.ceiling,
+      },
+      scales: {
+        x: { type: opts.xLog ? "logarithmic" : "linear", grid: { color: grid },
+             ticks: { color: ink2, maxRotation: 0, autoSkip: true, callback: (v) => (opts.xLog && !/^[125]0*$/.test(String(v))) ? "" : fmt(v) },
+             title: { display: true, text: opts.xLabel, color: ink2 } },
+        y: { beginAtZero: true, type: opts.yLog ? "logarithmic" : "linear", grid: { color: grid }, ticks: { color: ink2, callback: (v) => fmt(v, 2) },
+             title: { display: true, text: opts.yLabel, color: ink2 }, suggestedMax: opts.suggestedMax },
+      },
+    },
+    plugins: [{
+      id: "annotationLine",
+      afterDraw(chart, args, o) {
+        if (!o) return;
+        const y = chart.scales.y.getPixelForValue(o.y);
+        if (y < chart.chartArea.top || y > chart.chartArea.bottom) return;
+        const c = chart.ctx;
+        c.save(); c.strokeStyle = css("--crit"); c.setLineDash([4, 3]); c.lineWidth = 1.5;
+        c.beginPath(); c.moveTo(chart.chartArea.left, y); c.lineTo(chart.chartArea.right, y); c.stroke();
+        c.fillStyle = css("--crit"); c.font = "11px IBM Plex Mono, monospace"; c.textAlign = "right";
+        c.fillText(o.label, chart.chartArea.right - 4, y - 5); c.restore();
+      },
+    }],
+  };
+  return new Chart(ctx, cfg);
+}
+
+const pts = (arr, f = (v) => v) => arr.filter(p => p.y >= 0).map(p => ({ x: p.x, y: f(p.y) }));
+const failed = (arr) => arr.filter(p => p.y < 0).map(p => p.x);
+
+function renderTable(id, header, rows, flags) {
+  const t = document.getElementById(id);
+  t.innerHTML = "<thead><tr>" + header.map(h => "<th>" + h + "</th>").join("") + "</tr></thead><tbody>" +
+    rows.map(r => "<tr>" + r.map((c, i) => {
+      const cls = flags && flags(r, i, c);
+      return "<td" + (cls ? ' class="' + cls + '"' : "") + ">" + (i === 0 ? fmt(c) : (typeof c === "number" ? fmt(c, 1) : (c ?? "n/a"))) + "</td>";
+    }).join("") + "</tr>").join("") + "</tbody>";
+}
+
+function render() {
+  const R = DATA.running, H = DATA.history, S = DATA.steps;
+  const s1 = css("--s1"), s2 = css("--s2"), s3 = css("--s3");
+
+  // Sweep A
+  lineChart("c-running-total", [
+    { label: "start N", data: pts(R.start, sec), borderColor: s1 },
+    { label: "failover restore", data: pts(R.restore, sec), borderColor: s2 },
+    { label: "release all", data: pts(R.release, sec), borderColor: s3 },
+  ], { xLabel: "running instances (log)", yLabel: "seconds", yUnit: "s", xLog: true, ceiling: { y: 30, label: "30 s restore timeout" } });
+  lineChart("c-running-per", [
+    { label: "start", data: pts(R.start_per), borderColor: s1 },
+    { label: "restore", data: pts(R.restore_per), borderColor: s2 },
+    { label: "release", data: pts(R.release_per), borderColor: s3 },
+  ], { xLabel: "running instances (log)", yLabel: "ms per instance", yUnit: "ms", yDigits: 2, xLog: true });
+  lineChart("c-running-heap", [
+    { label: "heap per instance", data: pts(R.heap, (v) => v / 1024), borderColor: s1 },
+  ], { xLabel: "running instances (log)", yLabel: "KB per instance", yUnit: "KB", xLog: true });
+  lineChart("c-running-raw", [
+    { label: "running list read", data: pts(R.raw_list), borderColor: s1 },
+    { label: "one instance read", data: pts(R.raw_one), borderColor: s2 },
+  ], { xLabel: "running instances (log)", yLabel: "ms", yUnit: "ms", xLog: true });
+  renderTable("t-running",
+    ["running N", "start N (ms)", "restore (ms)", "release all (ms)", "heap/instance (B)", "raw list read (ms)", "raw instance read (ms)"],
+    R.table, (r, i, c) => (typeof c === "number" && c < 0 && i > 0) ? "fail" : (i === 2 && c > 30000 ? "fail" : ""));
+
+  // Sweep B
+  lineChart("c-history-total", [
+    { label: "failover restore", data: pts(H.restore, sec).filter(p => p.x > 0), borderColor: s2 },
+    { label: "raw running-list read", data: pts(H.raw_list, sec).filter(p => p.x > 0), borderColor: s1 },
+  ], { xLabel: "completed workflows in store (log)", yLabel: "seconds", yUnit: "s", xLog: true, ceiling: { y: 30, label: "30 s restore timeout" } });
+  lineChart("c-history-rate", [
+    { label: "lifecycle events read", data: H.raw_list.filter(p => p.y > 0 && p.x > 0).map(p => ({ x: p.x, y: (H.events[p.x] / p.y) })), borderColor: s1 },
+  ], { xLabel: "completed workflows in store (log)", yLabel: "k events / s", yUnit: "k ev/s", yDigits: 1, xLog: true });
+  renderTable("t-history",
+    ["completed workflows", "lifecycle events", "seed (ms)", "raw list read (ms)", "failover restore (ms)"],
+    H.table.map(r => [r[0], H.events[r[0]], r[1], r[2], r[3]]),
+    (r, i, c) => (i === 4 && typeof c === "number" && (c < 0 || c > 30000)) ? "fail" : "");
+
+  // Sweep C
+  lineChart("c-steps-restore", [
+    { label: "failover restore", data: S.restore.filter(p => p.y >= 0).map((p, i) => ({ x: S.events[i].y, y: p.y })), borderColor: s2 },
+    { label: "raw instance read", data: S.raw_one.map((p, i) => ({ x: S.events[i].y, y: p.y })), borderColor: s1 },
+    { label: "first append after restore", data: S.release.filter(p => p.y >= 0).map((p, i) => ({ x: S.events[i].y, y: p.y })), borderColor: s3 },
+  ], { xLabel: "events in the instance (log)", yLabel: "ms", yUnit: "ms", xLog: true });
+  lineChart("c-steps-per", [
+    { label: "ms per step", data: S.execute_per.filter(p => p.x > 0), borderColor: s1 },
+  ], { xLabel: "execute steps in the workflow (log)", yLabel: "ms per step", yUnit: "ms", xLog: true });
+  renderTable("t-steps",
+    ["execute steps", "events", "run steps (ms)", "ms / step", "raw instance read (ms)", "restore (ms)", "first append (ms)"],
+    S.table.map(r => [r[0], r[1], r[2], r[0] > 0 ? r[2] / r[0] : null, r[3], r[4], r[5]]),
+    (r, i, c) => (i >= 5 && typeof c === "number" && c < 0) ? "fail" : "");
+
+  NARRATIVE(DATA);
+  WHATIF(DATA);
+}
+render();
+</script>
