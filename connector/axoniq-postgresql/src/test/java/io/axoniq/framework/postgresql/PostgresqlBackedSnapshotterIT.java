@@ -92,6 +92,7 @@ class PostgresqlBackedSnapshotterIT extends SnapshottingEntityLifecycleHandlerTe
                 c -> engine = new PostgresqlEventStorageEngine(
                         dataSource,
                         c.getComponent(EventConverter.class),
+                        SchemaInitialization.CREATE_IF_MISSING,
                         Mockito.mock(EnforcingEntitlementManager.class)
                 )
         );

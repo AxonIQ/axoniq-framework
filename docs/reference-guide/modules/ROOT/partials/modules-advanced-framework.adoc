@@ -22,12 +22,10 @@ include::partial$advanced-modules.excalidraw[]
 |<<Axoniq message transformation>> |`axoniq-message-transformation` |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-message-transformation[available]
 |<<Axoniq connector for Spring Cloud>> |`axoniq-springcloud-discovery`  |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-springcloud-discovery[available]
 |<<Axoniq multi-tenancy>>          |`axoniq-multi-tenancy`          |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-multi-tenancy[available]
-// |<<Axoniq tracing OpenTelemetry>> |`axon-tracing-opentelemetry`    |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axon-tracing-opentelemetry[available]
+|<<Axoniq tracing OpenTelemetry>> |`axon-tracing-opentelemetry`    |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axon-tracing-opentelemetry[available]
+|<<Axoniq Workflow Engine>> |`axon-workflow-runtime`    |`io.axoniq.framework.workflow` |https://central.sonatype.com/search?q=a:axon-workflow-runtime[available]
 ifdef::data-protection[]
 |<<Axoniq Data Protection>> |`axoniq-data-protection`    |`io.axoniq.framework` |https://central.sonatype.com/search?q=a:axoniq-data-protection[available]
-endif::[]
-ifdef::workflows[]
-include::modules-table-workflows.adoc[]
 endif::[]
 |===
 
@@ -63,14 +61,14 @@ Spring Boot applications depend on `axoniq-springcloud-spring-boot-starter`, whi
 This module lets a single application instance serve multiple tenants, separating tenant data in transit and at rest by mapping each tenant to a dedicated Axon Server context.
 See the xref:multi-tenancy:index.adoc[multi-tenancy reference] to get started.
 
-// === Axoniq tracing OpenTelemetry
-//
-// This extension contains the components needed to xref:tracing:index.adoc[enable tracing with OpenTelemetry].
+=== Axoniq tracing OpenTelemetry
+
+This extension contains the components needed to xref:tracing:index.adoc[enable tracing with OpenTelemetry].
+
+=== Axoniq Workflow Engine
+
+This module provides the xref:workflows:index.adoc[Axoniq Workflow Engine], which allows users to express complex, long-running business processes in simple, imperative code.
 
 ifdef::data-protection[]
 include::modules-dataprotection.adoc[]
-endif::[]
-
-ifdef::workflows[]
-include::modules-workflows.adoc[]
 endif::[]

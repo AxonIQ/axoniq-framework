@@ -140,7 +140,7 @@
                 <configuration>
                     <archive>
                         <manifestEntries>
-                            <Automatic-Module-Name>io.axoniq.framework.eventstreaming</Automatic-Module-Name>
+                            <Automatic-Module-Name>io.axoniq.framework.messaging.eventstreaming</Automatic-Module-Name>
                         </manifestEntries>
                     </archive>
                 </configuration>

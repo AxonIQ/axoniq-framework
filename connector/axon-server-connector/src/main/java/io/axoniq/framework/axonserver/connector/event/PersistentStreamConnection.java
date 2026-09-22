@@ -413,39 +413,49 @@ public class PersistentStreamConnection {
             }
         }
 
+        /**
+         * Processes the given {@code batch} of events.
+         * <p>
+         * Once a {@code batch} is dequeued from the {@link PersistentStreamSegment segment's} buffer, it must
+         * <b>always</b> be processed and acknowledged. Doing so ensures we process through events given by the
+         * {@code PersistentStreamSegment} before it may complete (exceptionally). If we'd stop processing before that
+         * because {@link PersistentStreamSegment#isClosed()} is {@code true}, we may thus skip events.
+         *
+         * @param batch the batch of events to process
+         * @return a future completing when all events in the given {@code batch} have been processed
+         */
         private CompletableFuture<Void> processBatch(List<PersistentStreamEvent> batch) {
-            if (!persistentStreamSegment.isClosed() && !batch.isEmpty()) {
-                PersistentStreamEvent batchLastEvent = batch.getLast();
-                long token = batchLastEvent.getEvent().getToken();
-                TrackingToken batchEndToken = createToken(batchLastEvent);
-                UnitOfWork unitOfWork = unitOfWorkFactory.create();
-                return unitOfWork.executeWithResult(processingContext -> {
-                    CompletableFuture<?> result = CompletableFuture.completedFuture(null);
-                    // Applied before the first event is consumed, so every event of this batch observes the
-                    // batch-constant resources, such as the tenant a per-tenant stream belongs to.
-                    ProcessingContext batchContext =
-                            contextCustomizer.apply(processingContext)
-                                             .withResource(TrackingToken.BATCH_END_RESOURCE_KEY, batchEndToken);
-                    for (PersistentStreamEvent pse : batch) {
-                        result = result
-                                .thenCompose(ignored ->
-                                                     consumer.get().apply(List.of(convertToMessage(pse)),
-                                                                          enrichContextInformation(pse,
-                                                                                                   batchContext)));
-                    }
-                    return result;
-                }).thenRun(() -> {
-                    if (logger.isTraceEnabled()) {
-                        logger.trace("{}/{} processed {} entries",
-                                     streamId,
-                                     persistentStreamSegment.segment(),
-                                     batch.size());
-                    }
-                    persistentStreamSegment.acknowledge(token);
-                });
-
+            if (batch.isEmpty()) {
+                return CompletableFuture.completedFuture(null);
             }
-            return CompletableFuture.completedFuture(null);
+
+            PersistentStreamEvent batchLastEvent = batch.getLast();
+            long token = batchLastEvent.getEvent().getToken();
+            TrackingToken batchEndToken = createToken(batchLastEvent);
+            UnitOfWork unitOfWork = unitOfWorkFactory.create();
+
+            return unitOfWork.executeWithResult(processingContext -> {
+                CompletableFuture<?> result = CompletableFuture.completedFuture(null);
+                // Applied before the first event is consumed, so every event of this batch observes the
+                // batch-constant resources, such as the tenant a per-tenant stream belongs to.
+                ProcessingContext batchContext =
+                        contextCustomizer.apply(processingContext)
+                                         .withResource(TrackingToken.BATCH_END_RESOURCE_KEY, batchEndToken);
+                for (PersistentStreamEvent pse : batch) {
+                    result = result.thenCompose(
+                            ignored -> consumer.get().apply(
+                                    List.of(convertToMessage(pse)), enrichContextInformation(pse, batchContext)
+                            )
+                    );
+                }
+                return result;
+            }).thenRun(() -> {
+                if (logger.isTraceEnabled()) {
+                    logger.trace("{}/{} processed {} entries",
+                                 streamId, persistentStreamSegment.segment(), batch.size());
+                }
+                persistentStreamSegment.acknowledge(token);
+            });
         }
 
         public void messageAvailable() {

@@ -25,6 +25,7 @@ import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.MessageType;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
+import org.axonframework.messaging.core.unitofwork.UnitOfWork;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkTestUtils;
 import org.axonframework.messaging.queryhandling.GenericQueryMessage;
 import org.axonframework.messaging.queryhandling.GenericSubscriptionQueryUpdateMessage;
@@ -45,9 +46,11 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.*;
 
 /**
@@ -99,41 +102,22 @@ class DistributedQueryBusTest {
     }
 
     @Test
-    void queryUsesLocalHandlerWhenShortcutEnabledAndHandlerRegistered() {
-        // Given
+    void queryAlwaysDelegatesToConnector() {
+        // The local shortcut now lives in LocalShortcutQueryBusConnector; the bus itself always uses the connector.
         testSubject = new DistributedQueryBus(localSegment, connector, configuration);
         QualifiedName queryName = new QualifiedName("TestQuery");
+        QueryMessage query = queryMessage(queryName);
 
-        QueryHandler handler = (query, context) -> {
+        // When - a local handler is registered and a query is dispatched
+        testSubject.subscribe(queryName, (q, context) -> {
             QueryResponseMessage response = mock(QueryResponseMessage.class);
             return MessageStream.fromIterable(() -> List.of(response).iterator());
-        };
-
-        QueryMessage query = queryMessage(queryName);
-
-        // When - Subscribe handler first
-        testSubject.subscribe(queryName, handler);
+        });
         testSubject.query(query, null);
 
-        // Then - Query should use local segment (connector not invoked for query)
+        // Then - the connector is used regardless of the local handler
         assertThat(connector.queryCount.get())
-                .as("Connector should not be used when local handler is available")
-                .isZero();
-    }
-
-    @Test
-    void queryUsesConnectorWhenNoLocalHandlerRegistered() {
-        // Given
-        testSubject = new DistributedQueryBus(localSegment, connector, configuration);
-        QualifiedName queryName = new QualifiedName("TestQuery");
-        QueryMessage query = queryMessage(queryName);
-
-        // When - Query without registering a local handler
-        testSubject.query(query, null);
-
-        // Then - Should use connector
-        assertThat(connector.queryCount.get())
-                .as("Connector should be used when no local handler is registered")
+                .as("Bus should always delegate queries to the connector")
                 .isEqualTo(1);
     }
 
@@ -158,115 +142,6 @@ class DistributedQueryBusTest {
         assertThat(connector.subscriptionQueryCount.get())
                 .as("Subscription queries should always use the connector")
                 .isEqualTo(1);
-    }
-
-    @Nested
-    @DisplayName("Local Query Shortcut Tests")
-    class LocalQueryShortcutTests {
-
-        @Test
-        void localShortcutBypassesConnectorWhenHandlerRegistered() {
-            // Given
-            testSubject = new DistributedQueryBus(localSegment, connector, configuration);
-            QualifiedName queryName = new QualifiedName("TestQuery");
-
-            QueryHandler handler = (query, context) -> {
-                QueryResponseMessage response = mock(QueryResponseMessage.class);
-                return MessageStream.fromIterable(() -> List.of(response).iterator());
-            };
-
-            QueryMessage query = queryMessage(queryName);
-
-            // When - Register handler and execute query
-            testSubject.subscribe(queryName, handler);
-            testSubject.query(query, null);
-
-            // Then - Verify connector not used for query
-            assertThat(connector.queryCount.get())
-                    .as("Local shortcut should bypass connector when handler is registered")
-                    .isZero();
-        }
-
-        @Test
-        void queriesForDifferentHandlerStillUseConnector() {
-            // Given
-            testSubject = new DistributedQueryBus(localSegment, connector, configuration);
-            QualifiedName registeredQueryName = new QualifiedName("RegisteredQuery");
-            QualifiedName unregisteredQueryName = new QualifiedName("UnregisteredQuery");
-
-            QueryHandler handler = (query, context) -> {
-                QueryResponseMessage response = mock(QueryResponseMessage.class);
-                return MessageStream.fromIterable(() -> List.of(response).iterator());
-            };
-
-            QueryMessage query = queryMessage(unregisteredQueryName);
-
-            // When - Register handler for one query, execute different query
-            testSubject.subscribe(registeredQueryName, handler);
-            testSubject.query(query, null);
-
-            // Then - Should use connector since no local handler for this query
-            assertThat(connector.queryCount.get())
-                    .as("Connector should be used for queries without a local handler")
-                    .isEqualTo(1);
-        }
-
-        @Test
-        void multipleHandlerRegistrationsAllowLocalShortcut() {
-            // Given
-            testSubject = new DistributedQueryBus(localSegment, connector, configuration);
-            QualifiedName queryName1 = new QualifiedName("Query1");
-            QualifiedName queryName2 = new QualifiedName("Query2");
-
-            QueryHandler handler1 = (query, context) -> {
-                QueryResponseMessage response = mock(QueryResponseMessage.class);
-                return MessageStream.fromIterable(() -> List.of(response).iterator());
-            };
-            QueryHandler handler2 = (query, context) -> {
-                QueryResponseMessage response = mock(QueryResponseMessage.class);
-                return MessageStream.fromIterable(() -> List.of(response).iterator());
-            };
-
-            QueryMessage query1 = queryMessage(queryName1);
-            QueryMessage query2 = queryMessage(queryName2);
-
-            // When - Register multiple handlers
-            testSubject.subscribe(queryName1, handler1);
-            testSubject.subscribe(queryName2, handler2);
-
-            testSubject.query(query1, null);
-            testSubject.query(query2, null);
-
-            // Then - Both should use local segment
-            assertThat(connector.queryCount.get())
-                    .as("Both queries should use local shortcut when handlers are registered")
-                    .isZero();
-        }
-
-        @Test
-        void disablingLocalShortcutForcesConnectorUsage() {
-            // Given - Configuration with local shortcut disabled
-            DistributedQueryBusConfiguration configWithoutShortcut =
-                    configuration.preferLocalQueryHandler(false);
-            testSubject = new DistributedQueryBus(localSegment, connector, configWithoutShortcut);
-            QualifiedName queryName = new QualifiedName("TestQuery");
-
-            QueryHandler handler = (query, context) -> {
-                QueryResponseMessage response = mock(QueryResponseMessage.class);
-                return MessageStream.fromIterable(() -> List.of(response).iterator());
-            };
-
-            QueryMessage query = queryMessage(queryName);
-
-            // When - Register local handler and execute query
-            testSubject.subscribe(queryName, handler);
-            testSubject.query(query, null);
-
-            // Then - Connector should be used despite local handler being available
-            assertThat(connector.queryCount.get())
-                    .as("Connector should be used when local shortcut is disabled, even if handler is registered")
-                    .isEqualTo(1);
-        }
     }
 
     @Nested
@@ -411,6 +286,302 @@ class DistributedQueryBusTest {
         }
     }
 
+    @Nested
+    @DisplayName("Processing Context Aware Dispatch Tests")
+    class ProcessingContextAwareDispatchTests {
+
+        private StubUpdateCallback matchingCallbackOne;
+        private StubUpdateCallback matchingCallbackTwo;
+        private StubUpdateCallback nonMatchingCallback;
+        private QueryMessage matchingQueryOne;
+        private QueryMessage matchingQueryTwo;
+        private Predicate<QueryMessage> matchingFilter;
+
+        @BeforeEach
+        void registerSubscriptionQueries() {
+            testSubject = new DistributedQueryBus(localSegment, connector, configuration);
+            QualifiedName queryName = new QualifiedName("TestQuery");
+            matchingQueryOne = queryMessage(queryName);
+            matchingQueryTwo = queryMessage(queryName);
+            QueryMessage nonMatchingQuery = queryMessage(queryName);
+            matchingFilter = query -> query.identifier().equals(matchingQueryOne.identifier())
+                    || query.identifier().equals(matchingQueryTwo.identifier());
+
+            matchingCallbackOne = new StubUpdateCallback();
+            matchingCallbackTwo = new StubUpdateCallback();
+            nonMatchingCallback = new StubUpdateCallback();
+            connector.incomingHandler.registerUpdateHandler(matchingQueryOne, matchingCallbackOne);
+            connector.incomingHandler.registerUpdateHandler(matchingQueryTwo, matchingCallbackTwo);
+            connector.incomingHandler.registerUpdateHandler(nonMatchingQuery, nonMatchingCallback);
+        }
+
+        @Test
+        void emitUpdateWithProcessingContextStagesDispatchToAfterCommit() {
+            // given
+            SubscriptionQueryUpdateMessage update =
+                    new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+
+            // when emitting on invocation, before the ProcessingContext has committed...
+            uow.onInvocation(context -> testSubject.emitUpdateAndCount(matchingFilter, () -> update, context));
+
+            // then no dispatch happened yet...
+            assertThat(matchingCallbackOne.sendUpdateCount.get()).isZero();
+            assertThat(matchingCallbackTwo.sendUpdateCount.get()).isZero();
+
+            // when executing the UnitOfWork, we pass the after commit phase
+            uow.execute().join();
+
+            // then the update is dispatched to matching subscriptions only
+            assertThat(matchingCallbackOne.sendUpdateCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.sendUpdateCount.get()).isEqualTo(1);
+            assertThat(nonMatchingCallback.sendUpdateCount.get()).isZero();
+        }
+
+        @Test
+        void emitUpdateWithAlreadyCommittedProcessingContextDispatchesImmediately() {
+            // given - A completed UnitOfWork == a committed ProcessingContext
+            SubscriptionQueryUpdateMessage update =
+                    new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
+            AtomicReference<ProcessingContext> committedContext = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(committedContext::set);
+            uow.execute().join();
+
+            // when emitting with an already-committed context...
+            testSubject.emitUpdateAndCount(matchingFilter, () -> update, committedContext.get())
+                       .orTimeout(1, TimeUnit.SECONDS)
+                       .join();
+
+            // then the update is dispatched immediately
+            assertThat(matchingCallbackOne.sendUpdateCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.sendUpdateCount.get()).isEqualTo(1);
+        }
+
+        @SuppressWarnings("Convert2Lambda") // Suppressed to support spying.
+        @Test
+        void emitUpdateWithErroredProcessingContextDropsUpdate() {
+            // given - An exceptionally completed UnitOfWork/ProcessingContext
+            SubscriptionQueryUpdateMessage update =
+                    new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
+            Predicate<QueryMessage> spiedFilter = spy(new Predicate<QueryMessage>() {
+                @Override
+                public boolean test(QueryMessage query) {
+                    return matchingFilter.test(query);
+                }
+            });
+            AtomicReference<ProcessingContext> erroredContext = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(context -> {
+                erroredContext.set(context);
+                throw new RuntimeException("simulated error");
+            });
+            //noinspection DataFlowIssue
+            uow.execute().exceptionally(e -> null).join();
+
+            // when emitting with an errored context...
+            OptionalInt result = testSubject.emitUpdateAndCount(spiedFilter, () -> update, erroredContext.get())
+                                            .orTimeout(1, TimeUnit.SECONDS)
+                                            .join();
+
+            // then - the update must never be dispatched, and the filter must not be invoked
+            assertThat(result).isEmpty();
+            assertThat(matchingCallbackOne.sendUpdateCount.get()).isZero();
+            assertThat(matchingCallbackTwo.sendUpdateCount.get()).isZero();
+            verify(spiedFilter, never()).test(any());
+        }
+
+        @Test
+        void emitUpdateAndCountReflectsMatchCountAtCallTimeEvenWhenDispatchIsDeferredToAfterCommit() {
+            // given
+            SubscriptionQueryUpdateMessage update =
+                    new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            AtomicReference<OptionalInt> matchCountRef = new AtomicReference<>();
+
+            // when emitting on invocation, before the ProcessingContext has committed...
+            uow.onInvocation(context -> {
+                CompletableFuture<OptionalInt> matchCountFuture =
+                        testSubject.emitUpdateAndCount(matchingFilter, () -> update, context);
+                // then the match count is already available, without waiting for the after-commit phase...
+                matchCountRef.set(matchCountFuture.orTimeout(1, TimeUnit.SECONDS).join());
+                return CompletableFuture.completedFuture(null);
+            });
+            uow.execute().join();
+
+            // then...
+            assertThat(matchCountRef.get()).hasValue(2);
+        }
+
+        @Test
+        void completeSubscriptionsWithProcessingContextStagesCompletionToAfterCommit() {
+            // given
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+
+            // when completing on invocation, before the ProcessingContext has committed...
+            uow.onInvocation(context -> testSubject.completeSubscriptionsAndCount(matchingFilter, context));
+
+            // then no completion happened yet...
+            assertThat(matchingCallbackOne.completeCount.get()).isZero();
+            assertThat(matchingCallbackTwo.completeCount.get()).isZero();
+
+            // when executing the UnitOfWork, we pass the after commit phase
+            uow.execute().join();
+
+            // then the matching subscriptions only are completed
+            assertThat(matchingCallbackOne.completeCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.completeCount.get()).isEqualTo(1);
+            assertThat(nonMatchingCallback.completeCount.get()).isZero();
+        }
+
+        @Test
+        void completeSubscriptionsWithAlreadyCommittedProcessingContextCompletesImmediately() {
+            // given - A completed UnitOfWork == a committed ProcessingContext
+            AtomicReference<ProcessingContext> committedContext = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(committedContext::set);
+            uow.execute().join();
+
+            // when completing with an already-committed context...
+            testSubject.completeSubscriptionsAndCount(matchingFilter, committedContext.get())
+                       .orTimeout(1, TimeUnit.SECONDS)
+                       .join();
+
+            // then the subscriptions are completed immediately
+            assertThat(matchingCallbackOne.completeCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.completeCount.get()).isEqualTo(1);
+        }
+
+        @SuppressWarnings("Convert2Lambda") // Suppressed to support spying.
+        @Test
+        void completeSubscriptionsWithErroredProcessingContextDropsCompletion() {
+            // given - An exceptionally completed UnitOfWork/ProcessingContext
+            Predicate<QueryMessage> spiedFilter = spy(new Predicate<QueryMessage>() {
+                @Override
+                public boolean test(QueryMessage query) {
+                    return matchingFilter.test(query);
+                }
+            });
+            AtomicReference<ProcessingContext> erroredContext = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(context -> {
+                erroredContext.set(context);
+                throw new RuntimeException("simulated error");
+            });
+            //noinspection DataFlowIssue
+            uow.execute().exceptionally(e -> null).join();
+
+            // when completing with an errored context...
+            OptionalInt result = testSubject.completeSubscriptionsAndCount(spiedFilter, erroredContext.get())
+                                            .orTimeout(1, TimeUnit.SECONDS)
+                                            .join();
+
+            // then - completion must never be dispatched, and the filter must not be invoked
+            assertThat(result).isEmpty();
+            assertThat(matchingCallbackOne.completeCount.get()).isZero();
+            assertThat(matchingCallbackTwo.completeCount.get()).isZero();
+            verify(spiedFilter, never()).test(any());
+        }
+
+        @Test
+        void completeSubscriptionsExceptionallyWithProcessingContextStagesCompletionToAfterCommit() {
+            // given
+            MockException cause = new MockException("Mock");
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+
+            // when completing exceptionally on invocation, before the ProcessingContext has committed...
+            uow.onInvocation(context ->
+                                     testSubject.completeSubscriptionsExceptionallyAndCount(matchingFilter,
+                                                                                            cause,
+                                                                                            context));
+
+            // then no completion happened yet...
+            assertThat(matchingCallbackOne.completeExceptionallyCount.get()).isZero();
+            assertThat(matchingCallbackTwo.completeExceptionallyCount.get()).isZero();
+
+            // when executing the UnitOfWork, we pass the after commit phase
+            uow.execute().join();
+
+            // then the matching subscriptions only are completed exceptionally
+            assertThat(matchingCallbackOne.completeExceptionallyCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.completeExceptionallyCount.get()).isEqualTo(1);
+            assertThat(nonMatchingCallback.completeExceptionallyCount.get()).isZero();
+        }
+
+        @Test
+        void completeSubscriptionsExceptionallyWithAlreadyCommittedProcessingContextCompletesImmediately() {
+            // given - A completed UnitOfWork == a committed ProcessingContext
+            MockException cause = new MockException("Mock");
+            AtomicReference<ProcessingContext> committedContext = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(committedContext::set);
+            uow.execute().join();
+
+            // when completing exceptionally with an already-committed context...
+            testSubject.completeSubscriptionsExceptionallyAndCount(matchingFilter, cause, committedContext.get())
+                       .orTimeout(1, TimeUnit.SECONDS)
+                       .join();
+
+            // then the subscriptions are completed exceptionally, immediately
+            assertThat(matchingCallbackOne.completeExceptionallyCount.get()).isEqualTo(1);
+            assertThat(matchingCallbackTwo.completeExceptionallyCount.get()).isEqualTo(1);
+        }
+
+        @SuppressWarnings("Convert2Lambda") // Suppressed to support spying.
+        @Test
+        void completeSubscriptionsExceptionallyWithErroredProcessingContextDropsCompletion() {
+            // given - An exceptionally completed UnitOfWork/ProcessingContext
+            MockException cause = new MockException("Mock");
+            Predicate<QueryMessage> spiedFilter = spy(new Predicate<QueryMessage>() {
+                @Override
+                public boolean test(QueryMessage query) {
+                    return matchingFilter.test(query);
+                }
+            });
+            AtomicReference<ProcessingContext> erroredContext = new AtomicReference<>();
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+            uow.runOnInvocation(context -> {
+                erroredContext.set(context);
+                throw new RuntimeException("simulated error");
+            });
+            //noinspection DataFlowIssue
+            uow.execute().exceptionally(e -> null).join();
+
+            // when completing exceptionally with an errored context...
+            OptionalInt result = testSubject.completeSubscriptionsExceptionallyAndCount(
+                                                    spiedFilter, cause, erroredContext.get()
+                                            )
+                                            .orTimeout(1, TimeUnit.SECONDS)
+                                            .join();
+
+            // then - completion must never be dispatched, and the filter must not be invoked
+            assertThat(result).isEmpty();
+            assertThat(matchingCallbackOne.completeExceptionallyCount.get()).isZero();
+            assertThat(matchingCallbackTwo.completeExceptionallyCount.get()).isZero();
+            verify(spiedFilter, never()).test(any());
+        }
+
+        @Test
+        void deferredUpdateTaskCompletingExceptionallyIsLoggedAndDoesNotEscapeOrBlockOtherSubscriptions() {
+            // given - one matching subscription whose update dispatch fails, another that succeeds
+            SubscriptionQueryUpdateMessage update =
+                    new GenericSubscriptionQueryUpdateMessage(new MessageType("update"), "update-payload");
+            MockException cause = new MockException("Simulated dispatch failure");
+            connector.incomingHandler.registerUpdateHandler(matchingQueryOne, new FailingUpdateCallback(cause));
+            UnitOfWork uow = UnitOfWorkTestUtils.aUnitOfWork();
+
+            // when emitting on invocation, staging the dispatch to after commit...
+            uow.onInvocation(context -> testSubject.emitUpdateAndCount(matchingFilter, () -> update, context));
+
+            // then executing the UnitOfWork does not propagate the failing subscriber's exception...
+            assertThatCode(() -> uow.execute().orTimeout(1, TimeUnit.SECONDS).join())
+                    .doesNotThrowAnyException();
+
+            // ...and the other matching subscription still received its update
+            assertThat(matchingCallbackTwo.sendUpdateCount.get()).isEqualTo(1);
+        }
+    }
+
     /**
      * Stub implementation of {@link QueryBusConnector} that tracks invocations for test verification.
      */
@@ -487,6 +658,25 @@ class DistributedQueryBusTest {
         public CompletableFuture<Void> completeExceptionally(Throwable cause) {
             completeExceptionallyCount.incrementAndGet();
             return CompletableFuture.completedFuture(null);
+        }
+    }
+
+    /**
+     * Variant of {@link StubUpdateCallback} whose {@link #sendUpdate(SubscriptionQueryUpdateMessage)} always completes
+     * exceptionally, for verifying failures in one subscriber do not affect others.
+     */
+    private static class FailingUpdateCallback extends StubUpdateCallback {
+
+        private final Throwable cause;
+
+        FailingUpdateCallback(Throwable cause) {
+            this.cause = cause;
+        }
+
+        @Override
+        public CompletableFuture<Void> sendUpdate(SubscriptionQueryUpdateMessage update) {
+            sendUpdateCount.incrementAndGet();
+            return CompletableFuture.failedFuture(cause);
         }
     }
 }

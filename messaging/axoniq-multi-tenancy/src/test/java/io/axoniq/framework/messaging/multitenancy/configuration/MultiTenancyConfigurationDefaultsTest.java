@@ -19,6 +19,8 @@
 
 package io.axoniq.framework.messaging.multitenancy.configuration;
 
+import io.axoniq.framework.axonserver.connector.api.AxonServerConnectionManager;
+import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.framework.messaging.multitenancy.MultiTenancyUtils;
 import io.axoniq.framework.messaging.multitenancy.annotation.TenantScoped;
 import io.axoniq.framework.messaging.multitenancy.api.AttachTenantDescriptorDispatchInterceptor;
@@ -44,6 +46,7 @@ import org.axonframework.messaging.queryhandling.QueryBus;
 import org.axonframework.messaging.queryhandling.annotation.QueryHandler;
 import org.axonframework.messaging.queryhandling.interception.InterceptingQueryBus;
 import org.junit.jupiter.api.*;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.time.Duration;
@@ -74,7 +77,11 @@ class MultiTenancyConfigurationDefaultsTest {
         // when
         AxonConfiguration configuration =
                 MessagingConfigurer.create()
-                                   .componentRegistry(MultiTenancyUtils::disable)
+                                   .componentRegistry(registry -> {
+                                       registry.registerComponent(AxonServerConnectionManager.class,
+                                                                  config -> stubConnectionManager());
+                                       MultiTenancyUtils.disable(registry);
+                                   })
                                    .build();
 
         // then none of the multi-tenancy defaults were registered
@@ -108,6 +115,10 @@ class MultiTenancyConfigurationDefaultsTest {
         @BeforeEach
         void buildConfiguration() {
             configuration = MessagingConfigurer.create()
+                                               .componentRegistry(registry -> registry.registerComponent(
+                                                       AxonServerConnectionManager.class,
+                                                       config -> stubConnectionManager()
+                                               ))
                                                .componentRegistry(registry -> registry.registerComponent(
                                                        TenantComponentProvider.class,
                                                        config -> componentProvider))
@@ -153,6 +164,10 @@ class MultiTenancyConfigurationDefaultsTest {
         void registeringTheDecoratorTwiceDoesNotDoubleWrap() {
             // given / when
             AxonConfiguration configuration = MessagingConfigurer.create()
+                                                                 .componentRegistry(registry -> registry.registerComponent(
+                                                                         AxonServerConnectionManager.class,
+                                                                         config -> stubConnectionManager()
+                                                                 ))
                                                                  .componentRegistry(cr -> cr.registerComponent(
                                                                          TenantResolver.class,
                                                                          config -> new MetadataBasedTenantResolver()))
@@ -196,6 +211,14 @@ class MultiTenancyConfigurationDefaultsTest {
         }
     }
 
+    private static AxonServerConnectionManager stubConnectionManager() {
+        AxonServerConnectionManager connectionManager = Mockito.mock(AxonServerConnectionManager.class);
+        AxonServerConnection connection = Mockito.mock(AxonServerConnection.class);
+        Mockito.when(connectionManager.getConnection()).thenReturn(connection);
+        Mockito.when(connectionManager.getConnection(Mockito.anyString())).thenReturn(connection);
+        return connectionManager;
+    }
+
     @Nested
     class HandlerInterceptorWiring {
 
@@ -210,6 +233,8 @@ class MultiTenancyConfigurationDefaultsTest {
             tenantProvider.addTenant(TENANT_A);
             configuration = MessagingConfigurer.create()
                                                .componentRegistry(registry -> registry
+                                                       .registerComponent(AxonServerConnectionManager.class,
+                                                                          config -> stubConnectionManager())
                                                        .registerComponent(TenantProvider.class,
                                                                           config -> tenantProvider)
                                                        .registerComponent(TenantComponentProvider.class,
@@ -263,6 +288,8 @@ class MultiTenancyConfigurationDefaultsTest {
             tenantProvider.addTenant(TENANT_A);
             configuration = MessagingConfigurer.create()
                                                .componentRegistry(registry -> registry
+                                                       .registerComponent(AxonServerConnectionManager.class,
+                                                                          config -> stubConnectionManager())
                                                        .registerComponent(TenantProvider.class,
                                                                           config -> tenantProvider)
                                                        .registerComponent(TenantComponentProvider.class,
@@ -316,6 +343,8 @@ class MultiTenancyConfigurationDefaultsTest {
             tenantProvider.addTenant(TENANT_A);
             configuration = MessagingConfigurer.create()
                                                .componentRegistry(registry -> registry
+                                                       .registerComponent(AxonServerConnectionManager.class,
+                                                                          config -> stubConnectionManager())
                                                        .registerComponent(TenantProvider.class,
                                                                           config -> tenantProvider)
                                                        .registerComponent(TenantComponentProvider.class,
@@ -360,6 +389,8 @@ class MultiTenancyConfigurationDefaultsTest {
             AxonConfiguration withoutRoutingEngine =
                     MessagingConfigurer.create()
                                        .componentRegistry(registry -> registry
+                                               .registerComponent(AxonServerConnectionManager.class,
+                                                                  config -> stubConnectionManager())
                                                .disableEnhancer(AxonServerMultiTenancyConfigurationDefaults.class)
                                                .registerComponent(TenantProvider.class, config -> tenantProvider))
                                        .build();

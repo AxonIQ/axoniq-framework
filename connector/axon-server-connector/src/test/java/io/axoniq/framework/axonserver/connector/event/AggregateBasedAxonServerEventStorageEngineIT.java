@@ -47,10 +47,16 @@ import static org.awaitility.Awaitility.await;
 class AggregateBasedAxonServerEventStorageEngineIT extends
         AggregateBasedStorageEngineTestSuite<AggregateBasedAxonServerEventStorageEngine> {
 
+    /*
+     * Not SharedAxonServerContainer.INSTANCE: this suite asserts GapAwareTrackingToken/non-DCB aggregate-based
+     * semantics and destructively recreates the "default" context as non-DCB for every engine build (see
+     * AggregateBasedAxonServerEventStorageEngine tests below), which would corrupt the shared container's default
+     * context for every DCB-dependent suite sharing it.
+     */
     private static final AxonServerContainer axonServerContainer = new AxonServerContainer()
             .withAxonServerHostname("localhost")
             .withDevMode(true)
-            .withReuse(false);
+            .withReuse(true);
 
     private AxonServerConnection connection;
 

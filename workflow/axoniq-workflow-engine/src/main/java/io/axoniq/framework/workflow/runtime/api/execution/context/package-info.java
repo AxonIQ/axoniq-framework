@@ -1,0 +1,28 @@
+/*
+ * Copyright (c) 2010-2026. AxonIQ B.V.
+ *
+ * Licensed under the AXONIQ TERMS OF SERVICE,
+ * Version 29 April 2026 (the "License");
+ *
+ * The software is available for evaluation use without registration.
+ * Continued use beyond the evaluation period requires registration
+ * and a commercial license. See the License for the specific language
+ * governing permissions and limitations under the License.
+ * You may not use this file except in compliance with the License.
+ *
+ * You may obtain a copy of the License at:
+ *  https://www.axoniq.io/legal/terms-of-service
+ *
+ * For licensing information and to register, visit:
+ *  https://www.axoniq.io/pricing
+ */
+/**
+ * Core DSL/API surface for defining and executing workflow steps: step definitions (execute, wait-for, cancel, fail,
+ * version migration), event conditions, and the {@code WorkflowContext}/{@code WorkflowExecution} contracts that back
+ * workflow lifecycle control.
+ * @since 5.4.0
+ */
+@NullMarked
+package io.axoniq.framework.workflow.runtime.api.execution.context;
+
+import org.jspecify.annotations.NullMarked;

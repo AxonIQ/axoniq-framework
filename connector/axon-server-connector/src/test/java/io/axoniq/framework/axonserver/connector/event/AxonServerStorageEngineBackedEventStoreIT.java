@@ -23,6 +23,8 @@ import io.axoniq.axonserver.connector.AxonServerConnection;
 import io.axoniq.axonserver.connector.AxonServerConnectionFactory;
 import io.axoniq.axonserver.connector.impl.ServerAddress;
 import io.axoniq.framework.testcontainer.AxonServerContainer;
+import io.axoniq.framework.testcontainer.AxonServerContainerUtils;
+import io.axoniq.framework.testcontainer.SharedAxonServerContainer;
 import org.axonframework.common.infra.MockComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.StorageEngineBackedEventStoreTestSuite;
 import org.axonframework.messaging.core.EmptyApplicationContext;
@@ -32,9 +34,8 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.*;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.io.IOException;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -44,27 +45,38 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author John Hendrikx
  */
-@Testcontainers
 class AxonServerStorageEngineBackedEventStoreIT
         extends StorageEngineBackedEventStoreTestSuite<AxonServerEventStorageEngine> {
 
     private static final UnitOfWorkFactory FACTORY = new SimpleUnitOfWorkFactory(EmptyApplicationContext.INSTANCE);
-    private static final String CONTEXT = "default";
 
-    @SuppressWarnings("resource")
-    @Container
-    private static final AxonServerContainer container =
-            new AxonServerContainer("docker.axoniq.io/axoniq/axonserver:2025.2.0")
-                    .withDevMode(true)
-                    .withDcbContext(true);
+    /*
+     * A context of its own, rather than the shared container's default context: this suite's assertions depend
+     * on an exact event count/content per test, which other suites sharing the container's default context
+     * would otherwise silently pollute.
+     */
+    private static final String CONTEXT = "axon-server-storage-engine-backed-event-store-it";
+
+    private static final AxonServerContainer container = SharedAxonServerContainer.INSTANCE;
 
     private static AxonServerConnection connection;
 
     private static AxonServerEventStorageEngine engine;
 
     @BeforeAll
-    static void buildEngine() {
-        container.start();
+    static void buildEngine() throws IOException {
+        SharedAxonServerContainer.ensureStarted();
+
+        try {
+            AxonServerContainerUtils.deleteContext(container.getHost(), container.getHttpPort(), CONTEXT);
+        } catch (IOException ignored) {
+            // Context didn't exist yet.
+        }
+        AxonServerContainerUtils.createContext(container.getHost(),
+                                               container.getHttpPort(),
+                                               CONTEXT,
+                                               AxonServerContainerUtils.DCB_CONTEXT);
+
         ServerAddress address = new ServerAddress(container.getHost(), container.getGrpcPort());
         connection = AxonServerConnectionFactory.forClient("AxonServerEventStorageEngineTest")
                                                 .routingServers(address)
@@ -75,7 +87,6 @@ class AxonServerStorageEngineBackedEventStoreIT
     @AfterAll
     static void afterAll() {
         connection.disconnect();
-        container.stop();
     }
 
     @NonNull
@@ -102,8 +113,9 @@ class AxonServerStorageEngineBackedEventStoreIT
 
         Map<String, Object> describedProperties = descriptor.getDescribedProperties();
         assertThat(describedProperties)
-                .hasSize(2)
+                .hasSize(3)
                 .containsKey("connection")
-                .containsKey("converter");
+                .containsKey("converter")
+                .containsKey("snapshotStore");
     }
 }

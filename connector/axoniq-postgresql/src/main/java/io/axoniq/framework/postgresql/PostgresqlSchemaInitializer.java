@@ -29,7 +29,8 @@ import javax.sql.DataSource;
 
 /**
  * Creates the tables, sequence, and indices that {@link PostgresqlEventStorageEngine} relies on, if
- * they do not already exist.
+ * they do not already exist, or validates their presence, depending on the requested
+ * {@link SchemaInitialization}.
  *
  * @author John Hendrikx
  * @since 5.2.0
@@ -42,15 +43,83 @@ final class PostgresqlSchemaInitializer {
     }
 
     /**
-     * Creates the tables, sequence, and indices that {@link PostgresqlEventStorageEngine} relies
-     * on, and installs the type tag migration, if either does not already exist.
+     * Query returning a single boolean column: whether every table, sequence, index, and internal migration that
+     * {@link PostgresqlEventStorageEngine} relies on is present. Uses {@code to_regclass}, which returns
+     * {@code NULL} (rather than raising an error) for a relation that does not exist, so this is safe to run
+     * against a database that has none of the schema yet.
+     */
+    private static final String SCHEMA_COMPLETE_QUERY =
+        """
+        SELECT to_regclass('events') IS NOT NULL
+           AND to_regclass('tags') IS NOT NULL
+           AND to_regclass('consistency_tags') IS NOT NULL
+           AND to_regclass('events_monotonic_seq') IS NOT NULL
+           AND to_regclass('consistency_tags_global_index_idx') IS NOT NULL
+           AND to_regclass('tags_global_index_idx') IS NOT NULL
+           AND to_regclass('tags_type_unique') IS NOT NULL
+           AND EXISTS (
+             SELECT 1 FROM pg_trigger
+             WHERE tgname = 'axon_events_write_type_tag' AND tgrelid = to_regclass('events')
+           )
+           AND EXISTS (
+             SELECT 1 FROM pg_trigger
+             WHERE tgname = 'axon_tags_validate_type' AND tgrelid = to_regclass('tags')
+           )
+        """;
+
+    /**
+     * Ensures the schema {@link PostgresqlEventStorageEngine} relies on is present, per {@code schemaInitialization}.
+     *
+     * @param dataSource            a data source to connect to PostgreSQL, cannot be {@code null}
+     * @param schemaInitialization  how to handle a missing or incomplete schema, cannot be {@code null}
+     * @throws SQLException          when a JDBC error occurred
+     * @throws IllegalStateException when {@code schemaInitialization} is {@link SchemaInitialization#VALIDATE} and
+     *                                the schema is not complete
+     */
+    static void initialize(DataSource dataSource, SchemaInitialization schemaInitialization) throws SQLException {
+        switch (schemaInitialization) {
+            case SKIP -> {
+                // Trust the caller: no database round trip at all.
+            }
+            case VALIDATE -> {
+                if (!schemaIsComplete(dataSource)) {
+                    throw new IllegalStateException(
+                        "The PostgreSQL schema for " + PostgresqlEventStorageEngine.class.getSimpleName()
+                        + " is missing one or more tables, indices, or internal migrations, and "
+                        + SchemaInitialization.class.getSimpleName() + ".VALIDATE does not create or repair "
+                        + "schema objects. Apply the missing schema manually, or use "
+                        + SchemaInitialization.class.getSimpleName() + ".CREATE_IF_MISSING instead."
+                    );
+                }
+            }
+            case CREATE_IF_MISSING -> {
+                if (!schemaIsComplete(dataSource)) {
+                    createSchema(dataSource);
+                    installTypeTagMigration(dataSource);
+                }
+            }
+        }
+    }
+
+    /**
+     * Checks whether every table, sequence, index, and internal migration that
+     * {@link PostgresqlEventStorageEngine} relies on is present. Only issues cheap catalog look-ups; never
+     * acquires a lock on any of the schema's own tables.
      *
      * @param dataSource a data source to connect to PostgreSQL, cannot be {@code null}
+     * @return {@code true} if the schema is complete, {@code false} otherwise
      * @throws SQLException when a JDBC error occurred
      */
-    static void initialize(DataSource dataSource) throws SQLException {
-        createSchema(dataSource);
-        installTypeTagMigration(dataSource);
+    static boolean schemaIsComplete(DataSource dataSource) throws SQLException {
+        try (
+            Connection connection = dataSource.getConnection();
+            Statement statement = connection.createStatement();
+            ResultSet resultSet = statement.executeQuery(SCHEMA_COMPLETE_QUERY)
+        ) {
+            resultSet.next();
+
+            return resultSet.getBoolean(1);
+        }
     }
 
     // TODO #7 Allow to configure tables, sequences and indices

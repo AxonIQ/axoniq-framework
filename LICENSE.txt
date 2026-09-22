@@ -1,13 +1,80 @@
-Licensed under the AXONIQ TERMS OF SERVICE,
-Version 29 April 2026 (the "License");
+AXONIQ FRAMEWORK — COMMERCIAL SOURCE-AVAILABLE LICENSE
 
-The software is available for evaluation use without registration.
-Continued use beyond the evaluation period requires registration and a commercial license.
-See the License for the specific language governing permissions and limitations under the License.
-You may not use this file except in compliance with the License.
+Copyright (c) Axoniq B.V. All rights reserved.
 
-You may obtain a copy of the License at:
- https://www.axoniq.io/legal/terms-of-service
+This software ("Axoniq Framework") is licensed, not sold, under the
+Axoniq Terms of Service (the "Terms"). This file summarizes the
+restrictions applicable to Axoniq Framework. It is provided for
+convenience only — the full Terms, linked below, are the controlling
+legal document and govern in the event of any conflict with this
+summary.
 
-For licensing information and to register, visit:
- https://www.axoniq.io/pricing
+1. SOURCE-AVAILABLE, NOT OPEN SOURCE
+
+   This repository is published for transparency, so licensees and
+   prospective users can inspect the code. Publication here does not
+   grant open-source rights and does not itself constitute a license
+   to use the Software for any purpose beyond inspection, absent a
+   separate agreement or Order with Axoniq.
+
+2. PERMITTED USE
+
+   Subject to a valid license or Order with Axoniq, you may use and
+   modify this Software for your own internal use.
+
+3. RESTRICTIONS
+
+   You may NOT:
+
+   (a) Distribute the original or any modified version of this
+       Software to any third party;
+   (b) Distribute the source code, or any derivative work based on
+       it, to any third party;
+   (c) Sublicense, lease, rent, host, or make the Software available
+       to any third party as a hosted or managed service;
+   (d) Reverse engineer, decompile, or disassemble the Software,
+       except to the extent such restriction is prohibited by
+       applicable law;
+   (e) Remove or obscure any copyright, trademark, or other
+       proprietary rights notice contained in the Software;
+   (f) Circumvent any license-key or license-enforcement mechanism.
+
+   These restrictions apply regardless of whether your use is
+   otherwise permitted under Section 2.
+
+4. OWNERSHIP
+
+   Axoniq B.V., or its licensors, retain all right, title, and
+   interest in and to the Software, including all intellectual
+   property rights. No ownership rights are transferred under this
+   license.
+
+5. NO WARRANTY
+
+   This Software, as made available in this repository, is a Free
+   Service under the Terms and is provided "AS IS," without warranty
+   of any kind, express or implied, including without limitation the
+   warranties of merchantability, fitness for a particular purpose,
+   and non-infringement. Axoniq disclaims all liability for damages
+   arising from the use of the Software, to the fullest extent
+   permitted by applicable law.
+
+   This disclaimer applies to source-available, unlicensed, and
+   trial use of the Software. If you hold a paid license or Order
+   with Axoniq for this Software, the warranty terms of the Terms of
+   Service (Section 19, Warranties and Disclaimers) apply instead,
+   and take precedence over this Section 5.
+
+6. GOVERNING TERMS
+
+   This summary does not limit, replace, or supersede the full
+   Axoniq Terms of Service, which remain the controlling agreement
+   for any licensed use of this Software, including provisions on
+   liability, indemnification, term and termination, and governing
+   law. The current Terms of Service are available at:
+
+   https://www.axoniq.io/legal/terms-of-service
+
+For questions about licensing or usage rights, contact your Axoniq
+account representative. Do not open a GitHub issue for licensing
+questions.

@@ -93,9 +93,12 @@ Two consequences of this split are worth stating so they are not read as gaps in
 
 ## From the proof of concept to this plan
 
-Two things predate this plan, and both are scaffolding rather than a baseline. The `_multitenancy_poc/` directory holds an older, broad prototype (an Axon Framework 4 style multi-tenant event store, snapshot store, and per-tenant processor and query segments). This branch's module then has a reworked slice already committed, the `TenantRoutingEventStore` and its `TenantEventSegmentFactory`. Both route at the `EventStore`. The plan routes at the `EventStorageEngine` instead.
+Two things predate this plan, and both are scaffolding rather than a baseline. An earlier broad prototype used an Axon
+Framework 4-style multi-tenant event store, snapshot store, and per-tenant processor and query segments. The module
+then had a reworked slice, `TenantRoutingEventStore` and its `TenantEventSegmentFactory`. Both route at the
+`EventStore`. The plan routes at the `EventStorageEngine` instead.
 
-| | Proof of concept (poc directory and current branch) | This plan |
+| | Earlier prototype and reworked slice | This plan |
 |---|---|---|
 | **Routing layer** | The `EventStore` facade, registered under its own type. | The `EventStorageEngine`, under the stock `StorageEngineBackedEventStore`. |
 | **Per-tenant unit** | A full `StorageEngineBackedEventStore` per tenant. | A per-tenant `EventStorageEngine` plus a per-tenant `SnapshotStore`. |
