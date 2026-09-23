@@ -57,8 +57,8 @@ CONSTANTS
                           \*         drained position (lifecycle phase
                           \*         timeout / reconcile lowerBound fallback)
     NonTerminalExit,      \* how a body that stops without a terminal status
-                          \* (drift pause, recoverable exception, append
-                          \* rejection) leaves the engine:
+                          \* (drift pause, recoverable exception, failed
+                          \* append) leaves the engine:
                           \* "none"   = not modelled (every C* / M* arm)
                           \* "finish" = the execution is removed as if it
                           \*            finished (termination handler)

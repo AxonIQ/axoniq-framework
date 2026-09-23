@@ -76,9 +76,8 @@ public final class DcbFencingScenario {
      *                                {@code awaitConfirmation}).
      * @param rejectionsObserved      rejection warnings {@code WorkflowAppendConditions} logged for this instance —
      *                                the fault-landed proof. 0 means the race did not provably fire: INCONCLUSIVE.
-     * @param liveOwners              engines still holding the instance registered at the end (diagnostic only; a
-     *                                rejected loser keeps its execution registered with its driver stopped, so 2 is
-     *                                expected once a rejection fired).
+     * @param liveOwners              engines still holding the instance live at the end (diagnostic; the loser is
+     *                                interrupted, so ≤1 expected once a rejection fired).
      */
     public record Outcome(int startedRecords,
                           int maxTerminalRecordsForAStep,

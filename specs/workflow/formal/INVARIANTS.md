@@ -324,8 +324,9 @@ duplicated the *effect* while the *record* stayed ≤1, which is exactly why the
   **Re-derived 2026-09-23: not reproducible on the checkpointing engine** (see the INV-3 recovery facet): a graceful
   restart restores the parked instance from its own history and the late wake completes it, on the baseline and on the
   #479 fix. **Non-terminal exits after #479:** a body that stops without a terminal status (shutdown, replay drift
-  pause, recoverable exception, append rejection) keeps its execution registered with the driver stopped, instead of
-  being removed as if finished; an unhandled step failure or other body exception now ends the workflow FAILED instead
+  pause, recoverable exception, failed append) keeps its execution registered with the driver stopped, instead of
+  being removed as if finished; an append rejection still finishes the execution on this node, and the next restart or
+  claim restores the instance from its own history; an unhandled step failure or other body exception now ends the workflow FAILED instead
   of wedging (the F-6/S-4 and F-15 wedges close). `RecoveryAfterNonTerminalExitTest` covers each exit through a restart.
   **Remaining gap (F-16 family):** a wake delivered while the instance is paused is dropped (the paused execution only
   evolves its own events and holds no checkpoint work), so the token passes it and the restored wait never sees it;

@@ -126,14 +126,32 @@ class RecoveryAfterNonTerminalExitTest {
 
         @Test
         @Timeout(value = 60, unit = TimeUnit.SECONDS)
-        void rejectedInstanceStaysRegisteredAndCompletesAfterRestartWithTheOwnerUnchanged() {
+        void rejectedInstanceLeavesTheNodeAndCompletesAfterRestartWithTheOwnerUnchanged() {
             // given / when
             Outcome outcome = RecoveryAfterNonTerminalExitScenario.appendRejection(0L);
 
             // then
             assertThat(outcome.faultLanded()).as("the foreign write fenced the instance's append").isTrue();
-            assertThat(outcome.liveAfterPause()).as("a rejected append keeps the instance registered").isTrue();
+            assertThat(outcome.liveAfterPause()).as("a rejected append removes the execution from this node").isFalse();
             assertRecoveredAndCompleted(outcome, OrderWorkflow.SHIP_ORDER_MAX_RETRIES + 1);
+        }
+    }
+
+    @Nested
+    class InterruptedStepStart {
+
+        @Test
+        @Timeout(value = 60, unit = TimeUnit.SECONDS)
+        void anInterruptBeforeTheStepStartsPausesTheWorkflowAndItCompletesAfterRestart() {
+            // given / when
+            Outcome outcome = RecoveryAfterNonTerminalExitScenario.interruptedStepStart(0L);
+
+            // then
+            assertThat(outcome.faultLanded())
+                    .as("the shutdown interrupted the driver while the step's STARTED commit was pending")
+                    .isTrue();
+            // A body that fails the workflow on every step failure must not see the interrupted start as one.
+            assertRecoveredAndCompleted(outcome);
         }
     }
 

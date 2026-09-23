@@ -61,11 +61,15 @@ import java.util.Optional;
  *   <li><strong>Recoverable exception pause.</strong> A body throws an I/O failure between its steps once; the
  *       instance pauses, and after a restart it completes without re-running its first step.</li>
  *   <li><strong>Append rejection.</strong> A foreign write for a live instance makes its next append fail its
- *       condition. The owner does not change; after a graceful restart the instance must complete, with one terminal
- *       record.</li>
+ *       condition. The rejected execution leaves this node, and the owner does not change; after a graceful restart the
+ *       instance is restored from its own history and must complete, with one terminal record.</li>
+ *   <li><strong>Interrupted step start.</strong> The engine shuts down while a step's STARTED commit is still pending,
+ *       under a body that fails the workflow on any step failure. The interrupted start must pause the workflow, not
+ *       fail it, and the instance must complete after the restart.</li>
  * </ol>
- * Every arm reports its landing evidence (the interrupt, the drift warning, the thrown body, the fence), whether the
- * paused instance stayed registered, the processor token around the pause, and the outcome after the restart.
+ * Every arm reports its landing evidence (the interrupt, the drift warning, the thrown body, the fence, the stalled
+ * commit), whether the instance stayed registered, the processor token around the exit, and the outcome after the
+ * restart.
  * <p>
  * The processor token is reported, not asserted: a claim restores every non-terminal instance from its own durable
  * history, so recovery does not depend on the token staying below a parked or paused instance, and it does not.
@@ -90,8 +94,8 @@ public final class RecoveryAfterNonTerminalExitScenario {
      * What one arm observed.
      *
      * @param faultLanded          whether the arm's fault provably fired (see each arm for its evidence)
-     * @param liveAfterPause       whether the paused (or, for a shutdown, the parked) instance was still registered,
-     *                             and not re-driven, just before the restart
+     * @param liveAfterPause       whether the instance was still registered, and not re-driven, just before the
+     *                             restart
      * @param tokenBeforeRestart   the lowest stored processor token position just before the restart, or -1
      * @param tokenAfterShutdown   the lowest stored processor token position after the old engine stopped, or -1
      * @param instanceHeadIndex    the index in the durable log of the instance's latest event before the restart
@@ -258,7 +262,8 @@ public final class RecoveryAfterNonTerminalExitScenario {
     }
 
     /**
-     * An append rejection with the owner unchanged, then a graceful restart and the wake the instance needs.
+     * An append rejection with the owner unchanged, then a graceful restart and the wake the instance needs. The
+     * rejected execution is expected to leave this node; the restart restores it from its own history.
      * <p>
      * Landing evidence: the store reports the instance the foreign write targeted, and the engine warned that the
      * append was rejected.
@@ -304,6 +309,52 @@ public final class RecoveryAfterNonTerminalExitScenario {
                                terminalRecords(world.committedLog(), workflowId),
                                effects.count(workflowId, OrderWorkflow.STEP_CHARGE_PAYMENT),
                                effects.count(workflowId, OrderWorkflow.STEP_SHIP_ORDER));
+        }
+    }
+
+    /**
+     * A graceful shutdown while a step's STARTED commit is still pending, then a restart.
+     * <p>
+     * Landing evidence: the store holds the stalled STARTED commit, the step's first attempt never ran its side
+     * effect, and the driver the old engine held stopped with the status still non-terminal.
+     * <p>
+     * On this branch the engine's shutdown guard already blocks a terminal publish while it stops, so this arm passes
+     * whether the interrupted start reaches the body as a cancellation or as an interrupt. It guards the pause, not the
+     * exception type.
+     *
+     * @param seed seed for the world's deterministic id source
+     * @return the observed outcome
+     */
+    public static Outcome interruptedStepStart(long seed) {
+        var effects = new CountingEffects();
+        var workflow = new FlakyBodyWorkflow(effects);
+        var registration = new EngineInstance.WorkflowRegistration(
+                FlakyBodyWorkflow.WORKFLOW_NAME, RollingDeployOrderEvent.class, "flaky-",
+                workflow::executeFailingOnAnyStepFailure);
+        try (var world = new SimulationWorld(seed, registration)) {
+            String workflowId = "flaky-A";
+            world.eventStore().armStallCommitFor(FlakyBodyWorkflow.STEP_FULFILL, StepStatus.STARTED);
+            world.engine().publish(new RollingDeployOrderEvent("A"));
+            Polling.await(DEADLINE, () -> world.eventStore().stalledCommits() >= 1);
+            Optional<WorkflowExecution> parked = world.engine().liveExecution(workflowId);
+            boolean stalled = world.eventStore().stalledCommits() == 1
+                    && effects.count(workflowId, FlakyBodyWorkflow.STEP_FULFILL) == 0;
+            boolean liveBeforeShutdown = parked.map(WorkflowExecution::isRunning).orElse(false);
+            long tokenBefore = tokenPosition(world);
+            int headIndex = headIndex(world, workflowId);
+
+            world.restartGracefully();
+
+            boolean driverStopped = parked.map(execution -> !execution.isRunning()).orElse(false);
+            long tokenAfter = tokenPosition(world);
+            boolean restored = awaitRestored(world, workflowId);
+            Polling.await(DEADLINE, () -> terminalStatus(world.committedLog(), workflowId) != null);
+            Invariants.assertAtMostOnceRecording(world.committedLog());
+            return new Outcome(stalled && driverStopped, liveBeforeShutdown, tokenBefore, tokenAfter, headIndex,
+                               restored, terminalStatus(world.committedLog(), workflowId),
+                               terminalRecords(world.committedLog(), workflowId),
+                               effects.count(workflowId, FlakyBodyWorkflow.STEP_RESERVE),
+                               effects.count(workflowId, FlakyBodyWorkflow.STEP_FULFILL));
         }
     }
 

@@ -129,7 +129,7 @@ class ClaimRestoreForeignWriteTest extends AbstractEventSourcedEntityRepositoryT
     }
 
     @Test
-    void aFencedExecutionStaysRegisteredAndTheNextClaimantCompletesItAfterTheRelease() {
+    void aFencedExecutionLeavesTheNodeAndTheNextNodesClaimCompletesItWithOneTerminalRecord() {
         // given
         var storageEngine = new ForeignWritingStorageEngine(new InMemoryEventStorageEngine());
         configuration = configurationWith(storageEngine);
@@ -137,7 +137,7 @@ class ClaimRestoreForeignWriteTest extends AbstractEventSourcedEntityRepositoryT
         var instanceA = workflowContext("wf-a", MessageType.DEFAULT_VERSION);
         publish(EventMessageUtils.startedWorkflow(instanceA, MODULE, DEFINITION_ID, customizer));
         storageEngine.writeDuringSourcingOf("wf-a", () -> publish(step(instanceA, "approveOrder")));
-        var firstOwner = configuration.getComponent(WorkflowEngine.class);
+        var owner = configuration.getComponent(WorkflowEngine.class);
 
         // when
         restoreSegment();
@@ -146,51 +146,27 @@ class ClaimRestoreForeignWriteTest extends AbstractEventSourcedEntityRepositoryT
         assertThat(storageEngine.wroteDuringSourcing())
                 .as("the previous owner's write must have landed during the read, or this test proves nothing")
                 .isTrue();
-        assertThat(pausedWithin(firstOwner, "wf-a", BUDGET))
-                .as("the rejected execution stops its driver")
-                .isTrue();
-        // A driver that finishes stops first and is removed right after, so registration must hold for a while.
-        await().during(Duration.ofMillis(500))
-               .atMost(BUDGET)
-               .untilAsserted(() -> assertThat(firstOwner.workflowExecutions())
-                       .as("the rejected execution stays registered for the next claim")
-                       .anyMatch(execution -> execution.workflowId().equals("wf-a")));
+        await().atMost(BUDGET).untilAsserted(() -> assertThat(owner.workflowExecutions())
+                .as("the rejected execution leaves this node")
+                .noneMatch(execution -> execution.workflowId().equals("wf-a")));
         assertThat(isTerminal("wf-a")).isFalse();
 
-        // when the segment moves: this node releases it and another node claims it
-        firstOwner.releaseWorkflowsFor(Segment.ROOT_SEGMENT).join();
-        var firstOwnerConfiguration = configuration;
+        // when the segment moves: this node releases it and a started node claims it, now past the foreign write
+        owner.releaseWorkflowsFor(Segment.ROOT_SEGMENT).join();
+        var firstNode = configuration;
         try {
-            assertThat(firstOwner.workflowExecutions())
-                    .as("the release removes the paused execution")
-                    .isEmpty();
             configuration = configurationWith(storageEngine);
             configuration.start();
             restoreSegment();
 
             // then
             assertThat(terminatedWithin("wf-a", BUDGET))
-                    .as("the next claimant sourced the foreign write, so it drives the instance to its terminal record")
+                    .as("the next claim sources the foreign write from history and drives the instance to its end")
                     .isTrue();
             assertThat(terminalRecords("wf-a")).as("exactly one terminal record").isEqualTo(1);
         } finally {
-            firstOwnerConfiguration.shutdown();
+            firstNode.shutdown();
         }
-    }
-
-    /**
-     * Returns whether the engine holds the given instance with its driver stopped within the given {@code budget}.
-     */
-    private static boolean pausedWithin(WorkflowEngine engine, String workflowId, Duration budget) {
-        var deadline = System.nanoTime() + budget.toNanos();
-        while (System.nanoTime() < deadline) {
-            if (engine.workflowExecutions().stream()
-                      .anyMatch(execution -> execution.workflowId().equals(workflowId) && !execution.isRunning())) {
-                return true;
-            }
-            Thread.onSpinWait();
-        }
-        return false;
     }
 
     private int terminalRecords(String workflowId) {

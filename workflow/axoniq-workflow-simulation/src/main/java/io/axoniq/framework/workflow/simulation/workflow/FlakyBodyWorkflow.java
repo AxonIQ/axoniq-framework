@@ -19,6 +19,7 @@
 package io.axoniq.framework.workflow.simulation.workflow;
 
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -83,5 +84,24 @@ public class FlakyBodyWorkflow {
         }
         ctx.awaitExecute(STEP_FULFILL, Map.of(),
                          (pc, payload) -> Map.of("fulfilled", effects.record(workflowId, STEP_FULFILL)));
+    }
+
+    /**
+     * A body that fails the workflow on any step failure it sees, the pattern many authors write: reserve, then
+     * fulfill, and {@code ctx.fail(e)} on every {@link StepFailedException}. It does not single out an engine interrupt,
+     * so it shows whether the engine reports an interrupted step start as a failure.
+     *
+     * @param ctx the workflow context provided by the runtime
+     */
+    public void executeFailingOnAnyStepFailure(SimpleWorkflowContext ctx) {
+        String workflowId = ctx.workflowId();
+        try {
+            ctx.awaitExecute(STEP_RESERVE, Map.of(),
+                             (pc, payload) -> Map.of("reserved", effects.record(workflowId, STEP_RESERVE)));
+            ctx.awaitExecute(STEP_FULFILL, Map.of(),
+                             (pc, payload) -> Map.of("fulfilled", effects.record(workflowId, STEP_FULFILL)));
+        } catch (StepFailedException e) {
+            ctx.fail(e);
+        }
     }
 }

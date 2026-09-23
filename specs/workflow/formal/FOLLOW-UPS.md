@@ -65,7 +65,7 @@ Each fix flips its acceptance test from "gap present" to "gap closed". Two cheap
   the instance to FAILED instead of wedging it. Closes **F-6 + F-6′(S-4) + F-9's throw mode** in one change.
   **Done by the #479 fix** (backport `poc/tla_dst-479-backport`): the S-4 and F-15 pins flipped to FAILED.
 - **Paused instance drops wakes (F-16 family, after #479).** A paused execution (drift pause, recoverable exception,
-  append rejection) evolves only its own events and reports no checkpoint work, so a wake delivered during the pause is
+  failed append) evolves only its own events and reports no checkpoint work, so a wake delivered during the pause is
   passed by the token and lost to the restored wait. Candidate fix, model-checked by `Holdback.tla`
   `P3_paused_queues_wakes`: queue a matching wake on the paused execution and count it towards the barrier, as F-36 did
   for a restored-not-started execution. Cost: the paused instance then holds its segment's checkpoint back until the
