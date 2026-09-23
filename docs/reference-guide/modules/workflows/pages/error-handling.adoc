@@ -188,8 +188,8 @@ Nothing marks it as stopped except the log line written at that moment.
 |`WARN` "paused due to replay drift"
 
 |The event store did not accept one of the workflow's own events
-|Infrastructure did not answer or rejected the append. The next run appends again.
-|`ERROR` "the event store did not accept one of its events", or "did not complete before the resolution timeout"
+|Infrastructure did not answer, or another writer recorded an event for the instance first. The next run appends again from durable history.
+|`ERROR` "the event store did not accept one of its events", or "did not complete before the resolution timeout". `WARN` "was rejected: another writer already recorded events" for a rejection.
 
 |A recoverable exception the body did not catch
 |A later run may succeed. See <<recoverable>>.
