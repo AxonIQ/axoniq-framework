@@ -5,6 +5,7 @@
 *** xref:workflows:publishing-events.adoc[]
 *** xref:workflows:understanding-steps.adoc[]
 ** xref:workflows:workflow-lifecycle.adoc[]
+** xref:workflows:error-handling.adoc[]
 ** xref:workflows:workflow-manager.adoc[]
 ** xref:workflows:step-orchestration.adoc[]
 ** xref:workflows:common-patterns.adoc[]

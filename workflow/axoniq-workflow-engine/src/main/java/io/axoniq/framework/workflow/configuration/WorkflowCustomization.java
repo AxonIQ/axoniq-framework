@@ -19,6 +19,7 @@
 package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.RecoverableWorkflowExceptionPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
@@ -48,6 +49,7 @@ public class WorkflowCustomization {
     private final Map<WorkflowStatus, CompositeWorkflowStatusChangeListener> workflowStatusListeners;
     protected EventNameCustomizer eventNameCustomizer;
     protected WorkflowIdProvider workflowIdProvider;
+    private RecoverableWorkflowExceptionPolicy recoverableExceptionPolicy;
     private String workflowVersion = Version.DEFAULT_VERSION;
 
     /**
@@ -80,9 +82,13 @@ public class WorkflowCustomization {
                                                                   DefaultEventNameCustomizer.Builder::defaults);
             this.workflowIdProvider = configuration.getComponent(WorkflowIdProvider.class,
                                                                  MessageWorkflowIdProvider::new);
+            this.recoverableExceptionPolicy = configuration.getComponent(
+                    RecoverableWorkflowExceptionPolicy.class, () -> RecoverableWorkflowExceptionPolicy.DEFAULT
+            );
         } else {
             this.eventNameCustomizer = DefaultEventNameCustomizer.Builder.defaults();
             this.workflowIdProvider = new MessageWorkflowIdProvider();
+            this.recoverableExceptionPolicy = RecoverableWorkflowExceptionPolicy.DEFAULT;
         }
         this.workflowStatusListeners = new ConcurrentHashMap<>();
         Arrays.stream(WorkflowStatus.values()).forEach(workflowStatus -> {
@@ -101,6 +107,7 @@ public class WorkflowCustomization {
         this.workflowName = base.workflowName;
         this.eventNameCustomizer = base.eventNameCustomizer;
         this.workflowIdProvider = base.workflowIdProvider;
+        this.recoverableExceptionPolicy = base.recoverableExceptionPolicy;
         this.workflowVersion = base.workflowVersion;
         this.workflowStatusListeners = base.workflowStatusListeners;
     }
@@ -148,6 +155,31 @@ public class WorkflowCustomization {
         Objects.requireNonNull(workflowIdProvider, "Workflow id provider must not be null.");
         this.workflowIdProvider = workflowIdProvider;
         return this;
+    }
+
+    /**
+     * Sets the policy that decides whether an exception escaping the workflow body pauses the workflow or fails it.
+     * Defaults to the {@link RecoverableWorkflowExceptionPolicy} component, or
+     * {@link RecoverableWorkflowExceptionPolicy#DEFAULT} when none is registered.
+     *
+     * @param recoverableExceptionPolicy the policy to use for this workflow
+     * @return module configuration instance
+     */
+    public WorkflowCustomization recoverableExceptionPolicy(
+            RecoverableWorkflowExceptionPolicy recoverableExceptionPolicy
+    ) {
+        Objects.requireNonNull(recoverableExceptionPolicy, "Recoverable exception policy must not be null.");
+        this.recoverableExceptionPolicy = recoverableExceptionPolicy;
+        return this;
+    }
+
+    /**
+     * Returns the policy that decides whether an exception escaping the workflow body pauses the workflow or fails it.
+     *
+     * @return the configured recoverable exception policy
+     */
+    public RecoverableWorkflowExceptionPolicy recoverableExceptionPolicy() {
+        return this.recoverableExceptionPolicy;
     }
 
     /**

@@ -127,7 +127,8 @@ class DeclarativeWorkflowBuilder<C extends WorkflowContext> implements
                         workflowContextFactoryBuilder.build(config),
                         workflowModuleConfiguration.workflowIdProvider,
                         workflowModuleConfiguration.eventNameCustomizer,
-                        workflowModuleConfiguration.workflowStatusChangeListeners()
+                        workflowModuleConfiguration.workflowStatusChangeListeners(),
+                        workflowModuleConfiguration.recoverableExceptionPolicy()
                 )
         ));
     }
