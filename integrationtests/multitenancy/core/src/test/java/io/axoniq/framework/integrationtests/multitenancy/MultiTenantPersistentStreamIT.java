@@ -58,6 +58,10 @@ import static org.awaitility.Awaitility.await;
  * <p>
  * A single subscribing event processor consumes one configured stream. With multi-tenancy active that stream exists in
  * each tenant's context, so the processor consumes both tenants while the handler can tell them apart.
+ * <p>
+ * The application, contexts, and stream are built once for the whole class rather than per test: the subscribing
+ * processor only ever sees events published after it started, so tests stay isolated from each other without paying
+ * for a fresh application per test.
  *
  * @author Jakob Hatzl
  */
@@ -68,31 +72,34 @@ class MultiTenantPersistentStreamIT {
     private static final String TENANT_A = "tenant-A";
     private static final String TENANT_B = "tenant-B";
 
-    private AxonServerTestInfrastructure.ContextManager contextManager;
-    private AxonConfiguration application;
-    private String streamName;
-    private final List<HandledEvent> handled = new CopyOnWriteArrayList<>();
+    private static AxonServerTestInfrastructure.ContextManager contextManager;
+    private static AxonConfiguration application;
+    private static String streamName;
+    private static final List<HandledEvent> handled = new CopyOnWriteArrayList<>();
 
-    @BeforeEach
-    void setUp() {
+    @BeforeAll
+    static void setUpClass() {
         INFRASTRUCTURE.start();
         contextManager = INFRASTRUCTURE.getContextManager();
         contextManager.createContext(TENANT_A);
         contextManager.createContext(TENANT_B);
-        // A unique name per test keeps the server-side streams of one run from being joined by the next.
         streamName = "mt-stream-" + UUID.randomUUID();
-        handled.clear();
         application = buildApplication();
     }
 
-    @AfterEach
-    void tearDown() {
+    @AfterAll
+    static void tearDownClass() {
         if (application != null) {
             application.shutdown();
             application = null;
         }
         contextManager.deleteAllCustomContexts();
         INFRASTRUCTURE.stop();
+    }
+
+    @BeforeEach
+    void setUp() {
+        handled.clear();
     }
 
     @Test
@@ -145,7 +152,7 @@ class MultiTenantPersistentStreamIT {
 
     // ----- helpers -------------------------------------------------------
 
-    private AxonConfiguration buildApplication() {
+    private static AxonConfiguration buildApplication() {
         return EventSourcingConfigurer.create()
                                       .componentRegistry(INFRASTRUCTURE::configureInfrastructure)
                                       .componentRegistry(TenantFixture::connectOnlyCustomTenantsPredicate)
@@ -155,7 +162,7 @@ class MultiTenantPersistentStreamIT {
                                       .start();
     }
 
-    private SubscribingEventProcessorModule buildProcessorModule() {
+    private static SubscribingEventProcessorModule buildProcessorModule() {
         return EventProcessorModule
                 .subscribing("multi-tenant-persistent-stream-module")
                 .eventHandlingComponents(components -> components.declarative(
@@ -174,7 +181,7 @@ class MultiTenantPersistentStreamIT {
      *
      * @return the handling component recording every event it handles
      */
-    private EventHandlingComponent buildHandlingComponent() {
+    private static EventHandlingComponent buildHandlingComponent() {
         SimpleEventHandlingComponent handlingComponent =
                 SimpleEventHandlingComponent.create("multi-tenant-persistent-stream-handling",
                                                     SequentialPolicy.INSTANCE);
@@ -190,7 +197,7 @@ class MultiTenantPersistentStreamIT {
         return handlingComponent;
     }
 
-    private SubscribableEventSource buildMultiTenantStreamSource(Configuration configuration) {
+    private static SubscribableEventSource buildMultiTenantStreamSource(Configuration configuration) {
         int segmentCount = 1;
         PersistentStreamProperties properties = new PersistentStreamProperties(
                 streamName,
@@ -221,7 +228,7 @@ class MultiTenantPersistentStreamIT {
      * @param tenantId the tenant whose event store receives the event
      * @param id       the identifier of the published event
      */
-    private void publishEvent(String tenantId, String id) {
+    private static void publishEvent(String tenantId, String id) {
         UnitOfWorkFactory unitOfWorkFactory = application.getComponent(UnitOfWorkFactory.class);
         var unitOfWork = unitOfWorkFactory.create();
         unitOfWork.runOnInvocation(context -> {

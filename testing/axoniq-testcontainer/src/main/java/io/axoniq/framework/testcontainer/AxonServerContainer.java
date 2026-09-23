@@ -64,6 +64,13 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
     private static final String AXONIQ_AXONSERVER_INTERNAL_HOSTNAME = "AXONIQ_AXONSERVER_INTERNAL_HOSTNAME";
     private static final String AXONIQ_AXONSERVER_HOSTNAME = "AXONIQ_AXONSERVER_HOSTNAME";
     private static final String AXONIQ_AXONSERVER_DEVMODE_ENABLED = "AXONIQ_AXONSERVER_DEVMODE_ENABLED";
+    private static final String AXONIQ_AXONSERVER_PLUGINS_ENABLED = "AXONIQ_AXONSERVER_PLUGINS_ENABLED";
+    private static final String AXONIQ_AXONSERVER_REPLICATION_MIN_ELECTION_TIMEOUT =
+            "AXONIQ_AXONSERVER_REPLICATION_MIN_ELECTION_TIMEOUT";
+    private static final String AXONIQ_AXONSERVER_REPLICATION_MAX_ELECTION_TIMEOUT =
+            "AXONIQ_AXONSERVER_REPLICATION_MAX_ELECTION_TIMEOUT";
+    private static final String AXONIQ_AXONSERVER_REPLICATION_HEARTBEAT_TIMEOUT =
+            "AXONIQ_AXONSERVER_REPLICATION_HEARTBEAT_TIMEOUT";
 
     private static final String AXON_SERVER_ADDRESS_TEMPLATE = "%s:%s";
 
@@ -120,6 +127,8 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
         withExposedPorts(AXON_SERVER_HTTP_PORT, AXON_SERVER_GRPC_PORT)
                 .withEnv("TESTCONTAINERS_FORK_NUMBER", "" + System.getProperty("test.forkNumber", "0"))
                 .withEnv(AXONIQ_LICENSE, LICENCE_DEFAULT_LOCATION)
+                // Skip OSGi plugin loading entirely: framework tests never install plugins.
+                .withEnv(AXONIQ_AXONSERVER_PLUGINS_ENABLED, "false")
                 .waitingFor(Wait.forLogMessage(WAIT_FOR_LOG_MESSAGE, 1).withStartupTimeout(STARTUP_TIMEOUT))
                 .waitingFor(Wait.forHttp(HEALTH_ENDPOINT)
                                 .forPort(AXON_SERVER_HTTP_PORT)
@@ -136,6 +145,16 @@ public class AxonServerContainer extends GenericContainer<AxonServerContainer> {
         withOptionalEnv(AXONIQ_AXONSERVER_INTERNAL_HOSTNAME, axonServerInternalHostname);
         //noinspection resource | ignore from AutoClosable on GenericContainer
         withEnv(AXONIQ_AXONSERVER_DEVMODE_ENABLED, String.valueOf(devMode));
+        if (clusterTemplatePath == null) {
+            // Shrink Raft election/heartbeat timeouts: safe for the single-member replication groups a
+            // container without a cluster template runs (no real quorum risk), and shaves a guaranteed 1-2s+
+            // off every boot. Left untouched when a cluster template is supplied, since a real multi-node
+            // cluster needs Axon Server's own production-safe timing to avoid spurious re-elections.
+            //noinspection resource | ignore from AutoClosable on GenericContainer
+            withEnv(AXONIQ_AXONSERVER_REPLICATION_MIN_ELECTION_TIMEOUT, "50")
+                    .withEnv(AXONIQ_AXONSERVER_REPLICATION_MAX_ELECTION_TIMEOUT, "200")
+                    .withEnv(AXONIQ_AXONSERVER_REPLICATION_HEARTBEAT_TIMEOUT, "50");
+        }
     }
 
     @Override

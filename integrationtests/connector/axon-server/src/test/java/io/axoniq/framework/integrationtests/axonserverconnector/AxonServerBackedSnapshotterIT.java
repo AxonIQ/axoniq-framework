@@ -80,28 +80,4 @@ public class AxonServerBackedSnapshotterIT extends SnapshottingEntityLifecycleHa
             return new AxonServerSnapshotStore(component.getConnection(), c.getComponent(GeneralConverter.class));
         });
     }
-
-    @Disabled("TODO #5042 | Disabled as Decoration unwrapping is cleanly supported to decoration decisions")
-    @Override
-    protected void shouldSnapshotExplicitly() {
-        super.shouldSnapshotExplicitly();
-    }
-
-    @Disabled("TODO #5042 | Disabled as Decoration unwrapping is cleanly supported to decoration decisions")
-    @Override
-    protected void shouldSnapshotAfterFiveEvents() {
-        super.shouldSnapshotAfterFiveEvents();
-    }
-
-    @Disabled("TODO #5042 | Disabled as Decoration unwrapping is cleanly supported to decoration decisions")
-    @Override
-    protected void shouldIgnoreSnapshotIfVersionUnsupported() {
-        super.shouldIgnoreSnapshotIfVersionUnsupported();
-    }
-
-    @Disabled("TODO #5042 | Disabled as Decoration unwrapping is cleanly supported to decoration decisions")
-    @Override
-    protected void shouldIgnoreExceptionsWhileLoadingSnapshot() {
-        super.shouldIgnoreExceptionsWhileLoadingSnapshot();
-    }
 }
