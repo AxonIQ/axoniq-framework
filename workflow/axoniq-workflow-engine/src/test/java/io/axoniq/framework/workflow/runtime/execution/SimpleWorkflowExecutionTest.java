@@ -519,21 +519,18 @@ class SimpleWorkflowExecutionTest {
         }
 
         @Test
-        void rejectedAppendPausesInsteadOfFinishing() throws Exception {
-            // given
+        void fencedExecutionStillCallsTerminationHandler() throws Exception {
             var execution = execution(
                     failingEventStore(new AppendEventsTransactionRejectedException("another writer owns it")),
                     new DirectExecutorService()
             );
             var terminationHandlerCalled = new CountDownLatch(1);
 
-            // when
             execution.execute(ignored -> terminationHandlerCalled.countDown()).join();
-            // The rejection interrupts the driver, which is this thread under the direct executor.
+            // The fence interrupts the driver, which is this thread under the direct executor.
             Thread.interrupted();
 
-            // then
-            assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isFalse();
+            assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isTrue();
             assertThat(execution.isRunning()).isFalse();
             assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.NONE);
         }

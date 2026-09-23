@@ -86,6 +86,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     // Runtime
     private boolean running = false;
     private boolean stoppedForRecovery = false;
+    private volatile boolean appendRejected = false;
     private volatile boolean appendFailed = false;
     private volatile Thread workflowThread;
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
@@ -243,8 +244,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                                     throw timeout;
                                 }
                             } finally {
-                                // A non-terminal exit keeps the instance for recovery.
-                                if (this.state().workflowStatus().isTerminal()) {
+                                // A non-terminal exit keeps the instance for recovery, unless another writer owns it.
+                                if (this.state().workflowStatus().isTerminal() || appendRejected) {
                                     finishWorkflow(terminationHandler);
                                 } else {
                                     stopRuntimeForRecovery();
@@ -450,8 +451,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     }
 
     /**
-     * Stops the in-memory workflow driver after the body exited without a terminal status: a publication that could
-     * not be resolved, an append rejection, an engine shutdown, a replay drift pause, or a recoverable failure.
+     * Stops the in-memory workflow driver after the body exited without a terminal status and without an append
+     * rejection: a publication that could not be resolved, an engine shutdown, a replay drift pause, or an unhandled
+     * failure.
      * <p>
      * The execution deliberately remains in the repository and non-terminal so the next processing-node start or
      * segment claim can restore it from durable history. In contrast to {@link #finishWorkflow(Consumer)}, this method
@@ -612,6 +614,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 logger.warn("Append of {} for workflow '{}' was rejected: another writer already recorded events for "
                                     + "this instance. Stopping this execution.",
                             eventMessage.type(), workflowId);
+                // Set before the interrupt: the body usually sees the interrupt, not the rejection.
+                appendRejected = true;
                 interruptWorkflowDriver();
             }
         });
