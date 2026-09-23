@@ -33,9 +33,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Phase-1 production-realism pins: the {@link SagaOrderWorkflow} compensation saga driven through the windows a real
  * production deployment meets (see {@link SagaCompensationScenario} for each run's mechanism). The healthy paths
  * assert the engine honours the saga contract; the crash-mid-compensation pair contrasts the fragile (no-retry) and
- * recommended (retrying) compensation authoring under the SAME crash window — pinning the no-retry wedge as an
- * expected-gap (the F-6′ sink catching the engine's own indeterminate resolution, a composite the wedge family did not
- * previously cover); the duplicate-FAILED run pins the F-13-class FAIL-path duplicate terminal record.
+ * recommended (retrying) compensation authoring under the SAME crash window. An uncaught step failure or step timeout
+ * that escapes the catch block ends the saga FAILED with exactly one terminal record; the duplicate-FAILED run pins
+ * the F-13-class FAIL-path duplicate terminal record.
  *
  * @author Stefan Dragisic
  * @since 5.4.0
@@ -84,7 +84,7 @@ class SagaCompensationTest {
 
     @Test
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
-    void crashMidCompensation_noRetry_wedgesHalfCompensated_asExpectedGap() {
+    void crashMidCompensation_noRetry_failsHalfCompensatedWithOneTerminalRecord() {
         var outcome = SagaCompensationScenario.crashMidCompensation(0L, "C1", false);
 
         // The engine's at-most-once resolution turned the crash-interrupted releaseStock into a FAILED
@@ -96,17 +96,16 @@ class SagaCompensationTest {
                 .as("the interrupted attempt resolves through the regular error flow to FAILED")
                 .isEqualTo(StepStatus.FAILED);
 
-        // EXPECTED GAP (composite: F-0-fix resolution × catch-block compensation × the F-6′ default-branch sink): the
-        // StepFailedException escapes the catch block uncaught, handleWorkflowException's default branch does NOT
-        // drive a terminal status, and the saga wedges non-terminally, HALF-compensated — no refund ever attempted,
-        // no CANCELLED (nor FAILED) recorded. A production order would be stuck: stock release indeterminate, money
-        // kept, order neither cancelled nor failed (and the instance pins the engine safe-point, F-11).
+        // The StepFailedException escapes the catch block uncaught, so the saga ends FAILED instead of staying
+        // non-terminal. The refund and the intended ctx.cancel() are never reached.
         assertThat(outcome.terminalStatus())
-                .as("EXPECTED GAP: the saga wedges non-terminally (no workflow terminal status) when a no-retry "
-                            + "compensation step resolves indeterminate after a crash")
-                .isNull();
+                .as("an uncaught step failure after a crash ends the saga FAILED")
+                .isEqualTo(WorkflowStatus.FAILED);
         assertThat(outcome.refundEffectCount()).as("the refund compensation was never reached").isEqualTo(0);
         assertThat(outcome.cancelledRecords()).as("the intended ctx.cancel() was never reached").isEqualTo(0);
+        // Nothing after the terminal: a further restart neither re-drives the instance nor publishes again.
+        assertThat(outcome.workflowTerminalRecords()).as("exactly one workflow terminal record").isEqualTo(1);
+        assertThat(outcome.liveAtEnd()).as("the failed saga is not re-driven after a restart").isFalse();
     }
 
     @Test
@@ -126,6 +125,8 @@ class SagaCompensationTest {
                 .isEqualTo(2);
         assertThat(outcome.refundEffectCount()).as("the refund compensation completed").isEqualTo(1);
         assertThat(outcome.cancelledRecords()).isEqualTo(1);
+        assertThat(outcome.workflowTerminalRecords()).isEqualTo(1);
+        assertThat(outcome.liveAtEnd()).isFalse();
     }
 
     @Test
@@ -169,7 +170,7 @@ class SagaCompensationTest {
 
     @Test
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
-    void doomedCompensation_actionRunsButResultDiscardedAsTimedOut_asExpectedGap() {
+    void doomedCompensation_actionRunsButResultDiscardedAsTimedOut_sagaFails() {
         var outcome = SagaCompensationScenario.doomedCompensationAfterClockJump(0L, "DT1");
 
         // EXPECTED GAP (doomed attempt): ExecuteDelegate computes the per-attempt deadline at entry but dispatches the
@@ -184,12 +185,14 @@ class SagaCompensationTest {
                 .isEqualTo(0);
         assertThat(outcome.releaseTerminalStatus()).isEqualTo(StepStatus.TIMED_OUT);
 
-        // Composite consequence: the StepTimedOutException escapes the saga's catch block uncaught, and the
-        // handleWorkflowException default-branch sink wedges the instance non-terminally (F-6'-family sink, reached
-        // here through the engine's own timeout classification rather than user code throwing).
+        // The StepTimedOutException escapes the saga's catch block uncaught, so the saga ends FAILED instead of
+        // staying non-terminal. A further restart neither re-drives the instance nor publishes again.
         assertThat(outcome.workflowTerminalStatus())
-                .as("EXPECTED GAP: the saga wedges non-terminally after the doomed compensation attempt")
-                .isNull();
+                .as("an uncaught step timeout ends the saga FAILED")
+                .isEqualTo(WorkflowStatus.FAILED);
+        assertThat(outcome.workflowTerminalRecords()).as("exactly one workflow terminal record").isEqualTo(1);
+        assertThat(outcome.liveAtEnd()).as("the failed saga is not re-driven after a restart").isFalse();
+        assertThat(outcome.releaseEffectCount()).as("the doomed action does not run again").isEqualTo(1);
     }
 
     private static void assertRaceConsistency(SagaCompensationScenario.RaceOutcome outcome) {

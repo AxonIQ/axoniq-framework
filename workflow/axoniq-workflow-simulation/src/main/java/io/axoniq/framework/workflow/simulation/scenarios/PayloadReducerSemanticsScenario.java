@@ -30,6 +30,7 @@ import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.Reducer
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.ReducerRequestedEvent;
 import io.axoniq.framework.workflow.simulation.workflow.SimulationEvents.ReducerThrowingModifierRequestedEvent;
 import org.axonframework.messaging.eventhandling.EventMessage;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Duration;
 import java.util.List;
@@ -199,65 +200,37 @@ public final class PayloadReducerSemanticsScenario {
     }
 
     /**
-     * Result of the throwing-modifier edge run — a CANDIDATE-FINDING characterization (F-6, S-4 generalization;
-     * POC-TLA-DST.adoc): a {@code modifyPayload} modifier lambda that throws a plain {@code RuntimeException} between
-     * primitives <strong>wedges</strong> the instance, the SAME {@code handleWorkflowException} {@code default}-branch
-     * sink as F-6's null-payload trigger, with a wider trigger family.
+     * Result of the throwing-modifier edge run: a {@code modifyPayload} modifier lambda that throws a plain
+     * {@code RuntimeException} between primitives. The exception is not recoverable under the default
+     * {@link io.axoniq.framework.workflow.runtime.api.execution.context.RecoverableWorkflowExceptionPolicy}, so it ends
+     * the workflow {@code FAILED}.
      *
-     * @param modifierRanBeforeCrash whether the modifier lambda ran at least once before the crash (its
-     *                               {@code CountingEffects} record bumped). OBSERVED: {@code true} — the throw genuinely
-     *                               reached the user lambda on the workflow thread.
-     * @param reachedTerminalBeforeCrash whether the instance reached a terminal workflow status before the crash.
-     *                                   OBSERVED: {@code false} — wedged non-terminal (the {@code default} branch
-     *                                   records no terminal status).
-     * @param workflowCompleted      whether a {@code <workflow>:COMPLETED} status committed. OBSERVED: {@code false} —
-     *                               the body threw before completion.
-     * @param committedStepRecords   the number of committed STEP events for the instance (the {@code modifyPayload}
-     *                               COMPLETED among them). OBSERVED: {@code 0} — the modifier threw BEFORE
-     *                               {@code PayloadDelegate} builds/publishes its COMPLETED, so only the
-     *                               {@code <workflow>:STARTED} status event is committed (no step record).
-     * @param anyTerminalStatusEver  whether ANY terminal workflow status (COMPLETED/FAILED/CANCELLED/TIMED_OUT) ever
-     *                               committed for the instance, across the crash + replay. OBSERVED: {@code false} — the
-     *                               exception is only logged, never turned into FAILED/TIMED_OUT/CANCELLED.
-     * @param reachedTerminalAfterRecover whether the instance reached a terminal status after the crash + recover.
-     *                                    OBSERVED: {@code false} — STILL wedged: recovery does not rescue it (the wedged
-     *                                    instance was removed from the in-memory repository when its body threw, so the
-     *                                    orphaned {@code <workflow>:STARTED} is left non-terminal forever).
+     * @param modifierRanBeforeCrash      whether the modifier lambda ran at least once before the crash
+     * @param terminalBeforeCrash         the terminal workflow status recorded before the crash, or {@code null}
+     * @param committedStepRecords        the number of committed step events for the instance ({@code 0}: the modifier
+     *                                    throws before {@code PayloadDelegate} publishes its COMPLETED)
+     * @param terminalRecordsAfterRecover the number of committed terminal workflow status records after a crash and
+     *                                    recover ({@code 1}: nothing re-publishes the terminal)
+     * @param modifierRunsAfterRecover    how often the modifier lambda ran across the whole run ({@code 1}: the failed
+     *                                    instance is not re-driven)
+     * @param liveAfterRecover            whether the instance is live in the recovered engine ({@code false})
      */
-    public record ThrowingModifierOutcome(boolean modifierRanBeforeCrash, boolean reachedTerminalBeforeCrash,
-                                          boolean workflowCompleted, int committedStepRecords,
-                                          boolean anyTerminalStatusEver, boolean reachedTerminalAfterRecover) {
+    public record ThrowingModifierOutcome(boolean modifierRanBeforeCrash, @Nullable WorkflowStatus terminalBeforeCrash,
+                                          int committedStepRecords, int terminalRecordsAfterRecover,
+                                          int modifierRunsAfterRecover, boolean liveAfterRecover) {
 
     }
 
     /**
-     * Runs the throwing-modifier edge (the S-4 generalization of edge (a)/finding F-6) and
-     * <strong>characterizes the engine's ACTUAL handling</strong> of a plain {@code RuntimeException} thrown by a
-     * {@code modifyPayload} modifier lambda between primitives — a candidate finding (F-6 broadened, see
-     * POC-TLA-DST.adoc), NOT a passing assertion. It drives {@link ReducerWorkflow#throwingModifier} (a
-     * {@code modifyPayload} step whose modifier lambda throws {@link ReducerWorkflow#THROWING_MODIFIER_BOOM}).
-     * <p>
-     * OBSERVED behaviour: the modifier lambda runs on the workflow thread inside {@code PayloadDelegate.modifyPayload}'s
-     * {@code appendTask} task ({@code payloadModification.apply(...)}, {@code PayloadDelegate.java:86}); since it throws
-     * <em>before</em> the COMPLETED event is built/published, no step record is committed — only the
-     * {@code <workflow>:STARTED} status event. The exception propagates up out of {@code modifyPayload} → the workflow
-     * body → {@code executeWorkflow} → the {@code try/catch (Throwable)} ({@code SimpleWorkflowExecution.java:160-164}) →
-     * {@code handleWorkflowException}'s {@code default} branch ({@code SimpleWorkflowExecution.java:311-323}), which
-     * deliberately records NO terminal status ("we agreed not to drive the workflow to terminal state on any other
-     * exception") — so the instance is left <strong>non-terminal / stuck</strong> (a liveness stall) with the exception
-     * merely logged. Then {@code finishWorkflow} ({@code SimpleWorkflowExecution.java:333-341}) runs the termination
-     * handler that removes the wedged execution from the in-memory repository ({@code WorkflowEngine.java:194}), so a
-     * subsequent {@code crashAndRecover()} does NOT rescue it: the orphaned {@code <workflow>:STARTED} carries no terminal
-     * status, recovery does not re-drive it, and the instance is left non-terminal forever. This is the SAME
-     * {@code default}-branch wedge as {@link #runNullEdge} (F-6), with a wider trigger family — characterized and FLAGGED,
-     * not patched (per the POC's test/docs-only rule). The wedge is observed within a SHORT bounded window (the wedge is
-     * the ABSENCE of a terminal status; the run never hangs).
+     * Runs the throwing-modifier edge: drives {@link ReducerWorkflow#throwingModifier} (a {@code modifyPayload} step
+     * whose modifier lambda throws {@link ReducerWorkflow#THROWING_MODIFIER_BOOM}), waits for the terminal status,
+     * then crashes and recovers the engine and observes that nothing re-drives or re-publishes.
      *
-     * @param seed    seed for the world's deterministic id source.
-     * @param orderId business key for the single throwing-modifier instance.
-     * @return the observed throwing-modifier-edge outcome.
+     * @param seed    seed for the world's deterministic id source
+     * @param orderId business key for the single throwing-modifier instance
+     * @return the observed throwing-modifier-edge outcome
      */
-        public static ThrowingModifierOutcome runThrowingModifierEdge(long seed, String orderId) {
+    public static ThrowingModifierOutcome runThrowingModifierEdge(long seed, String orderId) {
         var effects = new CountingEffects();
         var registrations = List.of(EngineInstance.reducerWorkflow(effects),
                                     EngineInstance.reducerThrowingModifierWorkflow(effects));
@@ -265,32 +238,44 @@ public final class PayloadReducerSemanticsScenario {
             String workflowId = "reducer-" + orderId;
 
             world.engine().publish(new ReducerThrowingModifierRequestedEvent(orderId));
-            // Wait for the modifier lambda to actually run (the throw reaches the user code on the workflow thread),
-            // then give the completion path a SHORT bounded window in which it would (but does not) record a terminal
-            // status. The wedge is the ABSENCE of a terminal status, so a short deadline suffices and never hangs.
             Polling.await(Duration.ofSeconds(5),
                           () -> effects.count(workflowId, ReducerWorkflow.STEP_THROWING_MODIFIER) >= 1);
-            Polling.await(Duration.ofSeconds(2), () -> isTerminal(world.committedLog(), workflowId));
+            Polling.await(Duration.ofSeconds(5), () -> isTerminal(world.committedLog(), workflowId));
 
             boolean modifierRanBeforeCrash =
                     effects.count(workflowId, ReducerWorkflow.STEP_THROWING_MODIFIER) >= 1;
-            boolean reachedTerminalBeforeCrash = isTerminal(world.committedLog(), workflowId);
-            boolean workflowCompleted = isWorkflowCompleted(world.committedLog(), workflowId);
+            WorkflowStatus terminalBeforeCrash = terminalStatus(world.committedLog(), workflowId);
             int committedStepRecords = stepRecordCount(world.committedLog(), workflowId);
 
-            // Recovery: a crash + recover does NOT rescue the wedged instance — it was removed from the in-memory
-            // repository when its body threw, so the orphaned <workflow>:STARTED is left non-terminal. Give recovery a
-            // bounded window in which it would (but does not) drive the instance to any terminal status.
+            // A crash + recover after the terminal: a bounded window in which a re-drive or a second terminal shows.
             world.crashAndRecover();
-            Polling.await(Duration.ofSeconds(2), () -> isTerminal(world.committedLog(), workflowId));
+            Polling.await(Duration.ofSeconds(2),
+                          () -> terminalRecordCount(world.committedLog(), workflowId) > 1
+                                  || effects.count(workflowId, ReducerWorkflow.STEP_THROWING_MODIFIER) > 1);
 
-            boolean reachedTerminalAfterRecover = isTerminal(world.committedLog(), workflowId);
-            boolean anyTerminalStatusEver = reachedTerminalBeforeCrash || reachedTerminalAfterRecover;
-
-            return new ThrowingModifierOutcome(modifierRanBeforeCrash, reachedTerminalBeforeCrash, workflowCompleted,
-                                               committedStepRecords, anyTerminalStatusEver,
-                                               reachedTerminalAfterRecover);
+            return new ThrowingModifierOutcome(modifierRanBeforeCrash, terminalBeforeCrash, committedStepRecords,
+                                               terminalRecordCount(world.committedLog(), workflowId),
+                                               effects.count(workflowId, ReducerWorkflow.STEP_THROWING_MODIFIER),
+                                               world.engine().liveWorkflowIds().contains(workflowId));
         }
+    }
+
+    @Nullable
+    private static WorkflowStatus terminalStatus(List<EventMessage> committedLog, String workflowId) {
+        return committedLog.stream()
+                           .filter(e -> workflowId.equals(MetadataUtils.getWorkflowId(e.metadata())))
+                           .map(e -> MetadataUtils.getWorkflowStatus(e.metadata()).orElse(null))
+                           .filter(status -> status != null && status.isTerminal())
+                           .findFirst()
+                           .orElse(null);
+    }
+
+    private static int terminalRecordCount(List<EventMessage> committedLog, String workflowId) {
+        return (int) committedLog.stream()
+                                 .filter(e -> workflowId.equals(MetadataUtils.getWorkflowId(e.metadata())))
+                                 .filter(e -> MetadataUtils.getWorkflowStatus(e.metadata())
+                                                           .map(WorkflowStatus::isTerminal).orElse(false))
+                                 .count();
     }
 
     private static int stepRecordCount(List<EventMessage> committedLog, String workflowId) {

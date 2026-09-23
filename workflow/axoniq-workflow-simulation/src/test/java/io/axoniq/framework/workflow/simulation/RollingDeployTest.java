@@ -35,7 +35,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <strong>parked-instance blind spot</strong> (a structural change without {@code migrateVersion} executes silently
  * on recovery when the only post-insertion record is a non-terminal wait) and the <strong>poisoned rollback</strong>
  * it produces (the restored v1 body trips the guard on the bad deploy's terminal record — the operator's rollback
- * makes things worse, and only rolling forward releases the instance).
+ * makes things worse). The drift pause keeps the instance registered, so rolling forward to the matching body
+ * restores it and drives it to {@code COMPLETED}.
  *
  * @author Stefan Dragisic
  * @since 5.4.0
@@ -85,7 +86,7 @@ class RollingDeployTest {
 
     @Test
     @Timeout(value = 90, unit = TimeUnit.SECONDS)
-    void badDeploy_silentOnParkedInstance_poisonsTheRollback_rollForwardReleases() {
+    void badDeploy_silentOnParkedInstance_poisonsTheRollback_rollForwardCompletesThePausedInstance() {
         var outcome = RollingDeployScenario.badDeployThenRollback(0L);
 
         // EXPECTED GAP (drift-guard blind spot): the structural change WITHOUT migrateVersion executed silently on
@@ -115,21 +116,23 @@ class RollingDeployTest {
                 .isNull();
         assertThat(outcome.fulfilsAfterRollback()).as("fulfillment withheld by the pause").isEqualTo(0);
 
-        // EXPECTED GAP (F-17, the drift pause's hidden cost): finishWorkflow runs the termination handler
-        // unconditionally (the in-code TODO at SimpleWorkflowExecution.java:335 admits it), so the NON-terminal
-        // drift-paused instance is removed from the repository as if finished — and, the repo now empty, the engine
-        // persists the LATEST safe point, releasing the paused instance's recovery anchor.
+        // F-17 closed: the drift pause is a non-terminal exit, so the paused instance stays registered for recovery
+        // instead of being removed as if finished.
         assertThat(outcome.liveAfterDriftPause())
-                .as("EXPECTED GAP: the drift-paused instance is evicted from the live repository as if finished")
-                .isFalse();
-
-        // F-17, second half CLOSED: rehydration on claim restores every non-terminal instance from its own history,
-        // independently of the safe point, so rolling forward to the matching body brings the abandoned instance back
-        // (live again, drift-paused at the step the polluted history disagrees on). The eviction half above remains.
-        assertThat(outcome.restoredByRollForward())
-                .as("rolling forward to the matching body restores the abandoned instance")
+                .as("the drift-paused instance stays live in the engine")
                 .isTrue();
-        assertThat(outcome.terminalAfterRollForward()).isNull();
+
+        // The documented drift remedy: rolling forward to the body that matches the history restores the instance,
+        // replays it cleanly and runs the withheld fulfillment exactly once.
+        assertThat(outcome.restoredByRollForward())
+                .as("rolling forward to the matching body restores the paused instance")
+                .isTrue();
+        assertThat(outcome.terminalAfterRollForward()).isEqualTo(WorkflowStatus.COMPLETED);
         assertThat(outcome.fraudChecksTotal()).isEqualTo(1);
+        assertThat(outcome.fulfilsTotal()).as("the withheld fulfillment runs once").isEqualTo(1);
+        assertThat(outcome.completedRecords())
+                .as("a further restart publishes no second terminal record")
+                .isEqualTo(1);
+        assertThat(outcome.liveAtEnd()).as("the completed instance is not re-driven").isFalse();
     }
 }

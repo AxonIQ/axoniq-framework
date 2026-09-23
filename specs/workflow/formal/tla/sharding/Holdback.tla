@@ -53,9 +53,23 @@ CONSTANTS
     RestoreIgnoresCompletion, \* TRUE = MUTANT: a restored body re-registers a
                           \*        wait whose Completed event is already
                           \*        durable, so a redelivery completes it twice
-    PartialDrainStore     \* TRUE  = a node shutdown may store a partially
+    PartialDrainStore,    \* TRUE  = a node shutdown may store a partially
                           \*         drained position (lifecycle phase
                           \*         timeout / reconcile lowerBound fallback)
+    NonTerminalExit,      \* how a body that stops without a terminal status
+                          \* (drift pause, recoverable exception, append
+                          \* rejection) leaves the engine:
+                          \* "none"   = not modelled (every C* / M* arm)
+                          \* "finish" = the execution is removed as if it
+                          \*            finished (termination handler)
+                          \* "pause"  = the execution stays registered with
+                          \*            its driver stopped (stopRuntimeForRecovery)
+    PausedQueuesWakes     \* TRUE  = candidate fix: a paused execution queues
+                          \*         a matching wake and counts towards the
+                          \*         barrier, like a restored-not-started one
+                          \* FALSE = code as written: the stopped-for-recovery
+                          \*         branch only evolves its own events, and
+                          \*         hasUnsafeCheckpointWork is FALSE
 
 (* An instance is identified by <<owning segment, ordinal>>: the instance
    partitioning (SegmentedWorkflowRouting.shouldHandle) is a fixed function of
@@ -112,9 +126,15 @@ WaitPos(i) == CHOOSE p \in Positions : evTarget[p] = i
 (* Note !host.isExecutable() -> FALSE : a materialized but NOT running *)
 (* execution holds nothing back at all.                                *)
 (* ------------------------------------------------------------------ *)
+(* A paused execution: registered, driver stopped, and not because its
+   segment is still replaying. Reachable only through BodyStops. *)
+Paused(i) == present[i] /\ ~running[i] /\ ~replaying[SegOf[i]]
+
 PendingWorkOf(i) ==
     /\ present[i]
-    /\ (running[i] \/ ~HoldbackRequiresRunning)
+    /\ \/ running[i]
+       \/ ~HoldbackRequiresRunning /\ ~Paused(i)
+       \/ Paused(i) /\ PausedQueuesWakes
     /\ (current[i] /= NoTask \/ queue[i] /= <<>> \/ intentQueued[i])
 
 HasPendingWork(s) == \E i \in Owned(s) : PendingWorkOf(i)
@@ -206,15 +226,18 @@ Deliver(s) ==
     /\ LET p == lastConsumed[s] + 1
            tgt == evTarget[p]
            (* live mode: enqueue the match; not running: the drop branch *)
-           Enq(i) == present[i] /\ (running[i] \/ ~DropOnNotRunning)
+           Enq(i) == /\ present[i]
+                     /\ \/ running[i]
+                        \/ ~DropOnNotRunning /\ ~Paused(i)
+                        \/ Paused(i) /\ PausedQueuesWakes
        IN
        /\ queue' = [i \in Instances |->
                       IF i \in Owned(s) /\ Enq(i)
                       THEN Append(queue[i], Match(p))
                       ELSE queue[i]]
        /\ dropped' = [i \in Instances |->
-                      IF /\ i \in Owned(s) /\ present[i] /\ ~running[i]
-                         /\ DropOnNotRunning /\ waiting[i] /\ tgt = i
+                      IF /\ i \in Owned(s) /\ present[i] /\ ~Enq(i)
+                         /\ waiting[i] /\ tgt = i
                       THEN TRUE ELSE dropped[i]]
        /\ lastConsumed' = [lastConsumed EXCEPT ![s] = p]
     /\ UNCHANGED <<storedToken, owner, replaying, cp, present, running, waiting,
@@ -263,6 +286,23 @@ TaskFinish(i) ==
                  /\ UNCHANGED <<waiting, queue, completed, ncomplete>>
     /\ UNCHANGED <<storedToken, lastConsumed, owner, replaying, present, running,
                    dropped, evTarget, handovers>>
+
+(***************************************************************************)
+(* A body stops without a terminal status while it waits, with nothing     *)
+(* queued: SimpleWorkflowExecution's driver finally block on a non-terminal *)
+(* exit. The engine is not shutting down and the segment stays claimed.     *)
+(* Consumes the disruption budget, like a handover.                         *)
+(***************************************************************************)
+BodyStops(i) ==
+    /\ NonTerminalExit /= "none"
+    /\ present[i] /\ running[i] /\ waiting[i] /\ ~completed[i]
+    /\ current[i] = NoTask /\ queue[i] = <<>> /\ ~intentQueued[i]
+    /\ handovers < MaxHandovers
+    /\ handovers' = handovers + 1
+    /\ running'   = [running EXCEPT ![i] = FALSE]
+    /\ present'   = [present EXCEPT ![i] = (NonTerminalExit = "pause")]
+    /\ UNCHANGED <<storedToken, lastConsumed, owner, replaying, cp, waiting, completed,
+                   ncomplete, dropped, queue, current, intentQueued, evTarget>>
 
 (***************************************************************************)
 (* The barrier: WorkflowEngineCheckpointingSupport.onCheckpointAdvanced     *)
@@ -408,6 +448,7 @@ Next ==
     \/ \E s \in Segments : Deliver(s)
     \/ \E i \in Instances : TaskStart(i)
     \/ \E i \in Instances : TaskFinish(i)
+    \/ \E i \in Instances : BodyStops(i)
     \/ \E s \in Segments : CheckpointAttempt(s)
     \/ \E s \in Segments : Recheck(s)
     \/ \E s \in Segments : ReleaseSegment(s)

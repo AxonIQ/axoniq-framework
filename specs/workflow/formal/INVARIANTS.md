@@ -186,6 +186,14 @@ duplicated the *effect* while the *record* stayed ≤1, which is exactly why the
   `SimulationWorld.crashAndRecoverPersistingEngineSafePoint`): after the unmasked shutdown-race recovery the stored safe
   point == the log head (LATEST) and the in-flight instance is NOT re-created, while its committed `<workflow>:STARTED`
   still survives on the durable log.
+  **Re-derived 2026-09-23 against the checkpointing engine: F-12 does not reproduce on `poc/tla_dst`.** The safe-point
+  machinery above is gone; a claim restores every non-terminal instance from its own event-sourced history, independent
+  of the stored token. `RecoveryAfterNonTerminalExitTest.GracefulShutdown` (seed 0, `SimulationWorld.restartGracefully`,
+  no freeze or pin) parks an instance, shuts the engine down gracefully (the parked driver stops, the status stays
+  non-terminal), restarts over the same event store and token store, and wakes it late: restored and COMPLETED with one
+  terminal record, on the unchanged baseline **and** on the #479 fix. The stored token reaches the log head on shutdown
+  on both, so the token is not what protects recovery. Verdict on the old claim: evicted from memory at most, never lost
+  on restart. The `F12LostRecoveryOnShutdownRaceTest` named above does not exist on this branch.
 - **Checked by:** both — TLA+ invariant (model a crash as dropping volatile state but keeping the
   committed log; assert post-recovery log ⊇ pre-crash committed log) + DST post-step assertion
   (snapshot committed events before an injected crash, restart engine over the same store, assert the
@@ -313,6 +321,17 @@ duplicated the *effect* while the *record* stayed ≤1, which is exactly why the
   `SimulationWorld.crashAndRecoverPersistingEngineSafePoint` — the shared masked `crashAndRecover()` neutralizes the
   race). Candidate fix: do not store the empty-repo 'latest' safe point while a removed instance was non-terminal, or
   compute the safe point before removing a non-terminal instance.
+  **Re-derived 2026-09-23: not reproducible on the checkpointing engine** (see the INV-3 recovery facet): a graceful
+  restart restores the parked instance from its own history and the late wake completes it, on the baseline and on the
+  #479 fix. **Non-terminal exits after #479:** a body that stops without a terminal status (shutdown, replay drift
+  pause, recoverable exception, append rejection) keeps its execution registered with the driver stopped, instead of
+  being removed as if finished; an unhandled step failure or other body exception now ends the workflow FAILED instead
+  of wedging (the F-6/S-4 and F-15 wedges close). `RecoveryAfterNonTerminalExitTest` covers each exit through a restart.
+  **Remaining gap (F-16 family):** a wake delivered while the instance is paused is dropped (the paused execution only
+  evolves its own events and holds no checkpoint work), so the token passes it and the restored wait never sees it;
+  pinned by `RecoveryAfterNonTerminalExitTest.ReplayDriftPause.wakeDeliveredDuringThePauseIsNotReEvaluatedAfterRestart_asExpectedGap`
+  and model-checked by `Holdback.tla` `P2_nonterminal_exit_pauses` (VIOLATED, 4 steps) against the candidate fix
+  `P3_paused_queues_wakes` (No error). The same loss existed before #479 (`P1_nonterminal_exit_finishes`, VIOLATED).
 - **Checked by:** both — TLA+ **temporal property** `◇[]`/`◇` (under fairness constraints; carve out
   the drift-paused state) + DST: run a scenario to a fixed virtual-time horizon and assert every
   instance reaches a terminal status (a non-terminal instance at horizon is a liveness failure unless
@@ -1850,7 +1869,11 @@ duplicated the *effect* while the *record* stayed ≤1, which is exactly why the
   `C3b_short_claim_fullfix` and `C3c_holdbackfix_only`; `C4_shutdown_clears_first` against
   `C4b_shutdown_race_with_fixes` for the shutdown race, with `C6_liveness` / `C7_liveness_shutdownrace` for the
   liveness side; `C5_partial_drain`, `C8_two_instances_one_segment`; and `M1_no_holdback` /
-  `M2_single_round_barrier` / `M3_restore_ignores_completion` as mutation arms proving the green sides non-vacuous.
+  `M2_single_round_barrier` / `M3_restore_ignores_completion` as mutation arms proving the green sides non-vacuous;
+  `P1_nonterminal_exit_finishes` / `P2_nonterminal_exit_pauses` (both VIOLATED: a wake delivered while the body is
+  stopped is dropped and passed) against `P3_paused_queues_wakes` (No error, 22 397 388 distinct states) for a body that
+  stops without a terminal status. The knobs `NonTerminalExit = "none"`, `PausedQueuesWakes = FALSE` leave every C* / M*
+  arm unchanged (identical distinct-state counts on the green arms).
   **Scope decision (DST):** none — see INV-24's scope note. Carried by the unit tests
   `WorkflowEngineCrossSegmentCheckpointTest`
   (`asyncCheckpointOfOneSegmentLeavesTheStoredTokenOfAnotherSegmentAtItsOwnPosition`, parameterized over fully-deferred

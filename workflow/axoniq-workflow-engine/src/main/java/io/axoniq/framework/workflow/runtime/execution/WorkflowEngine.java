@@ -380,7 +380,8 @@ public class WorkflowEngine implements
         logger.info("Releasing segment {}: stopping {} workflow execution(s).",
                     segment.getSegmentId(), released.size());
         released.forEach(WorkflowExecution::stopForShutdown);
-        workflowExecutionRepository.removeAll(ownedBy(segment));
+        // An execution stopped for recovery skips the termination handler, so the release does its cleanup.
+        released.forEach(execution -> removeExecution(execution.workflowId()));
         catchUpSupport.release(segment);
         return CompletableFuture.completedFuture(null);
     }
@@ -594,7 +595,6 @@ public class WorkflowEngine implements
                                                   execution.workflowId(),
                                                   finished.state().workflowStatus());
                                      removeExecution(execution.workflowId());
-                                     checkpointWorkIndex.markSafe(execution.workflowId());
                                      // The completion is safe for the segment that owns this instance and started its
                                      // body, at that segment's own position: never at another segment's.
                                      checkpointingSupport.requestCheckpoint(segment, executionToken);
@@ -621,9 +621,13 @@ public class WorkflowEngine implements
         }
     }
 
+    /**
+     * Removes an execution that leaves this engine and releases its safe point.
+     */
     private void removeExecution(String workflowId) {
         workflowExecutionRepository.remove(workflowId);
         workflowCancellationService.unregister(workflowId);
+        checkpointWorkIndex.markSafe(workflowId);
     }
 
     /**
@@ -635,6 +639,9 @@ public class WorkflowEngine implements
      * stream still reflects the most recent {@code <Step>Started} and the step resumes on the next app start. Without
      * this, a graceful shutdown can hang because the workflow executor (e.g. a virtual-thread-per-task executor) blocks
      * on {@code close()} waiting for those threads to terminate. See issue #125.
+     * <p>
+     * A workflow driver that exits after this call skips its termination handler, so it touches no engine state and
+     * requests no checkpoint.
      */
     public void shutdown() {
         var executions = workflowExecutionRepository.findAll();

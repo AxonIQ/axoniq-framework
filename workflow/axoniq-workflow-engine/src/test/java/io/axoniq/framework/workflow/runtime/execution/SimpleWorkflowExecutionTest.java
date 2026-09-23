@@ -27,9 +27,13 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefini
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
+import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejectedException;
 import org.axonframework.eventsourcing.eventstore.EventStore;
 import org.axonframework.eventsourcing.eventstore.EventStoreTransaction;
 import org.axonframework.messaging.core.MessageType;
@@ -58,6 +62,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer.Builder.defaults;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -423,6 +428,209 @@ class SimpleWorkflowExecutionTest {
                 ).withConverter(TestEventConverter.INSTANCE),
                 execution.processingContext()
         );
+    }
+
+    @Nested
+    class BodyExit {
+
+        @Test
+        void driftPauseKeepsInstanceRecoverableWithoutCallingTerminationHandler() throws Exception {
+            var execution = execution(eventStore(), new DirectExecutorService(), ignored -> {
+                throw new WorkflowReplayDriftException("workflow-id", "fulfill", List.of("fraudCheck"));
+            });
+
+            assertPausedForRecovery(execution);
+        }
+
+        @Test
+        void recoverableBodyExceptionPausesTheWorkflow() throws Exception {
+            var execution = execution(eventStore(), new DirectExecutorService(), ignored -> {
+                throw new RuntimeException(new IOException("backend did not answer"));
+            });
+
+            assertPausedForRecovery(execution);
+        }
+
+        @Test
+        void failedAppendPausesTheWorkflowWhateverTheExceptionType() throws Exception {
+            var execution = execution(
+                    failingEventStore(new IllegalStateException("simulated event store failure on commit")),
+                    new DirectExecutorService()
+            );
+            var terminationHandlerCalled = new CountDownLatch(1);
+
+            execution.execute(ignored -> terminationHandlerCalled.countDown()).join();
+
+            assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isFalse();
+            assertThat(execution.isRunning()).isFalse();
+            assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.NONE);
+        }
+
+        @Test
+        void unhandledBugInBodyFailsTheWorkflowAndCallsTerminationHandler() throws Exception {
+            var target = new AtomicReference<SimpleWorkflowExecution>();
+            var execution = execution(echoingEventStore(target), new DirectExecutorService(), ignored -> {
+                throw new IllegalStateException("bug in the body");
+            });
+            target.set(execution);
+            var terminationHandlerCalled = new CountDownLatch(1);
+
+            execution.execute(ignored -> terminationHandlerCalled.countDown()).join();
+
+            assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isTrue();
+            assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.FAILED);
+            assertThat(execution.isRunning()).isFalse();
+        }
+
+        @Test
+        void stepInterruptedByShutdownPausesInsteadOfFailingTheWorkflow() throws Exception {
+            var execution = execution(eventStore(), new DirectExecutorService(), ignored -> {
+                throw new StepInterruptedException("Workflow engine shutdown");
+            });
+
+            assertPausedForRecovery(execution);
+        }
+
+        @Test
+        void shutdownInterruptOfParkedDriverPausesInsteadOfFinishing() throws Exception {
+            var target = new AtomicReference<SimpleWorkflowExecution>();
+            var executor = Executors.newSingleThreadExecutor();
+            executorServices.add(executor);
+            var execution = execution(eventStore(), executor, ignored -> {
+                try {
+                    // Park like a wait step does: nothing but an interrupt gets the driver out of here.
+                    target.get().awaitStateChange(state -> false);
+                } catch (InterruptedException e) {
+                    sneakyThrow(e);
+                }
+            });
+            target.set(execution);
+            markStarted(execution);
+            var terminationHandlerCalled = new CountDownLatch(1);
+
+            var body = execution.execute(ignored -> terminationHandlerCalled.countDown());
+            awaitParkedDriver(execution);
+            execution.stopForShutdown();
+            body.get(5, TimeUnit.SECONDS);
+
+            assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isFalse();
+            assertThat(execution.isRunning()).isFalse();
+            assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
+        }
+
+        @Test
+        void rejectedAppendPausesInsteadOfFinishing() throws Exception {
+            // given
+            var execution = execution(
+                    failingEventStore(new AppendEventsTransactionRejectedException("another writer owns it")),
+                    new DirectExecutorService()
+            );
+            var terminationHandlerCalled = new CountDownLatch(1);
+
+            // when
+            execution.execute(ignored -> terminationHandlerCalled.countDown()).join();
+            // The fence interrupts the driver, which is this thread under the direct executor.
+            Thread.interrupted();
+
+            // then
+            assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isFalse();
+            assertThat(execution.isRunning()).isFalse();
+            assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.NONE);
+        }
+
+        @Test
+        void unhandledStepFailureFailsTheWorkflowAndCallsTerminationHandler() throws Exception {
+            var target = new AtomicReference<SimpleWorkflowExecution>();
+            var execution = execution(echoingEventStore(target), new DirectExecutorService(), ignored -> {
+                throw new StepFailedException("chargePayment failed after its last retry");
+            });
+            target.set(execution);
+            var terminationHandlerCalled = new CountDownLatch(1);
+
+            execution.execute(ignored -> terminationHandlerCalled.countDown()).join();
+
+            assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isTrue();
+            assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.FAILED);
+            assertThat(execution.isRunning()).isFalse();
+        }
+
+        @Test
+        void completedWorkflowCallsTerminationHandler() throws Exception {
+            var target = new AtomicReference<SimpleWorkflowExecution>();
+            var execution = execution(echoingEventStore(target), new DirectExecutorService(), ignored -> {
+            });
+            target.set(execution);
+            var terminationHandlerCalled = new CountDownLatch(1);
+
+            execution.execute(ignored -> terminationHandlerCalled.countDown()).join();
+
+            assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isTrue();
+            assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
+        }
+
+        @Test
+        void pausedExecutionStillEvolvesFromDurableEventsWithoutQueuingWork() throws Exception {
+            var execution = execution(eventStore(), new DirectExecutorService(), ignored -> {
+                throw new WorkflowReplayDriftException("workflow-id", "fulfill", List.of("fraudCheck"));
+            });
+            assertPausedForRecovery(execution);
+            var definition = execution.state().workflowDefinitionId();
+
+            execution.onEvent(
+                    new GenericEventMessage(
+                            new MessageType(new QualifiedName("test-workflow"), definition.version()),
+                            Map.of(),
+                            MetadataUtils.create(execution.workflowId(), WorkflowStatus.COMPLETED, definition)
+                    ).withConverter(TestEventConverter.INSTANCE),
+                    execution.processingContext()
+            );
+
+            assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.COMPLETED);
+            assertThat(execution.hasTasks()).isFalse();
+        }
+
+        private void assertPausedForRecovery(SimpleWorkflowExecution execution) throws InterruptedException {
+            markStarted(execution);
+            var terminationHandlerCalled = new CountDownLatch(1);
+            var checkpointLatchReleased = new CountDownLatch(1);
+            execution.addCheckpointLatch(checkpointLatchReleased::countDown);
+
+            execution.execute(ignored -> terminationHandlerCalled.countDown()).join();
+
+            assertThat(terminationHandlerCalled.await(200, TimeUnit.MILLISECONDS)).isFalse();
+            assertThat(checkpointLatchReleased.await(200, TimeUnit.MILLISECONDS)).isTrue();
+            assertThat(execution.isRunning()).isFalse();
+            assertThat(execution.hasTasks()).isFalse();
+            assertThat(execution.hasUnsafeCheckpointWork()).isFalse();
+            assertThat(execution.state().workflowStatus()).isEqualTo(WorkflowStatus.STARTED);
+        }
+
+        private void awaitParkedDriver(SimpleWorkflowExecution execution) throws InterruptedException {
+            var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (!(execution.isRunning() && !execution.hasTasks()) && System.nanoTime() < deadline) {
+                Thread.sleep(10);
+            }
+            assertThat(execution.isRunning()).isTrue();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void sneakyThrow(Throwable failure) throws T {
+        throw (T) failure;
+    }
+
+    /**
+     * Returns an event store that feeds every published event straight back into the execution, the way the processor
+     * would deliver it, so terminal transitions can complete.
+     */
+    private static EventStore echoingEventStore(AtomicReference<SimpleWorkflowExecution> target) {
+        var eventStore = eventStore();
+        when(eventStore.publish(any(ProcessingContext.class), any(EventMessage.class))).thenAnswer(invocation -> {
+            var execution = target.get();
+            execution.onEvent(invocation.getArgument(1), execution.processingContext());
+            return CompletableFuture.completedFuture(null);
+        });
+        return eventStore;
     }
 
     private static final class DirectExecutorService extends AbstractExecutorService {

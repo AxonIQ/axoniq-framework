@@ -19,6 +19,7 @@
 **** xref:workflows:workflow-lifecycle.adoc#fail-vs-cancel[fail() vs cancel()]
 *** xref:workflows:workflow-lifecycle.adoc#_unhandled_exceptions[Unhandled Exceptions]
 *** xref:workflows:workflow-lifecycle.adoc#_lifecycle_listeners[Lifecycle Listeners]
+** xref:workflows:error-handling.adoc[]
 ** xref:workflows:step-orchestration.adoc[]
 *** xref:workflows:step-orchestration.adoc#_non_blocking_execution[Non-blocking Execution]
 *** xref:workflows:step-orchestration.adoc#_anymatch_first_match_wins[anyMatch]

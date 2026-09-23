@@ -70,9 +70,10 @@ public final class SplitBrainScenario {
     /**
      * Result of the scenario.
      *
-     * @param ownersThatRoutedStart      how many of the two engines created the instance for the published start event
-     *                                   (2 = split-brain: both own segment 0; the {@code MC_owner.cfg} /
-     *                                   {@code AtMostOneOwner} observation).
+     * @param ownersThatRoutedStart      how many of the two engines drive the instance with a running driver (2 =
+     *                                   split-brain: both own segment 0; the {@code MC_owner.cfg} /
+     *                                   {@code AtMostOneOwner} observation). A rejected writer keeps its execution
+     *                                   registered with its driver stopped and is not counted.
      * @param maxTerminalRecordsForAStep the highest number of terminal step records the shared durable log holds for
      *                                   any single {@code (workflowId, stepName)} (2 = the duplicate-recording
      *                                   consequence; the {@code MC_record.cfg} / {@code AtMostOnceRecording}
@@ -125,11 +126,13 @@ public final class SplitBrainScenario {
                                   && engineB.liveWorkflowIds().contains(workflowId)
                                   && terminalRecords(eventStore, workflowId, firstStep) >= 2);
 
+            // An owner drives the instance. A rejected writer keeps its execution registered for the next claim, with
+            // its driver stopped, so registration alone does not make a node an owner.
             int owners = 0;
-            if (engineA.liveWorkflowIds().contains(workflowId)) {
+            if (drives(engineA, workflowId)) {
                 owners++;
             }
-            if (engineB.liveWorkflowIds().contains(workflowId)) {
+            if (drives(engineB, workflowId)) {
                 owners++;
             }
             int maxTerminalRecords = maxTerminalRecordsForAnyStep(eventStore, workflowId);
@@ -140,6 +143,10 @@ public final class SplitBrainScenario {
     /**
      * Counts terminal step records for one {@code (workflowId, stepName)} in the shared durable committed log.
      */
+    private static boolean drives(EngineInstance engine, String workflowId) {
+        return engine.liveExecution(workflowId).map(execution -> execution.isRunning()).orElse(false);
+    }
+
     private static long terminalRecords(ControllableEventStorageEngine eventStore,
                                         String workflowId, String stepName) {
         return eventStore.committedWorkflowLog().stream()

@@ -466,6 +466,35 @@ public final class SimulationWorld implements AutoCloseable {
         crashAndRecoverInternal();
     }
 
+    /**
+     * Stops the current engine gracefully and starts a fresh one over the same durable substrate, without the freeze
+     * and pin {@link #crashAndRecover()} applies.
+     * <p>
+     * This models an ordinary production restart: the engine's shutdown interrupts every parked driver and the
+     * processor writes whatever token it writes on the way down, and the restarted engine reads exactly that token. A
+     * scenario uses it to check that a graceful shutdown keeps every non-terminal instance recoverable.
+     */
+    public void restartGracefully() {
+        restartGracefullyWith(registrations);
+    }
+
+    /**
+     * Stops the current engine gracefully and starts a fresh one under a different registration set, over the same
+     * durable substrate. See {@link #restartGracefully()}.
+     *
+     * @param restartedRegistrations the workflow definitions the restarted engine registers (at least one)
+     */
+    public void restartGracefullyWith(List<EngineInstance.WorkflowRegistration> restartedRegistrations) {
+        if (restartedRegistrations.isEmpty()) {
+            throw new IllegalArgumentException("At least one restarted registration is required");
+        }
+        this.registrations = List.copyOf(restartedRegistrations);
+        engine.stop();
+        this.eventStore = ControllableEventStorageEngine.recoveredFrom(eventStore.committedTaggedEvents());
+        this.scheduler = newScheduler();
+        this.engine = newEngine();
+    }
+
     private void crashAndRecoverInternal() {
         // Model a real crash precisely: the dying process's token writes must NEVER leak past the crash boundary.
         //

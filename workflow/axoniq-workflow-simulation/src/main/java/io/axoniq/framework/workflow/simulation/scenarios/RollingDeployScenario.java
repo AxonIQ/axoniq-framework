@@ -123,25 +123,23 @@ public final class RollingDeployScenario {
      * @param fulfilsAfterRollback      {@code fulfillOrder} effect executions after rollback + approval — 0.
      * @param waitCompletedAfterRollback whether the approval WAS consumed (the wait step records COMPLETED) before the
      *                                  pause — the instance holds a consumed approval it cannot act on.
-     * @param liveAfterDriftPause       whether the drift-paused instance is still LIVE in the engine — {@code false}
-     *                                  under the gap: {@code finishWorkflow} runs the termination handler
-     *                                  unconditionally, so the NON-terminal paused instance is removed from the
-     *                                  repository as if finished, and (repo now empty) the engine persists the
-     *                                  LATEST safe point — releasing the paused instance's recovery anchor.
-     * @param restoredByRollForward     whether rolling forward (to the body that matches the polluted history) ever
-     *                                  restored the instance — {@code false} under the gap: recovery resets to the
-     *                                  LATEST safe point, replays nothing, and never re-creates the instance. The
-     *                                  documented drift remedy ("revert or add migrateVersion and replay") is
-     *                                  unfulfillable.
-     * @param terminalAfterRollForward  terminal status after the roll-forward — {@code null} under the gap: the
-     *                                  instance is permanently abandoned, mid-completion, with a consumed approval.
-     * @param fraudChecksTotal          total {@code fraudCheck} effect executions across the whole run — 1.
+     * @param liveAfterDriftPause       whether the drift-paused instance is still LIVE in the engine after the pause
+     *                                  ({@code true}: a non-terminal exit keeps the instance registered for recovery).
+     * @param restoredByRollForward     whether rolling forward (to the body that matches the polluted history)
+     *                                  restored the instance.
+     * @param terminalAfterRollForward  terminal status after the roll-forward ({@code COMPLETED}: the matching body
+     *                                  replays cleanly and runs the withheld fulfillment).
+     * @param fraudChecksTotal          total {@code fraudCheck} effect executions across the whole run (1).
+     * @param fulfilsTotal              total {@code fulfillOrder} effect executions across the whole run (1).
+     * @param completedRecords          committed {@code <workflow>:COMPLETED} records, after one further restart (1).
+     * @param liveAtEnd                 whether the instance is still live after that further restart ({@code false}).
      */
     public record BadDeployOutcome(boolean fraudCheckRanSilently, long markersAfterBadDeploy,
                                    Set<String> versionsAfterBadDeploy, @Nullable WorkflowStatus terminalAfterRollback,
                                    int fulfilsAfterRollback, boolean waitCompletedAfterRollback,
                                    boolean liveAfterDriftPause, boolean restoredByRollForward,
-                                   @Nullable WorkflowStatus terminalAfterRollForward, int fraudChecksTotal) {
+                                   @Nullable WorkflowStatus terminalAfterRollForward, int fraudChecksTotal,
+                                   int fulfilsTotal, int completedRecords, boolean liveAtEnd) {
 
     }
 
@@ -265,22 +263,26 @@ public final class RollingDeployScenario {
                           () -> terminalWorkflowStatus(world.committedLog(), workflowId) != null);
             WorkflowStatus terminalAfterRollback = terminalWorkflowStatus(world.committedLog(), workflowId);
             int fulfilsAfterRollback = effects.count(workflowId, RollingDeployWorkflow.STEP_FULFILL);
-            // The drift pause's hidden cost: finishWorkflow runs the termination handler unconditionally, so the
-            // NON-terminal paused instance is removed from the live repository — and, the repo now empty, the engine
-            // persists the LATEST safe point, releasing the paused instance's recovery anchor.
+            // The drift pause keeps the instance: it stays registered for recovery, non-terminal. Bounded window in
+            // which an eviction would show.
             Polling.await(ABSENCE_WINDOW, () -> !world.engine().liveWorkflowIds().contains(workflowId));
             boolean liveAfterPause = world.engine().liveWorkflowIds().contains(workflowId);
 
-            // 3. The ROLL-FORWARD: the bad v2 again — the body that MATCHES the polluted history. The documented
-            // drift remedy says the next replay re-runs cleanly; but recovery resets to the (LATEST) safe point,
-            // replays nothing, and never re-creates the instance. Bounded absence window on restoration.
+            // 3. The ROLL-FORWARD: the bad v2 again, the body that MATCHES the polluted history. The documented drift
+            // remedy: the next replay runs cleanly, so the restored instance consumes nothing new, runs fulfill once
+            // and completes.
+            world.crashAndRecoverWith(List.of(EngineInstance.rollingDeployWorkflowV2BadOnly(effects)));
+            Polling.await(DEADLINE, () -> world.engine().liveWorkflowIds().contains(workflowId)
+                    || terminalWorkflowStatus(world.committedLog(), workflowId) != null);
+            boolean restored = world.engine().liveWorkflowIds().contains(workflowId)
+                    || terminalWorkflowStatus(world.committedLog(), workflowId) != null;
+            Polling.await(DEADLINE, () -> terminalWorkflowStatus(world.committedLog(), workflowId) != null);
+
+            // Nothing re-drives or re-publishes after the terminal: a further restart must leave the record as is.
             world.crashAndRecoverWith(List.of(EngineInstance.rollingDeployWorkflowV2BadOnly(effects)));
             Polling.await(ABSENCE_WINDOW,
-                          () -> world.engine().liveWorkflowIds().contains(workflowId)
-                                  || workflowStatusRecords(world.committedLog(), workflowId,
-                                                           WorkflowStatus.COMPLETED) >= 1);
-            boolean restored = world.engine().liveWorkflowIds().contains(workflowId)
-                    || workflowStatusRecords(world.committedLog(), workflowId, WorkflowStatus.COMPLETED) >= 1;
+                          () -> workflowStatusRecords(world.committedLog(), workflowId, WorkflowStatus.COMPLETED) > 1
+                                  || effects.count(workflowId, RollingDeployWorkflow.STEP_FULFILL) > 1);
 
             Invariants.assertAtMostOnceRecording(world.committedLog());
             return new BadDeployOutcome(ranSilently, markersAfterBad, versionsAfterBad, terminalAfterRollback,
@@ -289,7 +291,11 @@ public final class RollingDeployScenario {
                                                       RollingDeployWorkflow.STEP_AWAIT_APPROVAL, StepStatus.COMPLETED),
                                         liveAfterPause, restored,
                                         terminalWorkflowStatus(world.committedLog(), workflowId),
-                                        effects.count(workflowId, RollingDeployWorkflow.STEP_FRAUD_CHECK));
+                                        effects.count(workflowId, RollingDeployWorkflow.STEP_FRAUD_CHECK),
+                                        effects.count(workflowId, RollingDeployWorkflow.STEP_FULFILL),
+                                        workflowStatusRecords(world.committedLog(), workflowId,
+                                                              WorkflowStatus.COMPLETED),
+                                        world.engine().liveWorkflowIds().contains(workflowId));
         }
     }
 

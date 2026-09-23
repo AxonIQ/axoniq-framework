@@ -241,13 +241,14 @@ See xref:execute-steps.adoc[] and xref:step-orchestration.adoc[].
 
 == Unhandled exceptions
 
-[IMPORTANT]
-====
-If a workflow exits due to an *unhandled* exception—one where you didn't explicitly call `fail` or `cancel`—it is **not** in a terminal state.
-The engine will retry it on the next restart.
+An exception that escapes the workflow body ends the workflow with `FAILED` when it is a `StepFailedException`
+or a code defect such as a `NullPointerException`. A recoverable exception, an engine shutdown or a replay
+drift stop the body without ending the workflow: the status stays `STARTED`, there is no `PAUSED` status, and
+the engine re-drives the workflow on the next restart or segment claim.
 
-Always ensure your workflow has explicit terminal paths—call `fail` or `cancel` for every error condition, or let the workflow complete normally.
-====
+Always give your workflow explicit terminal paths: call `fail` or `cancel` for every error condition you
+anticipate, or let the workflow complete normally. See xref:error-handling.adoc[Error Handling] for the full
+classification and how a stopped workflow resumes.
 
 == Lifecycle listeners
 

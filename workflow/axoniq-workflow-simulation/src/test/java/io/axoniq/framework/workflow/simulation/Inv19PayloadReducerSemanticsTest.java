@@ -19,6 +19,7 @@
 package io.axoniq.framework.workflow.simulation;
 
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.GlobalOnlyPayloadReducer;
 import io.axoniq.framework.workflow.runtime.execution.payload.LocalOnlyPayloadReducer;
@@ -161,51 +162,23 @@ class Inv19PayloadReducerSemanticsTest {
 
     @Test
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
-    void throwingModifierLambda_wedgesTheInstance_candidateFindingF6_S4Generalization() {
-        // CANDIDATE FINDING F-6, S-4 generalization (POC-TLA-DST.adoc, NOT patched per the test/docs-only rule): a plain
-        // RuntimeException thrown by a user modifyPayload modifier lambda BETWEEN primitives wedges the instance via the
-        // SAME handleWorkflowException default-branch sink as F-6's null-payload trigger (SimpleWorkflowExecution.java:
-        // 311-323), with a WIDER trigger family. The modifier lambda runs on the workflow thread inside
-        // PayloadDelegate.modifyPayload's appendTask (payloadModification.apply(...), :86); the throw propagates up out of
-        // modifyPayload → the body → executeWorkflow → the try/catch(Throwable) (:160-164) → handleWorkflowException's
-        // default branch, which logs the error and deliberately records NO terminal status ("we agreed not to drive the
-        // workflow to terminal state on any other exception"). This test pins (characterizes) that observed wedge:
-        // instance NOT terminal, exception only logged (never FAILED/TIMED_OUT/CANCELLED), and a crash + recover does NOT
-        // rescue it (the wedged instance was removed from the repository when its body threw — the orphaned
-        // <workflow>:STARTED is left non-terminal forever). The whole test finishes fast — the wedge is observed within a
-        // SHORT bounded window (the wedge is the ABSENCE of a terminal status), so it never approaches the @Timeout.
+    void throwingModifierLambda_failsTheWorkflowOnce_andARestartDoesNotReDriveIt() {
+        // A plain RuntimeException thrown by a modifyPayload modifier lambda between primitives is a defect in the
+        // body, not a recoverable exception: the engine ends the workflow FAILED instead of leaving it non-terminal.
         PayloadReducerSemanticsScenario.ThrowingModifierOutcome outcome =
                 PayloadReducerSemanticsScenario.runThrowingModifierEdge(0L, "T");
 
-        // The throw genuinely reached the user lambda on the workflow thread (the modifier ran).
-        assertThat(outcome.modifierRanBeforeCrash())
-                .as("S-4: the modifyPayload modifier lambda ran (the RuntimeException reached the user code)")
-                .isTrue();
-        // OBSERVED: the modifier threw BEFORE PayloadDelegate builds/publishes its COMPLETED, so no step record commits —
-        // only the <workflow>:STARTED status event.
-        assertThat(outcome.committedStepRecords())
-                .as("S-4: the throw is between-primitives (before the COMPLETED publish) — no step record commits")
-                .isZero();
-        // OBSERVED: the instance does NOT reach a terminal status before the crash — the body-thrown RuntimeException
-        // landed in the default branch, which records no terminal status.
-        assertThat(outcome.reachedTerminalBeforeCrash())
-                .as("S-4 (broadens F-6): a plain RuntimeException from a modifyPayload modifier wedges the instance — "
-                            + "it does NOT reach a terminal status")
-                .isFalse();
-        // OBSERVED: no <workflow>:COMPLETED — the body threw before completion.
-        assertThat(outcome.workflowCompleted())
-                .as("S-4: no <workflow>:COMPLETED is recorded — the body threw before recording terminal")
-                .isFalse();
-        // OBSERVED: a crash + recover does NOT rescue the wedged instance — it stays non-terminal (recovery-unsafe: the
-        // orphaned <workflow>:STARTED carries no terminal status and is not re-driven to one).
-        assertThat(outcome.reachedTerminalAfterRecover())
-                .as("S-4: after a crash + recover the instance is STILL wedged non-terminal (recovery does not rescue it)")
-                .isFalse();
-        // OBSERVED: the exception is ONLY logged — it is NOT turned into a terminal FAILED/TIMED_OUT/CANCELLED status,
-        // before OR after the crash + replay.
-        assertThat(outcome.anyTerminalStatusEver())
-                .as("S-4: the RuntimeException is only logged — never turned into a terminal FAILED/TIMED_OUT/CANCELLED")
-                .isFalse();
+        // The throw genuinely reached the user lambda on the workflow thread.
+        assertThat(outcome.modifierRanBeforeCrash()).as("the modifyPayload modifier lambda ran").isTrue();
+        // The modifier threw before PayloadDelegate publishes its COMPLETED, so no step record commits.
+        assertThat(outcome.committedStepRecords()).as("the throw is between primitives").isZero();
+        assertThat(outcome.terminalBeforeCrash())
+                .as("the unhandled RuntimeException ends the workflow FAILED")
+                .isEqualTo(WorkflowStatus.FAILED);
+        // Nothing after the terminal: a crash + recover neither re-drives nor re-publishes.
+        assertThat(outcome.terminalRecordsAfterRecover()).as("exactly one terminal record").isEqualTo(1);
+        assertThat(outcome.modifierRunsAfterRecover()).as("the modifier is not re-run").isEqualTo(1);
+        assertThat(outcome.liveAfterRecover()).as("the failed instance is not restored").isFalse();
     }
 
     @Test

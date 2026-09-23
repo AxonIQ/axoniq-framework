@@ -106,10 +106,13 @@ public final class SagaCompensationScenario {
      * @param refundEffectCount     {@code refundPayment} effect executions (0 under no-retry — never reached; 1 under
      *                              retry).
      * @param cancelledRecords      committed {@code <workflow>:CANCELLED} records (0 under no-retry; 1 under retry).
+     * @param workflowTerminalRecords committed workflow terminal records after one further restart (1).
+     * @param liveAtEnd             whether the instance is still live after that further restart ({@code false}).
      */
     public record CrashMidCompensationOutcome(@Nullable WorkflowStatus terminalStatus,
                                               @Nullable StepStatus releaseTerminalStatus,
-                                              int releaseEffectCount, int refundEffectCount, int cancelledRecords) {
+                                              int releaseEffectCount, int refundEffectCount, int cancelledRecords,
+                                              int workflowTerminalRecords, boolean liveAtEnd) {
 
     }
 
@@ -287,14 +290,21 @@ public final class SagaCompensationScenario {
                                    () -> workflowStatusRecords(world.committedLog(), workflowId,
                                                                WorkflowStatus.CANCELLED) >= 1);
             } else {
-                // The interrupted attempt resolves to FAILED (indeterminate); the failure escapes the catch block. Wait
-                // for that resolution, then hold an absence window asserting NO workflow terminal ever lands.
+                // The interrupted attempt resolves to FAILED (indeterminate); the failure escapes the catch block
+                // uncaught, which ends the workflow FAILED.
                 Polling.awaitOrFail(DEADLINE, "releaseStock to resolve to a terminal record after recovery",
                                     () -> stepTerminalStatus(world.committedLog(), workflowId,
                                                              SagaOrderWorkflow.STEP_RELEASE_STOCK) != null);
-                Polling.await(ABSENCE_WINDOW,
-                              () -> terminalWorkflowStatus(world.committedLog(), workflowId) != null);
+                Polling.await(DEADLINE, () -> terminalWorkflowStatus(world.committedLog(), workflowId) != null);
             }
+
+            // One more restart after the terminal: nothing may re-drive the instance or publish a second terminal.
+            int releasesBeforeRestart = effects.count(workflowId, SagaOrderWorkflow.STEP_RELEASE_STOCK);
+            world.crashAndRecover();
+            Polling.await(ABSENCE_WINDOW,
+                          () -> workflowTerminalRecords(world.committedLog(), workflowId) > 1
+                                  || effects.count(workflowId, SagaOrderWorkflow.STEP_RELEASE_STOCK)
+                                  > releasesBeforeRestart);
 
             Invariants.assertAtMostOnceRecording(world.committedLog());
             return new CrashMidCompensationOutcome(
@@ -302,7 +312,9 @@ public final class SagaCompensationScenario {
                     stepTerminalStatus(world.committedLog(), workflowId, SagaOrderWorkflow.STEP_RELEASE_STOCK),
                     effects.count(workflowId, SagaOrderWorkflow.STEP_RELEASE_STOCK),
                     effects.count(workflowId, SagaOrderWorkflow.STEP_REFUND_PAYMENT),
-                    workflowStatusRecords(world.committedLog(), workflowId, WorkflowStatus.CANCELLED));
+                    workflowStatusRecords(world.committedLog(), workflowId, WorkflowStatus.CANCELLED),
+                    workflowTerminalRecords(world.committedLog(), workflowId),
+                    world.engine().liveWorkflowIds().contains(workflowId));
         }
     }
 
@@ -412,11 +424,14 @@ public final class SagaCompensationScenario {
      *                                gap (the executed action's result is discarded).
      * @param releaseCompletedRecords committed COMPLETED records for {@code releaseStock} — 0 under the gap.
      * @param workflowTerminalStatus  the workflow's terminal status, or {@code null} — under the gap the
-     *                                {@code StepTimedOutException} escapes the catch block uncaught and the instance
-     *                                wedges non-terminally.
+     *                                {@code StepTimedOutException} escapes the catch block uncaught, which ends the
+     *                                workflow {@code FAILED}.
+     * @param workflowTerminalRecords committed workflow terminal records after one further restart (1).
+     * @param liveAtEnd               whether the instance is still live after that further restart ({@code false}).
      */
     public record DoomedAttemptOutcome(int releaseEffectCount, @Nullable StepStatus releaseTerminalStatus,
-                                       int releaseCompletedRecords, @Nullable WorkflowStatus workflowTerminalStatus) {
+                                       int releaseCompletedRecords, @Nullable WorkflowStatus workflowTerminalStatus,
+                                       int workflowTerminalRecords, boolean liveAtEnd) {
 
     }
 
@@ -457,8 +472,14 @@ public final class SagaCompensationScenario {
             Polling.awaitOrFail(DEADLINE, "releaseStock to resolve to a terminal record",
                                 () -> stepTerminalStatus(world.committedLog(), workflowId,
                                                          SagaOrderWorkflow.STEP_RELEASE_STOCK) != null);
-            // Bounded absence window for any workflow terminal (the wedge expectation).
-            Polling.await(ABSENCE_WINDOW, () -> terminalWorkflowStatus(world.committedLog(), workflowId) != null);
+            // The StepTimedOutException escapes the catch block uncaught, which ends the workflow FAILED.
+            Polling.await(DEADLINE, () -> terminalWorkflowStatus(world.committedLog(), workflowId) != null);
+
+            // One more restart after the terminal: nothing may re-drive the instance or publish a second terminal.
+            world.crashAndRecover();
+            Polling.await(ABSENCE_WINDOW,
+                          () -> workflowTerminalRecords(world.committedLog(), workflowId) > 1
+                                  || effects.count(workflowId, SagaOrderWorkflow.STEP_RELEASE_STOCK) > 1);
 
             Invariants.assertAtMostOnceRecording(world.committedLog());
             return new DoomedAttemptOutcome(
@@ -466,7 +487,9 @@ public final class SagaCompensationScenario {
                     stepTerminalStatus(world.committedLog(), workflowId, SagaOrderWorkflow.STEP_RELEASE_STOCK),
                     stepStatusRecords(world.committedLog(), workflowId, SagaOrderWorkflow.STEP_RELEASE_STOCK,
                                       StepStatus.COMPLETED),
-                    terminalWorkflowStatus(world.committedLog(), workflowId));
+                    terminalWorkflowStatus(world.committedLog(), workflowId),
+                    workflowTerminalRecords(world.committedLog(), workflowId),
+                    world.engine().liveWorkflowIds().contains(workflowId));
         }
     }
 

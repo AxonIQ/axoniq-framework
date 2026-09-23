@@ -63,6 +63,14 @@ Each fix flips its acceptance test from "gap present" to "gap closed". Two cheap
 - **`handleWorkflowException` drive-to-FAILED** — uncomment the `failedWorkflow(...)` publish in the `default`
   branch (`SimpleWorkflowExecution.java:311-323`) so an unexpected `RuntimeException` between primitives drives
   the instance to FAILED instead of wedging it. Closes **F-6 + F-6′(S-4) + F-9's throw mode** in one change.
+  **Done by the #479 fix** (backport `poc/tla_dst-479-backport`): the S-4 and F-15 pins flipped to FAILED.
+- **Paused instance drops wakes (F-16 family, after #479).** A paused execution (drift pause, recoverable exception,
+  append rejection) evolves only its own events and reports no checkpoint work, so a wake delivered during the pause is
+  passed by the token and lost to the restored wait. Candidate fix, model-checked by `Holdback.tla`
+  `P3_paused_queues_wakes`: queue a matching wake on the paused execution and count it towards the barrier, as F-36 did
+  for a restored-not-started execution. Cost: the paused instance then holds its segment's checkpoint back until the
+  next start or claim (the F-11 retention shape). Acceptance: the
+  `wakeDeliveredDuringThePauseIsNotReEvaluatedAfterRestart_asExpectedGap` pin flips.
 - **F-7 `!containsStep` gate** — gate `PayloadDelegate`'s `appendTask` on `!state().containsStep(stepName)` and/or
   route its publish through the guarded `sendStepEvent` path, like `Execute`/`WaitFor`/`Version`. Closes the
   corruption-class duplicate terminal record.
@@ -187,6 +195,10 @@ never bound); run them explicitly:
   the rental never reaches RENTED. **F-16's producer-retry mitigation does NOT extend to F-12**: it wakes a
   surviving instance, not a lost one. When the F-12 fix lands, flip the IT's assertions (restart must log
   "Restored 1 running workflow instances"; the late wake must drive RENTED).
+  **2026-09-23:** on `poc/tla_dst`'s checkpointing engine the DST analogue does not reproduce: a claim restores every
+  non-terminal instance from its own history, so a graceful restart restores the parked instance and a late wake
+  completes it, before and after the #479 fix (`RecoveryAfterNonTerminalExitTest.GracefulShutdown`). The IT lives in the
+  old repo's `examples/bike-rental` and has not been re-run here; re-run it on the real store before quoting F-12 as open.
 - **F-1 — CONFIRMED on real infra** (`RealStoreSplitBrainIT`, green pin). Two app nodes (separate H2s, separate
   ports) against ONE Axon Server: segment claims are client-side `TokenStore` state in Axon Framework and the
   engine hardcodes `new InMemoryTokenStore()` (`AllEventEventHandlingComponent.ANY_EVENT_IN_ONE_SEGMENT`), so

@@ -20,11 +20,12 @@ New to the engine? Start with the xref:axon-workflow-getting-started::index.adoc
 * *xref:execute-steps.adoc[Execute Steps]*: Run actions synchronously (`awaitExecute`) or asynchronously (`execute`)
 * *xref:waiting-for-events.adoc[Waiting for Events]*: Suspend until external events arrive (`awaitEvent`, `waitForEvent`, `sleep`)
 * *xref:publishing-events.adoc[Publishing Events]*: Publish a business event as a durable step (`awaitPublish`, `publish`); how workflows talk to each other
-* *xref:understanding-steps.adoc[Understanding Steps]*: Cross-cutting concerns: timeouts, payload reducers, error handling, event naming, execution semantics
+* *xref:understanding-steps.adoc[Understanding Steps]*: Cross-cutting concerns: timeouts, payload reducers, event naming, execution semantics
 
 == Workflow lifecycle
 
 * *xref:workflow-lifecycle.adoc[Workflow Lifecycle]*: States, fail vs cancel, lifecycle listeners
+* *xref:error-handling.adoc[Error Handling]*: Step failure types, what is stored about an error, when a workflow fails and when it pauses and resumes
 
 == Orchestration
 

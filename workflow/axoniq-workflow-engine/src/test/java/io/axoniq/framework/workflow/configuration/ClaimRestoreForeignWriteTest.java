@@ -24,7 +24,9 @@ import io.axoniq.framework.workflow.runtime.execution.DefaultEventNameCustomizer
 import io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflowState;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTags;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.EventMessageUtils;
+import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.common.configuration.AxonConfiguration;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.AppendCondition;
@@ -40,6 +42,7 @@ import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.processing.streaming.segmenting.Segment;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.axonframework.messaging.eventstreaming.Tag;
 import org.junit.jupiter.api.Test;
@@ -49,9 +52,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Restores one instance while a previous owner's write for that same instance lands <em>inside</em> the instance's own
@@ -121,6 +126,86 @@ class ClaimRestoreForeignWriteTest extends AbstractEventSourcedEntityRepositoryT
         assertThat(terminatedWithin("wf-b", BUDGET))
                 .as("a sibling of the same claim is not fenced by another instance's events")
                 .isTrue();
+    }
+
+    @Test
+    void aFencedExecutionStaysRegisteredAndTheNextClaimantCompletesItAfterTheRelease() {
+        // given
+        var storageEngine = new ForeignWritingStorageEngine(new InMemoryEventStorageEngine());
+        configuration = configurationWith(storageEngine);
+        configuration.start();
+        var instanceA = workflowContext("wf-a", MessageType.DEFAULT_VERSION);
+        publish(EventMessageUtils.startedWorkflow(instanceA, MODULE, DEFINITION_ID, customizer));
+        storageEngine.writeDuringSourcingOf("wf-a", () -> publish(step(instanceA, "approveOrder")));
+        var firstOwner = configuration.getComponent(WorkflowEngine.class);
+
+        // when
+        restoreSegment();
+
+        // then
+        assertThat(storageEngine.wroteDuringSourcing())
+                .as("the previous owner's write must have landed during the read, or this test proves nothing")
+                .isTrue();
+        assertThat(pausedWithin(firstOwner, "wf-a", BUDGET))
+                .as("the rejected execution stops its driver")
+                .isTrue();
+        // A driver that finishes stops first and is removed right after, so registration must hold for a while.
+        await().during(Duration.ofMillis(500))
+               .atMost(BUDGET)
+               .untilAsserted(() -> assertThat(firstOwner.workflowExecutions())
+                       .as("the rejected execution stays registered for the next claim")
+                       .anyMatch(execution -> execution.workflowId().equals("wf-a")));
+        assertThat(isTerminal("wf-a")).isFalse();
+
+        // when the segment moves: this node releases it and another node claims it
+        firstOwner.releaseWorkflowsFor(Segment.ROOT_SEGMENT).join();
+        var firstOwnerConfiguration = configuration;
+        try {
+            assertThat(firstOwner.workflowExecutions())
+                    .as("the release removes the paused execution")
+                    .isEmpty();
+            configuration = configurationWith(storageEngine);
+            configuration.start();
+            restoreSegment();
+
+            // then
+            assertThat(terminatedWithin("wf-a", BUDGET))
+                    .as("the next claimant sourced the foreign write, so it drives the instance to its terminal record")
+                    .isTrue();
+            assertThat(terminalRecords("wf-a")).as("exactly one terminal record").isEqualTo(1);
+        } finally {
+            firstOwnerConfiguration.shutdown();
+        }
+    }
+
+    /**
+     * Returns whether the engine holds the given instance with its driver stopped within the given {@code budget}.
+     */
+    private static boolean pausedWithin(WorkflowEngine engine, String workflowId, Duration budget) {
+        var deadline = System.nanoTime() + budget.toNanos();
+        while (System.nanoTime() < deadline) {
+            if (engine.workflowExecutions().stream()
+                      .anyMatch(execution -> execution.workflowId().equals(workflowId) && !execution.isRunning())) {
+                return true;
+            }
+            Thread.onSpinWait();
+        }
+        return false;
+    }
+
+    private int terminalRecords(String workflowId) {
+        MessageStream<EventMessage> stream = configuration.getComponent(EventStorageEngine.class).source(
+                SourcingCondition.conditionFor(EventCriteria.havingTags(
+                        Tag.of(WorkflowEventTags.TAG_WORKFLOW_ID, workflowId))), null);
+        try {
+            return stream.reduce(0, (count, entry) -> MetadataUtils.getWorkflowStatus(entry.message().metadata())
+                                                                   .filter(WorkflowStatus::isTerminal)
+                                                                   .isPresent() ? count + 1 : count)
+                         .orTimeout(BUDGET.toMillis(), TimeUnit.MILLISECONDS)
+                         .join();
+        } finally {
+            stream.close();
+        }
     }
 
     /**

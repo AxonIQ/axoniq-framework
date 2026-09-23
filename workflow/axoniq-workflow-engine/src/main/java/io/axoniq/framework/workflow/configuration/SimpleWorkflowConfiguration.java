@@ -19,6 +19,7 @@
 package io.axoniq.framework.workflow.configuration;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.EventNameCustomizer;
+import io.axoniq.framework.workflow.runtime.api.execution.context.RecoverableWorkflowExceptionPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
@@ -58,7 +59,8 @@ record SimpleWorkflowConfiguration<C extends WorkflowContext>(
         WorkflowContextFactory<C> workflowContextFactory,
         WorkflowIdProvider workflowIdProvider,
         EventNameCustomizer eventNameCustomizer,
-        Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners
+        Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners,
+        RecoverableWorkflowExceptionPolicy recoverableExceptionPolicy
 ) implements WorkflowConfiguration<C> {
 
     SimpleWorkflowConfiguration {
