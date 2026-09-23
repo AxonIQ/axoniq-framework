@@ -221,6 +221,9 @@ The `.customized(...)` lambda receives the Axon `Configuration` and a `WorkflowC
 
 |`unregisterWorkflowStatusChangeListener(status, listener)`
 |Remove a previously registered listener.
+
+|`recoverableExceptionPolicy(...)`
+|Decide which exceptions escaping the body pause the workflow instead of failing it. See xref:error-handling.adoc#recoverable-policy[Configuring the policy].
 |===
 
 If you don't need any customizations, use `.notCustomized()`.

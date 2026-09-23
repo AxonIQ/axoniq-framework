@@ -23,6 +23,7 @@ import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinit
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -33,7 +34,6 @@ import java.util.Map;
 import java.util.function.Function;
 
 import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.Schedule.ofMillis;
-import static org.assertj.core.api.Assertions.assertThat;
 
 
 /**
@@ -55,7 +55,7 @@ class ExceptionBetweenStepsWorkflowTest extends AbstractWorkflowIntegrationTestB
     }
 
     @Test
-    void exceptionBetweenStepsDoesNotTerminateWorkflow() {
+    void exceptionBetweenStepsFailsTheWorkflow() {
         delayedPublisher.addSchedules(List.of(
                 ofMillis(500, new RegistrationReceivedEvent("user-exc-between", "excbetween@test.com", "vip"))
         ));
@@ -64,11 +64,8 @@ class ExceptionBetweenStepsWorkflowTest extends AbstractWorkflowIntegrationTestB
 
         testDriver.historyMatches(h -> h.state().workflowStepNames().contains("stepA"));
 
-        var state = testDriver.testingState().state();
-        assertThat(state.workflowStatus().isTerminal())
-                .as("Exception between steps should not put workflow into any terminal state, but was: %s",
-                    state.workflowStatus())
-                .isFalse();
+        // An unhandled exception in the body is a defect, so the workflow ends FAILED.
+        testDriver.historyMatches(h -> h.state().workflowStatus() == WorkflowStatus.FAILED);
         testDriver.testingState().hasSteps("stepA");
         testDriver.testingState().noStep("stepB");
     }
