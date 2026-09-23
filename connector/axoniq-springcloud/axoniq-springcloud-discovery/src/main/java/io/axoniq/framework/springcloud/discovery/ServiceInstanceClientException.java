@@ -22,6 +22,8 @@ package io.axoniq.framework.springcloud.discovery;
 import org.axonframework.common.AxonException;
 import org.springframework.cloud.client.ServiceInstance;
 
+import java.io.Serial;
+
 /**
  * Indicates a {@link ServiceInstance} answered a request for its
  * {@link io.axoniq.framework.springcloud.routing.MemberCapabilities capabilities} with a client error.
@@ -37,6 +39,7 @@ import org.springframework.cloud.client.ServiceInstance;
  */
 public class ServiceInstanceClientException extends AxonException {
 
+    @Serial
     private static final long serialVersionUID = 4408371030502919049L;
 
     /**

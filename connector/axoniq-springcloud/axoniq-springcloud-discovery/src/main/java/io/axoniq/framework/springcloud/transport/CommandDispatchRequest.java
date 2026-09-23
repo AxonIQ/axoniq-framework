@@ -61,6 +61,13 @@ public record CommandDispatchRequest(
     /**
      * Compact constructor requiring an {@code identifier} and {@code type}, and defaulting {@code null} metadata to
      * empty so a request from a member that omits the field still reads.
+     *
+     * @param identifier the {@link CommandMessage#identifier() identifier} of the command
+     * @param type       the {@link MessageType#toString() string form} of the command's {@link CommandMessage#type() type}, carrying both qualified name and version
+     * @param payload    the payload of the command as text, or {@code null} when it has none
+     * @param metadata   the {@link CommandMessage#metadata() metadata} of the command
+     * @param routingKey the {@link CommandMessage#routingKey() routing key} of the command, or {@code null} when it has none
+     * @param priority   the {@link CommandMessage#priority() priority} of the command, or {@code null} when it has none
      */
     public CommandDispatchRequest {
         Objects.requireNonNull(identifier, "The command identifier must not be null.");

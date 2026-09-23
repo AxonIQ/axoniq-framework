@@ -57,6 +57,9 @@ public record MemberCapabilities(int loadFactor, Set<QualifiedName> commands, Se
     /**
      * Compact constructor validating that the {@code loadFactor} is not negative and that neither name set is
      * {@code null}, and defensively copying both sets.
+     * @param commands the {@link QualifiedName names} of the commands this member subscribed to
+     * @param queries the {@link QualifiedName names} of the queries this member subscribed to
+     * @param loadFactor the relative share of command load this member asks for
      */
     public MemberCapabilities {
         if (loadFactor < 0) {

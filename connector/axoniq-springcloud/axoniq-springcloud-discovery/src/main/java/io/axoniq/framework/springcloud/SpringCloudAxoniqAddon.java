@@ -36,6 +36,7 @@ public class SpringCloudAxoniqAddon implements AxoniqAddon {
     /**
      * The identifier this addon is claimed under.
      */
+    @SuppressWarnings("java:S1845") // ignore potential naming conflict with identifier()
     public static final String IDENTIFIER = "framework.spring_cloud";
 
     @Override

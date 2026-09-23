@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -59,7 +60,7 @@ public final class ConsistentHash {
 
     private final Map<String, RingMember> members;
     private final SortedMap<String, RingMember> hashToMember;
-    private final Function<String, String> hashFunction;
+    private final UnaryOperator<String> hashFunction;
     private final int version;
 
     /**
@@ -81,14 +82,14 @@ public final class ConsistentHash {
      * @param hashFunction the function hashing a routing key, or a member's ring position, onto the ring. Must be
      *                     deterministic, and must order its output consistently for all members of the cluster.
      */
-    public ConsistentHash(Function<String, String> hashFunction) {
+    public ConsistentHash(UnaryOperator<String> hashFunction) {
         this.hashFunction = Objects.requireNonNull(hashFunction, "The hashFunction must not be null.");
         this.members = Collections.emptyMap();
         this.hashToMember = Collections.emptySortedMap();
         this.version = 0;
     }
 
-    private ConsistentHash(Map<String, RingMember> members, Function<String, String> hashFunction, int version) {
+    private ConsistentHash(Map<String, RingMember> members, UnaryOperator<String> hashFunction, int version) {
         this.hashFunction = hashFunction;
         this.members = members;
         this.version = version;

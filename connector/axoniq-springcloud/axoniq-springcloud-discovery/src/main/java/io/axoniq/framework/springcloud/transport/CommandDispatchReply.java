@@ -81,6 +81,17 @@ public record CommandDispatchReply(
     /**
      * Compact constructor requiring both identifiers, and defaulting {@code null} metadata and error details to empty
      * so a reply from a member that omits either field still reads.
+     * @param errorCode         the kind of failure that occurred, or {@code null} when handling succeeded
+     * @param errorMessage      a description of the failure, or {@code null} when handling succeeded
+     * @param errorDetails      the messages found down the failure's cause chain, outermost first, for diagnostics. Empty when handling succeeded.
+     * @param errorOrigin       the name of the member the failure originated on, or {@code null} when handling succeeded
+     * @param errorDetailsPayload the Base64-encoded serialized application-specific details carried by the failure, or
+     * @param errorDetailsType the runtime class name of the application-specific details carried by the failure, or
+     * @param identifier       the identifier of this reply message
+     * @param metadata          the {@link CommandResultMessage#metadata() metadata} of the result
+     * @param payload           the payload of the result as text, or {@code null}
+     * @param requestIdentifier the {@link CommandDispatchRequest#identifier() identifier} of the command this replies to
+     * @param type              the {@link MessageType#toString() string form} of
      */
     public CommandDispatchReply {
         Objects.requireNonNull(identifier, "The reply identifier must not be null.");

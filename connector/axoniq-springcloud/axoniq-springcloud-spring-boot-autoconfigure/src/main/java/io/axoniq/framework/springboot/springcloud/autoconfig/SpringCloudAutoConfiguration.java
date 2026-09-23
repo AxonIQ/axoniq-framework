@@ -54,6 +54,7 @@ import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -66,10 +67,10 @@ import java.util.function.Predicate;
  * {@link SpringCloudConfigurationEnhancer} registers the connector itself and the framework decorates the configured
  * {@code CommandBus} into a {@code DistributedCommandBus}.
  * <p>
- * These beans live here rather than in the {@code ConfigurationEnhancer} because two of them only work as Spring
- * beans. {@link SpringCloudMemberRegistry} learns about the cluster through {@code @EventListener} methods, which
- * Spring invokes only on beans it manages, and the two controllers are only mapped as endpoints if Spring MVC knows
- * about them. The rest follows those two.
+ * These beans live here rather than in the {@code ConfigurationEnhancer} because two of them only work as Spring beans.
+ * {@link SpringCloudMemberRegistry} learns about the cluster through {@code @EventListener} methods, which Spring
+ * invokes only on beans it manages, and the two controllers are only mapped as endpoints if Spring MVC knows about
+ * them. The rest follows those two.
  * <p>
  * Activates when a Spring Cloud {@link DiscoveryClient} and a {@link Registration} are available — that is, when the
  * application has chosen a discovery implementation of its own — and can be switched off with
@@ -139,8 +140,8 @@ public class SpringCloudAutoConfiguration {
      * Members reach each other over HTTP, so a member is only reachable if it serves the connector's two endpoints.
      * Without a servlet web application context there is nothing to map them onto, while this member still registers
      * with discovery and publishes its capabilities — leaving the other members routing commands to an address that
-     * refuses every connection. Failing at start-up says so, rather than leaving a share of the cluster's commands
-     * to time out for as long as this member is a member.
+     * refuses every connection. Failing at start-up says so, rather than leaving a share of the cluster's commands to
+     * time out for as long as this member is a member.
      *
      * @author Allard Buijze
      * @since 5.4.0
@@ -202,8 +203,8 @@ public class SpringCloudAutoConfiguration {
      * The connector's own beans, registered unless {@code axon.springcloud.enabled} is set to {@code false}.
      * <p>
      * Nested so that the property switches these beans off while leaving
-     * {@link #disableSpringCloudConfigurationEnhancer()} reachable — a class-level condition would switch that off
-     * too, and the service-loaded enhancer would go on registering a connector regardless.
+     * {@link #disableSpringCloudConfigurationEnhancer()} reachable — a class-level condition would switch that off too,
+     * and the service-loaded enhancer would go on registering a connector regardless.
      *
      * @author Allard Buijze
      * @since 5.4.0
@@ -229,15 +230,17 @@ public class SpringCloudAutoConfiguration {
         @Bean(REST_CLIENT_BEAN)
         @ConditionalOnMissingBean(name = REST_CLIENT_BEAN)
         public RestClient axoniqSpringCloudRestClient(ObjectProvider<RestClient.Builder> builderProvider,
-                                                     SpringCloudProperties properties) {
+                                                      SpringCloudProperties properties) {
             RestClient.Builder applicationBuilder = builderProvider.getIfAvailable();
-            if (applicationBuilder != null) {
-                return applicationBuilder.build();
-            }
-            return RestClient.builder()
-                             .requestFactory(requestFactory(CONNECT_TIMEOUT,
-                                                            properties.getCommandReplyTimeout()))
-                             .build();
+            return Objects.requireNonNullElseGet(
+                                  applicationBuilder,
+                                  () -> RestClient.builder()
+                                                  .requestFactory(requestFactory(
+                                                          CONNECT_TIMEOUT,
+                                                          properties.getCommandReplyTimeout())
+                                                  )
+                          )
+                          .build();
         }
 
         /**
@@ -325,9 +328,9 @@ public class SpringCloudAutoConfiguration {
         /**
          * Bean creation method for the {@link Executor} the blocking HTTP round trips to other members run on.
          * <p>
-         * A virtual-thread-per-task executor, because the work on it is a blocking HTTP call and nothing else. Sizing
-         * a platform thread pool for that would cap the commands this member can have in flight for no reason other
-         * than the pool's own size.
+         * A virtual-thread-per-task executor, because the work on it is a blocking HTTP call and nothing else. Sizing a
+         * platform thread pool for that would cap the commands this member can have in flight for no reason other than
+         * the pool's own size.
          * <p>
          * Shut down with {@code shutdownNow} rather than the destroy method Spring would infer. That would be
          * {@link ExecutorService#close()}, which waits for every task to finish, and the connector's own shutdown has

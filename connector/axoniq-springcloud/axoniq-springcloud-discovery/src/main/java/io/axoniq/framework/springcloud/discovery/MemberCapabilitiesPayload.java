@@ -52,6 +52,9 @@ public record MemberCapabilitiesPayload(int loadFactor, List<String> commands, L
     /**
      * Compact constructor defaulting {@code null} name lists to empty, so a payload from a member that omits a field
      * altogether still reads.
+     * @param commands   the {@link QualifiedName#name() names} of the commands the member subscribed to, sorted
+     * @param queries    the {@link QualifiedName#name() names} of the queries the member subscribed to, sorted
+     * @param loadFactor the relative share of command load the member asks for
      */
     public MemberCapabilitiesPayload {
         commands = commands == null ? List.of() : List.copyOf(commands);

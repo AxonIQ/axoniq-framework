@@ -57,7 +57,7 @@ public interface CapabilityDiscoveryMode {
      * An empty {@link Optional} means the instance should be left out of the routing ring entirely — it is not a
      * member of this cluster, or is not currently answering for one. That differs from returning
      * {@link MemberCapabilities#INCAPABLE}, which keeps the instance in the ring as a member that handles nothing.
-     *
+     * <p>
      * Called concurrently, once per discovered instance, for every instance of one discovery round. Implementations
      * must therefore be thread-safe.
      *
