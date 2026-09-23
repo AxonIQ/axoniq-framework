@@ -54,6 +54,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -88,8 +89,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     // Runtime
     private boolean running = false;
     private boolean stoppedForRecovery = false;
-    private volatile boolean appendRejected = false;
-    private volatile boolean appendFailed = false;
+    // Why one of this execution's own appends stopped it. Set by the store callback before the body sees the failure.
+    private final AtomicReference<StopReason> stopReason = new AtomicReference<>();
     private volatile Thread workflowThread;
     private volatile boolean shuttingDown = false;
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
@@ -248,7 +249,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                                 }
                             } finally {
                                 // A non-terminal exit keeps the instance for recovery, unless another writer owns it.
-                                if (this.state().workflowStatus().isTerminal() || appendRejected) {
+                                if (this.state().workflowStatus().isTerminal()
+                                        || stopReason.get() == StopReason.APPEND_REJECTED) {
                                     finishWorkflow(terminationHandler);
                                 } else {
                                     stopRuntimeForRecovery();
@@ -351,7 +353,7 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                                          + "recorded the event this execution tried to append, or because the "
                                          + "engine is shutting down.", workflowId);
             // Whatever the exception type, a store failure is not a defect in the body.
-            case Throwable storeFailure when appendFailed ->
+            case Throwable storeFailure when stopReason.get() == StopReason.APPEND_FAILED ->
                     logPaused("the event store did not accept one of its events", storeFailure);
             // If WorkflowLifecycleControlDelegate already published the terminal event, endWith does nothing.
             case WorkflowFailedException wfe ->
@@ -619,17 +621,18 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
                 parentContext,
                 appendConditionFor(marker)
         )).whenComplete((ignored, failure) -> {
-            if (failure != null && !isRejected(failure)) {
-                // Set before the failure reaches the body: the exit it causes must pause, not fail, the workflow.
-                appendFailed = true;
+            if (failure == null) {
+                return;
             }
             if (isRejected(failure)) {
                 logger.warn("Append of {} for workflow '{}' was rejected: another writer already recorded events for "
                                     + "this instance. Stopping this execution.",
                             eventMessage.type(), workflowId);
-                // Set before the interrupt: the body usually sees the interrupt, not the rejection.
-                appendRejected = true;
+                // A rejection wins over an earlier store failure: the execution must leave this engine.
+                stopReason.set(StopReason.APPEND_REJECTED);
                 interruptWorkflowDriver();
+            } else {
+                stopReason.compareAndSet(null, StopReason.APPEND_FAILED);
             }
         });
     }
@@ -719,5 +722,15 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         eventWaitConditions.describeTo(descriptor);
         runningSteps.describeTo(descriptor);
         reachedSteps.describeTo(descriptor);
+    }
+
+    /**
+     * Why one of this execution's own appends stopped it. A rejection means another writer recorded an event for the
+     * instance first, so this execution leaves the engine. Any other failure means the store did not accept the event,
+     * so the workflow pauses and is re-driven from its history.
+     */
+    private enum StopReason {
+        APPEND_REJECTED,
+        APPEND_FAILED
     }
 }
