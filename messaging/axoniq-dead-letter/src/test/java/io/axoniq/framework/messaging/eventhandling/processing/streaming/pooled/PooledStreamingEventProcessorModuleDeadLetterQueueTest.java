@@ -19,7 +19,9 @@
 
 package io.axoniq.framework.messaging.eventhandling.processing.streaming.pooled;
 
+import org.axonframework.messaging.eventhandling.processing.streaming.pooled.PooledStreamingEventProcessorModule;
 import org.jspecify.annotations.NonNull;
+import org.axonframework.common.configuration.DecoratorDefinition;
 import org.axonframework.messaging.core.MessageStream;
 import org.axonframework.messaging.core.QualifiedName;
 import org.axonframework.messaging.core.configuration.MessagingConfigurer;
@@ -27,6 +29,7 @@ import io.axoniq.framework.messaging.deadletter.InMemorySequencedDeadLetterQueue
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterProcessor;
 import io.axoniq.framework.messaging.deadletter.SequencedDeadLetterQueue;
 import org.axonframework.messaging.eventhandling.AsyncInMemoryStreamableEventSource;
+import org.axonframework.messaging.eventhandling.DelegatingEventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventHandlingComponent;
 import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.SimpleEventHandlingComponent;
@@ -645,6 +648,57 @@ class PooledStreamingEventProcessorModuleDeadLetterQueueTest {
             assertThat(ehcWithoutDlq).isPresent().get()
                                      .isNotInstanceOf(DeadLetteringEventHandlingComponent.class)
                                      .isNotInstanceOf(SequencedDeadLetterProcessor.class);
+        }
+    }
+
+    @Nested
+    class ResolutionThroughOuterDecoratorTest {
+
+        // Mirrors org.axonframework.messaging.tracing.configuration.TracingConfigurationOrder#TRACING_DECORATOR_ORDER,
+        // deliberately near Integer.MAX_VALUE so this decorator applies after dead-lettering, wrapping it.
+        private static final int OUTER_DECORATOR_ORDER = Integer.MAX_VALUE - 1000;
+
+        @Test
+        void shouldResolveSequencedDeadLetterProcessorWhenAnOuterDecoratorWrapsTheEventHandlingComponentAfterward() {
+            // given - a decorator registered at a higher order than dead-lettering, like messaging tracing,
+            // wraps the fully dead-lettering-decorated EventHandlingComponent, so the component ultimately
+            // registered under the name no longer implements SequencedDeadLetterProcessor itself
+            var processorName = "testProcessor";
+            var component = SimpleEventHandlingComponent.create("component");
+            component.subscribe(new QualifiedName(String.class), (event, context) -> MessageStream.empty());
+
+            var module = EventProcessorModule
+                    .pooledStreaming(processorName)
+                    .eventHandlingComponents(components -> components.declarative("component", cfg -> component))
+                    .customized((cfg, c) -> c
+                            .eventSource(new AsyncInMemoryStreamableEventSource())
+                            .extend(DeadLetterQueueConfiguration.class, () -> new DeadLetterQueueConfiguration().enabled()));
+
+            var configurer = MessagingConfigurer.create();
+            configurer.componentRegistry(registry -> registry.registerDecorator(
+                    DecoratorDefinition
+                            .forType(EventHandlingComponent.class)
+                            .<EventHandlingComponent>with((cfg, name, delegate) -> new DelegatingEventHandlingComponent(delegate) {})
+                            .order(OUTER_DECORATOR_ORDER)
+            ));
+            configurer.eventProcessing(ep -> ep.pooledStreaming(ps -> ps.processor(module)));
+            var configuration = configurer.build();
+            var moduleConfig = configuration.getModuleConfiguration(moduleKey(processorName));
+            var componentName = "EventHandlingComponent[" + processorName + "][component]";
+
+            // when
+            var registeredComponent = moduleConfig.flatMap(m -> m.getOptionalComponent(
+                    EventHandlingComponent.class, componentName
+            ));
+            var dlp = moduleConfig.flatMap(m -> m.getOptionalComponent(
+                    SequencedDeadLetterProcessor.class, componentName
+            ));
+
+            // then - the outer decorator hides the SequencedDeadLetterProcessor capability on the component
+            // registered under EventHandlingComponent.class ...
+            assertThat(registeredComponent).isPresent().get().isNotInstanceOf(SequencedDeadLetterProcessor.class);
+            // ... yet the processor remains discoverable as a SequencedDeadLetterProcessor
+            assertThat(dlp).isPresent();
         }
     }
 
