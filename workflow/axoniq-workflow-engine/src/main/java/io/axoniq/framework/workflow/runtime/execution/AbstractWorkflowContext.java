@@ -209,58 +209,45 @@ public abstract class AbstractWorkflowContext implements WorkflowContext {
         ));
     }
 
-    /**
-     * Returns a result that completes successfully when every supplied result matches the predicate.
-     *
-     * @param predicate condition each result must satisfy
-     * @param results   results to combine
-     * @return combined result
-     */
+    @Override
     public CombinatorWorkflowStepResult allMatch(Predicate<WorkflowStepResult> predicate,
                                                  WorkflowStepResult... results) {
         return workflowExecutionOperations.allMatch(predicate, results);
     }
 
-    /**
-     * Returns a result that completes successfully when any supplied result matches the predicate.
-     *
-     * @param predicate condition a result must satisfy
-     * @param results   results to combine
-     * @return combined result
-     */
+    @Override
     public CombinatorWorkflowStepResult anyMatch(Predicate<WorkflowStepResult> predicate,
                                                  WorkflowStepResult... results) {
         return workflowExecutionOperations.anyMatch(predicate, results);
     }
 
-    /**
-     * Returns a result that completes successfully when no supplied result matches the predicate.
-     *
-     * @param predicate condition no result may satisfy
-     * @param results   results to combine
-     * @return combined result
-     */
+    @Override
     public CombinatorWorkflowStepResult noneMatch(Predicate<WorkflowStepResult> predicate,
                                                   WorkflowStepResult... results) {
         return workflowExecutionOperations.noneMatch(predicate, results);
     }
 
+    @Override
     public String workflowId() {
         return workflowExecutionOperations.workflowId();
     }
 
+    @Override
     public String workflowVersion() {
         return workflowExecutionOperations.workflowVersion();
     }
 
+    @Override
     public Map<String, @Nullable Object> workflowPayload() {
         return workflowExecutionOperations.workflowPayload();
     }
 
+    @Override
     public WorkflowStatus workflowStatus() {
         return workflowExecution.state().workflowStatus();
     }
 
+    @Override
     public List<String> workflowStepNames() {
         return workflowExecutionOperations.workflowStepNames();
     }

@@ -18,21 +18,14 @@
  */
 package io.axoniq.framework.workflow.dsl.api;
 
+import io.axoniq.framework.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
+import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
 import org.jspecify.annotations.Nullable;
 
-import io.axoniq.framework.workflow.dsl.api.CancelStepDefinition;
-import io.axoniq.framework.workflow.dsl.api.CancelWorkflowDefinition;
-import io.axoniq.framework.workflow.dsl.api.ExecuteStepDefinition;
-import io.axoniq.framework.workflow.dsl.api.FailWorkflowDefinition;
-import io.axoniq.framework.workflow.dsl.api.PayloadStepDefinition;
-import io.axoniq.framework.workflow.dsl.api.PublishStepDefinition;
-import io.axoniq.framework.workflow.dsl.api.VersionStepDefinition;
-import io.axoniq.framework.workflow.dsl.api.WaitForStepDefinition;
-import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
-import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
-import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
-
+import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * Author-facing DSL API based on step definitions.
@@ -46,8 +39,8 @@ public interface WorkflowContext {
      * Executes a step asynchronously from a DSL step definition.
      * <p>
      * This method is the bridge between the DSL-facing {@link ExecuteStepDefinition} and the runtime command-mode
-     * primitive. The provided step definition is translated into the corresponding runtime command and delegated to
-     * the execution layer.
+     * primitive. The provided step definition is translated into the corresponding runtime command and delegated to the
+     * execution layer.
      * </p>
      * <p>
      * The returned {@link WorkflowStepResult} is the durable handle for the started step. Callers may inspect the state
@@ -130,8 +123,8 @@ public interface WorkflowContext {
     void awaitModifyPayload(PayloadStepDefinition stepDefinition);
 
     /**
-     * Migrates the workflow to the version carried by {@code stepDefinition} for the given changeId
-     * and returns whether the new branch is in effect for this workflow:
+     * Migrates the workflow to the version carried by {@code stepDefinition} for the given changeId and returns whether
+     * the new branch is in effect for this workflow:
      * <ul>
      *   <li>Migration step already recorded → returns {@code true} iff the recorded version is
      *       {@code >=} the requested version.</li>
@@ -145,8 +138,8 @@ public interface WorkflowContext {
      * </ul>
      *
      * @param stepDefinition author-facing version step definition.
-     * @return {@code true} iff the workflow has committed to (or is past) the requested version for
-     * this {@code changeId}; {@code false} if it stays on the legacy branch.
+     * @return {@code true} iff the workflow has committed to (or is past) the requested version for this
+     * {@code changeId}; {@code false} if it stays on the legacy branch.
      */
     boolean migrateVersion(VersionStepDefinition stepDefinition);
 
@@ -211,4 +204,71 @@ public interface WorkflowContext {
      * @throws WorkflowCancelledException always, after the cancellation event is published
      */
     void cancelStep(CancelStepDefinition definition);
+
+
+    /**
+     * Returns a result that completes successfully when every supplied result matches the predicate.
+     *
+     * @param predicate condition each result must satisfy
+     * @param results   results to combine
+     * @return combined result
+     */
+    CombinatorWorkflowStepResult allMatch(Predicate<WorkflowStepResult> predicate,
+                                          WorkflowStepResult... results);
+
+    /**
+     * Returns a result that completes successfully when any supplied result matches the predicate.
+     *
+     * @param predicate condition a result must satisfy
+     * @param results   results to combine
+     * @return combined result
+     */
+
+    CombinatorWorkflowStepResult anyMatch(Predicate<WorkflowStepResult> predicate,
+                                          WorkflowStepResult... results);
+
+    /**
+     * Returns a result that completes successfully when no supplied result matches the predicate.
+     *
+     * @param predicate condition no result may satisfy
+     * @param results   results to combine
+     * @return combined result
+     */
+    CombinatorWorkflowStepResult noneMatch(Predicate<WorkflowStepResult> predicate,
+                                           WorkflowStepResult... results);
+
+    /**
+     * Returns the unique workflow execution identifier.
+     *
+     * @return the workflow identifier
+     */
+    String workflowId();
+
+    /**
+     * Returns the workflow definition version currently used by this execution.
+     *
+     * @return the workflow definition version
+     */
+    String workflowVersion();
+
+    /**
+     * Returns the current workflow payload.
+     *
+     * @return the workflow payload
+     */
+    Map<String, @Nullable Object> workflowPayload();
+
+    /**
+     * Retrieves workflow status.
+     *
+     * @return the status of the workflow.
+     */
+    WorkflowStatus workflowStatus();
+
+    /**
+     * Retrieves workflow step names.
+     *
+     * @return the names of the workflow steps.
+     */
+    List<String> workflowStepNames();
 }

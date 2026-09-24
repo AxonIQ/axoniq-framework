@@ -25,7 +25,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResu
 
 import java.util.Map;
 
-import static io.axoniq.framework.workflow.dsl.base.BaseWorkflowContext.equalsTo;
+import static io.axoniq.framework.workflow.dsl.api.EventAssociationsUtils.equalsTo;
 import static io.axoniq.framework.workflow.runtime.association.Associations.associate;
 import static io.axoniq.framework.workflow.runtime.association.PayloadPropertyValueRetriever.payloadProperty;
 
@@ -34,15 +34,15 @@ public class ApprovalWorkflow {
     private final Inventory inventory = new Inventory();
 
     @Workflow(idProperty = "orderId",
-              startOnEventClass = OrderPlaced.class,
-              workflowNamespace = "io.myapp")
+            startOnEventClass = OrderPlaced.class,
+            workflowNamespace = "io.myapp")
     public void execute(SimpleWorkflowContext ctx) {
         String orderId = (String) ctx.workflowPayload().get("orderId");
         String approvedBy = "alice";
 
         // tag::await-publish[]
         ctx.awaitPublish("notifyApproved",                                  // <1>
-                new OrderApproved(orderId, approvedBy));                    // <2>
+                         new OrderApproved(orderId, approvedBy));                    // <2>
         // end::await-publish[]
     }
 
@@ -51,7 +51,7 @@ public class ApprovalWorkflow {
 
         // tag::wait-then-publish[]
         var reply = ctx.waitForEvent("awaitQuote", QuoteReceived.class,
-                associate(payloadProperty("orderId"), equalsTo(orderId)));
+                                     associate(payloadProperty("orderId"), equalsTo(orderId)));
         ctx.awaitPublish("requestQuote", new QuoteRequested(orderId));
         reply.await();
         // end::wait-then-publish[]
