@@ -42,9 +42,13 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecut
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
 import io.axoniq.framework.workflow.runtime.api.execution.state.CombinatorWorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepCancellationException;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepFailedException;
+import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.StepTimedOutException;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
+import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
 import io.axoniq.framework.workflow.runtime.api.execution.status.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
@@ -320,10 +324,22 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
                     "Step '" + result.getStepName() + "' timed out before completing");
         }
         if (result.canceled()) {
-            throw new StepCancellationException(
-                    "Step '" + result.getStepName() + "' was cancelled before completing");
+            throw cancellationOf(result);
         }
         throw result.error().orElseThrow();
+    }
+
+    /**
+     * A durably cancelled step is a step outcome the body sees as a {@link StepCancellationException}. A step with no
+     * cancellation record never started for this execution, because the driver was interrupted or another execution
+     * owns the attempt, so the body sees a {@link StepInterruptedException} and the workflow pauses instead of failing.
+     */
+    private StepFailedException cancellationOf(WorkflowStepResult result) {
+        var stepName = result.getStepName();
+        if (WorkflowStateUtils.isStepStatus(workflowExecution.state(), stepName, StepStatus.CANCELLED)) {
+            return new StepCancellationException("Step '" + stepName + "' was cancelled before completing");
+        }
+        return new StepInterruptedException("Step '" + stepName + "' did not start for this execution");
     }
 
     private void awaitStepCompletion(WorkflowStepResult result) {
@@ -333,8 +349,7 @@ public abstract class AbstractDSLWorkflowContext implements WorkflowContext, Wor
                     "Step '" + result.getStepName() + "' timed out before completing");
         }
         if (result.canceled()) {
-            throw new StepCancellationException(
-                    "Step '" + result.getStepName() + "' was cancelled before completing");
+            throw cancellationOf(result);
         }
         if (result.error().isPresent()) {
             throw result.error().orElseThrow();

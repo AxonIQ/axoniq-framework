@@ -85,7 +85,9 @@ class WorkflowEngineSegmentCallbackTest {
         assertThat(release).isCompleted();
         verify(owned).stopForShutdown();
         verify(foreign, never()).stopForShutdown();
-        verifyNoInteractions(cancellationService);
+        // An execution stopped for recovery skips the termination handler, so the release must clean up.
+        verify(cancellationService).unregister(OWNED_ID);
+        verify(cancellationService, never()).unregister(FOREIGN_ID);
         assertThat(repository.findAll()).containsExactly(foreign);
     }
 

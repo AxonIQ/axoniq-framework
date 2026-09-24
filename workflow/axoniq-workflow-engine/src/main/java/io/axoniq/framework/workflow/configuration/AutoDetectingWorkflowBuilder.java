@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.workflow.configuration;
 
+import io.axoniq.framework.workflow.runtime.api.execution.context.RecoverableWorkflowExceptionPolicy;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
@@ -133,7 +134,9 @@ class AutoDetectingWorkflowBuilder<C extends WorkflowContext>
                         workflowContextFactoryBuilder.build(config),
                         workflowIdProviderComponentBuilder.build(config),
                         namespaceCustomizer,
-                        statusChangeListeners
+                        statusChangeListeners,
+                        config.getComponent(RecoverableWorkflowExceptionPolicy.class,
+                                            () -> RecoverableWorkflowExceptionPolicy.DEFAULT)
                 )
         );
     }

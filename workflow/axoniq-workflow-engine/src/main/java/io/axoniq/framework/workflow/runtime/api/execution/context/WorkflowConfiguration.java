@@ -101,4 +101,15 @@ public interface WorkflowConfiguration<T extends WorkflowContext> {
     default Map<WorkflowStatus, WorkflowStatusChangeListener> workflowStatusChangeListeners() {
         return Map.of();
     }
+
+    /**
+     * Classifies an exception that escaped the workflow body. A recoverable exception pauses the workflow so a later
+     * run can succeed; any other exception fails the workflow.
+     *
+     * @return the policy deciding whether an unhandled body exception is recoverable, by default
+     * {@link RecoverableWorkflowExceptionPolicy#DEFAULT}
+     */
+    default RecoverableWorkflowExceptionPolicy recoverableExceptionPolicy() {
+        return RecoverableWorkflowExceptionPolicy.DEFAULT;
+    }
 }
