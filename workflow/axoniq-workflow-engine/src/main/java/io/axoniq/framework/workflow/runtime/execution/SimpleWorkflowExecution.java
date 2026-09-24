@@ -19,6 +19,7 @@
 package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.StepInterruptedException;
+import io.axoniq.framework.workflow.dsl.api.StepFailedException;
 import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
@@ -120,10 +121,6 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final WorkflowEventPublisher workflowEventPublisher;
     // State variables
     private volatile EventSourcedWorkflowState workflowState;
-    // Runtime
-    private boolean running = false;
-    private boolean stoppedForRecovery = false;
-    private volatile Thread workflowThread;
 
     /**
      * Constructs a new instance.

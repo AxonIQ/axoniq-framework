@@ -18,7 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.api.execution.context;
 
-import io.axoniq.framework.workflow.runtime.api.execution.state.StepInterruptedException;
+import io.axoniq.framework.workflow.dsl.api.StepInterruptedException;
 import org.junit.jupiter.api.*;
 
 import java.io.IOException;

@@ -121,7 +121,8 @@ class WorkflowEngineSegmentCallbackTest {
         assertThat(release).isCompleted();
         verify(owned).stopForShutdown();
         verify(foreign, never()).stopForShutdown();
-        verifyNoInteractions(cancellationService);
+        verify(cancellationService).unregister(OWNED_ID);
+        verify(cancellationService, never()).unregister(FOREIGN_ID);
         assertThat(repository.findAll()).containsExactly(foreign);
     }
 
