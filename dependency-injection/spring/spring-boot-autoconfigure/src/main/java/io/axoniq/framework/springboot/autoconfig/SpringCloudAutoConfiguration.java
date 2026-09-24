@@ -17,9 +17,9 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.springboot.springcloud.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
-import io.axoniq.framework.springboot.springcloud.SpringCloudProperties;
+import io.axoniq.framework.springboot.SpringCloudProperties;
 import io.axoniq.framework.springcloud.SpringCloudCommandBusConnector;
 import io.axoniq.framework.springcloud.SpringCloudConfigurationEnhancer;
 import io.axoniq.framework.springcloud.SpringCloudMemberRegistry;

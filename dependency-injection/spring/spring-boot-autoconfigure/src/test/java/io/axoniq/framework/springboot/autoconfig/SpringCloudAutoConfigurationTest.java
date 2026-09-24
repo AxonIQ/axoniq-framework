@@ -17,10 +17,10 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.springboot.springcloud.autoconfig;
+package io.axoniq.framework.springboot.autoconfig;
 
 import io.axoniq.framework.messaging.commandhandling.distributed.CommandBusConnector;
-import io.axoniq.framework.springboot.springcloud.SpringCloudProperties;
+import io.axoniq.framework.springboot.SpringCloudProperties;
 import io.axoniq.framework.springcloud.SpringCloudMemberRegistry;
 import io.axoniq.framework.springcloud.discovery.CapabilityDiscoveryMode;
 import io.axoniq.framework.springcloud.discovery.MemberCapabilitiesController;
@@ -63,7 +63,8 @@ class SpringCloudAutoConfigurationTest {
         // A web application, as members reach each other over HTTP and the connector refuses to start without one.
         contextRunner = new WebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
-                .withUserConfiguration(DiscoveryConfiguration.class);
+                .withUserConfiguration(DiscoveryConfiguration.class)
+                .withPropertyValues("axon.springcloud.enabled=true");
     }
 
     @Nested
@@ -198,6 +199,7 @@ class SpringCloudAutoConfigurationTest {
             // commands that are silently never distributed.
             new WebApplicationContextRunner()
                     .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
+                    .withPropertyValues("axon.springcloud.enabled=true")
                     .run(context -> assertThat(context)
                             .hasFailed()
                             .getFailure()
@@ -230,6 +232,7 @@ class SpringCloudAutoConfigurationTest {
             new ApplicationContextRunner()
                     .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
                     .withUserConfiguration(DiscoveryConfiguration.class)
+                    .withPropertyValues("axon.springcloud.enabled=true")
                     .run(context -> assertThat(context)
                             .hasFailed()
                             .getFailure()
@@ -263,6 +266,7 @@ class SpringCloudAutoConfigurationTest {
             new ReactiveWebApplicationContextRunner()
                     .withConfiguration(AutoConfigurations.of(SpringCloudAutoConfiguration.class))
                     .withUserConfiguration(DiscoveryConfiguration.class)
+                    .withPropertyValues("axon.springcloud.enabled=true")
                     .run(context -> assertThat(context)
                             .hasFailed()
                             .getFailure()

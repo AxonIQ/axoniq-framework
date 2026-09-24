@@ -56,6 +56,7 @@
             <groupId>org.axonframework.extensions.spring</groupId>
             <artifactId>axon-spring-boot-starter</artifactId>
         </dependency>
+
         <!-- Axoniq -->
         <dependency>
             <groupId>io.axoniq.framework</groupId>
@@ -93,7 +94,15 @@
             <groupId>io.axoniq.framework</groupId>
             <artifactId>axon-server-connector</artifactId>
             <version>${project.version}</version>
+            <optional>true</optional>
         </dependency>
+        <dependency>
+            <groupId>io.axoniq.framework</groupId>
+            <artifactId>axoniq-springcloud-discovery</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Tracing (core tracing lives in the open-source axon-messaging/axon-modelling/axon-eventsourcing) -->
         <dependency>
             <groupId>io.axoniq.framework</groupId>
@@ -140,6 +149,16 @@
             <optional>true</optional>
         </dependency>
         <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-commons</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
@@ -156,6 +175,18 @@
                     <artifactId>log4j-to-slf4j</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <!-- Required only by WebApplicationContextRunner in SpringCloudAutoConfigurationTest. -->
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- Required only to exercise the reactive-web guard in SpringCloudAutoConfigurationTest. -->
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webflux</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -200,6 +231,26 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <!-- Spring Cloud is on this module's test classpath; unrelated test contexts do not use it. -->
+                        <axon.springcloud.enabled>false</axon.springcloud.enabled>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <!-- Integration tests in this module exercise Axon Server, not Spring Cloud discovery. -->
+                        <axon.springcloud.enabled>false</axon.springcloud.enabled>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>

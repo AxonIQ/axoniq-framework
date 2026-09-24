@@ -17,7 +17,7 @@
  *  https://www.axoniq.io/pricing
  */
 
-package io.axoniq.framework.springboot.springcloud;
+package io.axoniq.framework.springboot;
 
 import io.axoniq.framework.springcloud.discovery.IgnoreListingDiscoveryMode;
 import io.axoniq.framework.springcloud.discovery.RestCapabilityDiscoveryMode;
