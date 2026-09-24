@@ -28,11 +28,19 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContex
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.state.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.status.StepStatus;
+import io.axoniq.framework.workflow.runtime.api.payload.PayloadReducer;
 import io.axoniq.framework.workflow.runtime.util.FutureResolver;
+import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
 import org.axonframework.common.annotation.Internal;
+import org.axonframework.eventsourcing.eventstore.EventStore;
+import org.axonframework.eventsourcing.eventstore.GlobalIndexPosition;
+import org.axonframework.eventsourcing.eventstore.SourcingCondition;
 import org.axonframework.messaging.core.unitofwork.UnitOfWorkFactory;
+import org.axonframework.messaging.eventhandling.EventMessage;
 import org.axonframework.messaging.eventhandling.EventSink;
+import org.axonframework.messaging.eventhandling.processing.streaming.token.TrackingToken;
+import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,6 +50,8 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalLong;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 
@@ -107,7 +117,8 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
 
         acceptAllPendingTasksForStep(stepName);
 
-        if (!workflowExecution.state().containsStep(stepName)) {
+        boolean alreadyStarted = workflowExecution.state().containsStep(stepName);
+        if (!alreadyStarted) {
             reachedSteps.assertNoReplayDrift(workflowExecution.workflowId(), workflowExecution.state(), stepName);
             workflowExecution.appendTask(i ->
                                                  startedWaitForEvent(stepName,
@@ -148,6 +159,10 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                         }));
                 registerParkedStep(stepName, timeoutTask.completion(), timeoutTask::cancel, eventNameCustomizer,
                                    () -> eventWaitConditions.remove(stepName));
+                if (alreadyStarted) {
+                    completeWithMissedEvent(stepName, eventCondition, resultPayloadReducer, eventNameCustomizer,
+                                            timeoutDeadline);
+                }
             }
         }
 
@@ -180,6 +195,84 @@ public class WaitForDelegate extends AbstractStepExecutor implements WaitForPrim
                             e.getMessage());
             }
         });
+    }
+
+    /**
+     * Completes a wait restored from history with an awaited event the store already holds.
+     * <p>
+     * The wait was started before this body run, so its event may have gone past while no condition was registered:
+     * during a pause, or in the window between storing the token that covers the event and the completion becoming
+     * durable. Such an event is never delivered again. This reads, once, the events of the awaited type stored after
+     * the wait's {@code STARTED} event and wakes the wait with the first one that matches and is not later than the
+     * timeout deadline. The wake is queued on the execution like a live one, and only applies while the condition is
+     * still registered, so a live delivery of the same event wakes the wait at most once.
+     */
+    private void completeWithMissedEvent(String stepName,
+                                      EventCondition eventCondition,
+                                      PayloadReducer resultPayloadReducer,
+                                      EventNameCustomizer eventNameCustomizer,
+                                      Instant timeoutDeadline) {
+        var processingContext = workflowExecution.processingContext();
+        var eventStore = processingContext.component(EventStore.class);
+        var workflowId = workflowExecution.workflowId();
+        processingContext
+                .component(UnitOfWorkFactory.class)
+                .create("wait-catch-up-" + workflowId + "-" + stepName)
+                .executeWithResult(context -> {
+                    var transaction = eventStore.transaction(context);
+                    return transaction
+                            .source(SourcingCondition.conditionFor(
+                                    EventSourcedWorkflowState.criteriaBuilder(workflowId)))
+                            .filter(entry -> isStartedEventOf(stepName, entry.message()))
+                            .first()
+                            .asCompletableFuture()
+                            .thenCompose(started -> {
+                                var startedAt = started == null
+                                        ? OptionalLong.empty()
+                                        : TrackingToken.fromContext(started).map(TrackingToken::position)
+                                                       .orElse(OptionalLong.empty());
+                                if (startedAt.isEmpty()) {
+                                    logger.debug("No position for the start of wait '{}' of workflow '{}'; it only "
+                                                         + "waits for live events.", stepName, workflowId);
+                                    return CompletableFuture.completedFuture(null);
+                                }
+                                var awaitedAfterStart = SourcingCondition.conditionFor(
+                                        new GlobalIndexPosition(startedAt.getAsLong()),
+                                        EventCriteria.havingAnyTag()
+                                                     .andBeingOneOfTypes(eventCondition.qualifiedName())
+                                );
+                                return transaction.source(awaitedAfterStart)
+                                                  .filter(entry -> !entry.message().timestamp()
+                                                                         .isAfter(timeoutDeadline)
+                                                          && eventCondition.predicate()
+                                                                           .test(entry.message(), context))
+                                                  .first()
+                                                  .asCompletableFuture();
+                            })
+                            .thenApply(match -> match == null ? null : match.message());
+                })
+                .whenComplete((match, failure) -> {
+                    if (failure != null) {
+                        logger.warn("Catching up wait '{}' of workflow '{}' on stored events failed; it only waits "
+                                            + "for live events.", stepName, workflowId, failure);
+                    } else if (match != null) {
+                        workflowExecution.appendTask(i -> {
+                            if (eventWaitConditions.remove(stepName)) {
+                                eventReceived(new EventWaitConditions.Awaited(match,
+                                                                              processingContext,
+                                                                              stepName,
+                                                                              resultPayloadReducer,
+                                                                              eventNameCustomizer));
+                            }
+                        });
+                    }
+                });
+    }
+
+    private static boolean isStartedEventOf(String stepName, EventMessage event) {
+        var metadata = event.metadata();
+        return MetadataUtils.getStepStatus(metadata).filter(StepStatus.STARTED::equals).isPresent()
+                && stepName.equals(MetadataUtils.getStepName(metadata));
     }
 
     private Map<String, @Nullable Object> startedPayload(EventCondition eventCondition,

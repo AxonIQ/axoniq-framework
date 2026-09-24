@@ -85,9 +85,10 @@ final class EventWaitConditions implements DescribableComponent {
      * Removes condition for a given step.
      *
      * @param stepName step name waiting for event.
+     * @return {@code true} if a condition was registered for the step
      */
-    public void remove(String stepName) {
-        waitConditions.remove(stepName);
+    public boolean remove(String stepName) {
+        return waitConditions.remove(stepName) != null;
     }
 
     /**
