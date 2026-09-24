@@ -117,6 +117,11 @@ class PostgresqlFinalizerTest {
         testSubject = new PostgresqlFinalizer(dataSource, notifiedGlobalIndex::set);
     }
 
+    @AfterEach
+    void tearDown() {
+        testSubject.close();
+    }
+
     @Test
     void scheduleFinalizationWithUnfinalizedEventsAssignsPermanentIndicesAndReturnsMarker() {
         insertEvent(-1);

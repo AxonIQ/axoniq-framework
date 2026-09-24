@@ -33,6 +33,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.LongConsumer;
 import javax.sql.DataSource;
 
@@ -52,7 +53,6 @@ import javax.sql.DataSource;
 final class PostgresqlFinalizer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PostgresqlFinalizer.class);
-    private static final ExecutorService FINALIZER_EXECUTOR = Executors.newSingleThreadExecutor(Thread.ofPlatform().name("PG-Finalizer").factory());  // must be a single thread
 
     /*
      * The finalization statement assigns permanent global_index values to any unfinalized events,
@@ -142,6 +142,8 @@ final class PostgresqlFinalizer {
 
     private final DataSource dataSource;
     private final LongConsumer onFinalized;
+    private final ExecutorService finalizerExecutor =
+            Executors.newSingleThreadExecutor(Thread.ofVirtual().name("PG-Finalizer").factory());  // must be a single thread
 
     /**
      * Synchronized field (via {@code this}). Future for the queued finalization which append
@@ -169,14 +171,28 @@ final class PostgresqlFinalizer {
         if (!finalizerRunning) {
             finalizerRunning = true;
 
-            return CompletableFuture.supplyAsync(this::runFinalizationTask, FINALIZER_EXECUTOR);
+            return CompletableFuture.supplyAsync(this::runFinalizationTask, finalizerExecutor);
         }
 
         if (queuedFinalization == null) {
-            queuedFinalization = CompletableFuture.supplyAsync(this::runFinalizationTask, FINALIZER_EXECUTOR);
+            queuedFinalization = CompletableFuture.supplyAsync(this::runFinalizationTask, finalizerExecutor);
         }
 
         return queuedFinalization;
+    }
+
+    void close() {  // for testing purposes, to avoid junk exceptions
+        finalizerExecutor.shutdown();
+
+        try {
+            if (!finalizerExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
+                finalizerExecutor.shutdownNow();
+            }
+        }
+        catch (InterruptedException e) {
+            finalizerExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     private ConsistencyMarker runFinalizationTask() {
