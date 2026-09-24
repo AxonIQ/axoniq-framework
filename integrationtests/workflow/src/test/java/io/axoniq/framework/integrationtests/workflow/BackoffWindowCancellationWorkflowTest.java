@@ -20,14 +20,14 @@ package io.axoniq.framework.integrationtests.workflow;
 
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
-import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.dsl.api.retry.BackoffStrategy;
-import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
 import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.retry.BackoffStrategy;
+import io.axoniq.framework.workflow.dsl.api.retry.RetryPolicy;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
+import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
+import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
@@ -109,9 +109,11 @@ class BackoffWindowCancellationWorkflowTest extends AbstractWorkflowIntegrationT
         });
         // Wait until after the original retry deadline to prove its timer cannot launch a second attempt.
         await().pollDelay(BACKOFF.plusMillis(100)).atMost(BACKOFF.plusSeconds(2)).untilAsserted(() ->
-                assertThat(workflow.attempts())
-                        .as("the retry attempt of a cancelled step must never run")
-                        .isEqualTo(1)
+                                                                                                        assertThat(
+                                                                                                                workflow.attempts())
+                                                                                                                .as("the retry attempt of a cancelled step must never run")
+                                                                                                                .isEqualTo(
+                                                                                                                        1)
         );
     }
 

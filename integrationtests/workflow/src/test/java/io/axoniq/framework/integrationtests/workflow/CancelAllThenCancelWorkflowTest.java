@@ -20,22 +20,18 @@ package io.axoniq.framework.integrationtests.workflow;
 
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
+import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
-import io.axoniq.framework.workflow.dsl.api.StepCancellationException;
-import io.axoniq.framework.workflow.dsl.api.StepStatus;
-import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.test.utils.SleepUtils;
 import org.axonframework.messaging.eventhandling.annotation.Event;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
-import org.junit.jupiter.api.RepeatedTest;
-import org.junit.jupiter.api.RepetitionInfo;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.condition.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,24 +48,25 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * Verifies that joining {@code requestRunningStepCancellations(workflowId, reason)} immediately followed by joining
- * {@code requestWorkflowCancellation(workflowId, reason)}, called back to back on the same external thread, deterministically
- * cancels the directly-awaited {@code awaitedStep} with a durable {@code CANCELLED} record, runs the body's
- * compensation, and drives the workflow to a terminal {@code CANCELLED} state.
+ * {@code requestWorkflowCancellation(workflowId, reason)}, called back to back on the same external thread,
+ * deterministically cancels the directly-awaited {@code awaitedStep} with a durable {@code CANCELLED} record, runs the
+ * body's compensation, and drives the workflow to a terminal {@code CANCELLED} state.
  * <p>
  * The determinism holds by construction: joining the first future blocks the caller until its control-thread task has
- * fully finished, every durable {@code <step>:CANCELLED} record included. The subsequent workflow cancellation
- * request is therefore not issued until the per-step cancellations are complete. The body observes
- * {@code awaitedStep}'s cancellation as a catchable {@link StepCancellationException}, compensates, then parks on
- * {@code holdStep} (which never completes on its own) until the external workflow-cancellation request terminates it.
+ * fully finished, every durable {@code <step>:CANCELLED} record included. The subsequent workflow cancellation request
+ * is therefore not issued until the per-step cancellations are complete. The body observes {@code awaitedStep}'s
+ * cancellation as a catchable {@link StepCancellationException}, compensates, then parks on {@code holdStep} (which
+ * never completes on its own) until the external workflow-cancellation request terminates it.
  *
  * @author Stefan Dragisic
  */
 class CancelAllThenCancelWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWorkflowContext> {
 
-    private static final Logger logger = LoggerFactory.getLogger(CancelAllThenCancelWorkflowTest.class);
-
-    /** Set true iff the body caught StepCancellationException around awaitedStep and compensated. */
+    /**
+     * Set true iff the body caught StepCancellationException around awaitedStep and compensated.
+     */
     static final AtomicBoolean COMPENSATION_RAN = new AtomicBoolean(false);
+    private static final Logger logger = LoggerFactory.getLogger(CancelAllThenCancelWorkflowTest.class);
 
     public CancelAllThenCancelWorkflowTest() {
         super(SimpleWorkflowContext.class, c -> new SimpleWorkflowContextFactory());
@@ -92,7 +89,7 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowIntegrationTestBas
 
     /**
      * Runs the probabilistic scheduling stress check outside the normal build.
-     *
+     * <p>
      * Enable with {@code -Dworkflow.stress-tests=true}.
      *
      * @param repetitionInfo information about the current stress-test repetition
@@ -147,8 +144,8 @@ class CancelAllThenCancelWorkflowTest extends AbstractWorkflowIntegrationTestBas
 
     /**
      * Starts a long, never-awaited {@code backgroundStep}, parks the body on {@code awaitedStep} inside a try/catch
-     * that compensates when the wait is cancelled, then parks on {@code holdStep} (which never completes on its own)
-     * so only the external whole-workflow cancel can terminate the instance.
+     * that compensates when the wait is cancelled, then parks on {@code holdStep} (which never completes on its own) so
+     * only the external whole-workflow cancel can terminate the instance.
      */
     public static class TwoRunningStepsWorkflow {
 

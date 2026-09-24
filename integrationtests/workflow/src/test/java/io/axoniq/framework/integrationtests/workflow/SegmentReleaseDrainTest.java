@@ -74,7 +74,7 @@ class SegmentReleaseDrainTest extends AbstractWorkflowIntegrationTestBase<Simple
         parked.stopForShutdown();
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
-                assertThat(parked.isRunning()).isFalse());
+                                                                     assertThat(parked.isRunning()).isFalse());
     }
 
     public static class ParkedWorkflow {

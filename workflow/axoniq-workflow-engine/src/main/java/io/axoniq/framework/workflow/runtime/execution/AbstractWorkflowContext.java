@@ -20,6 +20,7 @@ package io.axoniq.framework.workflow.runtime.execution;
 
 import io.axoniq.framework.workflow.dsl.api.CancelStepDefinition;
 import io.axoniq.framework.workflow.dsl.api.CancelWorkflowDefinition;
+import io.axoniq.framework.workflow.dsl.api.CombinatorWorkflowStepResult;
 import io.axoniq.framework.workflow.dsl.api.ExecuteStepDefinition;
 import io.axoniq.framework.workflow.dsl.api.FailWorkflowDefinition;
 import io.axoniq.framework.workflow.dsl.api.PayloadStepDefinition;
@@ -34,7 +35,6 @@ import io.axoniq.framework.workflow.dsl.api.WaitForStepDefinition;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
-import io.axoniq.framework.workflow.dsl.api.CombinatorWorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
@@ -275,7 +275,8 @@ public abstract class AbstractWorkflowContext implements WorkflowContext {
     /**
      * A durably cancelled step is a step outcome the body sees as a {@link StepCancellationException}. A step with no
      * cancellation record never started for this execution, because the driver was interrupted or another execution
-     * owns the attempt, so the body sees a {@link StepInterruptedException} and the workflow pauses instead of failing.
+     * owns the attempt, so the body sees a {@link StepInterruptedException} and the workflow pauses instead of
+     * failing.
      */
     private StepFailedException cancellationOf(WorkflowStepResult result) {
         var stepName = result.getStepName();

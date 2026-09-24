@@ -15,8 +15,8 @@ Here's the simplest possible workflow—a single durable step:
 public class OrderFulfillmentWorkflow {
 
     @Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
-    public void execute(SimpleWorkflowContext ctx) {
-        ctx.awaitExecute("reserveStock", Boolean.class,
+    public void execute(SimpleWorkflowContext workflowContext) {
+        workflowContext.awaitExecute("reserveStock", Boolean.class,
                 InventoryService::reserveStock); // <1>
     }
 }
@@ -39,20 +39,20 @@ public class OrderFulfillmentWorkflow {
     Logger logger = LoggerFactory.getLogger(OrderFulfillmentWorkflow.class);
 
     @Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
-    public void execute(SimpleWorkflowContext ctx) {
+    public void execute(SimpleWorkflowContext workflowContext) {
 
-        var customerId = ctx.workflowPayload().get("customerId");
-        var amount = ctx.workflowPayload().get("amount");
+        var customerId = workflowContext.workflowPayload().get("customerId");
+        var amount = workflowContext.workflowPayload().get("amount");
 
-        var reservation = ctx.awaitExecute("reserveStock",
+        var reservation = workflowContext.awaitExecute("reserveStock",
                 payload("customerId", customerId, "amount", amount).getValues(),
                 (pc, input) -> Map.of("reserved", InventoryService.reserveStock(input))); // <1>
         if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
-            ctx.fail(new RuntimeException("Stock unavailable")); // <2>
+            workflowContext.fail(new RuntimeException("Stock unavailable")); // <2>
             return;
         }
 
-        logger.info("Stock reserved for order {}", ctx.workflowPayload().get("orderId"));
+        logger.info("Stock reserved for order {}", workflowContext.workflowPayload().get("orderId"));
     }
 }
 ----
@@ -121,20 +121,20 @@ Let's extend our workflow to initiate payment after reserving stock:
 .src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
 ----
 @Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
-public void execute(SimpleWorkflowContext ctx) {
+public void execute(SimpleWorkflowContext workflowContext) {
 
-    var customerId = ctx.workflowPayload().get("customerId");
-    var amount = ctx.workflowPayload().get("amount");
+    var customerId = workflowContext.workflowPayload().get("customerId");
+    var amount = workflowContext.workflowPayload().get("amount");
 
-    var reservation = ctx.awaitExecute("reserveStock",
+    var reservation = workflowContext.awaitExecute("reserveStock",
             payload("customerId", customerId, "amount", amount).getValues(),
             (pc, input) -> Map.of("reserved", InventoryService.reserveStock(input)));
     if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
-        ctx.fail(new RuntimeException("Stock unavailable"));
+        workflowContext.fail(new RuntimeException("Stock unavailable"));
         return;
     }
 
-    ctx.awaitExecute("initiatePayment",                         // <1>
+    workflowContext.awaitExecute("initiatePayment",             // <1>
                      payload("customerId", customerId,
                              "amount", amount).getValues(),
                      PaymentService::initiatePayment,
@@ -173,30 +173,30 @@ The `awaitEvent` convenience suspends the workflow until a matching external eve
 .src/main/java/io/axoniq/example/order/OrderFulfillmentWorkflow.java
 ----
 @Workflow(idProperty = "orderId", startOnEventName = "OrderPlaced")
-public void execute(SimpleWorkflowContext ctx) {
+public void execute(SimpleWorkflowContext workflowContext) {
 
-    var customerId = ctx.workflowPayload().get("customerId");
-    var amount = ctx.workflowPayload().get("amount");
+    var customerId = workflowContext.workflowPayload().get("customerId");
+    var amount = workflowContext.workflowPayload().get("amount");
 
-    var reservation = ctx.awaitExecute("reserveStock",
+    var reservation = workflowContext.awaitExecute("reserveStock",
             payload("customerId", customerId, "amount", amount).getValues(),
             (pc, input) -> Map.of("reserved", InventoryService.reserveStock(input)));
     if (!Boolean.TRUE.equals(reservation.get("reserved"))) {
-        ctx.fail(new RuntimeException("Stock unavailable"));
+        workflowContext.fail(new RuntimeException("Stock unavailable"));
         return;
     }
 
-    ctx.awaitExecute("initiatePayment",
+    workflowContext.awaitExecute("initiatePayment",
                      payload("customerId", customerId,
                              "amount", amount).getValues(),
                      PaymentService::initiatePayment,
                      step -> step.timeout(Duration.ofSeconds(30))
                                  .eventNameCustomizer(baseName("InitiatingPaymentForCustomer")));
 
-    var confirmation = ctx.awaitEvent("awaitPayment",     // <1>
+    var confirmation = workflowContext.awaitEvent("awaitPayment", // <1>
             PaymentConfirmed.class,
             associate(payloadProperty("orderId"),
-                    equalsTo(ctx.workflowPayload().get("orderId"))),
+                    equalsTo(workflowContext.workflowPayload().get("orderId"))),
             step -> step.timeout(Duration.ofMinutes(15))); // <2>
 
     logger.info("Payment confirmed: {}", confirmation);

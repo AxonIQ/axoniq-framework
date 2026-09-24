@@ -30,10 +30,9 @@ import java.util.concurrent.TimeoutException;
 /**
  * Classifies an exception that escaped a workflow body as recoverable or not.
  * <p>
- * A recoverable exception describes a condition a later run can succeed on: the engine pauses the workflow, keeps
- * the instance non-terminal and re-drives it on the next start of the processing node or claim of its segment. Any
- * other exception is treated as a defect in the body and fails the workflow durably, so the failure is visible and
- * final.
+ * A recoverable exception describes a condition a later run can succeed on: the engine pauses the workflow, keeps the
+ * instance non-terminal and re-drives it on the next start of the processing node or claim of its segment. Any other
+ * exception is treated as a defect in the body and fails the workflow durably, so the failure is visible and final.
  * <p>
  * {@link #DEFAULT} walks the cause chain and treats these as recoverable:
  * <ul>

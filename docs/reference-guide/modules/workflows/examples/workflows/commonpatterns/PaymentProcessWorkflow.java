@@ -28,21 +28,21 @@ public class PaymentProcessWorkflow {
     @Workflow(idProperty = "childWorkflowId",
               startOnEventClass = PaymentProcessStarted.class,                 // <1>
               workflowNamespace = "io.myapp.payments")
-    public void execute(SimpleWorkflowContext ctx) {
+    public void execute(SimpleWorkflowContext workflowContext) {
 
-        ctx.awaitExecute("validatePayment",
-                ctx.workflowPayload(),
+        workflowContext.awaitExecute("validatePayment",
+                workflowContext.workflowPayload(),
                 PaymentService::validate);
 
-        ctx.awaitExecute("chargeCustomer",
-                ctx.workflowPayload(),
+        workflowContext.awaitExecute("chargeCustomer",
+                workflowContext.workflowPayload(),
                 PaymentService::charge);
 
         // Signal the parent explicitly
-        ctx.awaitPublish("notifyParent",                                     // <2>
+        workflowContext.awaitPublish("notifyParent",                         // <2>
                 new PaymentProcessCompleted(
-                        (String) ctx.workflowPayload().get("orderId"),
-                        (String) ctx.workflowPayload().get("childWorkflowId")));
+                        (String) workflowContext.workflowPayload().get("orderId"),
+                        (String) workflowContext.workflowPayload().get("childWorkflowId")));
     }
     // end::child[]
 }

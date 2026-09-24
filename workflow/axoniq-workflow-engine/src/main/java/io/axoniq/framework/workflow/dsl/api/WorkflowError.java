@@ -54,9 +54,8 @@ public record WorkflowError(String type,
     public static final int TRUNCATED_MESSAGE_SIZE = 1023;
 
     /**
-     * Compacts the given throwable and its cause chain (up to {@link #MAX_CAUSE_DEPTH} levels) into a
-     * . Messages longer than {@link #TRUNCATED_MESSAGE_SIZE} are truncated. Cycles are broken via
-     * identity tracking.
+     * Compacts the given throwable and its cause chain (up to {@link #MAX_CAUSE_DEPTH} levels) into a . Messages longer
+     * than {@link #TRUNCATED_MESSAGE_SIZE} are truncated. Cycles are broken via identity tracking.
      *
      * @param throwable throwable to compact, may be {@code null}.
      * @return compacted representation, or {@code null} if {@code throwable} is {@code null}.

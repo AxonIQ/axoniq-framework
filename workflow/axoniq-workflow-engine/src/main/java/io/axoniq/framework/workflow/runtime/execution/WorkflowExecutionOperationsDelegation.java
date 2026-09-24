@@ -18,6 +18,7 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
+import io.axoniq.framework.workflow.dsl.api.CombinatorWorkflowStepResult;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
@@ -32,7 +33,6 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfig
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowLifecycleControl;
-import io.axoniq.framework.workflow.dsl.api.CombinatorWorkflowStepResult;
 import org.axonframework.common.annotation.Internal;
 import org.axonframework.common.infra.ComponentDescriptor;
 import org.axonframework.eventsourcing.eventstore.EventStore;

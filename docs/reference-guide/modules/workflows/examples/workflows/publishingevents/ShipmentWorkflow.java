@@ -29,8 +29,8 @@ public class ShipmentWorkflow {
     @Workflow(idProperty = "orderId",
               startOnEventClass = OrderApproved.class,
               workflowNamespace = "io.myapp.shipping")
-    public void execute(SimpleWorkflowContext ctx) {
-        ctx.awaitExecute("prepareShipment", Boolean.class, () -> true);
+    public void execute(SimpleWorkflowContext workflowContext) {
+        workflowContext.awaitExecute("prepareShipment", Boolean.class, () -> true);
     }
     // end::workflow-to-workflow[]
 }

@@ -18,8 +18,8 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.dsl.api.StepInterruptedException;
 import io.axoniq.framework.workflow.dsl.api.StepFailedException;
+import io.axoniq.framework.workflow.dsl.api.StepInterruptedException;
 import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
@@ -80,13 +80,8 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
     private final WorkflowConfiguration<?> workflowConfiguration;
     // Execution
     private final WorkflowExecutionOperationsDelegation contextDelegate;
-
-    // Runtime
-    private boolean running = false;
-    private boolean stoppedForRecovery = false;
     // Why one of this execution's own appends stopped it. Set by the store callback before the body sees the failure.
     private final AtomicReference<StopReason> stopReason = new AtomicReference<>();
-    private volatile Thread workflowThread;
     private final BlockingQueue<Consumer<WorkflowExecution>> taskQueue = new ArrayBlockingQueue<>(1000); // FIXME size
     private final EventWaitConditions eventWaitConditions;
     private final RunningSteps runningSteps;
@@ -119,6 +114,10 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
             );
     private final SequencedAppender appender = new SequencedAppender();
     private final WorkflowEventPublisher workflowEventPublisher;
+    // Runtime
+    private boolean running = false;
+    private boolean stoppedForRecovery = false;
+    private volatile Thread workflowThread;
     // State variables
     private volatile EventSourcedWorkflowState workflowState;
 
@@ -333,10 +332,9 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
      * explicit {@link WorkflowFailedException}, a {@link StepFailedException} the body did not handle, a cancellation,
      * a workflow timeout, or any other exception the configuration does not classify as recoverable through
      * {@link WorkflowConfiguration#recoverableExceptionPolicy()}. A recoverable exception, a replay drift and an engine
-     * shutdown leave the workflow in its current non-terminal state, so the workflow driver stops runtime execution
-     * and the instance is re-driven from durable history on the next start. A
-     * {@link FutureResolutionTimeoutException} raised by one of the publication attempts propagates to the workflow
-     * driver the same way.
+     * shutdown leave the workflow in its current non-terminal state, so the workflow driver stops runtime execution and
+     * the instance is re-driven from durable history on the next start. A {@link FutureResolutionTimeoutException}
+     * raised by one of the publication attempts propagates to the workflow driver the same way.
      *
      * @param ctx       processing context.
      * @param exception exception to handle.
@@ -348,39 +346,59 @@ public final class SimpleWorkflowExecution implements WorkflowExecution, Workflo
         var names = this.workflowConfiguration.eventNameCustomizer();
         var definitionId = workflowState.workflowDefinitionId();
         switch (exception) {
-            case Throwable rejected when isRejected(rejected) ->
-                    logger.debug("Workflow {} stopped after an append rejection because another writer already "
-                                         + "recorded the event this execution tried to append.", workflowId);
+            case Throwable rejected when isRejected(rejected) -> logger.debug(
+                    "Workflow {} stopped after an append rejection because another writer already "
+                            + "recorded the event this execution tried to append.",
+                    workflowId);
             // Whatever the exception type, a store failure is not a defect in the body.
-            case Throwable storeFailure when stopReason.get() == StopReason.APPEND_FAILED ->
-                    logPaused("the event store did not accept one of its events", storeFailure);
+            case Throwable storeFailure when stopReason.get() == StopReason.APPEND_FAILED -> logPaused(
+                    "the event store did not accept one of its events",
+                    storeFailure);
             // If WorkflowLifecycleControlDelegate already published the terminal event, endWith does nothing.
-            case WorkflowFailedException wfe ->
-                    endWith(ctx, () -> failedWorkflow(workflowExecutionOperations(), workflowName, wfe, definitionId, names));
-            case WorkflowCancelledException wce ->
-                    endWith(ctx, () -> cancelledWorkflow(workflowExecutionOperations(), workflowName, wce, definitionId, names));
+            case WorkflowFailedException wfe -> endWith(ctx,
+                                                        () -> failedWorkflow(workflowExecutionOperations(),
+                                                                             workflowName,
+                                                                             wfe,
+                                                                             definitionId,
+                                                                             names));
+            case WorkflowCancelledException wce -> endWith(ctx,
+                                                           () -> cancelledWorkflow(workflowExecutionOperations(),
+                                                                                   workflowName,
+                                                                                   wce,
+                                                                                   definitionId,
+                                                                                   names));
             case TimeoutException te -> endWith(ctx, () -> timeoutWorkflow(workflowExecutionOperations(), workflowName,
                                                                            contextDelegate.clock().instant(),
                                                                            definitionId, names));
             // No terminal event: the next replay runs cleanly once the code is reverted or wrapped in
             // ctx.migrateVersion(...).
-            case WorkflowReplayDriftException drift ->
-                    logger.warn("Workflow {} paused due to replay drift: {}. "
-                                        + "Revert the code change or wrap it in ctx.migrateVersion() and replay.",
-                                workflowId, drift.getMessage());
+            case WorkflowReplayDriftException drift -> logger.warn("Workflow {} paused due to replay drift: {}. "
+                                                                           + "Revert the code change or wrap it in ctx.migrateVersion() and replay.",
+                                                                   workflowId, drift.getMessage());
             case InterruptedException ie -> Thread.currentThread().interrupt();
             // Engine shutdown, not a step outcome: the workflow resumes on the next start.
-            case StepInterruptedException sie ->
-                    logger.debug("Workflow {} driver stopped: {}", workflowId, sie.getMessage());
-            case StepFailedException sfe ->
-                    endWith(ctx, () -> failedWorkflow(workflowExecutionOperations(), workflowName, sfe, definitionId, names));
+            case StepInterruptedException sie -> logger.debug("Workflow {} driver stopped: {}",
+                                                              workflowId,
+                                                              sie.getMessage());
+            case StepFailedException sfe -> endWith(ctx,
+                                                    () -> failedWorkflow(workflowExecutionOperations(),
+                                                                         workflowName,
+                                                                         sfe,
+                                                                         definitionId,
+                                                                         names));
             case Throwable recoverable
-                    when workflowConfiguration.recoverableExceptionPolicy().isRecoverable(recoverable) ->
-                    logPaused("a recoverable exception in its body", recoverable);
+                    when workflowConfiguration.recoverableExceptionPolicy().isRecoverable(recoverable) -> logPaused(
+                    "a recoverable exception in its body",
+                    recoverable);
             default -> {
                 logger.error("Workflow {} failed after an unhandled exception in its body.", workflowId, exception);
                 var failure = new WorkflowFailedException("Unhandled exception in workflow body", exception);
-                endWith(ctx, () -> failedWorkflow(workflowExecutionOperations(), workflowName, failure, definitionId, names));
+                endWith(ctx,
+                        () -> failedWorkflow(workflowExecutionOperations(),
+                                             workflowName,
+                                             failure,
+                                             definitionId,
+                                             names));
             }
         }
     }

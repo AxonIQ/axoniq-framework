@@ -78,7 +78,9 @@ class WorkflowContextAdoptingExecutionFactoryTest {
      * Helper class for testing.
      */
     private abstract static class MyWorkflowContext extends AbstractWorkflowContext {
-        public MyWorkflowContext(String workflowId, Map<String, @Nullable Object> payload, ProcessingContext processingContext, WorkflowConfiguration<?> workflowConfiguration) {
+
+        public MyWorkflowContext(String workflowId, Map<String, @Nullable Object> payload,
+                                 ProcessingContext processingContext, WorkflowConfiguration<?> workflowConfiguration) {
             super(workflowId, payload, processingContext, workflowConfiguration);
         }
     }

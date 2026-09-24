@@ -18,12 +18,12 @@
  */
 package io.axoniq.framework.integrationtests.workflow;
 
-import org.jspecify.annotations.Nullable;
-
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.axoniq.framework.workflow.configuration.WorkflowConfigurer;
 import io.axoniq.framework.workflow.configuration.WorkflowEventProcessingRegistrationEnhancer;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
@@ -31,8 +31,6 @@ import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepos
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.dsl.api.StepStatus;
-import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
@@ -56,6 +54,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.TokenStore;
 import org.axonframework.messaging.eventhandling.processing.streaming.token.store.inmemory.InMemoryTokenStore;
 import org.axonframework.messaging.eventstreaming.Tag;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.*;
 
 import java.time.Duration;
@@ -80,6 +79,13 @@ import static org.awaitility.Awaitility.await;
  * @author Simon Zambrovski
  */
 class WorkflowReplayPreparedStateTest {
+
+    private static Map<String, @Nullable Object> payload(String id, String mode) {
+        var payload = new LinkedHashMap<String, @Nullable Object>();
+        payload.put("id", id);
+        payload.put("mode", mode);
+        return payload;
+    }
 
     @Test
     void restoresOnlyEarliestStillRunningWorkflow() {
@@ -227,13 +233,6 @@ class WorkflowReplayPreparedStateTest {
         }
     }
 
-    private static Map<String, @Nullable Object> payload(String id, String mode) {
-        var payload = new LinkedHashMap<String, @Nullable Object>();
-        payload.put("id", id);
-        payload.put("mode", mode);
-        return payload;
-    }
-
     private static final class PreparedState {
 
         private final EventStorageEngine eventStorageEngine = new InMemoryEventStorageEngine();
@@ -241,6 +240,12 @@ class WorkflowReplayPreparedStateTest {
         private final TokenStore processingTokenStore = new InMemoryTokenStore();
         private final InMemoryWorkflowHistoryRepository historyRepository = new InMemoryWorkflowHistoryRepository();
         private final List<TrackingToken> appendedTokens = new ArrayList<>();
+
+        private static Set<Tag> tagsFor(EventMessage eventMessage) {
+            var tags = new LinkedHashSet<>(new WorkflowEventTagResolver().resolve(eventMessage));
+            tags.add(Tag.of("type", eventMessage.type().qualifiedName().toString()));
+            return Set.copyOf(tags);
+        }
 
         private void appendWarmupEvents() {
             appendTypedPayloadEvent(IgnoredReplayWarmupEvent.class, Map.of("id", "warmup-1"));
@@ -306,12 +311,6 @@ class WorkflowReplayPreparedStateTest {
                               .commit()
                               .join();
             appendedTokens.add(eventStorageEngine.latestToken().join());
-        }
-
-        private static Set<Tag> tagsFor(EventMessage eventMessage) {
-            var tags = new LinkedHashSet<>(new WorkflowEventTagResolver().resolve(eventMessage));
-            tags.add(Tag.of("type", eventMessage.type().qualifiedName().toString()));
-            return Set.copyOf(tags);
         }
 
         private void seedProcessorToken(TrackingToken token) {

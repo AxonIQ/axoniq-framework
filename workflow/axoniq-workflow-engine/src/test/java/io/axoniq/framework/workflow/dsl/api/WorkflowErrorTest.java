@@ -82,9 +82,17 @@ class WorkflowErrorTest {
     @Test
     void fromBreaksCycleInCauseChain() {
         class Looping extends RuntimeException {
+
             private Throwable loopTarget;
-            Looping(String m) { super(m); }
-            @Override public Throwable getCause() { return loopTarget; }
+
+            Looping(String m) {
+                super(m);
+            }
+
+            @Override
+            public Throwable getCause() {
+                return loopTarget;
+            }
         }
         var a = new Looping("a");
         var b = new Looping("b");
@@ -187,7 +195,7 @@ class WorkflowErrorTest {
     @Test
     void roundTripWorkflowExecutionExceptionThroughWorkflowErrorIsStable() {
         var original = new WorkflowExecutionException("com.acme.Boom", "msg",
-                                                     new WorkflowExecutionException("com.acme.Inner", "i", null));
+                                                      new WorkflowExecutionException("com.acme.Inner", "i", null));
 
         var error = WorkflowError.from(original);
         var fromError = error.toThrowable();
@@ -212,6 +220,49 @@ class WorkflowErrorTest {
             assertThat(c.type()).isEqualTo(inner.type());
             assertThat(c.getMessage()).isEqualTo(inner.getMessage());
         });
+    }
+
+    @Test
+    void converterRoundTripPreservesData() {
+        var original = new RuntimeException("outer", new IllegalStateException("inner"));
+        var compact = WorkflowError.from(original);
+        var converter = new JacksonConverter();
+
+        WorkflowError roundTripped = converter.convert(converter.convert(compact, compact.getClass()),
+                                                       WorkflowError.class);
+
+        assertThat(roundTripped.type()).isEqualTo(RuntimeException.class.getName());
+        assertThat(roundTripped.message()).isEqualTo("outer");
+        assertThat(roundTripped.cause()).isNotNull();
+        assertThat(roundTripped.cause().type()).isEqualTo(IllegalStateException.class.getName());
+        assertThat(roundTripped.cause().message()).isEqualTo("inner");
+    }
+
+    @Test
+    void converterPayloadStaysCompactForDeepStackTraces() {
+        var converter = new JacksonConverter();
+        RuntimeException ex = new RuntimeException("boom");
+        StackTraceElement[] frames = new StackTraceElement[200];
+        for (int i = 0; i < frames.length; i++) {
+            frames[i] = new StackTraceElement(
+                    "com.example.very.long.package.path.ClassName" + i, "methodName" + i, "Source" + i + ".java", i);
+        }
+        ex.setStackTrace(frames);
+
+        byte[] serialized = converter.convert(WorkflowError.from(ex), byte[].class);
+
+        assertThat(serialized.length).isLessThan(500);
+        assertThat(new String(serialized)).doesNotContain("com.example.very.long.package.path.ClassName");
+    }
+
+    @Test
+    void jacksonWireFormatHasNoStackTraceField() {
+        var converter = new JacksonConverter();
+        var compact = WorkflowError.from(new RuntimeException("boom"));
+
+        String json = new String(converter.convert(compact, byte[].class));
+
+        assertThat(json).doesNotContain("stackTrace");
     }
 
     @Nested
@@ -271,47 +322,5 @@ class WorkflowErrorTest {
             // then
             assertThat(reconstructed).isExactlyInstanceOf(WorkflowExecutionException.class);
         }
-    }
-
-    @Test
-    void converterRoundTripPreservesData() {
-        var original = new RuntimeException("outer", new IllegalStateException("inner"));
-        var compact = WorkflowError.from(original);
-        var converter = new JacksonConverter();
-
-        WorkflowError roundTripped = converter.convert(converter.convert(compact, compact.getClass()), WorkflowError.class);
-
-        assertThat(roundTripped.type()).isEqualTo(RuntimeException.class.getName());
-        assertThat(roundTripped.message()).isEqualTo("outer");
-        assertThat(roundTripped.cause()).isNotNull();
-        assertThat(roundTripped.cause().type()).isEqualTo(IllegalStateException.class.getName());
-        assertThat(roundTripped.cause().message()).isEqualTo("inner");
-    }
-
-    @Test
-    void converterPayloadStaysCompactForDeepStackTraces() {
-        var converter = new JacksonConverter();
-        RuntimeException ex = new RuntimeException("boom");
-        StackTraceElement[] frames = new StackTraceElement[200];
-        for (int i = 0; i < frames.length; i++) {
-            frames[i] = new StackTraceElement(
-                    "com.example.very.long.package.path.ClassName" + i, "methodName" + i, "Source" + i + ".java", i);
-        }
-        ex.setStackTrace(frames);
-
-        byte[] serialized = converter.convert(WorkflowError.from(ex), byte[].class);
-
-        assertThat(serialized.length).isLessThan(500);
-        assertThat(new String(serialized)).doesNotContain("com.example.very.long.package.path.ClassName");
-    }
-
-    @Test
-    void jacksonWireFormatHasNoStackTraceField() {
-        var converter = new JacksonConverter();
-        var compact = WorkflowError.from(new RuntimeException("boom"));
-
-        String json = new String(converter.convert(compact, byte[].class));
-
-        assertThat(json).doesNotContain("stackTrace");
     }
 }

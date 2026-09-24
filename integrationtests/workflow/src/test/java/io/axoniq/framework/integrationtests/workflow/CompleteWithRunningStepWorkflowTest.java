@@ -20,11 +20,11 @@ package io.axoniq.framework.integrationtests.workflow;
 
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
+import io.axoniq.framework.workflow.dsl.api.StepStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.dsl.api.StepStatus;
-import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.test.utils.SleepUtils;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
@@ -43,8 +43,8 @@ import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.S
  * Issue #224: when a workflow reaches any terminal state while an async step is still running, the engine publishes
  * only the workflow-level terminal event and <b>interrupts</b> the running step (no per-step terminal event); the step
  * is left in its last recorded {@code STARTED} state. Covers all four paths in {@code SimpleWorkflowExecution}: normal
- * completion, {@code ctx.fail(...)}, and {@code ctx.cancel(...)}. (Single-step cancel is the way to get a step
- * terminal + compensation — see {@code CancelStepWorkflowTest}.)
+ * completion, {@code ctx.fail(...)}, and {@code ctx.cancel(...)}. (Single-step cancel is the way to get a step terminal
+ * + compensation — see {@code CancelStepWorkflowTest}.)
  *
  * @author Stefan Dragisic
  */

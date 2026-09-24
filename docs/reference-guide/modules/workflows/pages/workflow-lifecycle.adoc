@@ -49,7 +49,8 @@ The engine writes workflow lifecycle events with event-store tags as well:
 == The workflow context
 
 The workflow context passed to your workflow method is your single entry point to all engine capabilities.
-For Java, `BaseWorkflowContext` is the canonical DSL layer and `SimpleWorkflowContext` adds convenience methods on top:
+For Java, `WorkflowContext` is the author-facing workflow-body contract. `BaseWorkflowContext` is the canonical DSL
+layer implementing it, and `SimpleWorkflowContext` adds convenience methods on top:
 
 [cols="1,2"]
 |===
@@ -84,7 +85,7 @@ For Java, `BaseWorkflowContext` is the canonical DSL layer and `SimpleWorkflowCo
 |`allMatch(...)`, `anyMatch(...)`, `noneMatch(...)`—combine multiple non-blocking results
 |===
 
-In Kotlin, `WorkflowKontext` is the execution-facing context and `Kontext` is the author-facing wrapper.
+In Kotlin, `WorkflowKontext` is the workflow context instance and `Kontext` is the author-facing wrapper.
 `Kontext` exposes the same primitives through concise overloads and still delegates to the same definition-based API when needed.
 
 [TIP]

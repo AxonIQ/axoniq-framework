@@ -20,6 +20,7 @@ package io.axoniq.framework.integrationtests.workflow;
 
 import io.axoniq.framework.axonserver.connector.configuration.AxonServerConfigurationEnhancer;
 import io.axoniq.framework.workflow.configuration.WorkflowModule;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.history.inmemory.InMemoryWorkflowHistoryRepository;
@@ -27,7 +28,6 @@ import io.axoniq.framework.workflow.history.inmemory.MutableWorkflowHistoryRepos
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
-import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEventTagResolver;
 import io.axoniq.framework.workflow.runtime.execution.payload.CombineGlobalAndLocalPayloadReducer;
 import io.axoniq.framework.workflow.runtime.test.fixture.WorkflowTestDriver;
@@ -84,6 +84,27 @@ class ConcurrentWriterFencingTest {
     private final List<String> bodyRuns = new CopyOnWriteArrayList<>();
     private final AtomicInteger stepActionRuns = new AtomicInteger();
 
+    private static Tag workflowTag(String workflowId) {
+        return Tag.of(TAG_WORKFLOW_ID, workflowId);
+    }
+
+    private static Tag lifecycleTag() {
+        return Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_LIFECYCLE);
+    }
+
+    /**
+     * Returns the ids of the instances the given node is running.
+     */
+    private static List<String> runningWorkflowIds(WorkflowTestDriver node) {
+        return node.workflowTestServices()
+                   .workflowEngine()
+                   .workflowExecutions()
+                   .stream()
+                   .map(WorkflowExecution::workflowId)
+                   .sorted()
+                   .toList();
+    }
+
     @Test
     void twoEnginesRunningOneInstanceRecordEachFactOnce() {
         var nodeA = startNode();
@@ -97,10 +118,10 @@ class ConcurrentWriterFencingTest {
                 assertThat(eventsNamed("order-1", "FencedWorkflowCompleted")).hasSize(1);
             });
             await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
-                    assertThat(runningWorkflowIds(nodeA)).isEmpty()
+                                                                        assertThat(runningWorkflowIds(nodeA)).isEmpty()
             );
             await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
-                    assertThat(runningWorkflowIds(nodeB)).isEmpty()
+                                                                        assertThat(runningWorkflowIds(nodeB)).isEmpty()
             );
 
             // One started event, every fact of the instance recorded exactly once, and the step action ran once even
@@ -125,7 +146,7 @@ class ConcurrentWriterFencingTest {
             node.publishEvent(new StartFencedWorkflow("order-2"));
 
             await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
-                    assertThat(runningWorkflowIds(node)).isEmpty()
+                                                                         assertThat(runningWorkflowIds(node)).isEmpty()
             );
 
             // The seeded history is untouched, and the rejected start means the body never ran.
@@ -184,14 +205,6 @@ class ConcurrentWriterFencingTest {
                                                       .toList();
     }
 
-    private static Tag workflowTag(String workflowId) {
-        return Tag.of(TAG_WORKFLOW_ID, workflowId);
-    }
-
-    private static Tag lifecycleTag() {
-        return Tag.of(TAG_WORKFLOW_EVENT_TYPE, TAG_VALUE_EVENT_TYPE_LIFECYCLE);
-    }
-
     /**
      * Starts an engine sharing the event store with every other node of this test, but claiming segments through a
      * token store of its own, so it never learns that another node runs the same instances.
@@ -209,19 +222,6 @@ class ConcurrentWriterFencingTest {
                         .registerComponent(MutableWorkflowHistoryRepository.class,
                                            cfg -> new InMemoryWorkflowHistoryRepository())
                         .registerComponent(TokenStore.class, cfg -> new InMemoryTokenStore())));
-    }
-
-    /**
-     * Returns the ids of the instances the given node is running.
-     */
-    private static List<String> runningWorkflowIds(WorkflowTestDriver node) {
-        return node.workflowTestServices()
-                   .workflowEngine()
-                   .workflowExecutions()
-                   .stream()
-                   .map(WorkflowExecution::workflowId)
-                   .sorted()
-                   .toList();
     }
 
     public record StartFencedWorkflow(String id) {

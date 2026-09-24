@@ -69,7 +69,8 @@ class RetryPolicyTest {
 
     @Test
     void testConstructors() {
-        RetryHandler handler = context -> {};
+        RetryHandler handler = context -> {
+        };
         BackoffStrategy backoff = BackoffStrategy.fixed(Duration.ofSeconds(1));
 
         RetryPolicy p1 = new RetryPolicy(2, handler);
@@ -87,7 +88,8 @@ class RetryPolicyTest {
     void testWithers() {
         RetryPolicy base = RetryPolicy.maxRetries(5);
 
-        RetryHandler handler = context -> {};
+        RetryHandler handler = context -> {
+        };
         RetryPolicy p1 = base.onRetry(handler);
         assertThat(p1.maxRetries()).isEqualTo(5);
         assertThat(p1.onRetryHandler()).isEqualTo(handler);
@@ -110,7 +112,7 @@ class RetryPolicyTest {
     @Test
     void testShouldRetryWithPredicate() {
         RetryPolicy policy = RetryPolicy.maxRetries(5)
-                .retryWhile(ctx -> ctx.error() instanceof IllegalArgumentException);
+                                        .retryWhile(ctx -> ctx.error() instanceof IllegalArgumentException);
 
         RetryContext ctx1 = new RetryContext("step", 1, 5, new IllegalArgumentException());
         assertThat(policy.shouldRetry(ctx1)).isTrue();

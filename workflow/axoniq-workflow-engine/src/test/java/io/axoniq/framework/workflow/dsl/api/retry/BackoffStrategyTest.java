@@ -65,10 +65,10 @@ class BackoffStrategyTest {
     }
 
     /**
-     * Regression test for the exponential-backoff overflow bug (issue #222). With the old
-     * {@code 1L << (attempt - 1)} the shift overflowed at large attempt counts, producing a negative
-     * or wrapped factor and therefore a negative/huge delay. The result must always stay clamped to
-     * {@code max}: never negative and never greater than {@code max}.
+     * Regression test for the exponential-backoff overflow bug (issue #222). With the old {@code 1L << (attempt - 1)}
+     * the shift overflowed at large attempt counts, producing a negative or wrapped factor and therefore a
+     * negative/huge delay. The result must always stay clamped to {@code max}: never negative and never greater than
+     * {@code max}.
      */
     @Test
     void testExponentialClampsAtLargeAttemptCountsWithoutOverflow() {
@@ -91,9 +91,9 @@ class BackoffStrategyTest {
     }
 
     /**
-     * Regression test (issue #222): a large {@code max} that, combined with a large attempt count,
-     * would have overflowed the {@code base * 2^(attempt-1)} multiply must still clamp to {@code max}
-     * rather than wrapping to a negative or bogus value.
+     * Regression test (issue #222): a large {@code max} that, combined with a large attempt count, would have
+     * overflowed the {@code base * 2^(attempt-1)} multiply must still clamp to {@code max} rather than wrapping to a
+     * negative or bogus value.
      */
     @Test
     void testExponentialWithLargeMaxClampsWithoutOverflow() {
@@ -113,8 +113,8 @@ class BackoffStrategyTest {
     }
 
     /**
-     * Regression test (issue #222): a zero base would make the clamp guard divide by zero; the fix
-     * returns {@code max} instead.
+     * Regression test (issue #222): a zero base would make the clamp guard divide by zero; the fix returns {@code max}
+     * instead.
      */
     @Test
     void testExponentialWithZeroBaseReturnsMax() {
@@ -127,8 +127,7 @@ class BackoffStrategyTest {
     }
 
     /**
-     * Regression test (issue #222): a negative base must never yield a negative delay; the fix
-     * returns {@code max}.
+     * Regression test (issue #222): a negative base must never yield a negative delay; the fix returns {@code max}.
      */
     @Test
     void testExponentialWithNegativeBaseReturnsMax() {

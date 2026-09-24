@@ -27,8 +27,7 @@ import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
 import org.axonframework.messaging.core.unitofwork.transaction.Transaction;
 import org.axonframework.messaging.core.unitofwork.transaction.TransactionManager;
 import org.axonframework.messaging.eventhandling.annotation.Event;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.util.List;
@@ -45,14 +44,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Verifies the transaction scope of workflow execution: a workflow instance parked at {@code awaitEvent} must not
- * hold an open transaction.
+ * Verifies the transaction scope of workflow execution: a workflow instance parked at {@code awaitEvent} must not hold
+ * an open transaction.
  * <p>
  * The workflow-body wrapper unit of work stays open for the instance's entire lifetime, so it is deliberately
  * non-transactional; durable commits run in short-lived child units of work created from the transactional
  * application-level factory. This test registers a counting {@link TransactionManager} as the application-level
- * component and asserts that the parked steady state holds zero open transactions while short-lived transactional
- * units of work are still observed.
+ * component and asserts that the parked steady state holds zero open transactions while short-lived transactional units
+ * of work are still observed.
  *
  * @author Stefan Dragisic
  */
@@ -94,9 +93,9 @@ class TransactionScopeWorkflowTest extends AbstractWorkflowIntegrationTestBase<S
 
         // While parked, the instance must hold no open transaction.
         await().atMost(4, TimeUnit.SECONDS).untilAsserted(() ->
-                assertThat(countingTm.open.get())
-                        .as("a parked workflow instance must not hold an open transaction")
-                        .isZero());
+                                                                  assertThat(countingTm.open.get())
+                                                                          .as("a parked workflow instance must not hold an open transaction")
+                                                                          .isZero());
 
         // Sanity: the probe is wired. Durable commits (event publishes) did run transactionally.
         assertThat(countingTm.maxOpen.get())
@@ -110,9 +109,9 @@ class TransactionScopeWorkflowTest extends AbstractWorkflowIntegrationTestBase<S
                     .allMatch(h -> h.state().workflowStatus().isTerminal());
         });
         await().atMost(5, TimeUnit.SECONDS).untilAsserted(() ->
-                assertThat(countingTm.open.get())
-                        .as("no transaction leaked after completion")
-                        .isZero());
+                                                                  assertThat(countingTm.open.get())
+                                                                          .as("no transaction leaked after completion")
+                                                                          .isZero());
     }
 
     public static class TransactionScopeWorkflow {

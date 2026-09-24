@@ -18,20 +18,20 @@
  */
 package io.axoniq.framework.workflow.runtime.execution;
 
-import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
 import io.axoniq.framework.workflow.dsl.api.StepFailedException;
 import io.axoniq.framework.workflow.dsl.api.StepInterruptedException;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
-import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
+import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.runtime.api.execution.FutureResolutionTimeoutException;
+import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowDefinition;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionFactory;
-import io.axoniq.framework.workflow.dsl.api.WorkflowFailedException;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowReplayDriftException;
-import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.runtime.util.MetadataUtils;
 import org.axonframework.eventsourcing.eventstore.AppendEventsTransactionRejectedException;
 import org.axonframework.eventsourcing.eventstore.EventStore;
@@ -78,6 +78,71 @@ import static org.mockito.Mockito.*;
 class SimpleWorkflowExecutionTest {
 
     private final List<ExecutorService> executorServices = new ArrayList<>();
+
+    private static void setWorkflowDriver(SimpleWorkflowExecution execution, Thread driver)
+            throws ReflectiveOperationException {
+        Field field = SimpleWorkflowExecution.class.getDeclaredField("workflowThread");
+        field.setAccessible(true);
+        field.set(execution, driver);
+    }
+
+    private static EventMessage event(String name) {
+        return new GenericEventMessage(new MessageType(name), Map.of()).withConverter(TestEventConverter.INSTANCE);
+    }
+
+    private static EventStore failingEventStore(FutureResolutionTimeoutException timeout) {
+        return failingEventStore((Throwable) timeout);
+    }
+
+    private static EventStore failingEventStore(Throwable failure) {
+        var eventStore = eventStore();
+        when(eventStore.publish(any(ProcessingContext.class), any(EventMessage.class)))
+                .thenReturn(CompletableFuture.failedFuture(failure));
+        return eventStore;
+    }
+
+    /**
+     * Returns an event store that accepts every append. Workflow events append under a condition, which only an event
+     * store transaction carries, so a plain event sink is refused before a single event is published.
+     */
+    private static EventStore eventStore() {
+        var eventStore = mock(EventStore.class);
+        when(eventStore.transaction(any(ProcessingContext.class))).thenReturn(mock(EventStoreTransaction.class));
+        when(eventStore.publish(any(ProcessingContext.class), any(EventMessage.class)))
+                .thenReturn(CompletableFuture.completedFuture(null));
+        return eventStore;
+    }
+
+    private static void markStarted(SimpleWorkflowExecution execution) {
+        var definition = execution.state().workflowDefinitionId();
+        execution.onEvent(
+                new GenericEventMessage(
+                        new MessageType(new QualifiedName("test-workflow"), definition.version()),
+                        Map.of(),
+                        MetadataUtils.create(execution.workflowId(), WorkflowStatus.STARTED, definition)
+                ).withConverter(TestEventConverter.INSTANCE),
+                execution.processingContext()
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void sneakyThrow(Throwable failure) throws T {
+        throw (T) failure;
+    }
+
+    /**
+     * Returns an event store that feeds every published event straight back into the execution, the way the processor
+     * would deliver it, so terminal transitions can complete.
+     */
+    private static EventStore echoingEventStore(AtomicReference<SimpleWorkflowExecution> target) {
+        var eventStore = eventStore();
+        when(eventStore.publish(any(ProcessingContext.class), any(EventMessage.class))).thenAnswer(invocation -> {
+            var execution = target.get();
+            execution.onEvent(invocation.getArgument(1), execution.processingContext());
+            return CompletableFuture.completedFuture(null);
+        });
+        return eventStore;
+    }
 
     @AfterEach
     void shutDownExecutors() {
@@ -340,13 +405,6 @@ class SimpleWorkflowExecutionTest {
         assertThat(maximumInFlight).hasValue(1);
     }
 
-    private static void setWorkflowDriver(SimpleWorkflowExecution execution, Thread driver)
-            throws ReflectiveOperationException {
-        Field field = SimpleWorkflowExecution.class.getDeclaredField("workflowThread");
-        field.setAccessible(true);
-        field.set(execution, driver);
-    }
-
     private SimpleWorkflowExecution execution() {
         return execution(eventStore());
     }
@@ -387,43 +445,86 @@ class SimpleWorkflowExecutionTest {
         );
     }
 
-    private static EventMessage event(String name) {
-        return new GenericEventMessage(new MessageType(name), Map.of()).withConverter(TestEventConverter.INSTANCE);
+    private static final class DirectExecutorService extends AbstractExecutorService {
+
+        @Override
+        public void shutdown() {
+            // No-op
+        }
+
+        @Override
+        public List<Runnable> shutdownNow() {
+            return List.of();
+        }
+
+        @Override
+        public boolean isShutdown() {
+            return false;
+        }
+
+        @Override
+        public boolean isTerminated() {
+            return false;
+        }
+
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) {
+            return true;
+        }
+
+        @Override
+        public void execute(Runnable command) {
+            command.run();
+        }
     }
 
-    private static EventStore failingEventStore(FutureResolutionTimeoutException timeout) {
-        return failingEventStore((Throwable) timeout);
-    }
+    private static final class TestWorkflowConfiguration implements WorkflowConfiguration<WorkflowContext> {
 
-    private static EventStore failingEventStore(Throwable failure) {
-        var eventStore = eventStore();
-        when(eventStore.publish(any(ProcessingContext.class), any(EventMessage.class)))
-                .thenReturn(CompletableFuture.failedFuture(failure));
-        return eventStore;
-    }
+        private final WorkflowDefinition<WorkflowContext> workflowDefinition;
 
-    /**
-     * Returns an event store that accepts every append. Workflow events append under a condition, which only an event
-     * store transaction carries, so a plain event sink is refused before a single event is published.
-     */
-    private static EventStore eventStore() {
-        var eventStore = mock(EventStore.class);
-        when(eventStore.transaction(any(ProcessingContext.class))).thenReturn(mock(EventStoreTransaction.class));
-        when(eventStore.publish(any(ProcessingContext.class), any(EventMessage.class)))
-                .thenReturn(CompletableFuture.completedFuture(null));
-        return eventStore;
-    }
+        private TestWorkflowConfiguration() {
+            this(ignored -> {
+            });
+        }
 
-    private static void markStarted(SimpleWorkflowExecution execution) {
-        var definition = execution.state().workflowDefinitionId();
-        execution.onEvent(
-                new GenericEventMessage(
-                        new MessageType(new QualifiedName("test-workflow"), definition.version()),
-                        Map.of(),
-                        MetadataUtils.create(execution.workflowId(), WorkflowStatus.STARTED, definition)
-                ).withConverter(TestEventConverter.INSTANCE),
-                execution.processingContext()
-        );
+        private TestWorkflowConfiguration(WorkflowDefinition<WorkflowContext> workflowDefinition) {
+            this.workflowDefinition = workflowDefinition;
+        }
+
+        @Override
+        public Class<WorkflowContext> getWorkflowContextType() {
+            return WorkflowContext.class;
+        }
+
+        @Override
+        public WorkflowDefinition<WorkflowContext> workflowDefinition() {
+            return workflowDefinition;
+        }
+
+        @Override
+        public WorkflowContextFactory<WorkflowContext> workflowContextFactory() {
+            throw new UnsupportedOperationException("The workflow context factory is not used by this test");
+        }
+
+        @Override
+        public WorkflowExecutionFactory workflowExecutionFactory() {
+            throw new UnsupportedOperationException("The workflow execution factory is not used by this test");
+        }
+
+        @Override
+        public WorkflowIdProvider workflowIdProvider() {
+            throw new UnsupportedOperationException("The workflow id provider is not used by this test");
+        }
+
+        @Override
+        public String workflowName() {
+            return "test-workflow";
+        }
+
+        @Override
+        public DefaultEventNameCustomizer eventNameCustomizer() {
+            return defaults();
+        }
     }
 
     @Nested
@@ -604,107 +705,6 @@ class SimpleWorkflowExecutionTest {
                 Thread.sleep(10);
             }
             assertThat(execution.isRunning()).isTrue();
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T extends Throwable> void sneakyThrow(Throwable failure) throws T {
-        throw (T) failure;
-    }
-
-    /**
-     * Returns an event store that feeds every published event straight back into the execution, the way the processor
-     * would deliver it, so terminal transitions can complete.
-     */
-    private static EventStore echoingEventStore(AtomicReference<SimpleWorkflowExecution> target) {
-        var eventStore = eventStore();
-        when(eventStore.publish(any(ProcessingContext.class), any(EventMessage.class))).thenAnswer(invocation -> {
-            var execution = target.get();
-            execution.onEvent(invocation.getArgument(1), execution.processingContext());
-            return CompletableFuture.completedFuture(null);
-        });
-        return eventStore;
-    }
-
-    private static final class DirectExecutorService extends AbstractExecutorService {
-
-        @Override
-        public void shutdown() {
-            // No-op
-        }
-
-        @Override
-        public List<Runnable> shutdownNow() {
-            return List.of();
-        }
-
-        @Override
-        public boolean isShutdown() {
-            return false;
-        }
-
-        @Override
-        public boolean isTerminated() {
-            return false;
-        }
-
-        @Override
-        public boolean awaitTermination(long timeout, TimeUnit unit) {
-            return true;
-        }
-
-        @Override
-        public void execute(Runnable command) {
-            command.run();
-        }
-    }
-
-    private static final class TestWorkflowConfiguration implements WorkflowConfiguration<WorkflowContext> {
-
-        private final WorkflowDefinition<WorkflowContext> workflowDefinition;
-
-        private TestWorkflowConfiguration() {
-            this(ignored -> {
-            });
-        }
-
-        private TestWorkflowConfiguration(WorkflowDefinition<WorkflowContext> workflowDefinition) {
-            this.workflowDefinition = workflowDefinition;
-        }
-
-        @Override
-        public Class<WorkflowContext> getWorkflowContextType() {
-            return WorkflowContext.class;
-        }
-
-        @Override
-        public WorkflowDefinition<WorkflowContext> workflowDefinition() {
-            return workflowDefinition;
-        }
-
-        @Override
-        public WorkflowContextFactory<WorkflowContext> workflowContextFactory() {
-            throw new UnsupportedOperationException("The workflow context factory is not used by this test");
-        }
-
-        @Override
-        public WorkflowExecutionFactory workflowExecutionFactory() {
-            throw new UnsupportedOperationException("The workflow execution factory is not used by this test");
-        }
-
-        @Override
-        public WorkflowIdProvider workflowIdProvider() {
-            throw new UnsupportedOperationException("The workflow id provider is not used by this test");
-        }
-
-        @Override
-        public String workflowName() {
-            return "test-workflow";
-        }
-
-        @Override
-        public DefaultEventNameCustomizer eventNameCustomizer() {
-            return defaults();
         }
     }
 }

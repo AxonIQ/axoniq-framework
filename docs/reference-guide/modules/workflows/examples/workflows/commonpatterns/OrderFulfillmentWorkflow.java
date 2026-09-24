@@ -39,22 +39,22 @@ public class OrderFulfillmentWorkflow {
     @Workflow(idProperty = "orderId",
             startOnEventClass = OrderPlacedEvent.class,
             workflowNamespace = "io.myapp")
-    public void execute(SimpleWorkflowContext ctx) {
+    public void execute(SimpleWorkflowContext workflowContext) {
 
         // ... do some work ...
 
-        var orderId = (String) ctx.workflowPayload().get("orderId");
-        var amount = ((Number) ctx.workflowPayload().get("amount")).doubleValue();
+        var orderId = (String) workflowContext.workflowPayload().get("orderId");
+        var amount = ((Number) workflowContext.workflowPayload().get("amount")).doubleValue();
 
         // Register the wait for the child's completion BEFORE launching the child.
-        var completed = ctx.waitForEvent("awaitPaymentProcess",              // <1>
+        var completed = workflowContext.waitForEvent("awaitPaymentProcess",  // <1>
                                          PaymentProcessCompleted.class,
                                          associate(payloadProperty("orderId"),
                                                    equalsTo(orderId)),       // <2>
                                          step -> step.timeout(Duration.ofMinutes(30)));
 
         // Launch the child workflow by publishing a dedicated event.
-        ctx.awaitPublish("paymentProcessStarted",                              // <3>
+        workflowContext.awaitPublish("paymentProcessStarted",                  // <3>
                          new PaymentProcessStarted("payment-" + orderId, orderId, amount));
 
         // ... do other work in parallel while child runs ...

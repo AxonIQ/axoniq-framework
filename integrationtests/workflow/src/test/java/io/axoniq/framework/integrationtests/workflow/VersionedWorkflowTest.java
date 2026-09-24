@@ -20,10 +20,10 @@ package io.axoniq.framework.integrationtests.workflow;
 
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.DetectionPhase;
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
 import io.axoniq.framework.workflow.runtime.api.annotation.Workflow;
-import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
@@ -36,8 +36,8 @@ import static io.axoniq.framework.workflow.runtime.test.utils.DelayedPublisher.S
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Integration test for {@link VersionedWorkflow} — verifies that a fresh workflow bumps to version
- * {@code "0.0.2"} via the marker and takes the new branch.
+ * Integration test for {@link VersionedWorkflow} — verifies that a fresh workflow bumps to version {@code "0.0.2"} via
+ * the marker and takes the new branch.
  *
  * @author Stefan Dragisic
  */
@@ -104,5 +104,4 @@ class VersionedWorkflowTest extends AbstractWorkflowIntegrationTestBase<SimpleWo
     public record OrderPlacedEvent(String orderId, String customerId) {
 
     }
-
 }
