@@ -45,7 +45,7 @@ import org.axonframework.messaging.eventhandling.processing.streaming.token.Trac
 import org.axonframework.messaging.eventstreaming.EventCriteria;
 import org.axonframework.messaging.eventstreaming.StreamingCondition;
 import org.axonframework.messaging.eventstreaming.Tag;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -79,6 +79,13 @@ class ClaimRestoreForeignWriteTest extends AbstractEventSourcedEntityRepositoryT
     private static final Duration BUDGET = Duration.ofSeconds(5);
 
     private final DefaultEventNameCustomizer customizer = DefaultEventNameCustomizer.Builder.defaults();
+
+    @AfterEach
+    void shutDownConfiguration() {
+        if (configuration != null) {
+            configuration.shutdown();
+        }
+    }
 
     @Test
     void aWriteLandingInsideTheRestoreReadFencesTheRestoredExecution() {
