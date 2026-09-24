@@ -355,7 +355,9 @@ If you need to attach metadata that doesn't come from the triggering event (for 
 [[custom-workflow-context]]
 == Custom workflow context
 
-You don't have to use `SimpleWorkflowContext`. `BaseWorkflowContext` is the canonical Java DSL layer, while `SimpleWorkflowContext` adds helpers such as typed `awaitEvent`, `sleep(Duration)`, `setPayload`, and `cancel(String)`.
+You don't have to use `SimpleWorkflowContext`. `WorkflowContext` is the shared author-facing contract, and
+`BaseWorkflowContext` is the canonical Java DSL layer implementing it with Java-friendly named overloads.
+`SimpleWorkflowContext` adds helpers such as typed `awaitEvent`, `sleep(Duration)`, `setPayload`, and `cancel(String)`.
 Extend whichever layer best fits the API you want to expose to workflow authors.
 
 For example, an approval workflow context:

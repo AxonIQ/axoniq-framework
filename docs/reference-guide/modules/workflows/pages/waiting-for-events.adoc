@@ -6,8 +6,9 @@ The `waitForEvent` / `awaitEvent` pair lets your workflow suspend until a matchi
 
 [NOTE]
 ====
-`BaseWorkflowContext.waitForEvent(...)` is the canonical non-blocking primitive.
-`BaseWorkflowContext.awaitEvent(...)` blocks and returns the event payload map, while `SimpleWorkflowContext.awaitEvent(...)` adds a typed convenience overload on top of the same primitive.
+`BaseWorkflowContext` is the canonical DSL layer for the definition-based non-blocking and blocking event-wait primitives from `WorkflowContext`.
+Its named `waitForEvent(...)` and `awaitEvent(...)` overloads are Java-friendly; the blocking overload returns the event payload map.
+`SimpleWorkflowContext.awaitEvent(...)` adds a typed convenience overload on top of the same primitive.
 ====
 
 [NOTE]

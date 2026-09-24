@@ -44,7 +44,6 @@ class WorkflowKontext(
     processingContext,
     workflowConfiguration
 ) {
-
     /**
      * Runs the workflow definition block against this context instance.
      *

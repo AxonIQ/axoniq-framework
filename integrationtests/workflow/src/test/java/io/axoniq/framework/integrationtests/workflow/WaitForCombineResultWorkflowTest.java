@@ -88,13 +88,12 @@ class WaitForCombineResultWorkflowTest
                 startOnEventClass = RegistrationReceivedEvent.class,
                 startOnConditions = {"payload:status=waitForCombine"}
         )
-        public void execute(WaitForCombineWorkflowContext ctx) {
-            var event = ctx.processingContext().component(EventConverter.class).convert(
+        public void execute(WaitForCombineWorkflowContext ctx, ProcessingContext proce) {
+            var event = ctx.resolveComponent(EventConverter.class).convert(
                     ctx.awaitEvent(
                             "waitStep",
                             EventConditions.fromQualifiedName(
-                                    ctx.processingContext()
-                                       .component(MessageTypeResolver.class)
+                                    ctx.resolveComponent(MessageTypeResolver.class)
                                        .resolve(RegistrationReceivedEvent.class)
                                        .orElseThrow()
                                        .qualifiedName(),

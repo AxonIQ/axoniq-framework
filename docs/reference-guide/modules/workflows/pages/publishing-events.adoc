@@ -6,8 +6,8 @@ The `publish` / `awaitPublish` pair appends that business event as a durable wor
 
 [NOTE]
 ====
-`BaseWorkflowContext.publish(stepName, eventMessage, customizer)` is the canonical non-blocking primitive and returns a `WorkflowStepResult`.
-`awaitPublish(...)` blocks until the step is recorded and returns `void`.
+`BaseWorkflowContext` is the canonical DSL layer for the definition-based non-blocking `publish(...)` and blocking `awaitPublish(...)` primitives from `WorkflowContext`.
+Its `publish(stepName, eventMessage, customizer)` overload returns a `WorkflowStepResult`, while `awaitPublish(...)` blocks until the step is recorded and returns `void`.
 `SimpleWorkflowContext` adds the payload and payload-plus-metadata overloads shown below.
 ====
 

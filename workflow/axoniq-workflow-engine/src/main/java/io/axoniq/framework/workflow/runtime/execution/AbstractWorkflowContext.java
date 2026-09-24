@@ -34,6 +34,7 @@ import io.axoniq.framework.workflow.dsl.api.VersionStepDefinition;
 import io.axoniq.framework.workflow.dsl.api.WaitForStepDefinition;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
+import io.axoniq.framework.workflow.dsl.api.WorkflowStep;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStepResult;
 import io.axoniq.framework.workflow.runtime.api.execution.context.PrimitiveCommands;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
@@ -41,6 +42,7 @@ import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfig
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecution;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowExecutionOperations;
 import io.axoniq.framework.workflow.runtime.util.WorkflowStateUtils;
+import org.axonframework.messaging.core.VersionedType;
 import org.axonframework.messaging.core.unitofwork.ProcessingContext;
 import org.axonframework.messaging.eventhandling.conversion.EventConverter;
 import org.jspecify.annotations.Nullable;
@@ -54,9 +56,11 @@ import static io.axoniq.framework.workflow.runtime.execution.EventSourcedWorkflo
 
 /**
  * Base class for author-facing {@link WorkflowContext} implementations.
+ *
  * <p>Implementors extend this class and call its constructor with the workflow execution configuration. This class
  * translates step definitions to runtime commands and delegates them to internal {@link WorkflowExecutionOperations},
- * which are not exposed through the author-facing context type.
+ * which are not exposed through the author-facing context type. For reading operations, it exposes parts of the runtime
+ * state with own methods delegating to the {@link WorkflowExecution#state()}.
  * </p>
  *
  * @author Simon Zambrovski
@@ -178,7 +182,7 @@ public abstract class AbstractWorkflowContext implements WorkflowContext {
             return Version.of(state.versionFor(stepName)).isGreaterThanOrEqualTo(requested);
         }
         // No step recorded: either same-as-current path (true) or guard-blocked (false).
-        // Inspect current workflow version to distinguish.
+        // Inspect the current workflow version to distinguish.
         return Version.of(state.workflowDefinitionId().version()).isGreaterThanOrEqualTo(requested);
     }
 
@@ -226,18 +230,23 @@ public abstract class AbstractWorkflowContext implements WorkflowContext {
     }
 
     @Override
-    public String workflowId() {
-        return workflowExecutionOperations.workflowId();
+    public <T> T resolveComponent(Class<T> componentType) {
+        return processingContext().component(componentType);
     }
 
     @Override
-    public String workflowVersion() {
-        return workflowExecutionOperations.workflowVersion();
+    public String workflowId() {
+        return workflowExecution.state().workflowId();
+    }
+
+    @Override
+    public VersionedType workflowDefinitionId() {
+        return workflowExecution.state().workflowDefinitionId();
     }
 
     @Override
     public Map<String, @Nullable Object> workflowPayload() {
-        return workflowExecutionOperations.workflowPayload();
+        return workflowExecution.state().payload();
     }
 
     @Override
@@ -247,17 +256,47 @@ public abstract class AbstractWorkflowContext implements WorkflowContext {
 
     @Override
     public List<String> workflowStepNames() {
-        return workflowExecutionOperations.workflowStepNames();
+        return workflowExecution.state().workflowStepNames();
     }
 
-    public ProcessingContext processingContext() {
+    @Override
+    @Nullable
+    public WorkflowStep getStep(String stepName) {
+        return workflowExecution.state().getStep(stepName);
+    }
+
+    @Override
+    public boolean containsStep(String stepName) {
+        return workflowExecution.state().containsStep(stepName);
+    }
+
+
+    /**
+     * Internal access to processing context used by implemeters.
+     *
+     * @return processing context.
+     */
+    protected ProcessingContext processingContext() {
         return workflowExecution.processingContext();
     }
 
-    public WorkflowExecution execution() {
+    /**
+     * Internal access to execution used by WorkflowContextAdoptingExecutionFactory
+     *
+     * @return execution.
+     */
+    WorkflowExecution execution() {
         return workflowExecution;
     }
 
+
+    /**
+     * Helper to resolve step payload, see {@link #awaitStepCompletion(WorkflowStepResult)}.
+     *
+     * @param result a payload of the step is successful.
+     * @return payload.
+     * @throws StepTimedOutException if the step timed out.
+     */
     private Map<String, @Nullable Object> resolveStepPayload(WorkflowStepResult result) {
         if (result.success()) {
             return result.resultAs(PAYLOAD_TYPE, processingContext().component(EventConverter.class)).orElse(Map.of());
@@ -273,19 +312,11 @@ public abstract class AbstractWorkflowContext implements WorkflowContext {
     }
 
     /**
-     * A durably cancelled step is a step outcome the body sees as a {@link StepCancellationException}. A step with no
-     * cancellation record never started for this execution, because the driver was interrupted or another execution
-     * owns the attempt, so the body sees a {@link StepInterruptedException} and the workflow pauses instead of
-     * failing.
+     * Awaits step completion and throws a corresponding exception, depending on status, see
+     * {@link #resolveStepPayload(WorkflowStepResult)}.
+     *
+     * @param result workflow step result.
      */
-    private StepFailedException cancellationOf(WorkflowStepResult result) {
-        var stepName = result.getStepName();
-        if (WorkflowStateUtils.isStepStatus(workflowExecution.state(), stepName, StepStatus.CANCELLED)) {
-            return new StepCancellationException("Step '" + stepName + "' was cancelled before completing");
-        }
-        return new StepInterruptedException("Step '" + stepName + "' did not start for this execution");
-    }
-
     private void awaitStepCompletion(WorkflowStepResult result) {
         result.await();
         if (result.timeout()) {
@@ -298,5 +329,19 @@ public abstract class AbstractWorkflowContext implements WorkflowContext {
         if (result.error().isPresent()) {
             throw result.error().orElseThrow();
         }
+    }
+
+    /**
+     * A durably cancelled step is a step outcome the body sees as a {@link StepCancellationException}. A step with no
+     * cancellation record never started for this execution, because the driver was interrupted or another execution
+     * owns the attempt, so the body sees a {@link StepInterruptedException} and the workflow pauses instead of
+     * failing.
+     */
+    private StepFailedException cancellationOf(WorkflowStepResult result) {
+        var stepName = result.getStepName();
+        if (WorkflowStateUtils.isStepStatus(workflowExecution.state(), stepName, StepStatus.CANCELLED)) {
+            return new StepCancellationException("Step '" + stepName + "' was cancelled before completing");
+        }
+        return new StepInterruptedException("Step '" + stepName + "' did not start for this execution");
     }
 }
