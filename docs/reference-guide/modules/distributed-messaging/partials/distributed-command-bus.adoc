@@ -112,7 +112,7 @@ An application that adds the starter without a discovery implementation says so 
 The same holds for an application that could not serve the endpoints other members reach it on: one without a web stack, or one running on WebFlux.
 Set `axon.springcloud.enabled=false` to handle commands locally instead.
 
-Applications preferring to wire these beans themselves can depend on `axoniq-springcloud-discovery` alone.
+Applications preferring to wire these beans themselves can depend on `axoniq-springcloud` alone.
 Spring itself is still required: the connector learns about the cluster from Spring Cloud's discovery events, and receives commands and capability requests through two Spring MVC controllers.
 Each Spring Cloud component Axoniq Framework supports has a module of its own, so an application takes only the ones it uses.
 
