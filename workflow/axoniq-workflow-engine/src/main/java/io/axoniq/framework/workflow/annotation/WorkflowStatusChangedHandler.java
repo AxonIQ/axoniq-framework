@@ -16,7 +16,7 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.dsl.annotation;
+package io.axoniq.framework.workflow.annotation;
 
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 
@@ -27,7 +27,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Method marker to register a workflow lifecycle completed successfully listener.
+ * Method marker to register a workflow lifecycle listener based on the status of the workflow.
  *
  * @author Simon Zambrovski
  * @since 5.4.0
@@ -35,14 +35,20 @@ import java.lang.annotation.Target;
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD, ElementType.ANNOTATION_TYPE})
-@WorkflowStatusChangedHandler(workflowStatus = WorkflowStatus.COMPLETED)
-public @interface WorkflowCompletedHandler {
+public @interface WorkflowStatusChangedHandler {
 
     /**
      * Specifies the name of the workflow.
      *
      * @return workflow name, defaults to empty string, meaning that the full-qualified name and method name of the
-     * class are used
+     * class is used
      */
     String workflowName() default "";
+
+    /**
+     * Specifies the workflow status to listen for.
+     *
+     * @return workflow status to listen for
+     */
+    WorkflowStatus workflowStatus();
 }

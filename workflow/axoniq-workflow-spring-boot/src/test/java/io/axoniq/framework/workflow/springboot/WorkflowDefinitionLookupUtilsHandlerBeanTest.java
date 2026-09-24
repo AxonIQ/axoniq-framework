@@ -20,7 +20,7 @@ package io.axoniq.framework.workflow.springboot;
 
 import org.jspecify.annotations.Nullable;
 
-import io.axoniq.framework.workflow.dsl.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowConfiguration;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.runtime.execution.AbstractWorkflowContext;

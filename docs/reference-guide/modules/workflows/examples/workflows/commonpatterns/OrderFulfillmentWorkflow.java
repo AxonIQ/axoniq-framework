@@ -20,7 +20,7 @@
 package workflows.commonpatterns;
 
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.framework.workflow.dsl.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.Workflow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -19,7 +19,7 @@
 package io.axoniq.framework.workflow.springboot;
 
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.framework.workflow.dsl.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowEngine;

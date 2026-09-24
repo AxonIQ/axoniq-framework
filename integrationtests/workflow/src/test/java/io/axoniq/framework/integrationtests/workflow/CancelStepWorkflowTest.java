@@ -24,7 +24,7 @@ import io.axoniq.framework.workflow.dsl.api.StepStatus;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContext;
 import io.axoniq.framework.workflow.dsl.base.BaseWorkflowContextFactory;
-import io.axoniq.framework.workflow.dsl.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.test.utils.SleepUtils;
 import org.axonframework.messaging.eventhandling.annotation.Event;
 import org.junit.jupiter.api.*;

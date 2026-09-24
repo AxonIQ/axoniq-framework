@@ -20,7 +20,7 @@
 package workflows.publishingevents;
 
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
-import io.axoniq.framework.workflow.dsl.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.Workflow;
 
 public class ShipmentWorkflow {
 

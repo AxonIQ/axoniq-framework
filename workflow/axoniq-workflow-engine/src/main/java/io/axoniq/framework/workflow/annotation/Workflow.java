@@ -16,7 +16,7 @@
  * For licensing information and to register, visit:
  *  https://www.axoniq.io/pricing
  */
-package io.axoniq.framework.workflow.dsl.annotation;
+package io.axoniq.framework.workflow.annotation;
 
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;

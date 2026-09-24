@@ -23,7 +23,7 @@ import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinit
 import io.axoniq.framework.workflow.configuration.WorkflowModule.WorkflowDefinitionPhase.FinalizedPhase;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.framework.workflow.dsl.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.Workflow;
 import org.axonframework.messaging.core.unitofwork.transaction.Transaction;
 import org.axonframework.messaging.core.unitofwork.transaction.TransactionManager;
 import org.axonframework.messaging.eventhandling.annotation.Event;

@@ -22,8 +22,8 @@ import io.axoniq.framework.workflow.dsl.api.EventCondition;
 import io.axoniq.framework.workflow.dsl.api.EventConditions;
 import io.axoniq.framework.workflow.dsl.api.WorkflowContext;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
-import io.axoniq.framework.workflow.dsl.annotation.Workflow;
-import io.axoniq.framework.workflow.dsl.annotation.WorkflowStatusChangedHandler;
+import io.axoniq.framework.workflow.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.WorkflowStatusChangedHandler;
 import io.axoniq.framework.workflow.runtime.api.execution.context.Version;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowIdProvider;
 import io.axoniq.framework.workflow.runtime.api.execution.context.WorkflowStatusChangeListener;
@@ -55,7 +55,7 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
-import static io.axoniq.framework.workflow.dsl.annotation.Workflow.*;
+import static io.axoniq.framework.workflow.annotation.Workflow.*;
 import static org.axonframework.common.annotation.AnnotationUtils.findAnnotationAttributes;
 
 /**

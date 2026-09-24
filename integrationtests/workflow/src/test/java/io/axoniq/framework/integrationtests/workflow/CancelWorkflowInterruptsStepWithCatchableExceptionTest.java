@@ -27,7 +27,7 @@ import io.axoniq.framework.workflow.dsl.api.WorkflowCancelledException;
 import io.axoniq.framework.workflow.dsl.api.WorkflowStatus;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContext;
 import io.axoniq.framework.workflow.dsl.simple.SimpleWorkflowContextFactory;
-import io.axoniq.framework.workflow.dsl.annotation.Workflow;
+import io.axoniq.framework.workflow.annotation.Workflow;
 import io.axoniq.framework.workflow.runtime.execution.WorkflowExecutionRepository;
 import io.axoniq.framework.workflow.runtime.test.utils.SleepUtils;
 import org.axonframework.messaging.eventhandling.annotation.Event;
